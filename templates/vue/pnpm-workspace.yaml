@@ -1,0 +1,4 @@
+packages:
+  - .
+  - frontend-modules/*
+ignore-workspace-root-check: true

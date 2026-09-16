@@ -1,0 +1,17 @@
+# Build output
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+.amp
+.demo-workspace
+
