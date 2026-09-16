@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 
 it("renders setup errors as HTTP errors without corrupting simultaneous successful SSR", async () => {
   const workspace = mkdtempSync(resolve(".ssr-errors-"));
-  const previousBackend = process.env.DMS_BACKEND_URL;
+  const previousBackend = process.env.DMS_API_BASE_URL;
   const previousSecret = process.env.DMS_SESSION_SECRET;
   const unreadCountPath = "/settings/user/notifications/unread-count";
   const backend = createServer((request, response) => {
@@ -102,7 +102,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     );
     const backendAddress = backend.address();
     assert.ok(backendAddress && typeof backendAddress === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${backendAddress.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const { handleRequestSafely } = await import(
       pathToFileURL(join(workspace, "server.mjs")).href
     );
@@ -278,8 +278,8 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
   } finally {
     frontend?.close();
     backend.close();
-    if (previousBackend === undefined) delete process.env.DMS_BACKEND_URL;
-    else process.env.DMS_BACKEND_URL = previousBackend;
+    if (previousBackend === undefined) delete process.env.DMS_API_BASE_URL;
+    else process.env.DMS_API_BASE_URL = previousBackend;
     if (previousSecret === undefined) delete process.env.DMS_SESSION_SECRET;
     else process.env.DMS_SESSION_SECRET = previousSecret;
     rmSync(workspace, { recursive: true, force: true });

@@ -25,7 +25,7 @@ export function cmdBuild(): Command {
     .addOption(Options.bootstrapSecret)
     .action(async (options: BuildOptions) => {
       if (!options.backendUrl) {
-        error("Backend URL is required. Use -b <url> or set DMS_BACKEND_URL.");
+        error("Backend URL is required. Use -b <url> or set DMS_API_BASE_URL.");
         process.exit(1);
       }
 

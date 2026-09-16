@@ -173,7 +173,7 @@ describe("auth adapter safety", () => {
     await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
     const address = api.address();
     assert.ok(address && typeof address === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     try {
       for (const [path, [status, message]] of Object.entries(failures)) {
         await assert.rejects(
@@ -208,8 +208,8 @@ describe("auth adapter safety", () => {
     await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
     const address = api.address();
     assert.ok(address && typeof address === "object");
-    const previous = process.env.DMS_BACKEND_URL;
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${address.port}`;
+    const previous = process.env.DMS_API_BASE_URL;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     try {
       for (const [body, expected] of responses) {
         payload = body;
@@ -222,7 +222,7 @@ describe("auth adapter safety", () => {
         );
       }
     } finally {
-      process.env.DMS_BACKEND_URL = previous;
+      process.env.DMS_API_BASE_URL = previous;
       api.close();
     }
   });
@@ -236,7 +236,7 @@ describe("auth adapter safety", () => {
     await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
     const address = api.address();
     assert.ok(address && typeof address === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     process.env.DMS_SESSION_SECRET = "dms-inertia-test-session-secret-value";
     process.env.DMS_COOKIE_SECURE = "false";
     const cookie = sessionCookie();

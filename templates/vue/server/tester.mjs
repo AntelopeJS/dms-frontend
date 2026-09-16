@@ -71,7 +71,7 @@ function targetUrl(path) {
   )
     return invalidInput();
   path.split("?", 1)[0].split("/").forEach(validatePathSegment);
-  const base = new URL(process.env.DMS_BACKEND_URL);
+  const base = new URL(process.env.DMS_API_BASE_URL);
   if (
     !["http:", "https:"].includes(base.protocol) ||
     base.username ||

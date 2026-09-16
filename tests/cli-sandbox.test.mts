@@ -41,7 +41,7 @@ async function runCli(args: string[]): Promise<CliResult> {
           ...process.env,
           HOME: sandbox,
           NO_UPDATE_NOTIFIER: "1",
-          DMS_BACKEND_URL: "",
+          DMS_API_BASE_URL: "",
         },
       },
     );
@@ -84,7 +84,7 @@ describe("running outside a DMS project", () => {
   it("names what is missing for a project-bound command", async () => {
     const build = await runCli(["build"]);
     assert.equal(build.code, 1);
-    assert.match(build.stdout, /Backend URL is required.*DMS_BACKEND_URL/);
+    assert.match(build.stdout, /Backend URL is required.*DMS_API_BASE_URL/);
 
     const dev = await runCli(["dev"]);
     assert.equal(dev.code, 1);

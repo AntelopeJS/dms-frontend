@@ -38,7 +38,7 @@ function clientHost(): string {
 }
 
 /**
- * Resolve the backend to use: the explicit `-b`/`DMS_BACKEND_URL` value
+ * Resolve the backend to use: the explicit `-b`/`DMS_API_BASE_URL` value
  * when given, otherwise the enclosing antelope project's live dev
  * registry (`.antelope/dev.json`). Autodiscovery also switches the
  * workspace identity from the backend URL to the project path, so the
@@ -164,7 +164,7 @@ export function cmdDev(): Command {
             PORT: String(port),
             DMS_DEV: "true",
             DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "false",
-            DMS_BACKEND_URL: backendUrl,
+            DMS_API_BASE_URL: backendUrl,
             DMS_BOOTSTRAP_SECRET: bootstrapSecret,
             NODE_OPTIONS: "--max-old-space-size=4096",
             NODE_PATH: nodeModulesDir,

@@ -62,7 +62,7 @@ The generated application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router
 
 Vue modules use `dms.frontend.ts` and the `#dms-inertia/frontend-module` SDK alias, which replaces the former `#cms-inertia` alias and is the import path every DMS frontend module now uses. Email templates register separately through `dms.email.ts`.
 
-An email entry exports `serverEmailTemplates` and may export a plain `appConfig` object, such as shared branding defaults. Email rendering merges these configurations in manifest-priority order and provides them to `useDmsAppConfig` per render. Public runtime options come from the module manifest; `DMS_CLIENT_URL` overrides `public.dms.clientBaseUrl`. Email entries must not import the browser frontend module.
+An email entry exports `serverEmailTemplates` and may export a plain `appConfig` object, such as shared branding defaults. Email rendering merges these configurations in manifest-priority order and provides them to `useDmsAppConfig` per render. Public runtime options come from the module manifest; `DMS_CLIENT_BASE_URL` overrides `public.dms.clientBaseUrl`. Email entries must not import the browser frontend module.
 
 Email builds ship complete merged translation catalogs as JSON under `dist/server/locales/`, separate from executable JavaScript. Deploy the entire `dist/server` directory. Each render loads only its requested language and the English fallback; arbitrary translation keys and module overrides remain available. Unknown languages fall back to English, while missing or corrupt files for a supported language fail rendering rather than silently dropping translations. The source harness keeps the 256 KiB JavaScript ceiling and reports locale-data bytes separately.
 
@@ -89,7 +89,7 @@ The SDK also exposes `use` for Vue plugins. Entries execute by descending manife
 
 ## Discovery, caching, and security
 
-In development, `ajs dms` discovers the backend from the nearest live `.antelope/dev.json`. It reads the local bootstrap credential from `.antelope/dms-dev.json` only when that discovered backend matches the destination URL. For production and CI, set `DMS_BACKEND_URL` and `DMS_BOOTSTRAP_SECRET` in the environment rather than passing credentials on the command line.
+In development, `ajs dms` discovers the backend from the nearest live `.antelope/dev.json`. It reads the local bootstrap credential from `.antelope/dms-dev.json` only when that discovered backend matches the destination URL. For production and CI, set `DMS_API_BASE_URL` and `DMS_BOOTSTRAP_SECRET` in the environment rather than passing credentials on the command line.
 
 Each canonical backend URL gets an owner-only workspace under `~/.antelopejs/dms-frontend`. Manifest caches, private module configuration, and extracted archives retain restrictive permissions. `--offline` reuses the last successful manifest and archive; an authorization failure never falls back to privileged cached data.
 
@@ -105,7 +105,7 @@ frontend-module registry drives server and client entries.
 
 | Option | Environment | Purpose |
 | --- | --- | --- |
-| `-b, --backend-url` | `DMS_BACKEND_URL` | DMS backend URL |
+| `-b, --backend-url` | `DMS_API_BASE_URL` | DMS backend URL |
 | `-p, --port` | `PORT` | Frontend port, default `3001` |
 | `-f, --force` | | Reinstall workspace dependencies |
 | `--offline` | `DMS_OFFLINE` | Reuse cached manifest and archives |

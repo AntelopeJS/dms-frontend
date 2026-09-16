@@ -160,7 +160,7 @@ describe("Inertia HTTP protocol", () => {
     );
     const address = backend.address();
     assert.ok(address && typeof address === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
@@ -193,7 +193,7 @@ describe("Inertia HTTP protocol", () => {
     );
     const address = backend.address();
     assert.ok(address && typeof address === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
@@ -345,7 +345,7 @@ describe("Inertia HTTP protocol", () => {
     );
     const address = backend.address();
     assert.ok(address && typeof address === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
@@ -413,7 +413,7 @@ describe("Inertia HTTP protocol", () => {
     );
     const address = backend.address();
     assert.ok(address && typeof address === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
@@ -475,7 +475,7 @@ describe("frontend auth runtime", () => {
     );
     const backendAddress = backend.address();
     assert.ok(backendAddress && typeof backendAddress === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${backendAddress.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const runtime = await server;
     const sessionRuntime = await sessions;
     const cookieHeaders = new Map<string, string | string[]>();
@@ -552,7 +552,7 @@ describe("frontend auth runtime", () => {
     );
     const backendAddress = backend.address();
     assert.ok(backendAddress && typeof backendAddress === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${backendAddress.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
@@ -614,7 +614,7 @@ describe("frontend auth runtime", () => {
     );
     const backendAddress = backend.address();
     assert.ok(backendAddress && typeof backendAddress === "object");
-    process.env.DMS_BACKEND_URL = `http://127.0.0.1:${backendAddress.port}`;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>

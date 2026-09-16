@@ -12,7 +12,7 @@ export function useDmsAppConfig(): Record<string, unknown> {
 
 export function useDmsRuntimeConfig(): EmailRuntimeConfig {
   return inject<EmailRuntimeConfig>("dmsEmailRuntimeConfig", {
-    public: { dms: { clientBaseUrl: process.env.DMS_CLIENT_URL ?? "" } },
+    public: { dms: { clientBaseUrl: process.env.DMS_CLIENT_BASE_URL ?? "" } },
   });
 }
 
