@@ -28,7 +28,7 @@ export function cmdPrepare(): Command {
       // without leaving a partially generated workspace.
       if (!options.backendUrl) {
         warning(
-          "Backend URL not set; skipping prepare. Pass -b <url> or set DMS_BACKEND_URL to generate types.",
+          "Backend URL not set; skipping prepare. Pass -b <url> or set DMS_API_BASE_URL to generate types.",
         );
         process.exit(0);
       }

@@ -160,7 +160,7 @@ export const Options = {
   backendUrl: new Option(
     "-b, --backend-url <url>",
     "Backend DMS URL (when omitted, dev mode discovers it from the enclosing antelope project's .antelope/dev.json)",
-  ).env("DMS_BACKEND_URL"),
+  ).env("DMS_API_BASE_URL"),
 
   port: new Option("-p, --port <port>", "Port to run on")
     .default("3001")

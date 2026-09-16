@@ -151,7 +151,7 @@ export function describeDiscoveryFailure(result: DiscoveryResult): string {
         "No backend URL provided and no running antelope project found.\n" +
         `  Searched for ${DEV_REGISTRY_RELATIVE_PATH} from the current directory upward.\n` +
         "  Either run this command inside an antelope project started with 'ajs project dev',\n" +
-        "  or pass the backend explicitly with -b <url> (env: DMS_BACKEND_URL)."
+        "  or pass the backend explicitly with -b <url> (env: DMS_API_BASE_URL)."
       );
     case "stale":
       return (

@@ -142,14 +142,14 @@ function serverComponentFetch(request) {
     });
     return ofetch(path, {
       ...options,
-      baseURL: process.env.DMS_BACKEND_URL,
+      baseURL: process.env.DMS_API_BASE_URL,
       headers,
     });
   };
 }
 
 async function backendJson(path, request) {
-  const response = await fetch(new URL(path, process.env.DMS_BACKEND_URL), {
+  const response = await fetch(new URL(path, process.env.DMS_API_BASE_URL), {
     headers: backendHeaders(request),
   });
   if (!response.ok) {
@@ -245,7 +245,7 @@ async function proxy(request, response, fallbackOnNotFound = false) {
     response.end(JSON.stringify({ error: "Forbidden" }));
     return true;
   }
-  const target = new URL(request.url, process.env.DMS_BACKEND_URL);
+  const target = new URL(request.url, process.env.DMS_API_BASE_URL);
   const upstream = await fetch(target, {
     method: request.method,
     headers: backendHeaders(request),

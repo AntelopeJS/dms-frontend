@@ -34,7 +34,7 @@ export async function backend(path, request, options = {}) {
   if (options.relay)
     headers["x-dms-oauth-relay"] = process.env.DMS_OAUTH_RELAY_SECRET ?? "";
   if (options.body !== undefined) headers["content-type"] = "application/json";
-  const response = await fetch(new URL(path, process.env.DMS_BACKEND_URL), {
+  const response = await fetch(new URL(path, process.env.DMS_API_BASE_URL), {
     method: options.method ?? "GET",
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),

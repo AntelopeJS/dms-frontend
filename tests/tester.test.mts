@@ -75,7 +75,7 @@ before(async () => {
     "disposable-fixture-secret-at-least-32-characters";
   process.env.DMS_TRUSTED_PROXY_HOPS = "0";
   backend = await listen(fixture);
-  process.env.DMS_BACKEND_URL = `${backend}/ignored-configured-base-path/`;
+  process.env.DMS_API_BASE_URL = `${backend}/ignored-configured-base-path/`;
   frontend = await listen(handleTester);
   const headers = new Map();
   writeSession(
@@ -110,7 +110,7 @@ after(async () => {
   for (const key of [
     "DMS_SESSION_SECRET",
     "DMS_TRUSTED_PROXY_HOPS",
-    "DMS_BACKEND_URL",
+    "DMS_API_BASE_URL",
   ]) {
     if (originalEnvironment[key] === undefined) delete process.env[key];
     else process.env[key] = originalEnvironment[key];

@@ -147,8 +147,8 @@ export async function renderEmail(
   );
   app.provide("dmsEmailRuntimeConfig", {
     public: defu(
-      process.env.DMS_CLIENT_URL
-        ? { dms: { clientBaseUrl: process.env.DMS_CLIENT_URL } }
+      process.env.DMS_CLIENT_BASE_URL
+        ? { dms: { clientBaseUrl: process.env.DMS_CLIENT_BASE_URL } }
         : {},
       publicConfig,
       { dms: { clientBaseUrl: "" } },
