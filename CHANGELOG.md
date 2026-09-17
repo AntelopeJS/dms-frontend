@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.2
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.1...v0.1.2)
+
+### 🚀 Enhancements
+
+- **cli:** Load .env from the current directory ([#5](https://github.com/AntelopeJS/dms-frontend/pull/5))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.1
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.0...v0.1.1)
