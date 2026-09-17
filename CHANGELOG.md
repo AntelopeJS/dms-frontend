@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.3
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.2...v0.1.3)
+
+### 🚀 Enhancements
+
+- **auth:** Open a session from a module backend endpoint ([#6](https://github.com/AntelopeJS/dms-frontend/pull/6))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.2
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.1...v0.1.2)
