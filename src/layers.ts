@@ -93,6 +93,7 @@ function resolveLayer(layerPath: string, mod: ManifestModule): ResolvedLayer {
     priority: mod.priority,
     configKey: mod.configKey,
     options: mod.options,
+    authEstablishEndpoints: mod.authEstablishEndpoints,
   };
 }
 

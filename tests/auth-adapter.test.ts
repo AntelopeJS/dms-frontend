@@ -1,5 +1,8 @@
 import * as assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 import { describe, it } from "node:test";
 import {
@@ -17,6 +20,7 @@ import {
   allowedEstablishEndpoints,
   handleAuth,
   isAllowedEstablishEndpoint,
+  readDeclaredEstablishEndpoints,
   refreshSession,
 } from "../templates/vue/server/auth/routes.mjs";
 import {
@@ -321,6 +325,55 @@ describe("session establishment from a module endpoint", () => {
   it("keeps the allowlist empty when nothing is declared", () => {
     assert.deepEqual(allowedEstablishEndpoints(undefined), []);
     assert.deepEqual(allowedEstablishEndpoints(""), []);
+  });
+
+  it("allows what the modules declared, with no environment variable", () => {
+    assert.deepEqual(
+      allowedEstablishEndpoints(undefined, ["/api/saas/register/finalize"]),
+      ["/api/saas/register/finalize"],
+    );
+  });
+
+  it("unions the module declarations with the environment, without duplicates", () => {
+    assert.deepEqual(
+      allowedEstablishEndpoints(
+        "/api/invites/redeem, /api/saas/register/finalize",
+        ["/api/saas/register/finalize"],
+      ),
+      ["/api/saas/register/finalize", "/api/invites/redeem"],
+    );
+  });
+
+  it("drops malformed module declarations as it drops malformed environment ones", () => {
+    assert.deepEqual(
+      allowedEstablishEndpoints("", [
+        "/api/ok",
+        "/auth/login",
+        "/api/../secret",
+        undefined,
+      ]),
+      ["/api/ok"],
+    );
+  });
+
+  it("reads the endpoints the loader generated into the workspace", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "dms-declared-"));
+    const file = join(workspace, "generated-auth-establish.json");
+    writeFileSync(
+      file,
+      JSON.stringify({ endpoints: ["/api/saas/register/finalize"] }),
+    );
+    assert.deepEqual(readDeclaredEstablishEndpoints(file), [
+      "/api/saas/register/finalize",
+    ]);
+  });
+
+  it("falls back to no declaration when the workspace carries no such file", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "dms-declared-absent-"));
+    assert.deepEqual(
+      readDeclaredEstablishEndpoints(join(workspace, "absent.json")),
+      [],
+    );
   });
 
   it("reads a comma-separated declaration and drops malformed entries", () => {

@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import {
+  AUTH_ESTABLISH_FILE,
   FRONTEND_MODULE_ENTRY,
   LAYERS_SUBDIR,
   TAILWIND_SOURCE_GLOB,
@@ -245,6 +246,66 @@ export function createFrontendModuleRegistry(
   return registry;
 }
 
+/**
+ * Absolute backend API paths only: no scheme, no authority, no query string,
+ * and no segment that could climb out of `/api/`. Kept character-for-character
+ * in sync with the generated server's own grammar, which re-checks every path
+ * before calling it.
+ */
+const BACKEND_API_PATH =
+  /^\/api\/[A-Za-z0-9][A-Za-z0-9._~-]*(?:\/[A-Za-z0-9][A-Za-z0-9._~-]*)*$/;
+
+/**
+ * The backend endpoints this workspace's modules may open a session from.
+ *
+ * Each module declares its own on the backend and the manifest carries them
+ * here, so a standard deployment needs no `DMS_AUTH_ESTABLISH_ENDPOINTS` at
+ * all. A malformed path is dropped rather than fatal: the workspace is
+ * materialized from whatever the backend served, and one bad declaration in
+ * one module must not stop the frontend from building — the endpoint simply
+ * stays refused, which is the safe direction.
+ *
+ * @param layers Resolved layers, in workspace order
+ * @returns The well-formed declared paths, without duplicates
+ */
+export function collectAuthEstablishEndpoints(
+  layers: ResolvedLayer[],
+): string[] {
+  const endpoints = new Set<string>();
+  for (const layer of layers) {
+    for (const endpoint of layer.authEstablishEndpoints ?? []) {
+      if (typeof endpoint === "string" && BACKEND_API_PATH.test(endpoint)) {
+        endpoints.add(endpoint);
+        continue;
+      }
+      console.warn(
+        `⚠ Ignoring malformed authEstablishEndpoints entry ${JSON.stringify(endpoint)} ` +
+          `declared by ${layer.packageName ?? layer.path}: expected an absolute ` +
+          "backend API path under /api/ with no query string.",
+      );
+    }
+  }
+  return [...endpoints];
+}
+
+/**
+ * Write the declared endpoints where the generated server can read them.
+ *
+ * The server runs with no backend to ask — in production the backend may not
+ * even be reachable from it at boot — so the allow-list is baked into the
+ * workspace at materialization time, alongside the module registry.
+ */
+function writeAuthEstablishEndpoints(
+  workspaceDir: string,
+  layers: ResolvedLayer[],
+): void {
+  const endpoints = collectAuthEstablishEndpoints(layers);
+  writeFileSync(
+    join(workspaceDir, AUTH_ESTABLISH_FILE),
+    `${JSON.stringify({ endpoints }, null, 2)}\n`,
+  );
+}
+
 export function writeFrontendModuleRegistry(
   workspaceDir: string,
   layers: ResolvedLayer[],
@@ -254,6 +315,7 @@ export function writeFrontendModuleRegistry(
     join(workspaceDir, "generated-frontend-modules.json"),
     `${JSON.stringify(registry, null, 2)}\n`,
   );
+  writeAuthEstablishEndpoints(workspaceDir, layers);
   writeFrontendTypePaths(workspaceDir, registry);
   writeFrontendModuleLoader(workspaceDir, registry);
   writeLocaleMessages(workspaceDir, registry);

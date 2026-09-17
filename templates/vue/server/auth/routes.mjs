@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { backend, body, json, UpstreamError } from "./backend.mjs";
 import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./client-ip.mjs";
 import {
@@ -27,6 +28,36 @@ const PASSTHROUGH = new Map([
 // and no segment that could climb out of `/api/`.
 const BACKEND_API_PATH =
   /^\/api\/[A-Za-z0-9][A-Za-z0-9._~-]*(?:\/[A-Za-z0-9][A-Za-z0-9._~-]*)*$/;
+
+// Written at the workspace root by the loader, from the endpoints each backend
+// module declared in the frontend manifest. This file sits two directories up.
+const DECLARED_ENDPOINTS_FILE = new URL(
+  "../../generated-auth-establish.json",
+  import.meta.url,
+);
+
+let declaredEndpoints;
+
+/**
+ * Backend endpoints the modules of this deployment declared as session-opening.
+ *
+ * Read from the workspace rather than from the backend: the file is generated
+ * when the workspace is materialized, so the server needs no backend round trip
+ * — and no operator — to know which module flows may end on a login. A
+ * workspace built from a DMS that predates the declaration simply has no file,
+ * and the list falls back to whatever the environment names.
+ *
+ * @param file Generated file to read
+ * @returns The declared paths, unfiltered
+ */
+export function readDeclaredEstablishEndpoints(file = DECLARED_ENDPOINTS_FILE) {
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    return Array.isArray(parsed?.endpoints) ? parsed.endpoints : [];
+  } catch {
+    return [];
+  }
+}
 
 export function publicSession(session) {
   if (!session) return {};
@@ -88,20 +119,30 @@ async function establish(request, response, endpoint) {
 /**
  * Backend endpoints this deployment lets a module open a session from.
  *
- * Empty by default: a module route only becomes a session-opening route once
- * the operator names it, so no backend endpoint that happens to mint a token
- * pair can be turned into a login by a request from the browser.
+ * The union of what the backend's modules declared — the standard case, which
+ * needs no configuration — and what the environment adds on top, which is how
+ * an operator extends the list for a route no module owns. Everything else
+ * stays refused, so no backend endpoint that happens to mint a token pair can
+ * be turned into a login by a request from the browser.
  *
- * @param declaration Comma-separated absolute backend paths
- * @returns The declared paths that are well-formed backend API paths
+ * @param declaration Comma-separated absolute backend paths from the environment
+ * @param declared Paths declared by the backend's frontend modules
+ * @returns The well-formed backend API paths, without duplicates
  */
 export function allowedEstablishEndpoints(
   declaration = process.env.DMS_AUTH_ESTABLISH_ENDPOINTS,
+  declared = (declaredEndpoints ??= readDeclaredEstablishEndpoints()),
 ) {
-  return (declaration ?? "")
+  const fromEnvironment = (declaration ?? "")
     .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => BACKEND_API_PATH.test(entry));
+    .map((entry) => entry.trim());
+  return [
+    ...new Set(
+      [...declared, ...fromEnvironment].filter(
+        (entry) => typeof entry === "string" && BACKEND_API_PATH.test(entry),
+      ),
+    ),
+  ];
 }
 
 /**

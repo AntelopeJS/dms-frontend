@@ -95,6 +95,13 @@ export const LAYERS_SUBDIR = "frontend-modules";
 export const FRONTEND_MODULE_ENTRY = "dms.frontend.ts";
 
 /**
+ * Generated file naming the backend endpoints `/auth/establish` may open a
+ * session from. Written at the workspace root, next to the module registry,
+ * because the generated server reads it at run time with no backend to ask.
+ */
+export const AUTH_ESTABLISH_FILE = "generated-auth-establish.json";
+
+/**
  * Gitignore-style patterns we never want to copy from a layer source into
  * its workspace materialization. Hardcoded rather than driven by the
  * layer's own `.gitignore` so the behavior is deterministic across
