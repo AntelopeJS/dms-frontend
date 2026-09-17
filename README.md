@@ -190,18 +190,38 @@ never sends a token and never receives one: it gets back the same
 tenant-assignment outcomes are handled identically.
 
 Because the route turns a backend endpoint into a login, it only calls the
-endpoints the deployment names:
+endpoints that were declared for it.
+
+Backend modules declare their own. A module registering its frontend names the
+routes that finish its flow, the DMS aggregates them into the frontend manifest
+it serves with the bootstrap secret, and `dev`/`build` write them into the
+workspace as it is materialized:
+
+```ts
+// in the backend module
+await AddFrontendModule({
+  name: "@antelopejs/dms-saas-frontend-vue",
+  sourcePath: path.join(__dirname, "../frontend-vue"),
+  renderer: { name: "vue", version: "3" },
+  authEstablishEndpoints: ["/api/saas/register/finalize"],
+});
+```
+
+A standard deployment therefore needs no configuration at all. The environment
+variable stays as an override, for a backend route no module declares — or one
+declared by a DMS too old to carry the field:
 
 ```bash
 # .env
-DMS_AUTH_ESTABLISH_ENDPOINTS=/api/saas/register/finalize,/api/invites/redeem
+DMS_AUTH_ESTABLISH_ENDPOINTS=/api/invites/redeem
 ```
 
-The list is empty by default and matched verbatim against absolute `/api/…`
-paths — no prefixes, no query strings, no traversal — so no backend route that
-happens to mint a token pair can be turned into a login by a request from the
-browser. An undeclared endpoint is answered `403` and never called. The route
-is `POST`-only and same-origin, like every other auth action.
+The effective allow-list is the union of the two. Every entry, from either
+source, is matched verbatim against absolute `/api/…` paths — no prefixes, no
+query strings, no traversal — so no backend route that happens to mint a token
+pair can be turned into a login by a request from the browser. An undeclared
+endpoint is answered `403` and never called. The route is `POST`-only and
+same-origin, like every other auth action.
 
 ### Workspaces
 
@@ -246,7 +266,7 @@ frontend-module registry drives server and client entries.
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
 | | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
-| | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Backend endpoints `/auth/establish` may open a session from (comma-separated, empty by default) |
+| | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Extra backend endpoints `/auth/establish` may open a session from, on top of those the backend's modules declare (comma-separated, empty by default) |
 | | `DMS_CLIENT_BASE_URL` | Public frontend URL used in generated links and emails |
 
 All of these can be set in the project's `.env` instead of the environment; see [Configuration](#configuration).

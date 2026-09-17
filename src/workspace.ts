@@ -59,6 +59,13 @@ export interface ManifestModule {
    */
   privateOptions?: FrontendModuleOptions;
   configKey?: string;
+  /**
+   * Absolute backend API paths this module declared as session-opening: the
+   * generated server accepts them on `/auth/establish`. Served only to an
+   * authenticated caller, and absent from a manifest produced by a DMS that
+   * predates the field.
+   */
+  authEstablishEndpoints?: string[];
 }
 
 export interface Manifest {
@@ -86,6 +93,7 @@ export interface ResolvedLayer {
   priority?: number;
   configKey?: string;
   options?: FrontendModuleOptions;
+  authEstablishEndpoints?: string[];
 }
 
 // ============================================================================

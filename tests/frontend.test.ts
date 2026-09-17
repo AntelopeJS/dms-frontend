@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
+  collectAuthEstablishEndpoints,
   createFrontendModuleRegistry,
   writeFrontendModuleRegistry,
 } from "../src/common";
@@ -30,6 +31,66 @@ describe("Vite frontend generation", () => {
     );
     assert.match(paths, /#dms-inertia\/frontend-module/);
     assert.match(loader, /dms\.frontend\.ts/);
+  });
+
+  it("writes the endpoints the modules declared for /auth/establish", () => {
+    const source = mkdtempSync(join(tmpdir(), "dms-establish-module-"));
+    const workspace = mkdtempSync(join(tmpdir(), "dms-establish-workspace-"));
+    writeFrontendModuleRegistry(workspace, [
+      {
+        path: source,
+        packageName: "@dms/saas",
+        priority: 0,
+        authEstablishEndpoints: ["/api/saas/register/finalize"],
+      },
+      {
+        path: source,
+        packageName: "@dms/invites",
+        priority: 1,
+        authEstablishEndpoints: [
+          "/api/invites/redeem",
+          "/api/saas/register/finalize",
+        ],
+      },
+    ]);
+    const declared = JSON.parse(
+      readFileSync(join(workspace, "generated-auth-establish.json"), "utf8"),
+    );
+    assert.deepEqual(declared.endpoints, [
+      "/api/saas/register/finalize",
+      "/api/invites/redeem",
+    ]);
+  });
+
+  it("writes an empty declaration for a manifest that carries none", () => {
+    const source = mkdtempSync(join(tmpdir(), "dms-establish-none-module-"));
+    const workspace = mkdtempSync(join(tmpdir(), "dms-establish-none-"));
+    writeFrontendModuleRegistry(workspace, [
+      { path: source, packageName: "@dms/legacy", priority: 0 },
+    ]);
+    const declared = JSON.parse(
+      readFileSync(join(workspace, "generated-auth-establish.json"), "utf8"),
+    );
+    assert.deepEqual(declared.endpoints, []);
+  });
+
+  it("drops malformed declared endpoints instead of materializing them", () => {
+    assert.deepEqual(
+      collectAuthEstablishEndpoints([
+        {
+          path: "/tmp/module",
+          packageName: "@dms/bad",
+          authEstablishEndpoints: [
+            "/api/ok",
+            "/auth/login",
+            "/api/../secret",
+            "http://evil.test/api/x",
+            "/api/ok?token=1",
+          ],
+        },
+      ]),
+      ["/api/ok"],
+    );
   });
 
   it("ships complete renderer-specific workspace templates", () => {
