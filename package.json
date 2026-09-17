@@ -1,6 +1,6 @@
 {
   "name": "@antelopejs/dms-frontend",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Vue 3, Vite, and Inertia frontend loader for AntelopeJS DMS",
   "keywords": [
     "antelope",
