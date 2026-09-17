@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@antelopejs/core':
         specifier: '>=1.6.0 <3'
-        version: 1.6.0(@types/node@24.8.1)
+        version: 2.0.0(@types/node@24.8.1)
       boxen:
         specifier: ^5.1.2
         version: 5.1.2
@@ -127,8 +127,8 @@ importers:
 
 packages:
 
-  '@antelopejs/core@1.6.0':
-    resolution: {integrity: sha512-x2C4EHlTEYfJb2NfChXc5CNnXWVN7KnIDQp76NvN/7D75m+lcZY4THf1Tzv8oBSpSO0115Amo5/QmkjvKpybfw==}
+  '@antelopejs/core@2.0.0':
+    resolution: {integrity: sha512-2g64Oz/P0ccyar9ASQlG/fRCtAR+CMG+VRbb9KWzKksoFcsF/bIORtr2VrU7oo6PgKhmrxuTL+saL64eELFAag==}
     hasBin: true
 
   '@antelopejs/interface-core@0.0.13':
@@ -4063,7 +4063,7 @@ packages:
 
 snapshots:
 
-  '@antelopejs/core@1.6.0(@types/node@24.8.1)':
+  '@antelopejs/core@2.0.0(@types/node@24.8.1)':
     dependencies:
       '@antelopejs/interface-core': 0.0.13
       '@types/proper-lockfile': 4.1.4
