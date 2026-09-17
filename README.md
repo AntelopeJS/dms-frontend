@@ -6,7 +6,44 @@
 <a href="https://antelopejs.com"><img src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000" alt="Documentation"></a>
 </div>
 
-Official Vue 3, Vite, Inertia, and SSR frontend loader for AntelopeJS DMS. The `ajs dms` CLI generates a Vue workspace and runs its Node frontend server.
+Frontend-agnostic loader for AntelopeJS DMS. The backend serves a frontend
+manifest and the matching frontend-module archives; the `ajs dms` CLI
+materializes them into a generated workspace for one renderer, builds it, and
+runs its Node frontend server. The `vue` renderer — Vue 3, Vite, Inertia, and
+SSR — is the one shipped today.
+
+## Renderers
+
+A renderer is the target framework a generated workspace is built for. The
+loader's contract with a renderer has three parts:
+
+- **Manifest negotiation.** `prepare`, `dev`, and `build` request the versioned
+  `/dms/frontend` manifest with `renderer=vue&rendererVersion=3`
+  (`src/manifest.ts`) and reject every module whose `renderer` does not match.
+  The backend side is renderer-keyed too: `AddFrontendModule` takes a
+  `renderer: { name, version }`, and each manifest module carries it back
+  (`ManifestModule.renderer` in `src/workspace.ts`).
+- **Workspace templates.** Every file of the generated workspace comes from
+  `templates/<renderer>/` — `templates/vue/` today. `TEMPLATE_FILES` in
+  `src/config.ts` lists what is copied verbatim, and `src/materialize.ts`
+  resolves the template root, copies it, materializes the frontend modules
+  under `frontend-modules/`, and writes `generated-frontend-modules.json` in
+  manifest-priority order.
+- **Generated server.** `templates/vue/server.mjs` and `templates/vue/server/`
+  become the Node server that `ajs dms start` runs from the built workspace:
+  Inertia visits, backend proxying, sessions, and email rendering.
+
+`vue` (version `3`) is the only renderer this package ships, and the loader
+rejects a manifest that declares any other. Renderers for other frameworks —
+React, Svelte, Solid — are a direction, not a promise: nothing in the package
+implements them yet. Adding one means a new `templates/<renderer>/` tree, plus
+making the template root (`src/materialize.ts`) and the manifest query
+(`src/manifest.ts`) renderer-aware instead of hardcoding `vue`. There is no
+`--renderer` flag and no renderer registry; the single-renderer assumption is
+deliberate until a second renderer exists. Whatever a renderer names its module
+entry is its own convention: `dms.frontend.ts` and the
+`#dms-inertia/frontend-module` alias belong to the Vue renderer, not to the
+loader.
 
 ## Application ownership
 
@@ -56,9 +93,9 @@ throttle stamp lives at `~/.antelopejs/dms-frontend/update-check.json`. Set
 `NO_UPDATE_NOTIFIER=1`, pass `--no-update-check`, or run under `CI` to turn the
 check off.
 
-The loader renders Vue 3 only: a manifest that declares any other renderer is rejected. `prepare`, `dev`, and `build` request the versioned `/dms/frontend` manifest with `renderer=vue&rendererVersion=3`. Modules are materialized under `frontend-modules/` and registered in deterministic manifest-priority order in `generated-frontend-modules.json`.
+Manifest negotiation and module materialization are the renderer contract described in [Renderers](#renderers).
 
-The generated application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router: "inertia" }`, and `@nuxt/ui/vue-plugin`. The Node server resolves each Inertia visit through `/dms/page?path=…`, including fresh shared data so account, tenant, and permission changes update navigation state. It proxies backend routes and manages authentication through server-side sessions. `DMS_BOOTSTRAP_SECRET` is used only by the CLI's server-to-server frontend manifest and module archive requests and is never sent by, or exposed to, browser traffic.
+The generated Vue application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router: "inertia" }`, and `@nuxt/ui/vue-plugin`. The Node server resolves each Inertia visit through `/dms/page?path=…`, including fresh shared data so account, tenant, and permission changes update navigation state. It proxies backend routes and manages authentication through server-side sessions. `DMS_BOOTSTRAP_SECRET` is used only by the CLI's server-to-server frontend manifest and module archive requests and is never sent by, or exposed to, browser traffic.
 
 Vue modules use `dms.frontend.ts` and the `#dms-inertia/frontend-module` SDK alias, which replaces the former `#cms-inertia` alias and is the import path every DMS frontend module now uses. Email templates register separately through `dms.email.ts`.
 
