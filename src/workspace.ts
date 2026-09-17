@@ -104,12 +104,27 @@ export function getWorkspaceDirForKey(key: string): string {
   return join(DMS_FRONTEND_HOME, sha256Hex(key));
 }
 
+/** Marks a workspace key as a project path rather than a backend URL. */
+const PROJECT_KEY_PREFIX = "project:";
+
 /**
  * Workspace key for a project-path-keyed workspace (autodiscovery mode).
  * Prefixed so it can never collide with a canonicalized backend URL.
  */
 export function projectWorkspaceKey(projectDir: string): string {
-  return `project:${resolve(projectDir)}`;
+  return `${PROJECT_KEY_PREFIX}${resolve(projectDir)}`;
+}
+
+/**
+ * The project directory a workspace is keyed on, or undefined when it is
+ * keyed on its backend URL like every workspace `build` and `start` create.
+ */
+export function projectDirFromWorkspaceKey(
+  workspaceKey: string | undefined,
+): string | undefined {
+  return workspaceKey?.startsWith(PROJECT_KEY_PREFIX)
+    ? workspaceKey.slice(PROJECT_KEY_PREFIX.length)
+    : undefined;
 }
 
 /**
@@ -137,6 +152,28 @@ export function ensureWorkspace(workspaceKey: string): string {
 export interface WorkspaceEntry {
   dir: string;
   backendUrl: string;
+  /**
+   * The exact string hashed into the directory name: the canonical backend
+   * URL, or `project:<path>` for a workspace `dev` created without `-b`.
+   * Reported alongside the URL because those two keys produce two separate
+   * workspaces for the same backend, which is otherwise invisible.
+   */
+  workspaceKey?: string;
+}
+
+/**
+ * One line naming what a workspace is keyed on, for `clean --all`.
+ *
+ * A project-keyed workspace names its project directory as well as its
+ * backend, because the same backend also has — or will have — a second,
+ * URL-keyed workspace built by `build`, and the two are otherwise
+ * indistinguishable in a listing of hashed directory names.
+ */
+export function describeWorkspace(entry: WorkspaceEntry): string {
+  const projectDir = projectDirFromWorkspaceKey(entry.workspaceKey);
+  return projectDir
+    ? `${entry.backendUrl}, keyed on project ${projectDir}`
+    : entry.backendUrl;
 }
 
 /**
@@ -153,25 +190,41 @@ export function listWorkspaces(): WorkspaceEntry[] {
   for (const entry of readdirSync(DMS_FRONTEND_HOME, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const dir = join(DMS_FRONTEND_HOME, entry.name);
-    const backendUrl = readWorkspaceBackendUrl(dir);
-    if (backendUrl === undefined) {
+    const meta = readWorkspaceMeta(dir);
+    if (meta?.backendUrl === undefined) {
       console.warn(`⚠ Skipping ${dir}: no readable ${WORKSPACE_META_FILE}.`);
       continue;
     }
-    workspaces.push({ dir, backendUrl });
+    workspaces.push({
+      dir,
+      backendUrl: meta.backendUrl,
+      workspaceKey: meta.workspaceKey,
+    });
   }
   return workspaces;
 }
 
-function readWorkspaceBackendUrl(dir: string): string | undefined {
+function readWorkspaceMeta(
+  dir: string,
+): { backendUrl?: string; workspaceKey?: string } | undefined {
   let meta: unknown;
   try {
     meta = JSON.parse(readFileSync(join(dir, WORKSPACE_META_FILE), "utf-8"));
   } catch {
     return undefined;
   }
-  const backendUrl = (meta as { backendUrl?: unknown } | null)?.backendUrl;
-  return typeof backendUrl === "string" ? backendUrl : undefined;
+  const record = meta as {
+    backendUrl?: unknown;
+    workspaceKey?: unknown;
+  } | null;
+  return {
+    backendUrl:
+      typeof record?.backendUrl === "string" ? record.backendUrl : undefined,
+    workspaceKey:
+      typeof record?.workspaceKey === "string"
+        ? record.workspaceKey
+        : undefined,
+  };
 }
 
 /**

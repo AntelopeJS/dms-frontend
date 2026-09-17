@@ -1,6 +1,11 @@
 import { existsSync, rmSync } from "node:fs";
 import { Command } from "commander";
-import { getWorkspaceDir, listWorkspaces, Options } from "../common";
+import {
+  describeWorkspace,
+  getWorkspaceDir,
+  listWorkspaces,
+  Options,
+} from "../common";
 import { info, success, warning } from "../utils/cli-ui";
 
 interface CleanOptions {
@@ -28,7 +33,7 @@ export function cmdClean(): Command {
 
         for (const ws of workspaces) {
           rmSync(ws.dir, { recursive: true, force: true });
-          success(`Removed ${ws.dir} (${ws.backendUrl})`);
+          success(`Removed ${ws.dir} (${describeWorkspace(ws)})`);
         }
 
         console.log("");
@@ -38,7 +43,10 @@ export function cmdClean(): Command {
 
       if (!options.backendUrl) {
         warning(
-          "Specify -b <url> to clean a specific workspace, or --all to clean everything.",
+          "Specify -b <url> to clean a specific workspace, or --all to clean everything.\n" +
+            "  -b only reaches the workspace 'build', 'start' and 'dev -b' share for that URL;\n" +
+            "  a workspace 'dev' created without -b is keyed on the project directory and is\n" +
+            "  only removable with --all.",
         );
         process.exit(1);
       }
