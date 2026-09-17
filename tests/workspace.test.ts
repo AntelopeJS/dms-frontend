@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import {
   buildLayersFromPaths,
+  canonicalizeBackendUrl,
   computeDepsHash,
+  describeWorkspace,
   getWorkspaceDir,
   getWorkspaceDirForKey,
   type Manifest,
@@ -44,6 +46,47 @@ describe("workspace identity", () => {
     assert.notEqual(
       getWorkspaceDirForKey(projectWorkspaceKey("/home/user/worktree-a")),
       getWorkspaceDirForKey(projectWorkspaceKey("/home/user/worktree-b")),
+    );
+  });
+
+  it("shares one workspace between build, start, clean and dev -b", () => {
+    // `build`, `start` and `clean` all key on `getWorkspaceDir`, and `dev`
+    // falls back to the same canonical URL key as soon as -b is given; the
+    // command name and the dev/build mode are deliberately not in the hash,
+    // so a single backend is built and served out of a single workspace.
+    const spellings = [
+      "http://localhost:5010",
+      "http://localhost:5010/",
+      "HTTP://LOCALHOST:5010",
+      "http://127.0.0.1:5010",
+      "  http://127.0.0.1:5010  ",
+    ];
+    const dirs = new Set(spellings.map((url) => getWorkspaceDir(url)));
+    assert.equal(dirs.size, 1);
+    assert.equal(
+      getWorkspaceDirForKey(canonicalizeBackendUrl("http://localhost:5010/")),
+      getWorkspaceDir("http://127.0.0.1:5010"),
+    );
+  });
+
+  it("names the project a dev workspace is keyed on", () => {
+    // `dev` without -b intentionally does NOT share the URL-keyed workspace,
+    // so `clean --all` has to say which of the two it is removing.
+    assert.equal(
+      describeWorkspace({
+        dir: "/home/user/.antelopejs/dms-frontend/abc",
+        backendUrl: "http://127.0.0.1:5010",
+        workspaceKey: projectWorkspaceKey("/home/user/my-project"),
+      }),
+      "http://127.0.0.1:5010, keyed on project /home/user/my-project",
+    );
+    assert.equal(
+      describeWorkspace({
+        dir: "/home/user/.antelopejs/dms-frontend/abc",
+        backendUrl: "http://127.0.0.1:5010",
+        workspaceKey: canonicalizeBackendUrl("http://127.0.0.1:5010"),
+      }),
+      "http://127.0.0.1:5010",
     );
   });
 

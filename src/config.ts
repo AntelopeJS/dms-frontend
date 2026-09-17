@@ -168,10 +168,18 @@ export const Options = {
 
   force: new Option("-f, --force", "Force reinstall dependencies"),
 
-  offline: new Option(
-    "--offline",
-    "Skip the backend manifest fetch and reuse the last cached manifest (env: DMS_OFFLINE)",
-  ).default(booleanFromEnv("DMS_OFFLINE")),
+  /**
+   * Built on access rather than when this module is evaluated: its default
+   * reads the environment eagerly, and the CLI loads the project's `.env`
+   * into that environment at startup — long after the import graph settles.
+   * Reading it at module scope would miss a `DMS_OFFLINE` line in the file.
+   */
+  get offline(): Option {
+    return new Option(
+      "--offline",
+      "Skip the backend manifest fetch and reuse the last cached manifest (env: DMS_OFFLINE)",
+    ).default(booleanFromEnv("DMS_OFFLINE"));
+  },
 
   bootstrapSecret: new Option(
     "--bootstrap-secret <secret>",

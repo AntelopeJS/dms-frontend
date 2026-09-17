@@ -17,7 +17,10 @@ const UUID =
 function key() {
   const secret = process.env.DMS_SESSION_SECRET;
   if (!secret || secret.length < 32)
-    throw new Error("DMS_SESSION_SECRET must contain at least 32 characters");
+    throw new Error(
+      "DMS_SESSION_SECRET must contain at least 32 characters; " +
+        "generate one with: openssl rand -hex 32",
+    );
   return createHash("sha256").update(secret).digest();
 }
 

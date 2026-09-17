@@ -126,9 +126,64 @@ The SDK also exposes `use` for Vue plugins. Entries execute by descending manife
 
 ## Discovery, caching, and security
 
-In development, `ajs dms` discovers the backend from the nearest live `.antelope/dev.json`. It reads the local bootstrap credential from `.antelope/dms-dev.json` only when that discovered backend matches the destination URL. For production and CI, set `DMS_API_BASE_URL` and `DMS_BOOTSTRAP_SECRET` in the environment rather than passing credentials on the command line.
+In development, `ajs dms` discovers the backend from the nearest live `.antelope/dev.json`. It reads the local bootstrap credential from `.antelope/dms-dev.json` only when that discovered backend matches the destination URL. For production and CI, set `DMS_API_BASE_URL` and `DMS_BOOTSTRAP_SECRET` in the environment, or in the project's `.env`, rather than passing credentials on the command line.
 
-Each canonical backend URL gets an owner-only workspace under `~/.antelopejs/dms-frontend`. Manifest caches, private module configuration, and extracted archives retain restrictive permissions. `--offline` reuses the last successful manifest and archive; an authorization failure never falls back to privileged cached data.
+Each canonical backend URL gets an owner-only workspace under `~/.antelopejs/dms-frontend` (see [Workspaces](#workspaces) for how the key is derived). Manifest caches, private module configuration, and extracted archives retain restrictive permissions. `--offline` reuses the last successful manifest and archive; an authorization failure never falls back to privileged cached data.
+
+## Configuration
+
+Every command loads `.env.local` then `.env` from the **current working
+directory** before it parses its options, so a project can keep its
+configuration in a file instead of exporting variables by hand:
+
+```bash
+# .env
+DMS_API_BASE_URL=http://localhost:5010
+DMS_CLIENT_BASE_URL=http://localhost:3001
+DMS_BOOTSTRAP_SECRET=replace_with_a_strong_random_value
+DMS_SESSION_SECRET=replace_with_at_least_32_characters
+```
+
+Precedence is environment, then `.env.local`, then `.env`: a variable already
+present in the environment is never overwritten, so `DMS_API_BASE_URL=… ajs dms
+build` and a CI job's injected secrets always win over a file left in the
+checkout. A variable exported as an empty string counts as set. Only the
+current directory is read — never a parent directory, and never the generated
+workspace under `~/.antelopejs/dms-frontend`, which is this tool's own output
+and is handed its environment explicitly by the command that spawns it. The
+values loaded here reach the workspace build started by `build`, the dev server
+started by `dev`, and the production server started by `start`, because those
+child processes inherit the environment. A missing file is not an error; an
+unreadable one is reported and skipped.
+
+`DMS_SESSION_SECRET` is mandatory for anything that touches a session. The
+generated server encrypts its session cookie with it, and with no value — or
+one shorter than 32 characters — the login page at `/auth` fails the first
+sign-in attempt rather than starting degraded. Generate one with
+`openssl rand -hex 32`.
+
+### Workspaces
+
+Each canonical backend URL gets its own owner-only workspace under
+`~/.antelopejs/dms-frontend/<sha256>/`; `build`, `start`, `clean -b` and
+`dev -b` all key on that URL, so one backend means one workspace shared by
+every command.
+
+`dev` without `-b` is the deliberate exception. It discovers the backend from
+the enclosing antelope project's `.antelope/dev.json` and keys its workspace on
+the **project directory** instead, because a development backend can land on a
+different port between runs and re-keying on the URL would discard
+`node_modules`, the manifest cache and the client-side appId scope every time it
+does. The consequence is that `ajs dms dev` followed by `ajs dms build -b <url>`
+against the same backend creates two workspaces of their own — several hundred
+megabytes each. Pass `-b` to `dev` to share a single one. `clean --all` lists
+both and names the project a workspace is keyed on; `clean -b <url>` only
+reaches the URL-keyed one.
+
+A `DMS_API_BASE_URL` line in `.env` counts as an explicit backend, so a project
+that configures one gets the single shared workspace and gives up autodiscovery
+— including its tolerance for the backend moving to another port. Leave the
+variable out of `.env` to keep autodiscovery for `dev`.
 
 ## Rendering model
 
@@ -149,6 +204,10 @@ frontend-module registry drives server and client entries.
 | `--bootstrap-secret` | `DMS_BOOTSTRAP_SECRET` | Backend bootstrap credential |
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
+| | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
+| | `DMS_CLIENT_BASE_URL` | Public frontend URL used in generated links and emails |
+
+All of these can be set in the project's `.env` instead of the environment; see [Configuration](#configuration).
 
 Use pnpm for all repository and workspace operations.
 
