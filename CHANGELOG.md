@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.8
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.7...v0.1.8)
+
+### 🚀 Enhancements
+
+- Take /auth/establish endpoints from the frontend manifest ([#13](https://github.com/AntelopeJS/dms-frontend/pull/13))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.7
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.6...v0.1.7)
