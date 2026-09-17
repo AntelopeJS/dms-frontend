@@ -29,7 +29,7 @@ describe("DMS CLI plugin", () => {
   it("declares the AntelopeJS CLI as an optional peer", () => {
     assert.equal(
       packageJson.peerDependencies["@antelopejs/core"],
-      ">=1.6.0 <2",
+      ">=1.6.0 <3",
     );
     assert.equal(
       packageJson.peerDependenciesMeta["@antelopejs/core"].optional,
