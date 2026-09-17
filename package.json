@@ -82,7 +82,7 @@
     "vue-i18n": "^11.2.7"
   },
   "peerDependencies": {
-    "@antelopejs/core": ">=1.6.0 <3"
+    "@antelopejs/core": ">=1.7.0 <2"
   },
   "peerDependenciesMeta": {
     "@antelopejs/core": {
