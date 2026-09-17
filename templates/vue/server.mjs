@@ -11,7 +11,7 @@ import {
 } from "node:zlib";
 import { ofetch } from "ofetch";
 import { RequestBodyError, UpstreamError } from "./server/auth/backend.mjs";
-import { isSameOrigin } from "./server/auth/client-ip.mjs";
+import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./server/auth/client-ip.mjs";
 import {
   handleAuth,
   publicSession,
@@ -242,7 +242,7 @@ export function requestOwnership(method, pathname) {
 async function proxy(request, response, fallbackOnNotFound = false) {
   if (!SAFE_METHODS.has(request.method) && !isSameOrigin(request)) {
     response.writeHead(403, { "content-type": JSON_TYPE });
-    response.end(JSON.stringify({ error: "Forbidden" }));
+    response.end(JSON.stringify(CROSS_ORIGIN_ERROR));
     return true;
   }
   const target = new URL(request.url, process.env.DMS_API_BASE_URL);

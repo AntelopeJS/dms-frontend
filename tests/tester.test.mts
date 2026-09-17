@@ -216,11 +216,15 @@ test("rejects absent, forged, non-owner and revoked sessions regardless of outbo
 
 test("requires same-origin POST before any backend traffic", async () => {
   for (const origin of ["", "https://attacker.invalid", "null"]) {
-    assert.equal(
-      (await invoke({}, { origin, "x-forwarded-host": "attacker.invalid" }))
-        .response.status,
-      403,
+    const { response, data } = await invoke(
+      {},
+      { origin, "x-forwarded-host": "attacker.invalid" },
     );
+    assert.equal(response.status, 403);
+    assert.deepEqual(data, {
+      error: "Forbidden",
+      reason: "missing or untrusted Origin header",
+    });
   }
   const { response } = await invoke({}, {}, "GET");
   assert.equal(response.status, 405);
