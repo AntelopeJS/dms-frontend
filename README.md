@@ -162,6 +162,47 @@ one shorter than 32 characters — the login page at `/auth` fails the first
 sign-in attempt rather than starting degraded. Generate one with
 `openssl rand -hex 32`.
 
+### Opening a session from a module flow
+
+`/auth/login`, `/auth/signup` and `/auth/verify-2fa` are not the only ways a
+visitor becomes authenticated: a module can own a flow that ends in an
+authenticated user — a self-service registration completing after payment, an
+invitation being redeemed — and needs the session cookie opened at the end of
+it. `POST /auth/establish` is the generic form of those three routes.
+
+The browser names a backend endpoint and the payload to send it:
+
+```ts
+await $fetch("/auth/establish", {
+  method: "POST",
+  body: {
+    endpoint: "/api/saas/register/finalize",
+    payload: { /* whatever that backend route expects */ },
+  },
+});
+```
+
+The frontend server calls that endpoint itself over its own server-to-server
+channel to `DMS_API_BASE_URL`, exactly as it calls `/api/auth/login`, and
+writes the session from the token pair the backend answers with. The browser
+never sends a token and never receives one: it gets back the same
+`{ user, account }` body the login route returns, and the two-factor and
+tenant-assignment outcomes are handled identically.
+
+Because the route turns a backend endpoint into a login, it only calls the
+endpoints the deployment names:
+
+```bash
+# .env
+DMS_AUTH_ESTABLISH_ENDPOINTS=/api/saas/register/finalize,/api/invites/redeem
+```
+
+The list is empty by default and matched verbatim against absolute `/api/…`
+paths — no prefixes, no query strings, no traversal — so no backend route that
+happens to mint a token pair can be turned into a login by a request from the
+browser. An undeclared endpoint is answered `403` and never called. The route
+is `POST`-only and same-origin, like every other auth action.
+
 ### Workspaces
 
 Each canonical backend URL gets its own owner-only workspace under
@@ -205,6 +246,7 @@ frontend-module registry drives server and client entries.
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
 | | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
+| | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Backend endpoints `/auth/establish` may open a session from (comma-separated, empty by default) |
 | | `DMS_CLIENT_BASE_URL` | Public frontend URL used in generated links and emails |
 
 All of these can be set in the project's `.env` instead of the environment; see [Configuration](#configuration).

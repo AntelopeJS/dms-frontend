@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { Readable } from "node:stream";
 import { describe, it } from "node:test";
 import {
   backend,
@@ -12,7 +13,12 @@ import {
   isValidOAuthProvider,
   resolveOAuthClientKey,
 } from "../templates/vue/server/auth/oauth.mjs";
-import { refreshSession } from "../templates/vue/server/auth/routes.mjs";
+import {
+  allowedEstablishEndpoints,
+  handleAuth,
+  isAllowedEstablishEndpoint,
+  refreshSession,
+} from "../templates/vue/server/auth/routes.mjs";
 import {
   assertAccountInvariant,
   writeSession,
@@ -267,5 +273,171 @@ describe("auth adapter safety", () => {
       delete process.env.DMS_SESSION_SECRET;
       delete process.env.DMS_COOKIE_SECURE;
     }
+  });
+});
+
+interface CapturedResponse extends CookieResponse {
+  statusCode: number;
+  payload: string;
+  writeHead: (code: number, extra?: Record<string, string>) => void;
+  end: (body?: string) => void;
+}
+
+function capturedResponse(): CapturedResponse {
+  const base = cookieResponse();
+  const response = base as CapturedResponse;
+  response.statusCode = 0;
+  response.payload = "";
+  response.writeHead = (code, extra) => {
+    response.statusCode = code;
+    for (const [name, value] of Object.entries(extra ?? {}))
+      base.setHeader(name, value);
+  };
+  response.end = (body) => {
+    response.payload = body ?? "";
+  };
+  return response;
+}
+
+/** The half of an `IncomingMessage` the auth adapter actually reads. */
+function establishRequest(payload: unknown) {
+  return Object.assign(Readable.from([Buffer.from(JSON.stringify(payload))]), {
+    method: "POST",
+    headers: { origin: "http://frontend.local", host: "frontend.local" },
+    socket: { remoteAddress: "127.0.0.1" },
+  });
+}
+
+function accessToken(tenantId: string): string {
+  const claims = Buffer.from(JSON.stringify({ tenantId })).toString(
+    "base64url",
+  );
+  return `header.${claims}.signature`;
+}
+
+const ESTABLISH_URL = new URL("http://frontend.local/auth/establish");
+
+describe("session establishment from a module endpoint", () => {
+  it("keeps the allowlist empty when nothing is declared", () => {
+    assert.deepEqual(allowedEstablishEndpoints(undefined), []);
+    assert.deepEqual(allowedEstablishEndpoints(""), []);
+  });
+
+  it("reads a comma-separated declaration and drops malformed entries", () => {
+    assert.deepEqual(
+      allowedEstablishEndpoints(
+        " /api/saas/register/finalize , /api/invites/redeem ,,http://evil/api/x,/auth/login,/api/../secret",
+      ),
+      ["/api/saas/register/finalize", "/api/invites/redeem"],
+    );
+  });
+
+  it("only accepts an endpoint the deployment declared, verbatim", () => {
+    const allowed = allowedEstablishEndpoints("/api/saas/register/finalize");
+    assert.equal(
+      isAllowedEstablishEndpoint("/api/saas/register/finalize", allowed),
+      true,
+    );
+    for (const endpoint of [
+      "/api/auth/login",
+      "/api/saas/register/finalize/",
+      "/api/saas/register/finalize?x=1",
+      "/api/saas/register/../../secret",
+      "//evil.test/api/saas/register/finalize",
+      undefined,
+      42,
+    ])
+      assert.equal(isAllowedEstablishEndpoint(endpoint, allowed), false);
+  });
+
+  it("opens the session from tokens it fetched itself, and returns none of them", async () => {
+    const calls: { url: string; body: string }[] = [];
+    const api = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        calls.push({
+          url: request.url ?? "",
+          body: Buffer.concat(chunks).toString("utf8"),
+        });
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            token_type: "Bearer",
+            access_token: accessToken("tenant-1"),
+            expires_in: 900,
+            refresh_token: "module-refresh-token",
+            user: { _id: "user-1", email: "a@b.test", name: "A" },
+          }),
+        );
+      });
+    });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const address = api.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_SESSION_SECRET = "dms-inertia-test-session-secret-value";
+    process.env.DMS_COOKIE_SECURE = "false";
+    process.env.DMS_AUTH_ESTABLISH_ENDPOINTS = "/api/saas/register/finalize";
+    const response = capturedResponse();
+    try {
+      await handleAuth(
+        establishRequest({
+          endpoint: "/api/saas/register/finalize",
+          payload: { workspaceName: "Acme" },
+        }),
+        response,
+        ESTABLISH_URL,
+      );
+    } finally {
+      api.close();
+      delete process.env.DMS_AUTH_ESTABLISH_ENDPOINTS;
+    }
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "/api/saas/register/finalize");
+    assert.deepEqual(JSON.parse(calls[0].body), { workspaceName: "Acme" });
+    assert.equal(response.statusCode, 200);
+
+    const body = JSON.parse(response.payload);
+    assert.deepEqual(body.user, {
+      _id: "user-1",
+      email: "a@b.test",
+      name: "A",
+    });
+    assert.equal(body.account.activeTenantId, "tenant-1");
+    assert.ok(!response.payload.includes("module-refresh-token"));
+
+    const cookies = response.headers.get("set-cookie");
+    const written = Array.isArray(cookies) ? cookies : [cookies];
+    assert.ok(written.some((cookie) => cookie?.startsWith("dms_session=")));
+  });
+
+  it("refuses an endpoint the deployment never declared, without calling it", async () => {
+    let called = false;
+    const api = createServer((_request, response) => {
+      called = true;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("{}");
+    });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const address = api.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    delete process.env.DMS_AUTH_ESTABLISH_ENDPOINTS;
+    const response = capturedResponse();
+    try {
+      await handleAuth(
+        establishRequest({ endpoint: "/api/auth/login", payload: {} }),
+        response,
+        ESTABLISH_URL,
+      );
+    } finally {
+      api.close();
+    }
+
+    assert.equal(called, false);
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.headers.get("set-cookie"), undefined);
   });
 });

@@ -56,7 +56,7 @@ const AUTH_SERVER_ROUTES = [
   ["DELETE", /^\/api\/_auth\/session\/?$/],
   [
     "POST",
-    /^\/auth\/(?:login|signup|verify-2fa|request-2fa-email|switch-account|switch-tenant|validate-account|remove-account)\/?$/,
+    /^\/auth\/(?:login|signup|verify-2fa|establish|request-2fa-email|switch-account|switch-tenant|validate-account|remove-account)\/?$/,
   ],
   ["POST", /^\/auth\/oauth\/handoff\/?$/],
   ["GET", /^\/auth\/oauth\/[^/]+\/(?:start|callback)\/?$/],
