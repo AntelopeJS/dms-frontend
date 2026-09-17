@@ -1,5 +1,5 @@
 import { body, json, RequestBodyError } from "./auth/backend.mjs";
-import { isSameOrigin } from "./auth/client-ip.mjs";
+import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./auth/client-ip.mjs";
 import { readSession } from "./auth/session.mjs";
 
 const RESPONSE_LIMIT = 64 * 1024;
@@ -206,8 +206,7 @@ export async function handleTester(request, response) {
     response.setHeader("allow", "POST");
     return json(response, 405, { error: "Method Not Allowed" });
   }
-  if (!isSameOrigin(request))
-    return json(response, 403, { error: "Forbidden" });
+  if (!isSameOrigin(request)) return json(response, 403, CROSS_ORIGIN_ERROR);
   try {
     const session = readSession(request);
     if (!session?.accessToken)

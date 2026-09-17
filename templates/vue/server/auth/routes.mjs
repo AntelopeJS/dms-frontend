@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { backend, body, json, UpstreamError } from "./backend.mjs";
-import { isSameOrigin } from "./client-ip.mjs";
+import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./client-ip.mjs";
 import {
   oauthCallback,
   oauthHandoff,
@@ -288,8 +288,7 @@ export async function handleAuth(request, response, url) {
       response.setHeader("allow", "GET, POST, DELETE");
       return json(response, 405, { error: "Method Not Allowed" });
     }
-    if (!isSameOrigin(request))
-      return json(response, 403, { error: "Forbidden" });
+    if (!isSameOrigin(request)) return json(response, 403, CROSS_ORIGIN_ERROR);
     return request.method === "DELETE"
       ? logout(request, response)
       : refresh(request, response);
@@ -301,8 +300,9 @@ export async function handleAuth(request, response, url) {
     return match[2] === "start"
       ? oauthStart(request, response, match[1], url)
       : oauthCallback(request, response, match[1], url);
-  if (request.method !== "POST" || !isSameOrigin(request))
-    return json(response, 403, { error: "Forbidden" });
+  if (request.method !== "POST")
+    return json(response, 403, { error: "Forbidden", reason: "POST required" });
+  if (!isSameOrigin(request)) return json(response, 403, CROSS_ORIGIN_ERROR);
   if (url.pathname === "/auth/oauth/handoff")
     return oauthHandoff(request, response);
   const endpoint = PASSTHROUGH.get(url.pathname);

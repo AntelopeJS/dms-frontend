@@ -593,6 +593,22 @@ describe("frontend auth runtime", () => {
         body: "{}",
       });
       assert.equal(rejected.status, 403);
+      assert.deepEqual(await rejected.json(), {
+        error: "Forbidden",
+        reason: "missing or untrusted Origin header",
+      });
+      // A client that sends no Origin at all (curl, a server-side
+      // integration) gets the same explicit refusal rather than a bare
+      // "Forbidden" indistinguishable from bad credentials.
+      const originless = await fetch(`${base}/auth/login`, {
+        method: "POST",
+        body: "{}",
+      });
+      assert.equal(originless.status, 403);
+      assert.deepEqual(await originless.json(), {
+        error: "Forbidden",
+        reason: "missing or untrusted Origin header",
+      });
     } finally {
       frontend.close();
       backend.close();
@@ -630,6 +646,10 @@ describe("frontend auth runtime", () => {
         body: "{}",
       });
       assert.equal(rejected.status, 403);
+      assert.deepEqual(await rejected.json(), {
+        error: "Forbidden",
+        reason: "missing or untrusted Origin header",
+      });
 
       const relayed = await fetch(`${base}/api/items`, {
         method: "POST",

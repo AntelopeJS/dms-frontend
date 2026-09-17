@@ -50,3 +50,17 @@ export function clientIp(request) {
   const chain = [...forwarded, socketIp];
   return chain[Math.max(0, chain.length - hops - 1)] ?? socketIp;
 }
+
+/**
+ * Body answered with the 403 of the CSRF origin check.
+ *
+ * The check itself is unchanged: a state-changing request must carry an
+ * `Origin` matching the frontend's own. The `reason` only makes the refusal
+ * diagnosable, since a bare `{"error":"Forbidden"}` on `POST /auth/login`
+ * looks exactly like bad credentials to an API client that simply forgot
+ * the header (curl, a server-side integration, a test harness).
+ */
+export const CROSS_ORIGIN_ERROR = Object.freeze({
+  error: "Forbidden",
+  reason: "missing or untrusted Origin header",
+});
