@@ -7,12 +7,19 @@ import { cmdDev } from "./commands/dev";
 import { cmdPrepare } from "./commands/prepare";
 import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
+import { ENV_FILE_NAMES, loadProjectEnv } from "./env-file";
 import { checkForUpdate, stripUpdateCheckFlag } from "./update-check";
 import { displayBanner } from "./utils/cli-ui";
 
 const { version } = require("../package.json");
 
 const runCLI = async () => {
+  // Before anything reads the environment: every command option binds to an
+  // environment variable that Commander resolves while parsing, the commands
+  // below are only constructed after this point, and each child process the
+  // CLI spawns inherits `process.env` as it stands here.
+  loadProjectEnv();
+
   const argv = process.argv.slice(2);
 
   // Fire and forget: the registry socket is unref'd, so a short command
@@ -41,7 +48,24 @@ const runCLI = async () => {
       "--no-update-check",
       "Skip the daily check for a newer DMS frontend release",
     )
-    .helpCommand("help [command]", "Display help for a specific command");
+    .helpCommand("help [command]", "Display help for a specific command")
+    .addHelpText(
+      "after",
+      `
+Environment:
+  Every command reads ${ENV_FILE_NAMES.join(" then ")} from the current directory before parsing
+  its options, so DMS_API_BASE_URL, DMS_BOOTSTRAP_SECRET, DMS_SESSION_SECRET and
+  the other variables below can live in the project's .env. A variable already
+  set in the environment always wins over a file, and .env.local wins over .env.
+  The generated workspace never loads a .env of its own.
+
+Workspaces:
+  Each canonical backend URL gets its own workspace under
+  ~/.antelopejs/dms-frontend. 'dev' without -b is the exception: it keys the
+  workspace on the antelope project directory instead, so a backend that lands
+  on a different port between runs keeps its node_modules and manifest cache.
+  Pass -b to 'dev' to share one workspace with 'build' and 'start'.`,
+    );
 
   program.addCommand(cmdDev());
   program.addCommand(cmdBuild());
