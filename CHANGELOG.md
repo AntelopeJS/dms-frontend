@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.7
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.6...v0.1.7)
+
+### 🩹 Fixes
+
+- **cli:** Kill the spawned server with the CLI and explain CSRF 403s ([#12](https://github.com/AntelopeJS/dms-frontend/pull/12))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.6
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.5...v0.1.6)
