@@ -42,7 +42,7 @@ function tryListen(port: number): Promise<Server | undefined> {
  * Reserve the port the dev server should use: the requested port if free,
  * otherwise the next free one up to `preferred + range` (clamped to the
  * TCP maximum). We probe ourselves instead of letting the frontend server fall back
- * silently — ajs-dms must know the real port, since it is sent to the
+ * silently — ajs dms must know the real port, since it is sent to the
  * backend as the manifest's `clientUrl`.
  */
 export async function reserveFreePort(

@@ -5,7 +5,7 @@
 // `DMS_OFFLINE`, … — and passes `process.env` on to the workspace build and to
 // the generated server. A project that keeps those values in a `.env` file
 // (as the DMS project templates suggest) would otherwise have to export them
-// by hand before every `ajs-dms` invocation.
+// by hand before every `ajs dms` invocation.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,7 +36,7 @@ export interface LoadProjectEnvOptions {
  * A variable already present in `env` is never overwritten, so the real
  * environment always wins over a file and `.env.local` always wins over
  * `.env`. That ordering is what makes the files safe to load unconditionally:
- * a CI job, a container, or a one-off `DMS_API_BASE_URL=… ajs-dms build` keeps
+ * a CI job, a container, or a one-off `DMS_API_BASE_URL=… ajs dms build` keeps
  * the value the operator chose even when a stale `.env` sits in the checkout.
  *
  * Only the current working directory is consulted — never a parent, and never
