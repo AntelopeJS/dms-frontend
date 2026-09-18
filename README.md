@@ -104,7 +104,7 @@ Manifest negotiation and module materialization are the renderer contract descri
 
 The generated Vue application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router: "inertia" }`, and `@nuxt/ui/vue-plugin`. The Node server resolves each Inertia visit through `/dms/page?path=…`, including fresh shared data so account, tenant, and permission changes update navigation state. It proxies backend routes and manages authentication through server-side sessions. `DMS_BOOTSTRAP_SECRET` is used only by the CLI's server-to-server frontend manifest and module archive requests and is never sent by, or exposed to, browser traffic.
 
-Vue modules use `dms.frontend.ts` and the `#dms/frontend-module` SDK alias, the import path every DMS frontend module now uses. The alias is renderer-neutral on purpose: a module must not depend on the transport, Inertia being an implementation detail of the Vue renderer. Email templates register separately through `dms.email.ts`.
+Vue modules register through `dms.frontend.ts` and import the SDK from the `#dms/frontend-module` alias, which the loader resolves to the generated `frontend-module.ts`: `defineDmsPlugin`, `useDmsRouter`, the page and session types, and everything else a module needs from the host. Email templates register separately through `dms.email.ts`.
 
 An email entry exports `serverEmailTemplates` and may export a plain `appConfig` object, such as shared branding defaults. Email rendering merges these configurations in manifest-priority order and provides them to `useDmsAppConfig` per render. Public runtime options come from the module manifest; `DMS_CLIENT_BASE_URL` overrides `public.dms.clientBaseUrl`. Email entries must not import the browser frontend module.
 
