@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.9...v0.2.0)
+
+### 💅 Refactors
+
+- ⚠️  Rename the frontend-module SDK alias to `#dms/frontend-module` ([#16](https://github.com/AntelopeJS/dms-frontend/pull/16))
+
+### 🏡 Chore
+
+- Align community files with the organization defaults ([#15](https://github.com/AntelopeJS/dms-frontend/pull/15))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Rename the frontend-module SDK alias to `#dms/frontend-module` ([#16](https://github.com/AntelopeJS/dms-frontend/pull/16))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.9
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.8...v0.1.9)
