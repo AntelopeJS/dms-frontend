@@ -1,5 +1,5 @@
 // The CLI half of the child-lifetime test: spawns a long-lived child through
-// runCommand, the way `ajs-dms start` and `ajs-dms dev` spawn server.mjs.
+// runCommand, the way `ajs dms start` and `ajs dms dev` spawn server.mjs.
 //
 // argv: <pid file> <mode>, mode being "wait" (exit with the child's code) or
 // "self-exit" (the CLI dies on its own while the child is still running).

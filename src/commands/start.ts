@@ -30,7 +30,7 @@ export function cmdStart(): Command {
         error("Production build not found!");
         console.log(
           chalk.dim(
-            "  Run 'ajs-dms build -b " +
+            "  Run 'ajs dms build -b " +
               options.backendUrl +
               "' first to create a production build",
           ),

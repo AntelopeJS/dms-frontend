@@ -74,7 +74,7 @@ describe("running outside a DMS project", () => {
   it("prints help without a project", async () => {
     const result = await runCli(["--help"]);
     assert.equal(result.code, 0);
-    assert.match(result.stdout, /Usage: ajs-dms/);
+    assert.match(result.stdout, /Usage: ajs dms/);
     assert.match(result.stdout, /--no-update-check/);
   });
 

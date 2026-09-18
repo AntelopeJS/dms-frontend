@@ -32,8 +32,8 @@ export function assertLayerPathsServed(
   throw new Error(
     "The backend served a manifest without layer source paths:\n" +
       pathless.map((mod) => `  - ${mod.name}`).join("\n") +
-      "\n`ajs-dms dev` needs a development backend running on this machine (started with " +
-      "`ajs project dev`); use `ajs-dms build` against a remote or production one.\n" +
+      "\n`ajs dms dev` needs a development backend running on this machine (started with " +
+      "`ajs project dev`); use `ajs dms build` against a remote or production one.\n" +
       "If the backend is local and in development mode, it did not recognize the bootstrap " +
       "credential — see DMS_BOOTSTRAP_SECRET.",
   );

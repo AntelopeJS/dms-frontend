@@ -69,7 +69,7 @@ export function cmdBuild(): Command {
           console.log("");
           success("Build completed successfully!");
           console.log(
-            chalk.dim("  Run 'ajs-dms start' to start the production server"),
+            chalk.dim("  Run 'ajs dms start' to start the production server"),
           );
         } else {
           error("Build failed");

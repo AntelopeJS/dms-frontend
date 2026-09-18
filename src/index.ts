@@ -36,7 +36,7 @@ const runCLI = async () => {
   }
 
   const program = new Command()
-    .name("ajs-dms")
+    .name("ajs dms")
     .description(
       `Antelope DMS - Frontend Loader v${version}\n\n` +
         `Materializes frontend modules from an AntelopeJS backend and starts a Vue or React Vite and Inertia application.`,

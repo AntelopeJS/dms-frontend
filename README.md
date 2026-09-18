@@ -10,7 +10,9 @@ Frontend-agnostic loader for AntelopeJS DMS. The backend serves a frontend
 manifest and the matching frontend-module archives; the `ajs dms` CLI
 materializes them into a generated workspace for one renderer, builds it, and
 runs its Node frontend server. The `vue` renderer — Vue 3, Vite, Inertia, and
-SSR — is the one shipped today.
+SSR — is the one shipped today. The package itself installs a single executable,
+`ajs-dms`; `ajs dms` is the core CLI delegating to it, and is the name every
+project, script and document uses.
 
 ## Renderers
 
@@ -55,15 +57,23 @@ not infer application ownership from other framework configuration.
 
 ## Install
 
-The loader is an AntelopeJS CLI plugin: install it next to `@antelopejs/core`
-and `ajs` delegates its `dms` command to the `ajs-dms` executable.
+The loader is an official AntelopeJS CLI plugin: install it next to
+`@antelopejs/core` and run it as `ajs dms <command>`. That is the only supported
+way to invoke it — in a shell, in a package script, in CI and in a container
+alike.
 
 ```bash
+# in a project (the usual case: both are already project dependencies)
+pnpm add @antelopejs/core @antelopejs/dms-frontend
+
+# or globally
 pnpm add -g @antelopejs/core @antelopejs/dms-frontend
 ```
 
 `npm install -g` works too; this repository and every generated workspace use
-pnpm.
+pnpm. Inside a package script, `ajs` resolves from `node_modules/.bin`, and the
+`dms` command it delegates to resolves the project-local plugin, so a script
+never depends on a global install.
 
 ## Commands
 
@@ -76,9 +86,6 @@ ajs dms clean -b https://dms.example.com
 ajs dms clean --all
 ```
 
-`ajs dms <command>` and `ajs-dms <command>` are the same program; the delegation
-only saves you from remembering a second executable name. Package scripts should
-call `ajs-dms` directly so they do not depend on the CLI being installed.
 `--help`, `--version` and `clean` run from any directory. `prepare` also runs
 anywhere: with no backend in reach it warns and exits 0, so a frontend module's
 `postinstall` hook never fails an install, and the generated types are refreshed
