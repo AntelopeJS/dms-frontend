@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.9
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.8...v0.1.9)
+
+### 📖 Documentation
+
+- **cli:** Present the loader as `ajs dms <command>` ([#14](https://github.com/AntelopeJS/dms-frontend/pull/14))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.8
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.7...v0.1.8)
