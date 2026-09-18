@@ -135,7 +135,7 @@ export default defineConfig({
   resolve: {
     dedupe: ["vue", "reka-ui", "@nuxt/ui"],
     alias: {
-      "#dms-inertia/frontend-module": resolve(__dirname, "frontend-module.ts"),
+      "#dms/frontend-module": resolve(__dirname, "frontend-module.ts"),
       "#build/nuxt-icon-client-bundle": "virtual:nuxt-ui-icons",
       "#shortcuts-aggregated": resolve(
         __dirname,

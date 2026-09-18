@@ -328,7 +328,7 @@ function writeFrontendTypePaths(
   registry: FrontendModuleRegistry,
 ): void {
   const paths: Record<string, string[]> = {
-    "#dms-inertia/frontend-module": ["./frontend-module.ts"],
+    "#dms/frontend-module": ["./frontend-module.ts"],
     "@frontend/*": ["./frontend-modules/*"],
   };
   [...registry.modules].reverse().forEach((module) => {

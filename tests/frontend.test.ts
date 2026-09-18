@@ -29,7 +29,7 @@ describe("Vite frontend generation", () => {
       join(workspace, "frontend-modules.generated.ts"),
       "utf8",
     );
-    assert.match(paths, /#dms-inertia\/frontend-module/);
+    assert.match(paths, /#dms\/frontend-module/);
     assert.match(loader, /dms\.frontend\.ts/);
   });
 

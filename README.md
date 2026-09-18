@@ -44,7 +44,7 @@ making the template root (`src/materialize.ts`) and the manifest query
 `--renderer` flag and no renderer registry; the single-renderer assumption is
 deliberate until a second renderer exists. Whatever a renderer names its module
 entry is its own convention: `dms.frontend.ts` and the
-`#dms-inertia/frontend-module` alias belong to the Vue renderer, not to the
+`#dms/frontend-module` alias belong to the Vue renderer, not to the
 loader.
 
 ## Application ownership
@@ -104,7 +104,7 @@ Manifest negotiation and module materialization are the renderer contract descri
 
 The generated Vue application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router: "inertia" }`, and `@nuxt/ui/vue-plugin`. The Node server resolves each Inertia visit through `/dms/page?path=…`, including fresh shared data so account, tenant, and permission changes update navigation state. It proxies backend routes and manages authentication through server-side sessions. `DMS_BOOTSTRAP_SECRET` is used only by the CLI's server-to-server frontend manifest and module archive requests and is never sent by, or exposed to, browser traffic.
 
-Vue modules use `dms.frontend.ts` and the `#dms-inertia/frontend-module` SDK alias, which replaces the former `#cms-inertia` alias and is the import path every DMS frontend module now uses. Email templates register separately through `dms.email.ts`.
+Vue modules use `dms.frontend.ts` and the `#dms/frontend-module` SDK alias, the import path every DMS frontend module now uses. The alias is renderer-neutral on purpose: a module must not depend on the transport, Inertia being an implementation detail of the Vue renderer. Email templates register separately through `dms.email.ts`.
 
 An email entry exports `serverEmailTemplates` and may export a plain `appConfig` object, such as shared branding defaults. Email rendering merges these configurations in manifest-priority order and provides them to `useDmsAppConfig` per render. Public runtime options come from the module manifest; `DMS_CLIENT_BASE_URL` overrides `public.dms.clientBaseUrl`. Email entries must not import the browser frontend module.
 
@@ -117,7 +117,7 @@ A materialized module opts into the Vue adapter with a root `dms.frontend.ts`:
 ```ts
 import MyBlock from "./components/MyBlock.vue";
 import MyPage from "./pages/MyPage.vue";
-import type { DmsFrontendModule } from "../../frontend-module";
+import type { DmsFrontendModule } from "#dms/frontend-module";
 
 const frontendModule: DmsFrontendModule = {
   setup(sdk) {

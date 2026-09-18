@@ -247,7 +247,7 @@ describe("auth adapter safety", () => {
     const address = api.address();
     assert.ok(address && typeof address === "object");
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
-    process.env.DMS_SESSION_SECRET = "dms-inertia-test-session-secret-value";
+    process.env.DMS_SESSION_SECRET = "dms-frontend-test-session-secret-value";
     process.env.DMS_COOKIE_SECURE = "false";
     const cookie = sessionCookie();
     try {
@@ -429,7 +429,7 @@ describe("session establishment from a module endpoint", () => {
     const address = api.address();
     assert.ok(address && typeof address === "object");
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
-    process.env.DMS_SESSION_SECRET = "dms-inertia-test-session-secret-value";
+    process.env.DMS_SESSION_SECRET = "dms-frontend-test-session-secret-value";
     process.env.DMS_COOKIE_SECURE = "false";
     process.env.DMS_AUTH_ESTABLISH_ENDPOINTS = "/api/saas/register/finalize";
     const response = capturedResponse();
