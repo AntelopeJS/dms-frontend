@@ -982,8 +982,8 @@ export const DmsLink: Component = defineComponent({
   },
 });
 
-export const DmsClientOnly = defineComponent({
-  name: "DmsClientOnly",
+export const ClientOnly = defineComponent({
+  name: "ClientOnly",
   setup(_, { slots }) {
     const isMounted = ref(false);
     onMounted(() => {
@@ -1398,7 +1398,7 @@ export async function installDmsPlugins(
     })),
   );
   app.component("DmsLink", DmsLink);
-  app.component("DmsClientOnly", DmsClientOnly);
+  app.component("ClientOnly", ClientOnly);
   components.forEach(({ component, name }) => {
     app.component(name, component);
   });

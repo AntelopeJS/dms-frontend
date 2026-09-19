@@ -121,7 +121,7 @@ export default defineConfig({
               "useSeoMeta",
               "useDmsState",
               "useDmsAppConfig",
-              "DmsClientOnly",
+              "ClientOnly",
               "DmsLink",
               "useUserSession",
             ],

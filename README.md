@@ -258,7 +258,7 @@ variable out of `.env` to keep autodiscovery for `dev`.
 The Node server renders full-page requests through the Vite SSR bundle and sends
 the matching Inertia page object to the browser for hydration. Subsequent
 `X-Inertia` visits receive page objects and render client-side. Client-only
-plugins and `DmsClientOnly` defer browser-only work while the same generated
+plugins and `ClientOnly` defer browser-only work while the same generated
 frontend-module registry drives server and client entries.
 
 ## Options

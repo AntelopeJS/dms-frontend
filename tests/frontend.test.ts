@@ -423,6 +423,8 @@ describe("Vite frontend generation", () => {
     assert.match(config, /dirsScanOptions: \{ types: true \}/);
     assert.match(config, /"useDmsRoute"/);
     assert.match(config, /"defineDmsPlugin"/);
+    assert.match(config, /"ClientOnly"/);
+    assert.doesNotMatch(config, /"DmsClientOnly"/);
     assert.doesNotMatch(config, /"#imports"/);
   });
 
@@ -449,5 +451,8 @@ describe("Vite frontend generation", () => {
       );
     }
     assert.match(runtime, /options: DmsModuleOptions/);
+    assert.match(runtime, /export const ClientOnly = defineComponent\(\{/);
+    assert.match(runtime, /app\.component\("ClientOnly", ClientOnly\)/);
+    assert.doesNotMatch(runtime, /DmsClientOnly/);
   });
 });
