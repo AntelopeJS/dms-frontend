@@ -106,6 +106,22 @@ describe("running outside a DMS project", () => {
     assert.match(dev.stdout, /no running antelope project found/);
     assert.match(dev.stdout, /-b <url>/);
   });
+
+  it("requires a session secret for build and start", async () => {
+    const build = await runCli(["build", "-b", "http://127.0.0.1:5010"]);
+    assert.equal(build.code, 1);
+    assert.match(build.stderr, /DMS_SESSION_SECRET must contain at least 32/);
+
+    const start = await runCli(["start", "-b", "http://127.0.0.1:5010"]);
+    assert.equal(start.code, 1);
+    assert.match(start.stderr, /DMS_SESSION_SECRET must contain at least 32/);
+
+    const short = await runCli(["start", "-b", "http://127.0.0.1:5010"], {
+      env: { DMS_SESSION_SECRET: "short" },
+    });
+    assert.equal(short.code, 1);
+    assert.match(short.stderr, /DMS_SESSION_SECRET must contain at least 32/);
+  });
 });
 
 /**
@@ -114,7 +130,10 @@ describe("running outside a DMS project", () => {
  * resolved in the "build first" hint it prints when the workspace is absent.
  */
 describe("loading the project .env", () => {
-  const ENV_ONLY = { DMS_API_BASE_URL: undefined };
+  const ENV_ONLY = {
+    DMS_API_BASE_URL: undefined,
+    DMS_SESSION_SECRET: "configured-session-secret-at-least-32-characters",
+  };
 
   it("fills a variable the environment does not define", async () => {
     const result = await runCli(["start"], {
@@ -131,7 +150,10 @@ describe("loading the project .env", () => {
   it("lets a real environment variable win over the .env", async () => {
     const result = await runCli(["start"], {
       files: { ".env": "DMS_API_BASE_URL=http://127.0.0.1:5010\n" },
-      env: { DMS_API_BASE_URL: "http://127.0.0.1:5999" },
+      env: {
+        DMS_API_BASE_URL: "http://127.0.0.1:5999",
+        DMS_SESSION_SECRET: ENV_ONLY.DMS_SESSION_SECRET,
+      },
     });
 
     assert.equal(result.code, 1);

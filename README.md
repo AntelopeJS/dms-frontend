@@ -163,11 +163,13 @@ started by `dev`, and the production server started by `start`, because those
 child processes inherit the environment. A missing file is not an error; an
 unreadable one is reported and skipped.
 
-`DMS_SESSION_SECRET` is mandatory for anything that touches a session. The
-generated server encrypts its session cookie with it, and with no value — or
-one shorter than 32 characters — the login page at `/auth` fails the first
-sign-in attempt rather than starting degraded. Generate one with
-`openssl rand -hex 32`.
+`ajs dms dev` generates a fresh ephemeral 32-byte secret when
+`DMS_SESSION_SECRET` is absent; all sessions are invalidated when that dev
+server restarts. An explicit value is preserved, but empty or shorter than 32
+characters is rejected. `build` and `start` require a configured secret and
+never generate one, which is required for production so sessions survive
+restarts. The generated server also validates the value as a safety net.
+Generate one with `openssl rand -hex 32`.
 
 ### Opening a session from a module flow
 

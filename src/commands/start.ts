@@ -2,7 +2,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import chalk from "chalk";
 import { Command } from "commander";
-import { getWorkspaceDir, Options, runCommand } from "../common";
+import {
+  getWorkspaceDir,
+  Options,
+  resolveSessionSecret,
+  runCommand,
+} from "../common";
 import { error, info } from "../utils/cli-ui";
 
 interface StartOptions {
@@ -20,6 +25,8 @@ export function cmdStart(): Command {
         error("Backend URL is required. Use -b <url> or set DMS_API_BASE_URL.");
         process.exit(1);
       }
+
+      const sessionSecret = resolveSessionSecret("start");
 
       const workspaceDir = getWorkspaceDir(options.backendUrl);
       const serverPath = join(workspaceDir, "server.mjs");
@@ -49,6 +56,7 @@ export function cmdStart(): Command {
           ...process.env,
           PORT: options.port,
           DMS_API_BASE_URL: options.backendUrl,
+          DMS_SESSION_SECRET: sessionSecret,
           DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "true",
         },
       });

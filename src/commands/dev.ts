@@ -5,6 +5,7 @@ import {
   Options,
   projectWorkspaceKey,
   resolveBootstrapSecret,
+  resolveSessionSecret,
   runCommand,
   setupWorkspace,
   startLayerWatchers,
@@ -86,6 +87,7 @@ export function cmdDev(): Command {
         options.bootstrapSecret,
         backendUrl,
       );
+      const sessionSecret = resolveSessionSecret("dev");
 
       // Resolve the frontend port BEFORE the manifest fetch: the real
       // port is sent to the backend as clientUrl so a dev backend can
@@ -166,6 +168,7 @@ export function cmdDev(): Command {
             DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "false",
             DMS_API_BASE_URL: backendUrl,
             DMS_BOOTSTRAP_SECRET: bootstrapSecret,
+            DMS_SESSION_SECRET: sessionSecret,
             NODE_OPTIONS: "--max-old-space-size=4096",
             NODE_PATH: nodeModulesDir,
           },
