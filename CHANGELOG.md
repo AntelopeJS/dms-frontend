@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### 🚀 Enhancements
+
+- Generate an ephemeral session secret for `ajs dms dev`; `build` and `start`
+  now require an explicit secret. Dev sessions are invalidated on restart.
+
 ## v0.2.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.1.9...v0.2.0)
@@ -143,4 +150,3 @@
 ### ❤️ Contributors
 
 - Antony Rizzitelli <rizzitelli.antony@pm.me>
-

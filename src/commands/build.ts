@@ -4,6 +4,7 @@ import { Command } from "commander";
 import {
   normalizeBootstrapSecret,
   Options,
+  resolveSessionSecret,
   runCommand,
   setupWorkspace,
 } from "../common";
@@ -28,6 +29,8 @@ export function cmdBuild(): Command {
         error("Backend URL is required. Use -b <url> or set DMS_API_BASE_URL.");
         process.exit(1);
       }
+
+      const sessionSecret = resolveSessionSecret("build");
 
       const spinner = new Spinner("Setting up workspace...");
       await spinner.start();
@@ -60,6 +63,7 @@ export function cmdBuild(): Command {
           cwd: workspaceDir,
           env: {
             ...process.env,
+            DMS_SESSION_SECRET: sessionSecret,
             NODE_OPTIONS: "--max-old-space-size=4096",
             NODE_PATH: nodeModulesDir,
           },

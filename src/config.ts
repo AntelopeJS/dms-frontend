@@ -2,7 +2,7 @@
 // credential handling.
 //
 // Split out of common.ts, which stays the barrel every command imports from.
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { chmodSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -236,6 +236,31 @@ export function normalizeBootstrapSecret(
     );
   }
   return trimmed;
+}
+
+export type SessionSecretMode = "dev" | "build" | "start";
+
+/**
+ * Resolve the secret used by the generated server. Development gets a fresh
+ * in-memory secret when none is configured; persistent commands must be
+ * explicit so a deployment cannot silently invalidate sessions on restart.
+ */
+export function resolveSessionSecret(
+  mode: SessionSecretMode,
+  value: string | undefined = process.env.DMS_SESSION_SECRET,
+): string {
+  if (value === undefined && mode === "dev") {
+    return randomBytes(32).toString("hex");
+  }
+  if (value === undefined || value.length < 32) {
+    throw new Error(
+      "DMS_SESSION_SECRET must contain at least 32 characters; " +
+        (mode === "dev"
+          ? "set it explicitly or omit it to generate an ephemeral dev secret"
+          : "set it explicitly for build and start"),
+    );
+  }
+  return value;
 }
 
 /**

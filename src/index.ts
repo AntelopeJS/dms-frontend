@@ -58,6 +58,9 @@ Environment:
   the other variables below can live in the project's .env. A variable already
   set in the environment always wins over a file, and .env.local wins over .env.
   The generated workspace never loads a .env of its own.
+  'dev' generates an ephemeral 32-byte DMS_SESSION_SECRET when it is absent;
+  restarting dev invalidates its sessions. 'build' and 'start' require a
+  configured secret of at least 32 characters.
 
 Workspaces:
   Each canonical backend URL gets its own workspace under

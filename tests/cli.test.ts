@@ -12,6 +12,7 @@ import { cmdClean } from "../src/commands/clean";
 import { cmdDev } from "../src/commands/dev";
 import { cmdPrepare } from "../src/commands/prepare";
 import { cmdStart } from "../src/commands/start";
+import { resolveSessionSecret } from "../src/config";
 
 const packageJson = JSON.parse(
   readFileSync(
@@ -21,6 +22,29 @@ const packageJson = JSON.parse(
 );
 
 describe("DMS CLI plugin", () => {
+  it("resolves session secrets by command mode", () => {
+    const generated = resolveSessionSecret("dev", undefined);
+    assert.match(generated, /^[0-9a-f]{64}$/);
+    assert.equal(
+      resolveSessionSecret("dev", "explicit-session-secret-32-characters!!"),
+      "explicit-session-secret-32-characters!!",
+    );
+
+    for (const mode of ["dev", "build", "start"] as const) {
+      assert.throws(() => resolveSessionSecret(mode, ""), /at least 32/);
+      assert.throws(
+        () => resolveSessionSecret(mode, "too-short"),
+        /at least 32/,
+      );
+    }
+    for (const mode of ["build", "start"] as const) {
+      assert.throws(
+        () => resolveSessionSecret(mode, undefined),
+        /set it explicitly/,
+      );
+    }
+  });
+
   it("publishes only the core-discoverable executable", () => {
     assert.equal(packageJson.name, "@antelopejs/dms-frontend");
     assert.deepEqual(packageJson.bin, { "ajs-dms": "./dist/index.js" });
