@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.2.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.0...v0.2.1)
+
 ### 🚀 Enhancements
 
 - Generate an ephemeral session secret for `ajs dms dev`; `build` and `start`
