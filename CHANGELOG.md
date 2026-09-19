@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.2.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.0...v0.2.1)
+
+### 🚀 Enhancements
+
+- **cli:** Generate ephemeral dev session secrets ([#19](https://github.com/AntelopeJS/dms-frontend/pull/19))
+
+### 🏡 Chore
+
+- Remove obsolete demo ([#18](https://github.com/AntelopeJS/dms-frontend/pull/18))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## Unreleased
 
 ### 🚀 Enhancements
