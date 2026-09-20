@@ -94,9 +94,11 @@ URL, either through `-b` or through the enclosing antelope project's
 `.antelope/dev.json`, and say so on exit 1 when they have neither;
 `verify-source` needs `--layer` instead.
 
-The CLI checks npm for a newer release at most once a day — a failed lookup
-counts as the day's attempt — and prints a one-line notice on stderr. The
-throttle stamp lives at `~/.antelopejs/dms-frontend/update-check.json`. Set
+The CLI checks npm for a newer release at most once a day and prints a one-line
+notice on stderr. A lookup that comes back empty — offline, throttled, or simply
+raced by a command that blocked the event loop past the deadline — is retried
+after an hour instead of counting as the day's attempt. The throttle stamp lives
+at `~/.antelopejs/dms-frontend/update-check.json`. Set
 `NO_UPDATE_NOTIFIER=1`, pass `--no-update-check`, or run under `CI` to turn the
 check off.
 
