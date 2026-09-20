@@ -10,6 +10,7 @@ interface ServerTemplate {
   createInertiaPage: (url: string, props: unknown) => Record<string, unknown>;
   inertiaAppHtml: (page: unknown) => string;
   inertiaHeaders: () => Record<string, string>;
+  htmlHeaders: () => Record<string, string>;
   handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
   redirectFrontendVisit: (
     request: unknown,
@@ -105,11 +106,58 @@ describe("Inertia HTTP protocol", () => {
   it("sets Inertia response and cache variation headers", async () => {
     const runtime = await server;
     assert.deepEqual(runtime.inertiaHeaders(), {
+      // Every payload carries the visitor's own session, so it must never
+      // reach a shared cache, and the browser's own copy must be revalidated
+      // rather than replayed. `no-store` would go further and cost the
+      // back-forward cache on every page.
+      "cache-control": "private, no-cache",
       "content-type": "application/json",
       "x-inertia": "true",
       vary: "X-Inertia",
       "x-inertia-version": runtime.assetVersion(),
     });
+  });
+
+  it("keeps session-bearing responses out of shared caches", async () => {
+    const backend = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end('{"route":{},"layout":{}}');
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const address = backend.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    const runtime = await server;
+    const frontend = createServer(runtime.handleRequestSafely);
+    await new Promise<void>((resolve) =>
+      frontend.listen(0, "127.0.0.1", resolve),
+    );
+    const frontendAddress = frontend.address();
+    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${frontendAddress.port}/articles`,
+        { headers: { "x-inertia": "true" } },
+      );
+      assert.equal(response.headers.get("cache-control"), "private, no-cache");
+    } finally {
+      frontend.close();
+      backend.close();
+    }
+    // The document path renders through Vite, which this suite does not boot.
+    // Hold it to the same stance by checking the headers it writes, and that
+    // no document response builds its own set behind the helper's back.
+    assert.deepEqual(runtime.htmlHeaders(), {
+      "cache-control": "private, no-cache",
+      "content-type": "text/html",
+      vary: "X-Inertia",
+    });
+    const source = await import("node:fs/promises").then(({ readFile }) =>
+      readFile(join(process.cwd(), "templates", "vue", "server.mjs"), "utf8"),
+    );
+    assert.doesNotMatch(source, /"content-type": "text\/html"/);
   });
 
   it("uses native Inertia v3 semantics for internal, fragment, and external redirects", async () => {

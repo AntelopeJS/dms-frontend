@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import ui from "@nuxt/ui/vite";
 import vue from "@vitejs/plugin-vue";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+import { orderHeadForFirstPaint } from "./head-order.mjs";
 
 interface FrontendModuleRegistryEntry {
   id: string;
@@ -66,6 +67,38 @@ const optimizedDependencies = [
   "json-schema-to-zod",
   "striptags",
 ];
+
+/**
+ * Entry points the dependency optimizer crawls at startup.
+ *
+ * Every materialized module brings its own dependency set — subpath exports and
+ * transitive CommonJS included — and none of it can be listed in
+ * `optimizedDependencies` by hand, because the modules are only known at
+ * materialization time. Leaving the crawl off and letting Vite discover them as
+ * pages load meant the first visit to a cold page re-ran the optimizer
+ * mid-request: the chunks already in flight answered 504 and the client was
+ * told to reload the whole document. Crawling the module sources once, at
+ * startup, pays that cost a single time and in a place where it reads as
+ * startup rather than as a crash.
+ */
+const optimizerEntries = [
+  resolve(__dirname, "main.ts"),
+  ...moduleRoots.map((root) => resolve(root, "dms.frontend.ts")),
+  ...frontendSourceRoots.flatMap((root) => [
+    resolve(root, "app/**/*.vue"),
+    resolve(root, "app/**/*.ts"),
+  ]),
+];
+
+function paintBeforeHydrate(): Plugin {
+  return {
+    name: "dms-paint-before-hydrate",
+    apply: "build",
+    enforce: "post",
+    transformIndexHtml: { order: "post", handler: orderHeadForFirstPaint },
+  };
+}
+
 const uiLinkImport = "@nuxt/ui/components/Link.vue";
 const uiInertiaLinkImport = resolve(
   __dirname,
@@ -131,6 +164,7 @@ export default defineConfig({
         vueTemplate: true,
       },
     }),
+    paintBeforeHydrate(),
   ],
   resolve: {
     dedupe: ["vue", "reka-ui", "@nuxt/ui"],
@@ -152,8 +186,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: optimizedDependencies,
-    // Avoid crawling every module page at startup, but optimize dependencies as pages load.
-    entries: [],
+    entries: optimizerEntries,
   },
   ssr: { noExternal: ["@nuxt/icon", "@nuxt/ui"] },
   server: { strictPort: true, allowedHosts: [".onamp.dev"] },
