@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import ui from "@nuxt/ui/vite";
 import vue from "@vitejs/plugin-vue";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, normalizePath, type Plugin } from "vite";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
 
 interface FrontendModuleRegistryEntry {
@@ -38,6 +38,14 @@ const stableModuleAliases = Object.fromEntries(
     return [[`#${moduleName}`, module.root]];
   }),
 );
+/**
+ * Globs are POSIX, always.
+ *
+ * `resolve` returns a native path, so on Windows every pattern below would
+ * carry backslashes — which a glob matcher reads as escape characters, not as
+ * separators, and which therefore match nothing at all. `normalizePath` is
+ * Vite's own answer to this and is the identity function on POSIX.
+ */
 const importDirectories = frontendSourceRoots.flatMap((root) =>
   [
     "app/composables/**/*",
@@ -45,7 +53,7 @@ const importDirectories = frontendSourceRoots.flatMap((root) =>
     "app/utils/**/*",
     "app/build/composables/**/*",
     "app/build/types/**/*",
-  ].map((glob) => ({ glob: resolve(root, glob), types: true })),
+  ].map((glob) => ({ glob: normalizePath(resolve(root, glob)), types: true })),
 );
 const optimizedDependencies = [
   "vue",
@@ -80,6 +88,9 @@ const optimizedDependencies = [
  * told to reload the whole document. Crawling the module sources once, at
  * startup, pays that cost a single time and in a place where it reads as
  * startup rather than as a crash.
+ *
+ * Normalized for the same reason as `importDirectories`: Vite hands these
+ * patterns straight to its glob matcher without touching the separators.
  */
 const optimizerEntries = [
   resolve(__dirname, "main.ts"),
@@ -88,7 +99,7 @@ const optimizerEntries = [
     resolve(root, "app/**/*.vue"),
     resolve(root, "app/**/*.ts"),
   ]),
-];
+].map(normalizePath);
 
 function paintBeforeHydrate(): Plugin {
   return {
@@ -125,7 +136,13 @@ export default defineConfig({
         imports: [
           "vue",
           {
-            [resolve(__dirname, "frontend-module.ts")]: [
+            // This key is inlined verbatim as the module specifier of the
+            // import the auto-importer prepends to each file. A native Windows
+            // path would land inside a single-quoted JavaScript string with its
+            // backslashes intact, where `\U`, `\M` and `\f` are read as escape
+            // sequences: the specifier the bundler then resolves is a mangled
+            // path that cannot exist. Keep it POSIX.
+            [normalizePath(resolve(__dirname, "frontend-module.ts"))]: [
               "$fetch",
               "abortNavigation",
               "clearError",

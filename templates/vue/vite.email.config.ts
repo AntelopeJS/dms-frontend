@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import vue from "@vitejs/plugin-vue";
 import AutoImport from "unplugin-auto-import/vite";
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath } from "vite";
 
 interface FrontendModuleRegistryEntry {
   id: string;
@@ -55,7 +55,10 @@ export default defineConfig({
       dts: false,
       imports: [
         {
-          [resolve(__dirname, "email-runtime.ts")]: [
+          // Inlined verbatim as a module specifier in the generated import, so
+          // it has to be POSIX: a native Windows path would reach the parser
+          // with its backslashes read as string escapes. See vite.config.ts.
+          [normalizePath(resolve(__dirname, "email-runtime.ts"))]: [
             "useDmsAppConfig",
             "useDmsRuntimeConfig",
             "defineAppConfig",

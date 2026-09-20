@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { runInNewContext } from "node:vm";
-import { createServer } from "vite";
+import { createServer, normalizePath } from "vite";
 import { developmentStyleTags } from "../templates/vue/server/dev-styles.mjs";
 import { orderHeadForFirstPaint } from "../templates/vue/head-order.mjs";
 
@@ -162,11 +162,13 @@ describe("dependency optimizer entries", () => {
       "utf8",
     );
     const expression = template.match(
-      /const optimizerEntries = (\[[\s\S]*?\n\]);/,
+      /const optimizerEntries = ([\s\S]*?\n\][^;]*);/,
     );
     assert.ok(expression, "the template computes the optimizer's entry points");
+    // `normalizePath` is the real one: it must stay the identity on POSIX.
     const entries = runInNewContext(`(${expression[1]})`, {
       __dirname: "/workspace",
+      normalizePath,
       resolve: (...parts: string[]) => parts.join("/"),
       moduleRoots: ["/workspace/frontend-modules/core"],
       frontendSourceRoots: ["/workspace/frontend-modules/core/layers/ui"],

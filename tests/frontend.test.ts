@@ -1,11 +1,13 @@
 import * as assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
   collectAuthEstablishEndpoints,
   createFrontendModuleRegistry,
+  toPosixPath,
+  writeDmsMainCss,
   writeFrontendModuleRegistry,
 } from "../src/common";
 
@@ -449,5 +451,56 @@ describe("Vite frontend generation", () => {
       );
     }
     assert.match(runtime, /options: DmsModuleOptions/);
+  });
+});
+
+// A path a Node API opens keeps its native separators; a path that becomes
+// text in generated output must not. Windows is the only platform where the
+// two differ, so the separator is injected explicitly here rather than taken
+// from the host.
+describe("Windows path separators in generated output", () => {
+  it("rewrites a native Windows path onto POSIX separators", () => {
+    assert.equal(
+      toPosixPath("C:\\workspace\\frontend-modules\\dms__ai", "\\"),
+      "C:/workspace/frontend-modules/dms__ai",
+    );
+  });
+
+  it("leaves a POSIX path alone, backslashes in filenames included", () => {
+    // A backslash is a legal character in a POSIX name, so the rewrite is
+    // conditioned on the platform separator rather than applied blindly.
+    for (const path of [
+      "/home/dev/workspace/frontend-modules/dms__ai",
+      "/srv/od\\d name/app",
+    ]) {
+      assert.equal(toPosixPath(path, "/"), path);
+      assert.equal(toPosixPath(path), path);
+    }
+  });
+
+  it("writes every Tailwind @source as a POSIX glob", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "dms-main-css-"));
+    writeDmsMainCss(workspace, [
+      { path: "/src/ai", packageName: "@dms/ai", priority: 1 },
+      { path: "/src/saas", packageName: "@dms/saas", priority: 0 },
+    ]);
+    const sources = [
+      ...readFileSync(join(workspace, "dms-main.css"), "utf8").matchAll(
+        /@source "([^"]+)";/g,
+      ),
+    ].map((match) => match[1]);
+    assert.equal(sources.length, 2);
+    for (const source of sources) {
+      assert.doesNotMatch(
+        source,
+        /\\/,
+        "Tailwind reads a backslash in @source as an escape, not a separator",
+      );
+      assert.ok(source.endsWith("/**/*.{vue,ts,tsx,js,jsx,mjs,cjs}"));
+      assert.ok(
+        source.startsWith(`${toPosixPath(resolve(workspace))}/`),
+        "the scan must stay inside the workspace copy of each module",
+      );
+    }
   });
 });
