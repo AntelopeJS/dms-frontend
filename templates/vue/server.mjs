@@ -18,14 +18,14 @@ import {
   refreshSession,
 } from "./server/auth/routes.mjs";
 import { readSession } from "./server/auth/session.mjs";
-import {
-  pageModulePreloads,
-  productionHtmlTemplate,
-} from "./server/client-manifest.mjs";
+import { productionHtmlTemplate } from "./server/client-manifest.mjs";
+import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender } from "./server/email.mjs";
+import { HOMEPAGE } from "./server/homepage.mjs";
 import { handleTester } from "./server/tester.mjs";
 import {
   createInertiaPage,
+  htmlHeaders,
   inertiaAppHtml,
   inertiaHeaders,
   redirectFrontendVisit,
@@ -36,13 +36,6 @@ export * from "./server/inertia.mjs";
 const INERTIA_HEADER = "x-inertia";
 const JSON_TYPE = "application/json";
 const PROJECT_ROOT = fileURLToPath(new URL(".", import.meta.url));
-const MODULE_REGISTRY_PATH = join(
-  PROJECT_ROOT,
-  "generated-frontend-modules.json",
-);
-const MODULE_REGISTRY = existsSync(MODULE_REGISTRY_PATH)
-  ? JSON.parse(readFileSync(MODULE_REGISTRY_PATH, "utf8"))
-  : { modules: [] };
 const MIME_TYPES = {
   ".css": "text/css",
   ".js": "text/javascript",
@@ -73,19 +66,6 @@ let productionSsrRenderer;
 let vite;
 let vitePromise;
 let frontendHttpServer;
-
-function findHomepage(options) {
-  if (!options || typeof options !== "object") return undefined;
-  if (typeof options.homepage === "string") return options.homepage;
-  return Object.values(options)
-    .map(findHomepage)
-    .find((homepage) => homepage !== undefined);
-}
-
-const HOMEPAGE =
-  MODULE_REGISTRY.modules
-    .map((module) => findHomepage(module.options))
-    .find(Boolean) ?? "/";
 
 class BackendResponseError extends Error {
   constructor(status) {
@@ -358,7 +338,7 @@ export async function renderHtml(page, requestUrl, serverFetch) {
   }
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
-  const preloads = devServer ? "" : pageModulePreloads(page, template);
+  const preloads = await documentStyleTags(devServer, page, template);
   const html = template
     .replace("<title>Antelope DMS</title>", rendered.head.headTags)
     .replace("<html", `<html ${rendered.head.htmlAttrs}`)
@@ -410,13 +390,7 @@ async function writeBackendError(error, request, response) {
       request.url,
       serverComponentFetch(request),
     );
-    return writeContent(
-      request,
-      response,
-      status,
-      { "content-type": "text/html", vary: "X-Inertia" },
-      html,
-    );
+    return writeContent(request, response, status, htmlHeaders(), html);
   }
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
@@ -481,7 +455,7 @@ export async function handleRequest(request, response) {
     request,
     response,
     rendered.status,
-    { "content-type": "text/html", vary: "X-Inertia" },
+    htmlHeaders(),
     rendered.html,
   );
 }

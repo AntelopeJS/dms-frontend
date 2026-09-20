@@ -7,6 +7,17 @@ const CLIENT_MANIFEST_PATH = fileURLToPath(
 );
 let productionAssetVersion;
 
+/**
+ * Every document and Inertia payload this server writes carries the visitor's
+ * own session: the user, the session, and the page tree their permissions
+ * allow. `private` is what keeps a shared cache from ever holding it;
+ * `no-cache` keeps the browser's own copy from being reused without asking us
+ * first, so a revoked session cannot resurface from disk. We stop short of
+ * `no-store`, which would additionally forfeit the back-forward cache on every
+ * page of a dashboard people navigate constantly.
+ */
+export const PRIVATE_CACHE_CONTROL = "private, no-cache";
+
 export function assetVersion() {
   if (process.env.DMS_DEV === "true" || !existsSync(CLIENT_MANIFEST_PATH))
     return "development";
@@ -32,10 +43,20 @@ export function createInertiaPage(url, props, version = assetVersion()) {
 
 export function inertiaHeaders(version = assetVersion()) {
   return {
+    "cache-control": PRIVATE_CACHE_CONTROL,
     "content-type": "application/json",
     "x-inertia": "true",
     vary: "X-Inertia",
     "x-inertia-version": version,
+  };
+}
+
+/** Headers for a rendered document: same cache stance as an Inertia payload. */
+export function htmlHeaders() {
+  return {
+    "cache-control": PRIVATE_CACHE_CONTROL,
+    "content-type": "text/html",
+    vary: "X-Inertia",
   };
 }
 

@@ -25,6 +25,10 @@ function templateOptimization(): DepOptimizationOptions {
   );
   return runInNewContext(`(${options[1]})`, {
     optimizedDependencies: [],
+    // The template crawls each materialized module at startup. A fixture has
+    // none, so the crawl is empty here and the lazy-discovery guarantee below
+    // is what this test still exercises.
+    optimizerEntries: [],
   }) as DepOptimizationOptions;
 }
 
@@ -34,7 +38,7 @@ function writeFixture(root: string, path: string, content: string): void {
   writeFileSync(destination, content);
 }
 
-it("optimizes a module's late CommonJS dependency without an initial page crawl", async () => {
+it("optimizes a module's CommonJS dependency discovered after startup", async () => {
   const root = mkdtempSync(join(tmpdir(), "dms-vite-dependency-"));
   const moduleRoot = "frontend-modules/example";
   const dependencyRoot = `${moduleRoot}/node_modules/example-cjs`;
@@ -89,13 +93,11 @@ it("optimizes a module's late CommonJS dependency without an initial page crawl"
       /\/\.vite\/deps\//,
       "late module imports must use a prebundle, not raw CommonJS",
     );
-    assert.ok(Array.isArray(optimizeDeps.entries));
-    assert.deepEqual(
-      Array.from(optimizeDeps.entries),
-      [],
-      "initial entry scanning stays disabled",
+    assert.equal(
+      optimizeDeps.noDiscovery ?? false,
+      false,
+      "discovery stays on: the startup crawl reaches the modules, not every dependency they pull at run time",
     );
-    assert.equal(optimizeDeps.noDiscovery ?? false, false);
     const optimizedUrl = transformed.code.match(/from "([^"?]+\.js)/)?.[1];
     assert.ok(optimizedUrl);
     await server.transformRequest(optimizedUrl);
