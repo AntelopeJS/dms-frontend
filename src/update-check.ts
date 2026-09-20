@@ -18,6 +18,20 @@ const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org/";
 export const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Retry delay after a lookup that came back empty.
+ *
+ * A failure is not the same event as a success and must not buy the same
+ * silence. Most failures here are self-inflicted rather than network-wide:
+ * the check is fired and forgotten while the command it rides along with
+ * blocks the event loop — `installDeps` shells out through a synchronous
+ * `execSync("pnpm install")` — so the deadline below, which is wall-clock,
+ * expires on a response that already arrived but could not be read yet.
+ * Charging a full day of silence for that means the first `dev` of a fresh
+ * workspace reliably suppresses the notice for the rest of the day.
+ */
+export const UPDATE_CHECK_RETRY_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
  * Wall-clock deadline for the whole round trip, not an inactivity timeout:
  * the registry answers in milliseconds when it answers at all, and a captive
  * portal that dribbles bytes forever would satisfy any per-socket timer.
@@ -53,9 +67,17 @@ const VALUE_TAKING_OPTIONS = [
 ];
 
 interface UpdateCheckCache {
+  /** When the last lookup was attempted, whether or not it answered. */
   checkedAt: number;
   /** Absent until a lookup succeeds; a failed attempt still stamps the time. */
   latestVersion?: string;
+  /**
+   * Whether the attempt at `checkedAt` answered, which picks the interval
+   * before the next one. Absent in caches written before this field existed;
+   * `latestVersion` is the fallback tell, and gets the one case that matters
+   * right — a cache holding nothing but a timestamp is a failed first lookup.
+   */
+  succeeded?: boolean;
 }
 
 export interface UpdateCheckOptions {
@@ -141,7 +163,11 @@ function readCache(file: string): UpdateCheckCache | undefined {
     if (latestVersion !== undefined && typeof latestVersion !== "string") {
       return undefined;
     }
-    return { checkedAt: parsed.checkedAt, latestVersion };
+    const succeeded = parsed.succeeded;
+    if (succeeded !== undefined && typeof succeeded !== "boolean") {
+      return undefined;
+    }
+    return { checkedAt: parsed.checkedAt, latestVersion, succeeded };
   } catch {
     return undefined;
   }
@@ -256,8 +282,11 @@ function isNewer(currentVersion: string, latestVersion: string): boolean {
  * The cached version still produces a notice inside the interval: the
  * throttle is on the network call, not on the reminder. A failed lookup
  * stamps the cache too, so a machine that is offline, throttled or behind a
- * broken proxy pays for one attempt a day rather than one per command; it
- * keeps whatever version the last successful lookup found.
+ * broken proxy pays for one attempt per hour rather than one per command; it
+ * keeps whatever version the last successful lookup found. That shorter
+ * `UPDATE_CHECK_RETRY_INTERVAL_MS` is the whole point of remembering whether
+ * the last attempt answered: a lookup lost to a busy event loop or a dropped
+ * connection otherwise costs a full day of silence.
  *
  * @param options Injection points for the clock, the registry and the sink
  * @returns A promise that settles once the check is done; production callers
@@ -281,15 +310,23 @@ export async function checkForUpdate(
 
     const cached = readCache(cacheFile);
     const checkedAt = now();
+    const lastAttemptAnswered =
+      cached?.succeeded ?? cached?.latestVersion !== undefined;
+    const interval = lastAttemptAnswered
+      ? UPDATE_CHECK_INTERVAL_MS
+      : UPDATE_CHECK_RETRY_INTERVAL_MS;
     const withinInterval =
-      cached !== undefined &&
-      checkedAt - cached.checkedAt < UPDATE_CHECK_INTERVAL_MS;
+      cached !== undefined && checkedAt - cached.checkedAt < interval;
 
     let latestVersion = cached?.latestVersion;
     if (!withinInterval) {
-      latestVersion =
-        (await fetchLatestVersion(UPDATE_CHECK_PACKAGE)) ?? latestVersion;
-      writeCache(cacheFile, { checkedAt, latestVersion });
+      const published = await fetchLatestVersion(UPDATE_CHECK_PACKAGE);
+      latestVersion = published ?? latestVersion;
+      writeCache(cacheFile, {
+        checkedAt,
+        latestVersion,
+        succeeded: published !== undefined,
+      });
     }
 
     if (latestVersion && isNewer(currentVersion, latestVersion)) {

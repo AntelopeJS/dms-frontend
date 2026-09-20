@@ -1,9 +1,9 @@
 import * as assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import {
   checkForUpdate,
@@ -12,6 +12,7 @@ import {
   stripUpdateCheckFlag,
   UPDATE_CHECK_INTERVAL_MS,
   UPDATE_CHECK_PACKAGE,
+  UPDATE_CHECK_RETRY_INTERVAL_MS,
   updateCheckCacheFile,
 } from "../src/update-check";
 import { DMS_FRONTEND_HOME } from "../src/config";
@@ -130,6 +131,7 @@ describe("update check notice", () => {
     assert.deepEqual(JSON.parse(readFileSync(test.cacheFile, "utf-8")), {
       checkedAt: 1_000_000,
       latestVersion: "0.1.0",
+      succeeded: true,
     });
   });
 
@@ -178,6 +180,7 @@ describe("update check notice", () => {
     assert.deepEqual(JSON.parse(readFileSync(test.cacheFile, "utf-8")), {
       checkedAt: later,
       latestVersion: "0.4.0",
+      succeeded: false,
     });
     assert.deepEqual(test.written, [
       "A newer DMS frontend version is available: 0.0.1 -> 0.4.0. " +
@@ -191,12 +194,75 @@ describe("update check notice", () => {
 
     assert.deepEqual(JSON.parse(readFileSync(test.cacheFile, "utf-8")), {
       checkedAt: 1_000_000,
+      succeeded: false,
     });
     assert.deepEqual(test.written, []);
 
     test.fetched.length = 0;
     await test.run({ now: () => 1_000_000 + 60_000 });
     assert.deepEqual(test.fetched, [], "the failed attempt throttles the next");
+  });
+
+  it("retries a failed lookup after the back-off instead of a day later", async () => {
+    const test = harness("0.5.0", 1_000_000);
+    await test.run({ fetchLatestVersion: async () => undefined });
+    test.fetched.length = 0;
+
+    const retry = 1_000_000 + UPDATE_CHECK_RETRY_INTERVAL_MS;
+    assert.ok(
+      UPDATE_CHECK_RETRY_INTERVAL_MS < UPDATE_CHECK_INTERVAL_MS,
+      "a failure must not buy as much silence as a success",
+    );
+    await test.run({ now: () => retry });
+
+    assert.deepEqual(test.fetched, [UPDATE_CHECK_PACKAGE]);
+    assert.deepEqual(test.written, [
+      "A newer DMS frontend version is available: 0.0.1 -> 0.5.0. " +
+        "Run `ajs update dms` to update.\n",
+    ]);
+  });
+
+  it("keeps a successful lookup throttled for the whole day", async () => {
+    const test = harness("0.5.0", 1_000_000);
+    await test.run();
+    test.fetched.length = 0;
+
+    await test.run({ now: () => 1_000_000 + UPDATE_CHECK_RETRY_INTERVAL_MS });
+
+    assert.deepEqual(test.fetched, []);
+  });
+
+  it("retries a failure that followed a success, keeping the notice going", async () => {
+    const test = harness("0.6.0", 1_000_000);
+    await test.run();
+    const failedAt = 1_000_000 + UPDATE_CHECK_INTERVAL_MS;
+    await test.run({
+      now: () => failedAt,
+      fetchLatestVersion: async () => undefined,
+    });
+    test.fetched.length = 0;
+
+    await test.run({ now: () => failedAt + UPDATE_CHECK_RETRY_INTERVAL_MS });
+
+    assert.deepEqual(test.fetched, [UPDATE_CHECK_PACKAGE]);
+  });
+
+  it("retries a cache written before the outcome was recorded", async () => {
+    // The shape a failed first lookup left on disk: a timestamp and nothing
+    // else. Read as a success it would silence the notice for a full day.
+    const test = harness("0.7.0", 1_000_000);
+    mkdirSync(dirname(test.cacheFile), { recursive: true });
+    writeFileSync(test.cacheFile, JSON.stringify({ checkedAt: 1_000_000 }));
+
+    await test.run({ now: () => 1_000_000 + 60_000 });
+    assert.deepEqual(test.fetched, [], "still throttled inside the back-off");
+
+    await test.run({ now: () => 1_000_000 + UPDATE_CHECK_RETRY_INTERVAL_MS });
+    assert.deepEqual(test.fetched, [UPDATE_CHECK_PACKAGE]);
+    assert.deepEqual(test.written, [
+      "A newer DMS frontend version is available: 0.0.1 -> 0.7.0. " +
+        "Run `ajs update dms` to update.\n",
+    ]);
   });
 
   it("never throws when the registry fails, hangs or answers nonsense", async () => {
