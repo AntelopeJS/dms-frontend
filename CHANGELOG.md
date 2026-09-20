@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.3
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.2...v0.2.3)
+
+### 🩹 Fixes
+
+- **update-check:** Retry a failed lookup after an hour, not a day ([#22](https://github.com/AntelopeJS/dms-frontend/pull/22))
+- **windows:** Keep generated specifiers and globs on POSIX separators ([#23](https://github.com/AntelopeJS/dms-frontend/pull/23))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.2.2
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.1...v0.2.2)

@@ -1,6 +1,6 @@
 {
   "name": "@antelopejs/dms-frontend",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Frontend-agnostic loader for AntelopeJS DMS, shipping the Vue 3 renderer (Vite, Inertia, SSR)",
   "keywords": [
     "antelope",
