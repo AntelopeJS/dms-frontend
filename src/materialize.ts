@@ -30,6 +30,7 @@ import {
   collectFiles,
   isBlocklistedCopyPath,
   sanitizedPackageContent,
+  toPosixPath,
 } from "./fs-sync";
 
 // ============================================================================
@@ -420,7 +421,7 @@ function discoverAssets(
         .sort()
         .map((relativePath) => ({
           moduleId: module.id,
-          relativePath: `${assetRoot.relativePrefix}${join(directory, relativePath).split(sep).join("/")}`,
+          relativePath: `${assetRoot.relativePrefix}${toPosixPath(join(directory, relativePath))}`,
         }));
     });
   });
@@ -530,6 +531,10 @@ function writeShortcutExports(
  * different drive can yield absolute paths where relative paths are required.
  * Scope the scan to extensions Tailwind needs and avoid dependencies, build
  * output, and caches.
+ *
+ * The path is written into the stylesheet as the prefix of a glob, where a
+ * native Windows separator would be read as an escape character and match
+ * nothing, so it goes in with POSIX separators.
  */
 export function writeDmsMainCss(
   workspaceDir: string,
@@ -538,7 +543,7 @@ export function writeDmsMainCss(
   const sources = layers
     .map(
       (layer) =>
-        `@source "${getLayerWorkspacePath(workspaceDir, layer)}/${TAILWIND_SOURCE_GLOB}";`,
+        `@source "${toPosixPath(getLayerWorkspacePath(workspaceDir, layer))}/${TAILWIND_SOURCE_GLOB}";`,
     )
     .join("\n");
 

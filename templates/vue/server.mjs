@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { extname, join, resolve } from "node:path";
+import { extname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
@@ -254,7 +254,9 @@ function acceptedAsset(pathname, request) {
 
 function serveAsset(pathname, request, response) {
   const selected = acceptedAsset(pathname, request);
-  const assetRoot = `${resolve(PROJECT_ROOT, "dist/client")}/`;
+  // Native separator: `selected.source` comes from `resolve`, so a hardcoded
+  // `/` here would make the containment check fail for every asset on Windows.
+  const assetRoot = `${resolve(PROJECT_ROOT, "dist/client")}${sep}`;
   if (
     !selected.source.startsWith(assetRoot) ||
     !existsSync(selected.file) ||

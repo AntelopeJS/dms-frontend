@@ -33,6 +33,29 @@ export function stripExtendedLengthPrefix(p: string): string {
 }
 
 /**
+ * Rewrite a native path onto POSIX separators.
+ *
+ * For the places where a path stops being something Node opens and becomes
+ * text instead: a module specifier, a glob pattern, a CSS `@source` directive.
+ * All three read a backslash as an escape character rather than a separator,
+ * so a native Windows path inlined into them is silently mangled.
+ *
+ * A backslash is a legal character in a POSIX filename, so the rewrite is
+ * conditioned on the platform separator rather than applied blindly — the same
+ * rule as Vite's `normalizePath`, which the generated Vite configs use and
+ * which the CLI cannot import (`vite` is a development dependency here, not a
+ * runtime one).
+ *
+ * @param path The path to rewrite
+ * @param separator The platform separator, overridable so the Windows
+ * behaviour stays testable from a POSIX host
+ * @returns The path with POSIX separators
+ */
+export function toPosixPath(path: string, separator: string = sep): string {
+  return separator === "/" ? path : path.split(separator).join("/");
+}
+
+/**
  * True when `srcPath` (an absolute path under `src`) matches any
  * gitignore-style pattern in `LAYER_COPY_BLOCKLIST`. Used by both
  * `copyLayerSource` (via `cpSync`'s filter) and the dev watcher (via
@@ -45,7 +68,7 @@ export function isBlocklistedCopyPath(src: string, srcPath: string): boolean {
   );
   if (!rel || rel.startsWith("..")) return false;
   // `ignore` expects POSIX separators; on Windows `relative()` yields `\`.
-  return layerCopyIgnore.ignores(rel.split(sep).join("/"));
+  return layerCopyIgnore.ignores(toPosixPath(rel));
 }
 
 export function sanitizedPackageContent(raw: string): string {

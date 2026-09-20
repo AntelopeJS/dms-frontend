@@ -16,7 +16,7 @@
 // any pre-existing link with that attribute and then skips `updateStyle` for
 // it, which would leave CSS edits stranded.
 
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pageModulePreloads } from "./client-manifest.mjs";
 
@@ -32,8 +32,16 @@ const STYLE_EXTENSION =
  * one `@source` per materialized module — nearly every rule a page needs.
  * Naming it is the one enumeration this module accepts, and the comment is the
  * reason why.
+ *
+ * `ENTRY_STYLESHEET_ID` is matched against the `data-vite-dev-id` Vite puts on
+ * its own copy, and Vite normalizes every module id onto POSIX separators — so
+ * the native path `join` returns has to be normalized too, or the handover
+ * never happens on Windows and both copies stay in the document.
  */
 const ENTRY_STYLESHEET = "/dms-main.css";
+const ENTRY_STYLESHEET_ID = join(PROJECT_ROOT, "dms-main.css")
+  .split(sep)
+  .join("/");
 
 function ssrModuleGraph(devServer) {
   return devServer.environments?.ssr?.moduleGraph ?? devServer.moduleGraph;
@@ -75,7 +83,7 @@ async function inlineTag(devServer, { url, id }) {
 export async function developmentStyleTags(devServer) {
   const modules = styleModules(devServer);
   const links = [
-    { url: ENTRY_STYLESHEET, id: join(PROJECT_ROOT, "dms-main.css") },
+    { url: ENTRY_STYLESHEET, id: ENTRY_STYLESHEET_ID },
     ...modules.filter(({ url }) => !SFC_STYLE.test(url)),
   ].map(linkTag);
   const inlined = await Promise.all(
