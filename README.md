@@ -323,6 +323,6 @@ ajs dms verify-source \
   --local-package @antelopejs/dms=/path/to/dms
 ```
 
-The verifier prints its generated workspace path, builds client, SSR, and email bundles, runs `vue-tsc`, renders eight DMS email templates, and checks that the email bundle excludes browser-only modules. It leaves the generated workspace in the temporary directory for inspection. It does not start a backend or publish packages. Repository development can invoke the same runner with `DMS_LAYER_SOURCE` through `pnpm test:real-source`.
+The verifier prints its generated workspace path, builds client, SSR, and email bundles, runs `vue-tsc`, renders eight DMS email templates, and checks that the email bundle excludes browser-only modules. It removes the generated workspace when it exits, whether verification passed or failed; pass `--keep-workspace` (or set `DMS_KEEP_WORKSPACE=1` for `pnpm test:real-source`) to leave it in the temporary directory for inspection. It does not start a backend or publish packages. Repository development can invoke the same runner with `DMS_LAYER_SOURCE` through `pnpm test:real-source`.
 
 Refresh rotation is single-flight within one frontend process. Horizontally scaled deployments must use sticky routing so a browser reaches the same process, or replace this process-local behavior with an external session adapter. It does not provide a distributed rotation guarantee.

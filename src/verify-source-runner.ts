@@ -3,12 +3,10 @@ import { execFileSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import {
   createFrontendModuleRegistry,
@@ -18,6 +16,7 @@ import {
   writeFrontendModuleRegistry,
   writeWorkspacePackageJson,
 } from "./common";
+import { createTemporaryWorkspace } from "./temporary-workspace";
 
 interface LayerPackage {
   devDependencies?: Record<string, string>;
@@ -37,7 +36,10 @@ function removeDevelopmentDependencies(root: string): void {
 if (!process.env.DMS_LAYER_SOURCE)
   throw new Error("DMS_LAYER_SOURCE must identify a frontend package");
 const sourceRoot = resolve(process.env.DMS_LAYER_SOURCE);
-const workspace = mkdtempSync(join(tmpdir(), "dms-frontend-real-source-"));
+const workspace = createTemporaryWorkspace(
+  "dms-frontend-real-source-",
+  process.env.DMS_KEEP_WORKSPACE === "1",
+);
 const templateRoot = join(getPackageRoot(), "templates", "vue");
 const commandEnvironment = { ...process.env };
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;

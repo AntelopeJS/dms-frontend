@@ -77,12 +77,12 @@ describe("DMS CLI plugin", () => {
 });
 
 describe("verify-source CLI", () => {
-  it("publishes source and local package options", () => {
+  it("publishes source, local package and workspace retention options", () => {
     const command = cmdVerifySource().exitOverride();
     assert.equal(command.name(), "verify-source");
     assert.deepEqual(
       command.options.map((option) => option.attributeName()),
-      ["layer", "module", "localPackage"],
+      ["layer", "module", "localPackage", "keepWorkspace"],
     );
   });
 
