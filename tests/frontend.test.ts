@@ -330,9 +330,12 @@ describe("Vite frontend generation", () => {
       viteConfig,
       /\[\.\.\.registry\.modules\]\.reverse\(\)\.flatMap/,
     );
+    // The layer aliases go through `frontendLayerTypePaths`, which gives a
+    // contested name to the last root, so the reversal is what hands it to
+    // the highest-priority module.
     assert.match(
       readFileSync(join("src", "materialize.ts"), "utf8"),
-      /\[\.\.\.registry\.modules\]\.reverse\(\)\.forEach/,
+      /\[\.\.\.registry\.modules\]\.reverse\(\)\.map/,
     );
   });
 

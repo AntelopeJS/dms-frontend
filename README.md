@@ -133,6 +133,34 @@ export default frontendModule;
 
 The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
 
+### Layer aliases outside the workspace
+
+Every layer a module ships under `layers/<name>/` answers to `#<name>` inside
+the generated workspace. That convention is exported, so a module's own tooling
+can reuse it instead of restating it — a unit test runs the module's Vue
+sources outside the workspace, where nothing otherwise supplies `#dms-core` or
+`#dms-ui`:
+
+```ts
+// vitest.config.ts, in a DMS frontend module
+import { frontendLayerAliases } from "@antelopejs/dms-frontend/common";
+
+export default defineConfig({
+  resolve: {
+    alias: frontendLayerAliases(
+      resolve(__dirname, ".antelope/cache/@antelopejs/dms/frontend-vue"),
+    ),
+  },
+});
+```
+
+`frontendLayerAliases` reads a module root on disk and needs no backend,
+manifest or materialized workspace. `frontendLayerTypePaths` returns the same
+layers in tsconfig `paths` shape, and `resolveFrontendLayers` is the primitive
+behind both. Pass several module roots in increasing precedence to overlay
+them: when two modules expose a layer of the same name, the last one wins,
+which is the order the loader itself materializes them in.
+
 ## Discovery, caching, and security
 
 In development, `ajs dms` discovers the backend from the nearest live `.antelope/dev.json`. It reads the local bootstrap credential from `.antelope/dms-dev.json` only when that discovered backend matches the destination URL. For production and CI, set `DMS_API_BASE_URL` and `DMS_BOOTSTRAP_SECRET` in the environment, or in the project's `.env`, rather than passing credentials on the command line.

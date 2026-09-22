@@ -3,6 +3,7 @@
 // uses, so the split is invisible to them.
 export * from "./config";
 export * from "./layers";
+export * from "./layer-aliases";
 export * from "./manifest";
 export * from "./fs-sync";
 export * from "./layer-watch";
