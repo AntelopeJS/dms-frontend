@@ -22,6 +22,7 @@ import {
   TAILWIND_SOURCE_GLOB,
   TEMPLATE_FILES,
 } from "./config";
+import { frontendLayerTypePaths } from "./layer-aliases";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
 import { FrontendModuleOptions, ResolvedLayer } from "./workspace";
 
@@ -324,6 +325,15 @@ export function writeFrontendModuleRegistry(
   writePublicAssets(workspaceDir, registry);
 }
 
+/**
+ * Declare the workspace's module specifiers to TypeScript.
+ *
+ * The layer aliases come from `frontendLayerTypePaths`, the same helper a
+ * module's own test runner calls, so the convention has one definition. The
+ * registry is sorted by descending priority and the helper resolves same-name
+ * collisions in favour of the last root, hence the reversal: the
+ * highest-priority module is the one that keeps the alias.
+ */
 function writeFrontendTypePaths(
   workspaceDir: string,
   registry: FrontendModuleRegistry,
@@ -331,16 +341,11 @@ function writeFrontendTypePaths(
   const paths: Record<string, string[]> = {
     "#dms/frontend-module": ["./frontend-module.ts"],
     "@frontend/*": ["./frontend-modules/*"],
+    ...frontendLayerTypePaths(
+      [...registry.modules].reverse().map((module) => module.root),
+      { relativeTo: workspaceDir },
+    ),
   };
-  [...registry.modules].reverse().forEach((module) => {
-    const layersRoot = join(module.root, "layers");
-    if (!existsSync(layersRoot)) return;
-    readdirSync(layersRoot).forEach((name) => {
-      paths[`#${name}/*`] = [
-        `./frontend-modules/${module.id}/layers/${name}/*`,
-      ];
-    });
-  });
   const config = { compilerOptions: { paths } };
   writeFileSync(
     join(workspaceDir, "frontend-paths.generated.json"),

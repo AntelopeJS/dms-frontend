@@ -27,6 +27,25 @@
     "dist/",
     "templates/"
   ],
+  "main": "./dist/common.js",
+  "types": "./dist/common.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/common.d.ts",
+      "default": "./dist/common.js"
+    },
+    "./common": {
+      "types": "./dist/common.d.ts",
+      "default": "./dist/common.js"
+    },
+    "./dist/*.js": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./dist/*": "./dist/*",
+    "./templates/*": "./templates/*",
+    "./package.json": "./package.json"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true,
