@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
@@ -44,15 +44,5 @@ describe("createTemporaryWorkspace", () => {
     const { status, workspace } = runFixture("reject");
     assert.notEqual(status, 0);
     assert.equal(existsSync(workspace), false);
-  });
-
-  it("keeps the workspace when asked to", () => {
-    const { status, workspace } = runFixture("keep");
-    try {
-      assert.equal(status, 0);
-      assert.equal(existsSync(join(workspace, "marker.txt")), true);
-    } finally {
-      rmSync(workspace, { recursive: true, force: true });
-    }
   });
 });

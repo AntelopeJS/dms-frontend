@@ -36,10 +36,7 @@ function removeDevelopmentDependencies(root: string): void {
 if (!process.env.DMS_LAYER_SOURCE)
   throw new Error("DMS_LAYER_SOURCE must identify a frontend package");
 const sourceRoot = resolve(process.env.DMS_LAYER_SOURCE);
-const workspace = createTemporaryWorkspace(
-  "dms-frontend-real-source-",
-  process.env.DMS_KEEP_WORKSPACE === "1",
-);
+const workspace = createTemporaryWorkspace("dms-frontend-real-source-");
 const templateRoot = join(getPackageRoot(), "templates", "vue");
 const commandEnvironment = { ...process.env };
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;

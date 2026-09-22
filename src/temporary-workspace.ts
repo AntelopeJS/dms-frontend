@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 /**
  * Create a directory under the OS temporary directory and remove it when the
- * process exits, unless `keep` asks to leave it for inspection.
+ * process exits.
  *
  * Cleanup hangs off "exit" rather than a try/finally so it also covers a
  * failed assertion, an uncaught exception, a rejected promise and an explicit
@@ -13,14 +13,10 @@ import { join } from "node:path";
  * returns, so a handler would keep the process alive through the whole install
  * or build instead of letting the default action terminate it.
  */
-export function createTemporaryWorkspace(
-  prefix: string,
-  keep: boolean,
-): string {
+export function createTemporaryWorkspace(prefix: string): string {
   const workspace = mkdtempSync(join(tmpdir(), prefix));
-  if (!keep)
-    process.on("exit", () => {
-      rmSync(workspace, { recursive: true, force: true });
-    });
+  process.on("exit", () => {
+    rmSync(workspace, { recursive: true, force: true });
+  });
   return workspace;
 }

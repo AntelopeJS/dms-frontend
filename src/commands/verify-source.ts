@@ -3,7 +3,6 @@ import { Command } from "commander";
 import { getPackageRoot, runCommand } from "../common";
 
 interface VerifySourceOptions {
-  keepWorkspace: boolean;
   layer: string;
   localPackage: string[];
   module: string[];
@@ -29,7 +28,6 @@ async function verifySource(options: VerifySourceOptions): Promise<void> {
   const code = await runCommand(process.execPath, [runner], {
     env: {
       ...process.env,
-      DMS_KEEP_WORKSPACE: options.keepWorkspace ? "1" : "0",
       DMS_LAYER_SOURCE: resolve(options.layer),
       DMS_MODULE_SOURCES: JSON.stringify(
         options.module.map((path) => resolve(path)),
@@ -58,11 +56,6 @@ export function cmdVerifySource(): Command {
       "Bind a local package into the generated workspace (repeatable)",
       collectOption,
       [],
-    )
-    .option(
-      "--keep-workspace",
-      "Leave the generated workspace in the temporary directory for inspection",
-      false,
     )
     .action(verifySource);
 }
