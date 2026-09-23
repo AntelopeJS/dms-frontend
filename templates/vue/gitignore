@@ -1,0 +1,6 @@
+# Rewritten by the auto-import plugins while the dev server discovers new
+# components and composables. Tailwind's automatic source detection honors this
+# file: without it, every rewrite invalidates the stylesheets and triggers a
+# CSS hot update on plain navigation.
+auto-imports.d.ts
+components.d.ts
