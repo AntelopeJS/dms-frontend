@@ -66,7 +66,8 @@ export function writeSecretBearingFile(file: string, content: string): void {
  * Static files copied verbatim from `templates/` into the workspace.
  * Each entry is `[sourceName, destName]`: npm strips any `.npmrc` from
  * published tarballs (hardcoded, to prevent token leaks), so we ship the
- * file as `npmrc` in the package and rename it to `.npmrc` on copy.
+ * file as `npmrc` in the package and rename it to `.npmrc` on copy. The same
+ * applies to `.gitignore`, which npm never packs.
  */
 export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["vite.config.ts", "vite.config.ts"],
@@ -89,6 +90,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["server.mjs", "server.mjs"],
   ["server", "server"],
   ["npmrc", ".npmrc"],
+  ["gitignore", ".gitignore"],
   ["pnpm-workspace.yaml", "pnpm-workspace.yaml"],
 ] as const;
 
