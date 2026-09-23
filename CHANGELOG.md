@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.6
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.5...v0.2.6)
+
+### 🩹 Fixes
+
+- **workspace:** Keep dev-rewritten declaration files out of Tailwind's scan ([#26](https://github.com/AntelopeJS/dms-frontend/pull/26))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.2.5
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.4...v0.2.5)
