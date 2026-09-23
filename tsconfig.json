@@ -1,9 +1,8 @@
 {
   "compilerOptions": {
-    "noEmit": true,
     "moduleResolution": "bundler",
     "target": "ES2021",
-    "module": "preserve",
+    "module": "commonjs",
     "lib": ["ES2021"],
     "allowJs": true,
     "checkJs": false,
@@ -15,9 +14,11 @@
     "resolveJsonModule": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "declaration": false,
+    "declaration": true,
     "sourceMap": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "incremental": true,
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["./src/**/*.ts"]
 }
