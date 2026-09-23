@@ -25,6 +25,7 @@
   },
   "files": [
     "dist/",
+    "!dist/.tsbuildinfo",
     "templates/"
   ],
   "main": "./dist/common.js",
@@ -52,14 +53,14 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rimraf dist && tsc -p tsconfig.build.json",
+    "build": "rimraf dist && tsc",
     "prepack": "pnpm run build",
     "release": "pnpm run lint && pnpm run test && pnpm run prepack && release-it",
     "test": "node --import tsx --test tests/*.test.ts tests/*.test.mts",
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
     "lint": "oxlint && oxfmt --check .",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
     "lint:fix": "oxlint --fix --max-warnings=1000000 && oxfmt .",
     "knip": "knip --dependencies",
     "knip:all": "knip"
@@ -94,7 +95,7 @@
     "release-it-changelogen": "^0.1.0",
     "rimraf": "^6.1.2",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "unplugin-auto-import": "^20.2.0",
     "vite": "^7.2.4",
     "vue": "^3.5.25",
