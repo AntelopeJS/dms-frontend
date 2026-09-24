@@ -22,6 +22,7 @@ import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender } from "./server/email.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
+import { htmlTag } from "./server/html-tag.mjs";
 import { handleTester } from "./server/tester.mjs";
 import {
   createInertiaPage,
@@ -314,22 +315,6 @@ async function ssrRenderer(devServer) {
   return productionSsrRenderer;
 }
 
-const HTML_ATTRIBUTE = /([^\s=]+)(?:="[^"]*")?/g;
-
-/**
- * The document's `<html>` tag: the template's attributes, overridden by those
- * the render produced (`lang`, `data-scale`…), so none appears twice.
- */
-function htmlTag(templateAttributes, renderedAttributes) {
-  const rendered = new Set(
-    [...renderedAttributes.matchAll(HTML_ATTRIBUTE)].map((match) => match[1]),
-  );
-  const kept = [...templateAttributes.matchAll(HTML_ATTRIBUTE)]
-    .filter((match) => !rendered.has(match[1]))
-    .map((match) => match[0]);
-  return `<html ${[...kept, renderedAttributes.trim()].filter(Boolean).join(" ")}>`;
-}
-
 export async function renderHtml(
   page,
   requestUrl,
@@ -377,6 +362,11 @@ export async function renderHtml(
   return { html, status: rendered.error?.statusCode ?? 200 };
 }
 
+function renderRequestHtml(page, request) {
+  const fetch = serverComponentFetch(request);
+  return renderHtml(page, request.url, fetch, request.headers.cookie);
+}
+
 async function writeBackendError(error, request, response) {
   const status = Number.isInteger(error?.status) ? error.status : 502;
   const pathname = new URL(request.url, "http://frontend.local").pathname;
@@ -410,12 +400,7 @@ async function writeBackendError(error, request, response) {
         JSON.stringify(page),
       );
     }
-    const { html } = await renderHtml(
-      page,
-      request.url,
-      serverComponentFetch(request),
-      request.headers.cookie,
-    );
+    const { html } = await renderRequestHtml(page, request);
     return writeContent(request, response, status, htmlHeaders(), html);
   }
   const payload =
@@ -468,12 +453,7 @@ export async function handleRequest(request, response) {
       JSON.stringify(page),
     );
   }
-  const rendered = await renderHtml(
-    page,
-    request.url,
-    serverComponentFetch(request),
-    request.headers.cookie,
-  );
+  const rendered = await renderRequestHtml(page, request);
   if (rendered.redirect) {
     redirectFrontendVisit(request, response, rendered.redirect);
     return;
