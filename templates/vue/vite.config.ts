@@ -184,7 +184,7 @@ export default defineConfig({
     paintBeforeHydrate(),
   ],
   resolve: {
-    dedupe: ["vue", "reka-ui", "@nuxt/ui"],
+    dedupe: ["vue", "reka-ui", "@nuxt/ui", "@vueuse/core"],
     alias: {
       "#dms/frontend-module": resolve(__dirname, "frontend-module.ts"),
       "#build/nuxt-icon-client-bundle": "virtual:nuxt-ui-icons",
