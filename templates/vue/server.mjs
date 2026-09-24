@@ -62,6 +62,11 @@ const MINIMUM_COMPRESSION_BYTES = 1_024;
 const DYNAMIC_BROTLI_QUALITY = 4;
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
 const BUILT_SSR_RENDERER_PATH = join(PROJECT_ROOT, "dist/ssr/ssr-renderer.js");
+// The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
+// which reads compile-time flags only a bundler replaces. Vite inlines them in
+// the client bundle; without the same value here, installing vue-i18n under
+// NODE_ENV=production throws a ReferenceError on the first render.
+globalThis.__VUE_PROD_DEVTOOLS__ ??= false;
 let productionSsrRenderer;
 let vite;
 let vitePromise;
