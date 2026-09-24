@@ -1,5 +1,11 @@
 import * as assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -27,6 +33,39 @@ describe("dependency fingerprint", () => {
     const before = computeDepsHash([layer], workspacePackage);
     writeFileSync(workspacePackage, '{"dependencies":{"vue":"4"}}');
     assert.notEqual(computeDepsHash([layer], workspacePackage), before);
+  });
+
+  it("changes when a dependency patch or the pnpm workspace config changes", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "dms-deps-"));
+    cleanupDirs.push(workspace);
+    const workspacePackage = join(workspace, "package.json");
+    const pnpmConfig = join(workspace, "pnpm-workspace.yaml");
+    const patch = join(workspace, "ui.patch");
+    writeFileSync(workspacePackage, "{}");
+    writeFileSync(pnpmConfig, "packages: ['.']");
+    writeFileSync(patch, "-old");
+    const inputs = [pnpmConfig, patch];
+    const before = computeDepsHash([], workspacePackage, inputs);
+    writeFileSync(patch, "+new");
+    const patched = computeDepsHash([], workspacePackage, inputs);
+    assert.notEqual(patched, before);
+    writeFileSync(pnpmConfig, "packages: ['.']\npatchedDependencies: {}");
+    assert.notEqual(computeDepsHash([], workspacePackage, inputs), patched);
+  });
+});
+
+describe("renderer dependency patches", () => {
+  it("declares every shipped patch and ships every declared one", () => {
+    const template = join("templates", "vue");
+    const shipped = readdirSync(join(template, "patches"))
+      .map((name) => `patches/${name}`)
+      .sort();
+    const config = readFileSync(join(template, "pnpm-workspace.yaml"), "utf8");
+    const declared = [...config.matchAll(/^\s+"[^"]+":\s*(patches\/\S+)$/gm)]
+      .map((match) => match[1])
+      .sort();
+    assert.ok(shipped.length > 0);
+    assert.deepEqual(declared, shipped);
   });
 });
 

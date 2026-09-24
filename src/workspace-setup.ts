@@ -5,7 +5,7 @@
 
 import { type SpawnOptions, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { constants as osConstants } from "node:os";
 import { join } from "node:path";
 import {
@@ -34,13 +34,36 @@ import { canonicalizeBackendUrl, DEPS_HASH_FILE } from "./config";
 // Constants
 // ============================================================================
 
+const WORKSPACE_PNPM_CONFIG = "pnpm-workspace.yaml";
+const WORKSPACE_PATCHES_DIR = "patches";
+
+/**
+ * Workspace files besides the package manifests that change what `pnpm
+ * install` produces: the pnpm workspace config, which lists the dependency
+ * patches, and the patches themselves. A workspace installed before a patch
+ * was added or changed has to install again to pick it up.
+ */
+function workspaceInstallInputs(workspaceDir: string): string[] {
+  const patchesDir = join(workspaceDir, WORKSPACE_PATCHES_DIR);
+  const patches = existsSync(patchesDir)
+    ? readdirSync(patchesDir)
+        .sort()
+        .map((name) => join(patchesDir, name))
+    : [];
+  return [join(workspaceDir, WORKSPACE_PNPM_CONFIG), ...patches];
+}
+
 export function computeDepsHash(
   layerPaths: string[],
   workspacePackage?: string,
+  installInputs: readonly string[] = [],
 ): string {
   const hash = createHash("sha256");
   if (workspacePackage && existsSync(workspacePackage))
     hash.update(readFileSync(workspacePackage));
+  for (const input of installInputs) {
+    if (existsSync(input)) hash.update(readFileSync(input));
+  }
   for (const layerPath of [...layerPaths].sort()) {
     const pkgPath = join(layerPath, "package.json");
     if (existsSync(pkgPath)) {
@@ -68,6 +91,7 @@ export function needsInstall(
   const currentHash = computeDepsHash(
     layerPaths,
     join(workspaceDir, "package.json"),
+    workspaceInstallInputs(workspaceDir),
   );
   const savedHash = readFileSync(hashFile, "utf-8").trim();
   return currentHash !== savedHash;
@@ -77,7 +101,11 @@ export function needsInstall(
  * Save the current deps hash after a successful install
  */
 export function saveDepsHash(workspaceDir: string, layerPaths: string[]): void {
-  const hash = computeDepsHash(layerPaths, join(workspaceDir, "package.json"));
+  const hash = computeDepsHash(
+    layerPaths,
+    join(workspaceDir, "package.json"),
+    workspaceInstallInputs(workspaceDir),
+  );
   writeFileSync(join(workspaceDir, DEPS_HASH_FILE), hash);
 }
 

@@ -92,6 +92,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["npmrc", ".npmrc"],
   ["gitignore", ".gitignore"],
   ["pnpm-workspace.yaml", "pnpm-workspace.yaml"],
+  ["patches", "patches"],
 ] as const;
 
 export const LAYERS_SUBDIR = "frontend-modules";
