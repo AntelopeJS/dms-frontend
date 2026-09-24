@@ -503,5 +503,27 @@ if (
   frontendHttpServer.listen(
     Number(process.env.PORT ?? 3001),
     process.env.HOST ?? "0.0.0.0",
+    announceReady,
   );
+}
+
+/**
+ * Print the line the CLI's "Starting … server" announcement waits for. In
+ * development Vite would otherwise start with the first request, so it is
+ * started here: "ready" then means the first page is served without that wait.
+ */
+async function announceReady() {
+  try {
+    await developmentServer();
+  } catch (error) {
+    console.error("DMS development server failed to start", error);
+    return;
+  }
+  const { address, port } = frontendHttpServer.address();
+  const host = ["0.0.0.0", "::"].includes(address)
+    ? "localhost"
+    : address.includes(":")
+      ? `[${address}]`
+      : address;
+  console.log(`✓ Server ready on http://${host}:${port}`);
 }
