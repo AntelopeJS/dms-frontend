@@ -314,7 +314,28 @@ async function ssrRenderer(devServer) {
   return productionSsrRenderer;
 }
 
-export async function renderHtml(page, requestUrl, serverFetch) {
+const HTML_ATTRIBUTE = /([^\s=]+)(?:="[^"]*")?/g;
+
+/**
+ * The document's `<html>` tag: the template's attributes, overridden by those
+ * the render produced (`lang`, `data-scale`…), so none appears twice.
+ */
+function htmlTag(templateAttributes, renderedAttributes) {
+  const rendered = new Set(
+    [...renderedAttributes.matchAll(HTML_ATTRIBUTE)].map((match) => match[1]),
+  );
+  const kept = [...templateAttributes.matchAll(HTML_ATTRIBUTE)]
+    .filter((match) => !rendered.has(match[1]))
+    .map((match) => match[0]);
+  return `<html ${[...kept, renderedAttributes.trim()].filter(Boolean).join(" ")}>`;
+}
+
+export async function renderHtml(
+  page,
+  requestUrl,
+  serverFetch,
+  requestCookies,
+) {
   const devServer = await developmentServer();
   const rawTemplate = devServer
     ? readFileSync(SOURCE_TEMPLATE_PATH, "utf8")
@@ -325,7 +346,7 @@ export async function renderHtml(page, requestUrl, serverFetch) {
   let rendered;
   try {
     const renderer = await ssrRenderer(devServer);
-    rendered = await renderer.renderDmsPage(page, serverFetch);
+    rendered = await renderer.renderDmsPage(page, serverFetch, requestCookies);
   } catch (error) {
     console.error(
       "DMS SSR render failed; falling back to client rendering",
@@ -343,7 +364,9 @@ export async function renderHtml(page, requestUrl, serverFetch) {
   const preloads = await documentStyleTags(devServer, page, template);
   const html = template
     .replace("<title>Antelope DMS</title>", rendered.head.headTags)
-    .replace("<html", `<html ${rendered.head.htmlAttrs}`)
+    .replace(/<html([^>]*)>/, (_, attributes) =>
+      htmlTag(attributes, rendered.head.htmlAttrs),
+    )
     .replace("<body", `<body ${rendered.head.bodyAttrs}`)
     .replace("</head>", `${preloads}</head>`)
     .replace(
@@ -391,6 +414,7 @@ async function writeBackendError(error, request, response) {
       page,
       request.url,
       serverComponentFetch(request),
+      request.headers.cookie,
     );
     return writeContent(request, response, status, htmlHeaders(), html);
   }
@@ -448,6 +472,7 @@ export async function handleRequest(request, response) {
     page,
     request.url,
     serverComponentFetch(request),
+    request.headers.cookie,
   );
   if (rendered.redirect) {
     redirectFrontendVisit(request, response, rendered.redirect);

@@ -19,6 +19,7 @@ import {
   useDmsAsyncData,
   useError,
   useDmsRuntimeHooks,
+  useDmsCookie,
   useDmsState,
   useDmsFetch,
   useDmsRouter,
@@ -430,6 +431,67 @@ describe("Vue request runtime", () => {
     assert.equal(
       capturedErrors.get("/second-middleware"),
       second.runtime.currentError,
+    );
+  });
+});
+
+describe("Cookie refs", () => {
+  it("shares one browser ref per cookie and writes it to the document", (context) => {
+    const cookieJar = { cookie: "dms-shared-pref=%22small%22" };
+    Object.assign(globalThis, { document: cookieJar });
+    context.after(() => {
+      delete (globalThis as { document?: unknown }).document;
+    });
+    const pageRef = useDmsCookie<string>("dms-shared-pref");
+    const pluginRef = useDmsCookie<string>("dms-shared-pref");
+    assert.equal(pageRef, pluginRef);
+    assert.equal(pluginRef.value, "small");
+    pageRef.value = "large";
+    assert.equal(pluginRef.value, "large");
+    assert.match(cookieJar.cookie, /^dms-shared-pref=%22large%22; path=\//);
+  });
+
+  it("reads a server ref from the rendered request, isolated per request", () => {
+    const render = (cookieHeader: string) => {
+      const app = createSSRApp({ render: () => null });
+      const runtime = createDmsFrontendRuntime(
+        undefined,
+        {},
+        true,
+        cookieHeader,
+      );
+      provideDmsFrontendRuntime(app, runtime);
+      return app.runWithContext(() => {
+        const first = useDmsCookie<string>("dms-scale", {
+          default: () => "normal",
+        });
+        const second = useDmsCookie<string>("dms-scale");
+        first.value = "small";
+        return { shared: first === second, value: second.value };
+      });
+    };
+    assert.deepEqual(render("session=abc; dms-scale=%22large%22"), {
+      shared: true,
+      value: "small",
+    });
+    const untouched = createSSRApp({ render: () => null });
+    const runtime = createDmsFrontendRuntime(
+      undefined,
+      {},
+      true,
+      "dms-scale=%22large%22",
+    );
+    provideDmsFrontendRuntime(untouched, runtime);
+    assert.equal(
+      untouched.runWithContext(() => useDmsCookie<string>("dms-scale").value),
+      "large",
+    );
+    assert.equal(
+      untouched.runWithContext(
+        () =>
+          useDmsCookie<string>("dms-other", { default: () => "normal" }).value,
+      ),
+      "normal",
     );
   });
 });
