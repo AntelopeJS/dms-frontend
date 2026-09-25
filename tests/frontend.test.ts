@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { runInNewContext } from "node:vm";
 import {
   collectAuthEstablishEndpoints,
   copyStaticTemplates,
@@ -248,51 +247,6 @@ describe("Vite frontend generation", () => {
     assert.match(appRuntime, /DmsPersistentLayout[\s\S]*hydrateDmsPageProps/);
     assert.match(appRuntime, /default: \(\) => children/);
     assert.doesNotMatch(appRuntime, /default: \(\) => content/);
-  });
-
-  it("paints the color mode from the store Nuxt UI shares, migrating the legacy key", () => {
-    const html = readFileSync(join("templates", "vue", "index.html"), "utf8");
-    const runtime = readFileSync(
-      join("templates", "vue", "frontend-module.ts"),
-      "utf8",
-    );
-    const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
-    const paint = (stored: Record<string, string>, systemDark: boolean) => {
-      const storage = new Map(Object.entries(stored));
-      const classes = new Set<string>();
-      runInNewContext(script, {
-        localStorage: {
-          getItem: (key: string) => storage.get(key) ?? null,
-          setItem: (key: string, value: string) => storage.set(key, value),
-          removeItem: (key: string) => storage.delete(key),
-        },
-        matchMedia: () => ({ matches: systemDark }),
-        document: {
-          documentElement: {
-            classList: { add: (c: string) => classes.add(c) },
-          },
-        },
-      });
-      return { classes: [...classes], storage: Object.fromEntries(storage) };
-    };
-
-    assert.match(runtime, /COLOR_MODE_STORAGE_KEY = "vueuse-color-scheme"/);
-    assert.deepEqual(paint({ "vueuse-color-scheme": "light" }, true), {
-      classes: ["light"],
-      storage: { "vueuse-color-scheme": "light" },
-    });
-    assert.deepEqual(paint({}, true).classes, ["dark"]);
-    assert.deepEqual(paint({ "vueuse-color-scheme": "auto" }, false).classes, [
-      "light",
-    ]);
-    assert.deepEqual(
-      paint({ "dms-color-mode": "light", "vueuse-color-scheme": "auto" }, true),
-      { classes: ["light"], storage: { "vueuse-color-scheme": "light" } },
-    );
-    assert.deepEqual(paint({ "dms-color-mode": "system" }, true), {
-      classes: ["dark"],
-      storage: { "vueuse-color-scheme": "auto" },
-    });
   });
 
   it("replaces a failed Inertia page slot with the captured error page", () => {

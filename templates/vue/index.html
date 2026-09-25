@@ -5,20 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="data:," />
     <script>
-      // Same store as `useColorMode()` and Nuxt UI: vueuse's default key, where
-      // "auto" follows the system. The preference used to live under
-      // `dms-color-mode`; carry it over once so nobody loses their choice.
-      const legacy = localStorage.getItem("dms-color-mode");
-      if (legacy) {
-        localStorage.setItem(
-          "vueuse-color-scheme",
-          legacy === "system" ? "auto" : legacy,
-        );
-        localStorage.removeItem("dms-color-mode");
-      }
-      const preference = localStorage.getItem("vueuse-color-scheme") || "auto";
+      const preference = localStorage.getItem("dms-color-mode") || "system";
       const mode =
-        preference === "auto"
+        preference === "system"
           ? matchMedia("(prefers-color-scheme: dark)").matches
             ? "dark"
             : "light"

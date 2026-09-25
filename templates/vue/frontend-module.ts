@@ -8,7 +8,6 @@ import {
   useHead as useUnhead,
   useSeoMeta as useUnheadSeoMeta,
 } from "@unhead/vue";
-import { useColorMode as useVueUseColorMode } from "@vueuse/core";
 import { defu } from "defu";
 import { type FetchOptions, ofetch } from "ofetch";
 import {
@@ -18,7 +17,6 @@ import {
   type ComputedRef,
   computed,
   defineComponent,
-  effectScope,
   getCurrentInstance,
   getCurrentScope,
   h,
@@ -334,22 +332,15 @@ const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
 const appConfig = ref<Record<string, unknown>>({});
-/**
- * The storage key Nuxt UI's own color mode reads: its Vue plugin calls
- * `useDark()` on every boot and its components (`UDashboardSearch`,
- * `UColorModeSelect`…) call vueuse's `useColorMode()`, both on vueuse's default
- * key. Keeping the DMS preference anywhere else leaves two stores fighting over
- * the `<html>` class, and Nuxt UI's — mounted on every page — always wins.
- * `index.html` reads the same key before first paint.
- */
-const COLOR_MODE_STORAGE_KEY = "vueuse-color-scheme";
-const SERVER_COLOR_MODE: DmsColorMode = {
+const COLOR_MODE_STORAGE_KEY = "dms-color-mode";
+const COLOR_MODE_CLASSES = ["light", "dark"];
+const colorMode = reactive<DmsColorMode>({
   preference: "system",
   value: "light",
   unknown: false,
   forced: false,
-};
-let colorMode: DmsColorMode | undefined;
+});
+let isColorModeInitialized = false;
 const DMS_RUNTIME_KEY: InjectionKey<DmsFrontendRuntime> = Symbol("dms-runtime");
 type DmsRuntimeContext = DmsAppContext["runWithContext"];
 const runtimeContexts = new WeakMap<DmsFrontendRuntime, DmsRuntimeContext>();
@@ -1114,36 +1105,44 @@ export function useDmsCookie<T = string | null>(
   return runtime.sharedState.get(key) as Ref<T>;
 }
 
-/**
- * One browser-wide color mode, backed by the same vueuse store as Nuxt UI's so
- * the two can never disagree. vueuse spells "follow the system" `auto`; the DMS
- * API keeps calling it `system`.
- */
-function createColorMode(): DmsColorMode {
-  const { store, system } = useVueUseColorMode({
-    storageKey: COLOR_MODE_STORAGE_KEY,
-  });
-  return reactive({
-    preference: computed<DmsColorModePreference>({
-      get: () => (store.value === "auto" ? "system" : store.value),
-      set: (preference) => {
-        store.value = preference === "system" ? "auto" : preference;
-      },
-    }),
-    value: computed(() =>
-      store.value === "auto" ? system.value : store.value,
-    ),
-    unknown: false,
-    forced: false,
-  }) as DmsColorMode;
+function preferredColorMode(): "light" | "dark" {
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function applyColorMode(preference: DmsColorModePreference): void {
+  colorMode.value = preference === "system" ? preferredColorMode() : preference;
+  document.documentElement.classList.remove(...COLOR_MODE_CLASSES);
+  document.documentElement.classList.add(colorMode.value);
+}
+
+function initializeColorMode(): void {
+  if (isColorModeInitialized) return;
+  isColorModeInitialized = true;
+  if (typeof window === "undefined") return;
+  const stored = window.localStorage.getItem(COLOR_MODE_STORAGE_KEY);
+  if (COLOR_MODE_CLASSES.includes(stored ?? "") || stored === "system") {
+    colorMode.preference = stored as DmsColorModePreference;
+  }
+  watch(
+    () => colorMode.preference,
+    (preference) => {
+      applyColorMode(preference);
+      window.localStorage.setItem(COLOR_MODE_STORAGE_KEY, preference);
+    },
+    { immediate: true },
+  );
+  window
+    .matchMedia?.("(prefers-color-scheme: dark)")
+    .addEventListener("change", () => {
+      if (colorMode.preference === "system") applyColorMode("system");
+    });
 }
 
 export function useColorMode(): DmsColorMode {
-  if (typeof window === "undefined") return SERVER_COLOR_MODE;
-  // Detached: the first caller is usually a page's setup, and the store's
-  // watchers must outlive that page.
-  colorMode ??= effectScope(true).run(createColorMode);
-  return colorMode as DmsColorMode;
+  initializeColorMode();
+  return colorMode;
 }
 
 export function createError(
