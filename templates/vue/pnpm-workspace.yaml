@@ -2,3 +2,10 @@ packages:
   - .
   - frontend-modules/*
 ignore-workspace-root-check: true
+# Fixes carried until they are released upstream. Each patch names the upstream
+# issue and pull request it stands in for; drop it with the upgrade that ships
+# them, since pnpm refuses a patch whose version is no longer installed.
+patchedDependencies:
+  # Menu and breadcrumb links active on a sibling route (`/test` on `/test-a`):
+  # nuxt/ui#6803, fixed by nuxt/ui#6809.
+  "@nuxt/ui@4.10.0": patches/@nuxt__ui@4.10.0.patch
