@@ -133,6 +133,17 @@ export default frontendModule;
 
 The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
 
+### Components rendered inside `<svg>`
+
+Modules usually register their components lazily, with `defineAsyncComponent`, and the page is rendered under a `<Suspense>`. Vue mounts an async component that resolves under a `<Suspense>` with the `<Suspense>`'s element namespace rather than the namespace of the place it is rendered: a component resolved by name (`resolveComponent` or a template tag) whose root is an SVG element (`<path>`, `<g>`, …) is created as an HTML element inside the `<svg>`, and the browser draws nothing ([vuejs/core#15639](https://github.com/vuejs/core/issues/15639)). Import such components directly instead, for example the node and edge types passed to Vue Flow:
+
+```ts
+import { markRaw } from "vue";
+import RelationEdge from "./RelationEdge.vue";
+
+const edgeTypes = markRaw({ relation: RelationEdge });
+```
+
 ### Layer aliases outside the workspace
 
 Every layer a module ships under `layers/<name>/` answers to `#<name>` inside

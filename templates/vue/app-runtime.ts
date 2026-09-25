@@ -31,8 +31,10 @@ import {
   installDmsPlugins,
   preloadDmsPage,
   provideDmsFrontendRuntime,
+  resolveDmsAsyncComponents,
   resolveDmsComponent,
   serializeDmsAsyncData,
+  trackDmsAsyncComponents,
   useDmsAppConfig,
   useDmsState,
   useError,
@@ -72,6 +74,7 @@ export type DmsServerFetch = (
 ) => Promise<unknown>;
 
 const SSR_ASYNC_DATA_ID = "dms-ssr-async-data";
+export const SSR_ASYNC_COMPONENTS_ID = "dms-ssr-async-components";
 const DEFAULT_LOCALE = "en";
 
 function pageLocale(props: DmsPageProps): string {
@@ -88,6 +91,15 @@ function readDmsAsyncData(): Record<string, unknown> {
   const data = JSON.parse(element.textContent) as Record<string, unknown>;
   element.remove();
   return data;
+}
+
+function readDmsAsyncComponents(): string[] {
+  if (typeof document === "undefined") return [];
+  const element = document.getElementById(SSR_ASYNC_COMPONENTS_ID);
+  if (!element?.textContent) return [];
+  const names = JSON.parse(element.textContent) as string[];
+  element.remove();
+  return names;
 }
 
 const DmsInertiaPage = defineComponent({
@@ -227,6 +239,13 @@ export async function configureDmsApp(
   options.app.runWithContext(() =>
     hydrateDmsPageProps(options.initialPageProps, options.initialPageUrl),
   );
+  // Resolve, before the app mounts, every async component the server
+  // rendered: the page, its layout, and the components the render reached.
+  // Hydration then adopts the server-rendered markup instead of discarding it.
+  await Promise.all([
+    preloadDmsPage(options.initialPageProps),
+    resolveDmsAsyncComponents(readDmsAsyncComponents()),
+  ]);
   const mounted = await installDmsPlugins(
     options.app,
     i18n.global,
@@ -237,4 +256,4 @@ export async function configureDmsApp(
   return { mounted, runtime };
 }
 
-export { serializeDmsAsyncData };
+export { serializeDmsAsyncData, trackDmsAsyncComponents };

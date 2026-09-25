@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { router } from "@inertiajs/vue3";
+import { renderToString } from "@vue/server-renderer";
 import {
   createSSRApp,
   createRenderer,
+  defineAsyncComponent,
   defineComponent,
   h,
   nextTick,
@@ -15,7 +17,10 @@ import {
   hydrateDmsPageProps,
   navigateDms,
   provideDmsFrontendRuntime,
+  registerDmsComponent,
+  resolveDmsAsyncComponents,
   serializeDmsAsyncData,
+  trackDmsAsyncComponents,
   useDmsAsyncData,
   useError,
   useDmsRuntimeHooks,
@@ -294,6 +299,40 @@ describe("Vue request runtime", () => {
     ]);
   });
 
+  it("keeps the page mounted when a navigation only changes the query or hash", async (context) => {
+    const { app, runtime } = application("first");
+    runtime.route.path = "/data";
+    runtime.route.fullPath = "/data";
+    runtime.route.query = {};
+    const visits: Array<{
+      url: string;
+      preserveState?: unknown;
+      preserveScroll?: unknown;
+    }> = [];
+    context.mock.method(router, "visit", (url, options) => {
+      visits.push({
+        url,
+        preserveState: options.preserveState,
+        preserveScroll: options.preserveScroll,
+      });
+      options.onFinish({});
+    });
+    const navigation = app.runWithContext(useDmsRouter);
+    await navigation.replace({ query: { table: "tags" } });
+    await navigation.push("/data#rows");
+    await navigation.push("/schemas");
+    await navigation.push(
+      { query: { table: "posts" } },
+      { preserveState: false },
+    );
+    assert.deepEqual(visits, [
+      { url: "/data?table=tags", preserveState: true, preserveScroll: true },
+      { url: "/data#rows", preserveState: true, preserveScroll: true },
+      { url: "/schemas", preserveState: false, preserveScroll: false },
+      { url: "/data?table=posts", preserveState: false, preserveScroll: true },
+    ]);
+  });
+
   it("isolates overlapping transport, state, async data and hooks", async () => {
     const first = application("first");
     const second = application("second");
@@ -493,5 +532,30 @@ describe("Cookie refs", () => {
       ),
       "normal",
     );
+  });
+});
+
+describe("Async component hydration", () => {
+  const asyncBlock = (label: string) =>
+    defineAsyncComponent(async () =>
+      defineComponent({ render: () => h("span", label) }),
+    );
+
+  it("records the registered async components a server render reaches", async () => {
+    const rendered = asyncBlock("rendered");
+    registerDmsComponent("TrackedRenderedBlock", rendered);
+    registerDmsComponent("TrackedUnusedBlock", asyncBlock("unused"));
+    const app = createSSRApp({ render: () => h(rendered) });
+    const names = trackDmsAsyncComponents(app);
+    assert.match(await renderToString(app), /rendered/);
+    assert.deepEqual([...names], ["TrackedRenderedBlock"]);
+  });
+
+  it("resolves the recorded async components before hydration", async () => {
+    const block = asyncBlock("ahead") as { __asyncResolved?: unknown };
+    registerDmsComponent("ResolvedAheadBlock", block as never);
+    assert.equal(block.__asyncResolved, undefined);
+    await resolveDmsAsyncComponents(["ResolvedAheadBlock", "UnknownBlock"]);
+    assert.ok(block.__asyncResolved);
   });
 });

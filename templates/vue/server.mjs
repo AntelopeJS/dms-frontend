@@ -63,6 +63,11 @@ const MINIMUM_COMPRESSION_BYTES = 1_024;
 const DYNAMIC_BROTLI_QUALITY = 4;
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
 const BUILT_SSR_RENDERER_PATH = join(PROJECT_ROOT, "dist/ssr/ssr-renderer.js");
+// The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
+// which reads compile-time flags only a bundler replaces. Vite inlines them in
+// the client bundle; without the same value here, installing vue-i18n under
+// NODE_ENV=production throws a ReferenceError on the first render.
+globalThis.__VUE_PROD_DEVTOOLS__ ??= false;
 let productionSsrRenderer;
 let vite;
 let vitePromise;
@@ -503,5 +508,27 @@ if (
   frontendHttpServer.listen(
     Number(process.env.PORT ?? 3001),
     process.env.HOST ?? "0.0.0.0",
+    announceReady,
   );
+}
+
+/**
+ * Print the line the CLI's "Starting … server" announcement waits for. In
+ * development Vite would otherwise start with the first request, so it is
+ * started here: "ready" then means the first page is served without that wait.
+ */
+async function announceReady() {
+  try {
+    await developmentServer();
+  } catch (error) {
+    console.error("DMS development server failed to start", error);
+    return;
+  }
+  const { address, port } = frontendHttpServer.address();
+  const host = ["0.0.0.0", "::"].includes(address)
+    ? "localhost"
+    : address.includes(":")
+      ? `[${address}]`
+      : address;
+  console.log(`✓ Server ready on http://${host}:${port}`);
 }

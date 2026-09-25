@@ -13,6 +13,7 @@ import { type FetchOptions, ofetch } from "ofetch";
 import {
   type App,
   type Component,
+  type ComponentPublicInstance,
   type ComputedRef,
   computed,
   defineComponent,
@@ -523,16 +524,24 @@ async function visit(
   options: DmsNavigationOptions = {},
 ): Promise<void> {
   const url = locationToUrl(runtime, to);
-  const result = await runMiddleware(runtime, parseRoute(runtime, url));
+  const target = parseRoute(runtime, url);
+  const result = await runMiddleware(runtime, target);
   if (result === false) return;
   if (result !== undefined) return visit(runtime, result, options);
   if (runtime.isServer) {
     runtime.serverRedirect = url;
     return;
   }
+  // Like Vue Router, a navigation that only changes the query or hash keeps
+  // the page mounted: without preserveState, Inertia remounts the page
+  // component on every visit and its local state (open tabs, selection,
+  // inputs) is lost.
+  const samePath = target.path === runtime.route.path;
   await new Promise<void>((resolve) =>
     inertiaRouter.visit(url, {
       ...options,
+      preserveState: options.preserveState ?? samePath,
+      preserveScroll: options.preserveScroll ?? samePath,
       onFinish: (completedVisit) => {
         options.onFinish?.(completedVisit);
         resolve();
@@ -1195,6 +1204,41 @@ export function resolveDmsComponent(name: string): Component | undefined {
   return components.get(normalizeDmsName(name))?.component;
 }
 export const getDmsComponent = resolveDmsComponent;
+
+/**
+ * Records, by registered name, every registered async component a server
+ * render reaches, so the client can resolve the same ones before hydrating.
+ * Inertia re-renders the tree once on boot; an async component still loading
+ * at that moment makes Vue drop its server-rendered markup ("Skipping lazy
+ * hydration") and leave it empty until its chunk arrives.
+ */
+export function trackDmsAsyncComponents(app: App): Set<string> {
+  const names = new Map<Component, string>();
+  components.forEach(({ component, name }) => {
+    if ((component as DmsAsyncComponent).__asyncLoader)
+      names.set(component, name);
+  });
+  const rendered = new Set<string>();
+  app.mixin({
+    beforeCreate(this: ComponentPublicInstance) {
+      const name = names.get(this.$.type as Component);
+      if (name) rendered.add(name);
+    },
+  });
+  return rendered;
+}
+
+export async function resolveDmsAsyncComponents(
+  names: readonly string[],
+): Promise<void> {
+  await Promise.all(
+    names.map((name) =>
+      (
+        resolveDmsComponent(name) as DmsAsyncComponent | undefined
+      )?.__asyncLoader?.(),
+    ),
+  );
+}
 export async function preloadComponents(names: string[]): Promise<void> {
   const registry = useDmsRuntime().appContext?.vueApp._context.components ?? {};
   await Promise.all(
@@ -1335,8 +1379,15 @@ export async function preloadDmsPage(props: DmsPageProps): Promise<void> {
     ? layouts.get(normalizeDmsName(layoutName))
     : undefined;
   const entries = props.error ? [errorPage] : [page, layout];
+  // `preload` only warms the module; the async wrapper stays unresolved until
+  // its own loader runs. Hydrating an unresolved wrapper defers it, and the
+  // first parent render (Inertia's initial swap) then makes Vue drop the
+  // server-rendered markup and render the subtree from scratch.
   await Promise.all(
-    entries.flatMap((entry) => (entry?.preload ? [entry.preload()] : [])),
+    entries.flatMap((entry) => [
+      entry?.preload?.(),
+      (entry?.component as DmsAsyncComponent | undefined)?.__asyncLoader?.(),
+    ]),
   );
   if (!props.error) await preloadDmsLayoutComponents(props.page.layout);
 }
