@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.2.7
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.6...v0.2.7)
+
+### 🩹 Fixes
+
+- **ssr:** Define __VUE_PROD_DEVTOOLS__ for the external vue-i18n build ([#39](https://github.com/AntelopeJS/dms-frontend/pull/39))
+- **server:** Announce when the frontend server is ready ([#33](https://github.com/AntelopeJS/dms-frontend/pull/33))
+
+### 💅 Refactors
+
+- **build:** Merge tsconfig.build.json into tsconfig.json ([#27](https://github.com/AntelopeJS/dms-frontend/pull/27))
+
+### 🤖 CI
+
+- **release:** Release next from a dedicated branch and restore requireCommits ([#28](https://github.com/AntelopeJS/dms-frontend/pull/28))
+- **release:** Reference the shared release workflows through v1 ([#29](https://github.com/AntelopeJS/dms-frontend/pull/29))
+
+### ❤️ Contributors
+
+- Alessandro Aloisio ([@alessaloisio](http://github.com/alessaloisio))
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.2.6
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.5...v0.2.6)

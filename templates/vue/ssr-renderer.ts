@@ -5,9 +5,11 @@ import { renderToString } from "@vue/server-renderer";
 import { createSSRApp, h } from "vue";
 import {
   type DmsServerFetch,
+  SSR_ASYNC_COMPONENTS_ID,
   configureDmsApp,
   resolveDmsInertiaPage,
   serializeDmsAsyncData,
+  trackDmsAsyncComponents,
 } from "./app-runtime";
 import {
   type DmsErrorData,
@@ -60,6 +62,11 @@ function asyncDataScript(runtime: DmsFrontendRuntime): string {
   return `<script id="${SSR_ASYNC_DATA_ID}" type="application/json">${value}</script>`;
 }
 
+function asyncComponentsScript(names: Set<string>): string {
+  const value = JSON.stringify([...names]).replaceAll("<", "\\u003c");
+  return `<script id="${SSR_ASYNC_COMPONENTS_ID}" type="application/json">${value}</script>`;
+}
+
 await setupFrontendModules(frontendModules);
 
 export function isDmsFrontendPage(path: string): boolean {
@@ -69,11 +76,13 @@ export function isDmsFrontendPage(path: string): boolean {
 export async function renderDmsPage(
   page: DmsSsrPage,
   serverFetch?: DmsServerFetch,
+  requestCookies?: string,
 ): Promise<DmsSsrResult> {
   const runtime = createDmsFrontendRuntime(
     serverFetch as typeof import("ofetch").ofetch,
     {},
     true,
+    requestCookies,
   );
   return runtimeStorage.run(runtime, () =>
     renderDmsPageWithRuntime(page, runtime, serverFetch),
@@ -88,12 +97,14 @@ async function renderDmsPageWithRuntime(
   await preloadDmsPage(page.props);
   const head = createHead();
   const ssrContext: DmsSsrContext = {};
+  let asyncComponents = new Set<string>();
   const inertiaResult = await createInertiaApp({
     page,
     render: (app) => renderToString(app, ssrContext),
     resolve: resolveDmsInertiaPage,
     async setup({ App, props, plugin }) {
       const app = createSSRApp({ render: () => h(App, props) });
+      asyncComponents = trackDmsAsyncComponents(app);
       const configured = await configureDmsApp({
         app,
         head,
@@ -130,12 +141,13 @@ async function renderDmsPageWithRuntime(
     return renderDmsPage(
       { ...page, props: { ...page.props, error } },
       serverFetch,
+      runtime.requestCookies,
     );
   }
   const renderedHead = await renderSSRHead(head);
   return {
     error: page.props.error,
-    body: `${inertiaResult.body}${asyncDataScript(runtime)}`,
+    body: `${inertiaResult.body}${asyncDataScript(runtime)}${asyncComponentsScript(asyncComponents)}`,
     head: {
       bodyAttrs: renderedHead.bodyAttrs,
       headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { router } from "@inertiajs/vue3";
+import { renderToString } from "@vue/server-renderer";
 import {
   createSSRApp,
   createRenderer,
+  defineAsyncComponent,
   defineComponent,
   h,
   nextTick,
@@ -15,10 +17,14 @@ import {
   hydrateDmsPageProps,
   navigateDms,
   provideDmsFrontendRuntime,
+  registerDmsComponent,
+  resolveDmsAsyncComponents,
   serializeDmsAsyncData,
+  trackDmsAsyncComponents,
   useDmsAsyncData,
   useError,
   useDmsRuntimeHooks,
+  useDmsCookie,
   useDmsState,
   useDmsFetch,
   useDmsRouter,
@@ -293,6 +299,40 @@ describe("Vue request runtime", () => {
     ]);
   });
 
+  it("keeps the page mounted when a navigation only changes the query or hash", async (context) => {
+    const { app, runtime } = application("first");
+    runtime.route.path = "/data";
+    runtime.route.fullPath = "/data";
+    runtime.route.query = {};
+    const visits: Array<{
+      url: string;
+      preserveState?: unknown;
+      preserveScroll?: unknown;
+    }> = [];
+    context.mock.method(router, "visit", (url, options) => {
+      visits.push({
+        url,
+        preserveState: options.preserveState,
+        preserveScroll: options.preserveScroll,
+      });
+      options.onFinish({});
+    });
+    const navigation = app.runWithContext(useDmsRouter);
+    await navigation.replace({ query: { table: "tags" } });
+    await navigation.push("/data#rows");
+    await navigation.push("/schemas");
+    await navigation.push(
+      { query: { table: "posts" } },
+      { preserveState: false },
+    );
+    assert.deepEqual(visits, [
+      { url: "/data?table=tags", preserveState: true, preserveScroll: true },
+      { url: "/data#rows", preserveState: true, preserveScroll: true },
+      { url: "/schemas", preserveState: false, preserveScroll: false },
+      { url: "/data?table=posts", preserveState: false, preserveScroll: true },
+    ]);
+  });
+
   it("isolates overlapping transport, state, async data and hooks", async () => {
     const first = application("first");
     const second = application("second");
@@ -431,5 +471,91 @@ describe("Vue request runtime", () => {
       capturedErrors.get("/second-middleware"),
       second.runtime.currentError,
     );
+  });
+});
+
+describe("Cookie refs", () => {
+  it("shares one browser ref per cookie and writes it to the document", (context) => {
+    const cookieJar = { cookie: "dms-shared-pref=%22small%22" };
+    Object.assign(globalThis, { document: cookieJar });
+    context.after(() => {
+      delete (globalThis as { document?: unknown }).document;
+    });
+    const pageRef = useDmsCookie<string>("dms-shared-pref");
+    const pluginRef = useDmsCookie<string>("dms-shared-pref");
+    assert.equal(pageRef, pluginRef);
+    assert.equal(pluginRef.value, "small");
+    pageRef.value = "large";
+    assert.equal(pluginRef.value, "large");
+    assert.match(cookieJar.cookie, /^dms-shared-pref=%22large%22; path=\//);
+  });
+
+  it("reads a server ref from the rendered request, isolated per request", () => {
+    const render = (cookieHeader: string) => {
+      const app = createSSRApp({ render: () => null });
+      const runtime = createDmsFrontendRuntime(
+        undefined,
+        {},
+        true,
+        cookieHeader,
+      );
+      provideDmsFrontendRuntime(app, runtime);
+      return app.runWithContext(() => {
+        const first = useDmsCookie<string>("dms-scale", {
+          default: () => "normal",
+        });
+        const second = useDmsCookie<string>("dms-scale");
+        first.value = "small";
+        return { shared: first === second, value: second.value };
+      });
+    };
+    assert.deepEqual(render("session=abc; dms-scale=%22large%22"), {
+      shared: true,
+      value: "small",
+    });
+    const untouched = createSSRApp({ render: () => null });
+    const runtime = createDmsFrontendRuntime(
+      undefined,
+      {},
+      true,
+      "dms-scale=%22large%22",
+    );
+    provideDmsFrontendRuntime(untouched, runtime);
+    assert.equal(
+      untouched.runWithContext(() => useDmsCookie<string>("dms-scale").value),
+      "large",
+    );
+    assert.equal(
+      untouched.runWithContext(
+        () =>
+          useDmsCookie<string>("dms-other", { default: () => "normal" }).value,
+      ),
+      "normal",
+    );
+  });
+});
+
+describe("Async component hydration", () => {
+  const asyncBlock = (label: string) =>
+    defineAsyncComponent(async () =>
+      defineComponent({ render: () => h("span", label) }),
+    );
+
+  it("records the registered async components a server render reaches", async () => {
+    const rendered = asyncBlock("rendered");
+    registerDmsComponent("TrackedRenderedBlock", rendered);
+    registerDmsComponent("TrackedUnusedBlock", asyncBlock("unused"));
+    const app = createSSRApp({ render: () => h(rendered) });
+    const names = trackDmsAsyncComponents(app);
+    assert.match(await renderToString(app), /rendered/);
+    assert.deepEqual([...names], ["TrackedRenderedBlock"]);
+  });
+
+  it("resolves the recorded async components before hydration", async () => {
+    const block = asyncBlock("ahead") as { __asyncResolved?: unknown };
+    registerDmsComponent("ResolvedAheadBlock", block as never);
+    assert.equal(block.__asyncResolved, undefined);
+    await resolveDmsAsyncComponents(["ResolvedAheadBlock", "UnknownBlock"]);
+    assert.ok(block.__asyncResolved);
   });
 });

@@ -14,6 +14,7 @@ import { type FetchOptions, ofetch } from "ofetch";
 import {
   type App,
   type Component,
+  type ComponentPublicInstance,
   type ComputedRef,
   computed,
   defineComponent,
@@ -315,6 +316,8 @@ export interface DmsFrontendRuntime {
   pendingNavigation?: Promise<void>;
   hasNavigationListener: boolean;
   pageVersion: number;
+  /** The `Cookie` header of the request a server runtime renders. */
+  requestCookies?: string;
 }
 
 const components = new Map<string, DmsComponentRegistration>();
@@ -358,8 +361,10 @@ export function createDmsFrontendRuntime(
   serverFetch?: typeof ofetch,
   hydratedAsyncData: Record<string, unknown> = {},
   isServer = false,
+  requestCookies?: string,
 ): DmsFrontendRuntime {
   return {
+    requestCookies,
     sharedState: new Map(),
     asyncData: new Map(),
     asyncDataPromises: new Map(),
@@ -528,16 +533,24 @@ async function visit(
   options: DmsNavigationOptions = {},
 ): Promise<void> {
   const url = locationToUrl(runtime, to);
-  const result = await runMiddleware(runtime, parseRoute(runtime, url));
+  const target = parseRoute(runtime, url);
+  const result = await runMiddleware(runtime, target);
   if (result === false) return;
   if (result !== undefined) return visit(runtime, result, options);
   if (runtime.isServer) {
     runtime.serverRedirect = url;
     return;
   }
+  // Like Vue Router, a navigation that only changes the query or hash keeps
+  // the page mounted: without preserveState, Inertia remounts the page
+  // component on every visit and its local state (open tabs, selection,
+  // inputs) is lost.
+  const samePath = target.path === runtime.route.path;
   await new Promise<void>((resolve) =>
     inertiaRouter.visit(url, {
       ...options,
+      preserveState: options.preserveState ?? samePath,
+      preserveScroll: options.preserveScroll ?? samePath,
       onFinish: (completedVisit) => {
         options.onFinish?.(completedVisit);
         resolve();
@@ -1013,42 +1026,92 @@ export function useDmsApp(): DmsAppContext {
   return contextual ?? (useDmsRuntime().appContext as DmsAppContext);
 }
 
-export function useDmsCookie<T = string | null>(
+const COOKIE_STATE_PREFIX = "dms-cookie:";
+// A browser tab runs one application, so its cookie refs are shared by every
+// caller; a server shares them within the request it renders instead.
+const browserCookieRefs = new Map<string, Ref<unknown>>();
+
+function readCookie(
+  source: string | undefined,
   name: string,
-  options: DmsCookieOptions<T> = {},
-): Ref<T> {
-  if (typeof document === "undefined")
-    return ref(options.default?.() ?? null) as Ref<T>;
-  const match = document.cookie
-    .split("; ")
+): string | undefined {
+  const match = source
+    ?.split(/;\s*/)
     .find((entry) => entry.startsWith(`${name}=`));
-  const stored = match
-    ? decodeURIComponent(match.slice(name.length + 1))
-    : undefined;
-  let parsed: T;
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
+}
+
+function parseCookieValue<T>(
+  stored: string | undefined,
+  options: DmsCookieOptions<T>,
+): T {
+  if (stored === undefined) return (options.default?.() ?? null) as T;
   try {
-    parsed =
-      stored === undefined
-        ? ((options.default?.() ?? null) as T)
-        : JSON.parse(stored);
+    return JSON.parse(stored) as T;
   } catch {
-    parsed = stored as T;
+    return stored as T;
   }
-  const value = ref(parsed) as Ref<T>;
+}
+
+function writeCookie<T>(name: string, next: T, options: DmsCookieOptions<T>) {
+  const attributes = [
+    `path=${options.path ?? "/"}`,
+    options.maxAge === undefined ? "" : `max-age=${options.maxAge}`,
+    options.sameSite ? `samesite=${options.sameSite}` : "",
+    options.secure ? "secure" : "",
+  ].filter(Boolean);
+  // biome-ignore lint/suspicious/noDocumentCookie: reactive cookie refs require synchronous writes.
+  document.cookie = `${name}=${encodeURIComponent(JSON.stringify(next ?? null))}; ${attributes.join("; ")}`;
+}
+
+function createCookieRef<T>(
+  name: string,
+  source: string | undefined,
+  options: DmsCookieOptions<T>,
+  isServer: boolean,
+): Ref<T> {
+  const value = ref(
+    parseCookieValue(readCookie(source, name), options),
+  ) as Ref<T>;
   return computed({
     get: () => value.value,
     set: (next) => {
       value.value = next;
-      const attributes = [
-        `path=${options.path ?? "/"}`,
-        options.maxAge === undefined ? "" : `max-age=${options.maxAge}`,
-        options.sameSite ? `samesite=${options.sameSite}` : "",
-        options.secure ? "secure" : "",
-      ].filter(Boolean);
-      // biome-ignore lint/suspicious/noDocumentCookie: reactive cookie refs require synchronous writes.
-      document.cookie = `${name}=${encodeURIComponent(JSON.stringify(next ?? null))}; ${attributes.join("; ")}`;
+      if (!isServer) writeCookie(name, next, options);
     },
   });
+}
+
+/**
+ * A cookie as a ref, shared by every caller of the same name — so a plugin and
+ * a page reading one preference see each other's writes — and read on the
+ * server from the request being rendered, so the server HTML matches the client.
+ */
+export function useDmsCookie<T = string | null>(
+  name: string,
+  options: DmsCookieOptions<T> = {},
+): Ref<T> {
+  if (typeof document !== "undefined") {
+    if (!browserCookieRefs.has(name))
+      browserCookieRefs.set(
+        name,
+        createCookieRef(name, document.cookie, options, false) as Ref<unknown>,
+      );
+    return browserCookieRefs.get(name) as Ref<T>;
+  }
+  const runtime = useDmsRuntime();
+  const key = `${COOKIE_STATE_PREFIX}${name}`;
+  if (!runtime.sharedState.has(key))
+    runtime.sharedState.set(
+      key,
+      createCookieRef(
+        name,
+        runtime.requestCookies,
+        options,
+        true,
+      ) as Ref<unknown>,
+    );
+  return runtime.sharedState.get(key) as Ref<T>;
 }
 
 /**
@@ -1142,6 +1205,41 @@ export function resolveDmsComponent(name: string): Component | undefined {
   return components.get(normalizeDmsName(name))?.component;
 }
 export const getDmsComponent = resolveDmsComponent;
+
+/**
+ * Records, by registered name, every registered async component a server
+ * render reaches, so the client can resolve the same ones before hydrating.
+ * Inertia re-renders the tree once on boot; an async component still loading
+ * at that moment makes Vue drop its server-rendered markup ("Skipping lazy
+ * hydration") and leave it empty until its chunk arrives.
+ */
+export function trackDmsAsyncComponents(app: App): Set<string> {
+  const names = new Map<Component, string>();
+  components.forEach(({ component, name }) => {
+    if ((component as DmsAsyncComponent).__asyncLoader)
+      names.set(component, name);
+  });
+  const rendered = new Set<string>();
+  app.mixin({
+    beforeCreate(this: ComponentPublicInstance) {
+      const name = names.get(this.$.type as Component);
+      if (name) rendered.add(name);
+    },
+  });
+  return rendered;
+}
+
+export async function resolveDmsAsyncComponents(
+  names: readonly string[],
+): Promise<void> {
+  await Promise.all(
+    names.map((name) =>
+      (
+        resolveDmsComponent(name) as DmsAsyncComponent | undefined
+      )?.__asyncLoader?.(),
+    ),
+  );
+}
 export async function preloadComponents(names: string[]): Promise<void> {
   const registry = useDmsRuntime().appContext?.vueApp._context.components ?? {};
   await Promise.all(
@@ -1282,8 +1380,15 @@ export async function preloadDmsPage(props: DmsPageProps): Promise<void> {
     ? layouts.get(normalizeDmsName(layoutName))
     : undefined;
   const entries = props.error ? [errorPage] : [page, layout];
+  // `preload` only warms the module; the async wrapper stays unresolved until
+  // its own loader runs. Hydrating an unresolved wrapper defers it, and the
+  // first parent render (Inertia's initial swap) then makes Vue drop the
+  // server-rendered markup and render the subtree from scratch.
   await Promise.all(
-    entries.flatMap((entry) => (entry?.preload ? [entry.preload()] : [])),
+    entries.flatMap((entry) => [
+      entry?.preload?.(),
+      (entry?.component as DmsAsyncComponent | undefined)?.__asyncLoader?.(),
+    ]),
   );
   if (!props.error) await preloadDmsLayoutComponents(props.page.layout);
 }
