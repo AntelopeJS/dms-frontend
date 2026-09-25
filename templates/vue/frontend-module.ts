@@ -520,16 +520,24 @@ async function visit(
   options: DmsNavigationOptions = {},
 ): Promise<void> {
   const url = locationToUrl(runtime, to);
-  const result = await runMiddleware(runtime, parseRoute(runtime, url));
+  const target = parseRoute(runtime, url);
+  const result = await runMiddleware(runtime, target);
   if (result === false) return;
   if (result !== undefined) return visit(runtime, result, options);
   if (runtime.isServer) {
     runtime.serverRedirect = url;
     return;
   }
+  // Like Vue Router, a navigation that only changes the query or hash keeps
+  // the page mounted: without preserveState, Inertia remounts the page
+  // component on every visit and its local state (open tabs, selection,
+  // inputs) is lost.
+  const samePath = target.path === runtime.route.path;
   await new Promise<void>((resolve) =>
     inertiaRouter.visit(url, {
       ...options,
+      preserveState: options.preserveState ?? samePath,
+      preserveScroll: options.preserveScroll ?? samePath,
       onFinish: (completedVisit) => {
         options.onFinish?.(completedVisit);
         resolve();
