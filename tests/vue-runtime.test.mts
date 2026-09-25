@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { router } from "@inertiajs/vue3";
+import { renderToString } from "@vue/server-renderer";
 import {
   createSSRApp,
   createRenderer,
+  defineAsyncComponent,
   defineComponent,
   h,
   nextTick,
@@ -15,7 +17,10 @@ import {
   hydrateDmsPageProps,
   navigateDms,
   provideDmsFrontendRuntime,
+  registerDmsComponent,
+  resolveDmsAsyncComponents,
   serializeDmsAsyncData,
+  trackDmsAsyncComponents,
   useDmsAsyncData,
   useError,
   useDmsRuntimeHooks,
@@ -431,5 +436,30 @@ describe("Vue request runtime", () => {
       capturedErrors.get("/second-middleware"),
       second.runtime.currentError,
     );
+  });
+});
+
+describe("Async component hydration", () => {
+  const asyncBlock = (label: string) =>
+    defineAsyncComponent(async () =>
+      defineComponent({ render: () => h("span", label) }),
+    );
+
+  it("records the registered async components a server render reaches", async () => {
+    const rendered = asyncBlock("rendered");
+    registerDmsComponent("TrackedRenderedBlock", rendered);
+    registerDmsComponent("TrackedUnusedBlock", asyncBlock("unused"));
+    const app = createSSRApp({ render: () => h(rendered) });
+    const names = trackDmsAsyncComponents(app);
+    assert.match(await renderToString(app), /rendered/);
+    assert.deepEqual([...names], ["TrackedRenderedBlock"]);
+  });
+
+  it("resolves the recorded async components before hydration", async () => {
+    const block = asyncBlock("ahead") as { __asyncResolved?: unknown };
+    registerDmsComponent("ResolvedAheadBlock", block as never);
+    assert.equal(block.__asyncResolved, undefined);
+    await resolveDmsAsyncComponents(["ResolvedAheadBlock", "UnknownBlock"]);
+    assert.ok(block.__asyncResolved);
   });
 });
