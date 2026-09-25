@@ -76,11 +76,13 @@ export function isDmsFrontendPage(path: string): boolean {
 export async function renderDmsPage(
   page: DmsSsrPage,
   serverFetch?: DmsServerFetch,
+  requestCookies?: string,
 ): Promise<DmsSsrResult> {
   const runtime = createDmsFrontendRuntime(
     serverFetch as typeof import("ofetch").ofetch,
     {},
     true,
+    requestCookies,
   );
   return runtimeStorage.run(runtime, () =>
     renderDmsPageWithRuntime(page, runtime, serverFetch),
@@ -139,6 +141,7 @@ async function renderDmsPageWithRuntime(
     return renderDmsPage(
       { ...page, props: { ...page.props, error } },
       serverFetch,
+      runtime.requestCookies,
     );
   }
   const renderedHead = await renderSSRHead(head);

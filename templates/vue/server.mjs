@@ -22,6 +22,7 @@ import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender } from "./server/email.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
+import { htmlTag } from "./server/html-tag.mjs";
 import { handleTester } from "./server/tester.mjs";
 import {
   createInertiaPage,
@@ -319,7 +320,12 @@ async function ssrRenderer(devServer) {
   return productionSsrRenderer;
 }
 
-export async function renderHtml(page, requestUrl, serverFetch) {
+export async function renderHtml(
+  page,
+  requestUrl,
+  serverFetch,
+  requestCookies,
+) {
   const devServer = await developmentServer();
   const rawTemplate = devServer
     ? readFileSync(SOURCE_TEMPLATE_PATH, "utf8")
@@ -330,7 +336,7 @@ export async function renderHtml(page, requestUrl, serverFetch) {
   let rendered;
   try {
     const renderer = await ssrRenderer(devServer);
-    rendered = await renderer.renderDmsPage(page, serverFetch);
+    rendered = await renderer.renderDmsPage(page, serverFetch, requestCookies);
   } catch (error) {
     console.error(
       "DMS SSR render failed; falling back to client rendering",
@@ -348,7 +354,9 @@ export async function renderHtml(page, requestUrl, serverFetch) {
   const preloads = await documentStyleTags(devServer, page, template);
   const html = template
     .replace("<title>Antelope DMS</title>", rendered.head.headTags)
-    .replace("<html", `<html ${rendered.head.htmlAttrs}`)
+    .replace(/<html([^>]*)>/, (_, attributes) =>
+      htmlTag(attributes, rendered.head.htmlAttrs),
+    )
     .replace("<body", `<body ${rendered.head.bodyAttrs}`)
     .replace("</head>", `${preloads}</head>`)
     .replace(
@@ -357,6 +365,11 @@ export async function renderHtml(page, requestUrl, serverFetch) {
     )
     .replace("__DMS_APP__", () => rendered.body);
   return { html, status: rendered.error?.statusCode ?? 200 };
+}
+
+function renderRequestHtml(page, request) {
+  const fetch = serverComponentFetch(request);
+  return renderHtml(page, request.url, fetch, request.headers.cookie);
 }
 
 async function writeBackendError(error, request, response) {
@@ -392,11 +405,7 @@ async function writeBackendError(error, request, response) {
         JSON.stringify(page),
       );
     }
-    const { html } = await renderHtml(
-      page,
-      request.url,
-      serverComponentFetch(request),
-    );
+    const { html } = await renderRequestHtml(page, request);
     return writeContent(request, response, status, htmlHeaders(), html);
   }
   const payload =
@@ -449,11 +458,7 @@ export async function handleRequest(request, response) {
       JSON.stringify(page),
     );
   }
-  const rendered = await renderHtml(
-    page,
-    request.url,
-    serverComponentFetch(request),
-  );
+  const rendered = await renderRequestHtml(page, request);
   if (rendered.redirect) {
     redirectFrontendVisit(request, response, rendered.redirect);
     return;
