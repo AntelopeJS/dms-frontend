@@ -205,10 +205,7 @@ describe("auth adapter safety", () => {
       ["error.invalid_credentials", "error.invalid_credentials"],
       ['"error.invalid_2fa_code"', "error.invalid_2fa_code"],
       ["private database host", "error.500.description"],
-      [
-        "error.invalid_credentials\nprivate stack",
-        "error.500.description",
-      ],
+      ["error.invalid_credentials\nprivate stack", "error.500.description"],
     ];
     let payload = "";
     const api = createServer((_request, response) => {

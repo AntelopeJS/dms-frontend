@@ -76,6 +76,15 @@ export function handleAssetVersionMismatch(request, response) {
   return true;
 }
 
+/** A page visit: a document or Inertia request, as opposed to an API call. */
+export function isFrontendVisit(request) {
+  if (request.method !== "GET") return false;
+  return (
+    Boolean(request.headers["x-inertia"]) ||
+    request.headers.accept?.includes("text/html")
+  );
+}
+
 export function redirectFrontendVisit(request, response, location) {
   const vary = { vary: "X-Inertia" };
   if (!request.headers["x-inertia"]) {
