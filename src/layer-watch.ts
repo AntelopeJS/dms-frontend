@@ -7,6 +7,11 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 import { getLayerWorkspacePath } from "./layers";
+import {
+  affectsLocaleMessages,
+  createFrontendModuleRegistry,
+  writeLocaleMessages,
+} from "./materialize";
 
 import { ResolvedLayer } from "./workspace";
 import {
@@ -29,9 +34,13 @@ const WATCH_DEBOUNCE_MS = 80;
  * last — and only when the entry is truly gone from the source — means a
  * rapid delete+recreate (common during editor saves and re-materialize)
  * never leaves the workspace tree transiently missing a file the Vite importer
- * is mid-scan over.
+ * is mid-scan over. `onFlushed` then receives every path the pass touched.
  */
-function createLayerSync(src: string, dest: string) {
+function createLayerSync(
+  src: string,
+  dest: string,
+  onFlushed: (paths: string[]) => void,
+) {
   const fileUpserts = new Set<string>();
   const fileDeletes = new Set<string>();
   const dirCreates = new Set<string>();
@@ -54,6 +63,12 @@ function createLayerSync(src: string, dest: string) {
 
   const flush = (): void => {
     timer = null;
+    const touched = [
+      ...dirCreates,
+      ...fileUpserts,
+      ...fileDeletes,
+      ...dirDeletes,
+    ];
     for (const rel of [...dirCreates].sort((a, b) => a.length - b.length)) {
       try {
         mkdirSync(join(dest, rel), { recursive: true });
@@ -104,6 +119,7 @@ function createLayerSync(src: string, dest: string) {
       }
     }
     dirDeletes.clear();
+    onFlushed(touched);
   };
 
   const arm = (): void => {
@@ -148,6 +164,27 @@ function createLayerSync(src: string, dest: string) {
 }
 
 /**
+ * Regenerate the merged locale catalogs from the workspace copies, which the
+ * pass that calls it has just brought up to date. Only the files whose content
+ * changed are rewritten, and Vite's own watcher takes it from there.
+ */
+function createLocaleRefresher(
+  workspaceDir: string,
+  layers: ResolvedLayer[],
+): () => void {
+  const registry = createFrontendModuleRegistry(workspaceDir, layers);
+  return () => {
+    try {
+      writeLocaleMessages(workspaceDir, registry);
+    } catch (err) {
+      // Same reason as `warnFailure`: a catalog saved half-written must not
+      // take the dev process down. The previous catalogs stay in place.
+      console.warn("[ajs-dms] locale catalogs not regenerated:", err);
+    }
+  };
+}
+
+/**
  * Start one chokidar watcher per layer that mirrors filesystem changes
  * from the frontend-module source tree into its materialized copy inside the
  * workspace. Vite HMR then picks up the change through the workspace
@@ -164,6 +201,11 @@ function createLayerSync(src: string, dest: string) {
  * source tree — the watcher closes that gap by propagating every change
  * through a debounced, content-gated, atomic applier (see
  * `createLayerSync`).
+ *
+ * Mirroring is not enough for the translations: the app imports the catalogs
+ * materialization merged from every module, never a module's own locale
+ * files, so a pass that touches one regenerates them (see
+ * `createLocaleRefresher`).
  */
 export function startLayerWatchers(
   workspaceDir: string,
@@ -171,12 +213,15 @@ export function startLayerWatchers(
 ): () => Promise<void> {
   const watchers: FSWatcher[] = [];
   const syncs: Array<ReturnType<typeof createLayerSync>> = [];
+  const refreshLocales = createLocaleRefresher(workspaceDir, layers);
 
   for (const layer of layers) {
     if (!layer.packageName) continue;
     const dest = getLayerWorkspacePath(workspaceDir, layer);
     const src = layer.path;
-    const sync = createLayerSync(src, dest);
+    const sync = createLayerSync(src, dest, (paths) => {
+      if (paths.some(affectsLocaleMessages)) refreshLocales();
+    });
     syncs.push(sync);
 
     const watcher = chokidar.watch(src, {

@@ -451,6 +451,19 @@ function mergeLocaleMessages(
   return merged;
 }
 
+/** Where each asset root keeps its locale files, one JSON file per locale. */
+const LOCALE_DIRECTORY = "i18n/locales";
+
+/** Names the file: in development an editor can save a catalog half-written. */
+function readLocaleFile(path: string): Record<string, unknown> {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid locale file ${path}: ${reason}`);
+  }
+}
+
 function readLocaleMessages(
   assets: DiscoveredAsset[],
   registry: FrontendModuleRegistry,
@@ -465,34 +478,63 @@ function readLocaleMessages(
     )?.[1];
     const root = roots.get(asset.moduleId);
     if (!locale || !root) continue;
-    const value = JSON.parse(
-      readFileSync(join(root, asset.relativePath), "utf8"),
-    );
+    const value = readLocaleFile(join(root, asset.relativePath));
     messages[locale] = mergeLocaleMessages(value, messages[locale] ?? {});
   }
   return messages;
 }
 
-function writeLocaleMessages(
+/**
+ * Whether a change at `relativePath`, relative to a module root, can change
+ * the generated catalogs: anything under a locale directory, or a directory on
+ * the way to one, whose creation or removal brings or takes a whole set of
+ * locale files at once.
+ */
+export function affectsLocaleMessages(relativePath: string): boolean {
+  const segments = toPosixPath(relativePath).split("/");
+  if (segments[0] === "layers" && segments.length <= 2) return true;
+  const withinRoot = segments[0] === "layers" ? segments.slice(2) : segments;
+  return LOCALE_DIRECTORY.split("/").every(
+    (segment, index) =>
+      index >= withinRoot.length || withinRoot[index] === segment,
+  );
+}
+
+/**
+ * Merge every module's `i18n/locales/*.json` into one catalog per locale, in
+ * manifest-priority order, and write what the app, the server renderer and
+ * the email bundle import: `locales.generated/<locale>.{json,ts}`,
+ * `locales.generated.ts` and `email-locales.generated.json`.
+ *
+ * Materialization writes them once; in development the layer watcher writes
+ * them again whenever a locale file changes. Every catalog is read before
+ * anything is written, so a file saved half-written keeps the previous
+ * catalogs. A file is only rewritten when its content changes, a catalog
+ * before the module that imports it, and stale catalogs go last: Vite never
+ * reloads for nothing, nor finds a catalog missing.
+ */
+export function writeLocaleMessages(
   workspaceDir: string,
   registry: FrontendModuleRegistry,
 ): void {
-  const locales = discoverAssets(registry, "i18n/locales", [".json"]);
+  const locales = discoverAssets(registry, LOCALE_DIRECTORY, [".json"]);
   const messages = readLocaleMessages(locales, registry);
   const outputDir = join(workspaceDir, "locales.generated");
-  rmSync(outputDir, { recursive: true, force: true });
+  const outputs = new Set<string>();
   mkdirSync(outputDir, { recursive: true });
   for (const [locale, value] of Object.entries(messages)) {
-    writeFileSync(join(outputDir, `${locale}.json`), JSON.stringify(value));
-    writeFileSync(
+    const catalog = JSON.stringify(value);
+    applyContent(catalog, join(outputDir, `${locale}.json`));
+    applyContent(
+      `const messages = ${catalog};\nexport default messages;\n`,
       join(outputDir, `${locale}.ts`),
-      `const messages = ${JSON.stringify(value)};\nexport default messages;\n`,
     );
+    outputs.add(`${locale}.json`).add(`${locale}.ts`);
   }
   const supportedLocales = Object.keys(messages);
-  writeFileSync(
-    join(workspaceDir, "email-locales.generated.json"),
+  applyContent(
     JSON.stringify(supportedLocales),
+    join(workspaceDir, "email-locales.generated.json"),
   );
   const loaders = supportedLocales
     .filter((locale) => locale !== "en")
@@ -500,10 +542,14 @@ function writeLocaleMessages(
       (locale) =>
         `${JSON.stringify(locale)}: () => import(${JSON.stringify(`./locales.generated/${locale}`)})`,
     );
-  writeFileSync(
-    join(workspaceDir, "locales.generated.ts"),
+  applyContent(
     `import defaultMessages from "./locales.generated/en";\ninterface LocaleModule { default: Record<string, unknown>; }\ntype LocaleLoader = () => Promise<LocaleModule>;\nexport const supportedLocales = ${JSON.stringify(supportedLocales)};\nexport const localeMessages: Record<string, Record<string, unknown>> = { en: defaultMessages };\nconst localeLoaders: Record<string, LocaleLoader> = { ${loaders.join(", ")} };\nexport async function loadLocaleMessages(locale: string): Promise<Record<string, unknown>> {\n  const normalized = locale.slice(0, 2);\n  const existing = localeMessages[normalized];\n  if (existing) return existing;\n  const loader = localeLoaders[normalized];\n  if (!loader) return defaultMessages;\n  const messages = (await loader()).default;\n  localeMessages[normalized] = messages;\n  return messages;\n}\n`,
+    join(workspaceDir, "locales.generated.ts"),
   );
+  for (const name of readdirSync(outputDir)) {
+    if (!outputs.has(name))
+      rmSync(join(outputDir, name), { recursive: true, force: true });
+  }
 }
 
 function writeShortcutExports(
