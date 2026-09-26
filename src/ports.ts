@@ -28,10 +28,16 @@ export interface ReservedPort {
 /**
  * Bind without a host so a process listening on
  * any interface counts as a conflict.
+ *
+ * The holder only reserves the port: it drops every connection it accepts.
+ * `server.close()` waits for the accepted connections to end, so a client
+ * left connected to the held port (a browser tab, a startup probe) would
+ * otherwise keep `release()` pending and the frontend server would never
+ * start.
  */
 function tryListen(port: number): Promise<Server | undefined> {
   return new Promise((resolve) => {
-    const server = createServer();
+    const server = createServer((socket) => socket.destroy());
     server.unref();
     server.once("error", () => resolve(undefined));
     server.listen({ port }, () => resolve(server));

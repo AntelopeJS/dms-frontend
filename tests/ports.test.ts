@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { createServer, type Server } from "node:net";
+import { connect, createServer, type Server } from "node:net";
 import { describe, it } from "node:test";
 import { reserveFreePort } from "../src/ports";
 
@@ -74,6 +74,33 @@ describe("reserveFreePort", () => {
       assert.equal(again.port, port);
     } finally {
       await again.release();
+    }
+  });
+
+  it("releases the port while a client is still connected to it", async () => {
+    const { server, port } = await occupyPort();
+    await closeServer(server);
+    const held = await reserveFreePort(port);
+
+    // A client that connects during the reservation and never hangs up,
+    // like a browser tab or a startup probe polling the frontend port.
+    const client = connect(held.port, "127.0.0.1");
+    client.on("error", () => {});
+    await new Promise<void>((resolve) => client.once("connect", resolve));
+    try {
+      const outcome = await Promise.race([
+        held.release().then(() => "released"),
+        new Promise<string>((resolve) => {
+          setTimeout(() => resolve("still pending"), 2000).unref();
+        }),
+      ]);
+      assert.equal(outcome, "released");
+
+      // The frontend server can then bind the port.
+      const again = await reserveFreePort(held.port, 0);
+      await again.release();
+    } finally {
+      client.destroy();
     }
   });
 
