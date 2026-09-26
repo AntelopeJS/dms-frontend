@@ -58,7 +58,13 @@ describe("regenerated locale catalogs in the dev server", () => {
   const copy = join(getLayerWorkspacePath(workspace, layer), "i18n", "locales");
   let server: ViteDevServer;
 
-  const regenerate = (catalogs: Record<string, Messages>): void => {
+  // The dev layer watcher leaves at least 100 ms between two regenerations,
+  // because Vite's file watcher drops a second change to the same file within
+  // 50 ms on Linux. Consecutive steps here keep the same gap.
+  const regenerate = async (
+    catalogs: Record<string, Messages>,
+  ): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
     for (const [locale, messages] of Object.entries(catalogs))
       writeFileSync(join(copy, `app-${locale}.json`), JSON.stringify(messages));
     writeLocaleMessages(
@@ -112,11 +118,11 @@ describe("regenerated locale catalogs in the dev server", () => {
     assert.equal(await render("fr"), "Bonjour");
     // One locale at a time: English is imported statically and French on
     // demand, and each has its own way of invalidating the modules above it.
-    regenerate({ "en-GB": { greeting: "Hello from the server" } });
+    await regenerate({ "en-GB": { greeting: "Hello from the server" } });
     await eventually(
       async () => (await render("en")) === "Hello from the server",
     );
-    regenerate({ "fr-FR": { greeting: "Bonjour du serveur" } });
+    await regenerate({ "fr-FR": { greeting: "Bonjour du serveur" } });
     await eventually(async () => (await render("fr")) === "Bonjour du serveur");
   });
 
@@ -137,7 +143,7 @@ describe("regenerated locale catalogs in the dev server", () => {
       });
       await catalogs.loadLocaleMessages("fr");
 
-      regenerate({
+      await regenerate({
         "en-GB": { greeting: "Hello again" },
         "fr-FR": { greeting: "Bonjour encore" },
       });
@@ -155,7 +161,7 @@ describe("regenerated locale catalogs in the dev server", () => {
       );
 
       // A second update goes through the instance the first one created.
-      regenerate({ "en-GB": { greeting: "Hello a third time" } });
+      await regenerate({ "en-GB": { greeting: "Hello a third time" } });
       await eventually(() => applied.en?.greeting === "Hello a third time");
       assert.equal(catalogs.localeMessages.en.greeting, "Hello a third time");
     } finally {
@@ -174,7 +180,7 @@ describe("regenerated locale catalogs in the dev server", () => {
     });
     try {
       await runner.import("/locales.generated.ts");
-      regenerate({ "de-DE": { greeting: "Hallo" } });
+      await regenerate({ "de-DE": { greeting: "Hallo" } });
       await eventually(() => invalidated.includes("/locales.generated.ts"));
     } finally {
       await runner.close();

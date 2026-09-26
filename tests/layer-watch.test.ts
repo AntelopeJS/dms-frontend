@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {
+import fs, {
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -157,6 +157,39 @@ describe("locale catalogs in the dev layer watcher", () => {
     assert.deepEqual(untouched.map(mtime), before);
   });
 
+  it("regenerates once for changes flushed by several layers together", async () => {
+    // What a checkout or an editor saving several files does. One regeneration
+    // per layer would write the first layer's change alone, then both within a
+    // few milliseconds: Vite's watcher drops that second change on Linux.
+    const catalogPath = join(generated, "en.json");
+    const rename = mock.method(fs, "renameSync");
+    try {
+      await eventually(
+        () => {
+          writeFileSync(
+            join(baseLocales, "ui-en-GB.json"),
+            JSON.stringify({
+              form: { title: "Form (both)", owner: "base", demo_key: "Hello" },
+            }),
+          );
+          writeFileSync(
+            join(app, "i18n", "locales", "app-en-GB.json"),
+            JSON.stringify({ form: { owner: "app", both: true } }),
+          );
+        },
+        () =>
+          catalog("en").form.title === "Form (both)" &&
+          catalog("en").form.both === true,
+      );
+      const catalogWrites = rename.mock.calls.filter(
+        (call) => call.arguments[1] === catalogPath,
+      );
+      assert.equal(catalogWrites.length, 1);
+    } finally {
+      rename.mock.restore();
+    }
+  });
+
   it("adds and removes a locale", async () => {
     const german = join(baseLocales, "ui-de-DE.json");
     await eventually(
@@ -240,6 +273,8 @@ describe("locale catalogs in the dev layer watcher", () => {
         writeFileSync(component, "<template><form novalidate /></template>\n"),
       () => readFileSync(mirrored, "utf8").includes("novalidate"),
     );
+    // Longer than the delay a regeneration waits for, had one been scheduled.
+    await new Promise((resolve) => setTimeout(resolve, 300));
     assert.deepEqual(catalog("en"), { form: { marker: true } });
   });
 });

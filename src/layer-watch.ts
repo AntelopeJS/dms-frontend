@@ -28,6 +28,15 @@ import {
 const WATCH_DEBOUNCE_MS = 80;
 
 /**
+ * Delay between the last pass that touched a locale file and the regeneration
+ * of the catalogs, shared by every layer. It must stay above the 50 ms during
+ * which Vite's file watcher (chokidar, without FSEvents, so on Linux) drops a
+ * second change to the same file: two regenerations closer than that would
+ * leave the dev server on the first one.
+ */
+const LOCALE_REFRESH_DEBOUNCE_MS = 100;
+
+/**
  * Per-layer event batcher. Watcher events are coalesced over
  * `WATCH_DEBOUNCE_MS` and applied as one ordered pass: create dirs, upsert
  * files (content-gated + atomic), then deletions LAST. Applying deletes
@@ -164,16 +173,19 @@ function createLayerSync(
 }
 
 /**
- * Regenerate the merged locale catalogs from the workspace copies, which the
- * pass that calls it has just brought up to date. Only the files whose content
- * changed are rewritten, and Vite's own watcher takes it from there.
+ * Regenerate the merged locale catalogs from the workspace copies, once the
+ * passes that touched a locale file have settled. The catalogs merge every
+ * layer, so passes of several layers flushed together (a checkout, an editor
+ * saving several files) make one regeneration with all of their changes. Only
+ * the files whose content changed are rewritten, and Vite's own watcher takes
+ * it from there.
  */
-function createLocaleRefresher(
-  workspaceDir: string,
-  layers: ResolvedLayer[],
-): () => void {
+function createLocaleRefresher(workspaceDir: string, layers: ResolvedLayer[]) {
   const registry = createFrontendModuleRegistry(workspaceDir, layers);
-  return () => {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const refresh = (): void => {
+    timer = null;
     try {
       writeLocaleMessages(workspaceDir, registry);
     } catch (err) {
@@ -181,6 +193,18 @@ function createLocaleRefresher(
       // take the dev process down. The previous catalogs stay in place.
       console.warn("[ajs-dms] locale catalogs not regenerated:", err);
     }
+  };
+
+  return {
+    schedule() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(refresh, LOCALE_REFRESH_DEBOUNCE_MS);
+    },
+    flushNow() {
+      if (!timer) return;
+      clearTimeout(timer);
+      refresh();
+    },
   };
 }
 
@@ -213,14 +237,14 @@ export function startLayerWatchers(
 ): () => Promise<void> {
   const watchers: FSWatcher[] = [];
   const syncs: Array<ReturnType<typeof createLayerSync>> = [];
-  const refreshLocales = createLocaleRefresher(workspaceDir, layers);
+  const localeRefresher = createLocaleRefresher(workspaceDir, layers);
 
   for (const layer of layers) {
     if (!layer.packageName) continue;
     const dest = getLayerWorkspacePath(workspaceDir, layer);
     const src = layer.path;
     const sync = createLayerSync(src, dest, (paths) => {
-      if (paths.some(affectsLocaleMessages)) refreshLocales();
+      if (paths.some(affectsLocaleMessages)) localeRefresher.schedule();
     });
     syncs.push(sync);
 
@@ -242,6 +266,7 @@ export function startLayerWatchers(
   return async () => {
     await Promise.all(watchers.map((w) => w.close().catch(() => {})));
     for (const sync of syncs) sync.flushNow();
+    localeRefresher.flushNow();
   };
 }
 
