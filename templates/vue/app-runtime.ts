@@ -216,11 +216,26 @@ function renderDmsPersistentLayout(
   );
 }
 
+/**
+ * Nuxt UI keeps one app config for the whole process, and defu concatenates
+ * arrays: merged into it on every server render, the compound variants the DMS
+ * declares piled up, and every class list built from them grew with each
+ * request. Each config is merged once; a new one, after a reload, is merged
+ * again.
+ */
+const mergedUiAppConfigs = new WeakSet<object>();
+
+function mergeDmsAppConfig(): void {
+  const uiAppConfig = useAppConfig();
+  if (mergedUiAppConfigs.has(uiAppConfig)) return;
+  Object.assign(uiAppConfig, defu(useDmsAppConfig(), uiAppConfig));
+  mergedUiAppConfigs.add(uiAppConfig);
+}
+
 export async function configureDmsApp(
   options: DmsAppOptions,
 ): Promise<DmsConfiguredApp> {
-  const uiAppConfig = useAppConfig();
-  Object.assign(uiAppConfig, defu(useDmsAppConfig(), uiAppConfig));
+  mergeDmsAppConfig();
   const runtime =
     options.runtime ??
     createDmsFrontendRuntime(

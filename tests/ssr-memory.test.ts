@@ -17,6 +17,7 @@ const collectGarbage = runInNewContext("gc") as () => void;
 interface LeakProbe {
   hooks: Set<() => unknown>;
   timers: NodeJS.Timeout[];
+  uiAppConfig: { ui?: { button?: { compoundVariants?: unknown[] } } };
   rendered: number;
   released: number;
   track: (app: App) => void;
@@ -26,6 +27,7 @@ function leakProbe(): LeakProbe {
   const probe: LeakProbe = {
     hooks: new Set(),
     timers: [],
+    uiAppConfig: {},
     rendered: 0,
     released: 0,
     track: (app) => {
@@ -85,23 +87,26 @@ it("releases every server render once it is sent", async () => {
     );
     writeFileSync(
       join(workspace, "ui-stub.ts"),
-      `import {h} from 'vue'; export const useAppConfig=()=>({});export const useToast=()=>({add(){}});export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
+      `import {h} from 'vue'; export const useAppConfig=()=>globalThis.__dmsLeakProbe.uiAppConfig;export const useToast=()=>({add(){}});export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
     );
     // Stands for Nuxt UI's `useRuntimeHook`: a process-wide registry a
     // component only leaves when its scope is disposed. The hook holds the
     // component instance, and through it the whole app. The page awaits the
     // way a compiled <script setup> does, and the plugin reads the route the
     // way the DMS layout's plugins do. The interval stands for a pooled
-    // backend socket: opened during the render, it outlives it.
+    // backend socket: opened during the render, it outlives it. The module
+    // declares a compound variant the way the DMS layout's app config does,
+    // into the one app config Nuxt UI keeps for the process.
     writeFileSync(
       join(workspace, "frontend-modules.generated.ts"),
       `
 import {defineComponent,getCurrentInstance,h,onScopeDispose,withAsyncContext} from 'vue';
-import {useDmsRoute} from './frontend-module';
+import {useDmsAppConfig,useDmsRoute} from './frontend-module';
 const probe=globalThis.__dmsLeakProbe;
 function useProcessHook(){const instance=getCurrentInstance();const hook=()=>instance;probe.hooks.add(hook);onScopeDispose(()=>probe.hooks.delete(hook));}
 const Widget=defineComponent({setup(){useProcessHook();return()=>h('span','widget')}});
 export const frontendModules=[{options:{public:{}},module:{setup(sdk){
+ Object.assign(useDmsAppConfig(),{ui:{button:{compoundVariants:[{color:'primary',class:'highlight'}]}}});
  sdk.registerPlugin((nuxtApp)=>{probe.track(nuxtApp.vueApp);useDmsRoute();onScopeDispose(()=>{})});
  sdk.registerPage('page',defineComponent({async setup(){useProcessHook();let pending,restore;[pending,restore]=withAsyncContext(()=>Promise.resolve());await pending;restore();useProcessHook();const route=useDmsRoute();probe.timers.push(setInterval(()=>{},60000));return()=>h('p',['Rendered '+route.path,h(Widget)])}}));
 }}}];`,
@@ -154,6 +159,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     }
     assert.equal(probe.rendered, RENDERS);
     assert.equal(probe.hooks.size, 0);
+    assert.equal(probe.uiAppConfig.ui?.button?.compoundVariants?.length, 1);
     // Inertia keeps the head manager of the latest render in module state,
     // so that one render stays reachable until the next replaces it.
     assert.ok((await retainedApps(probe)) <= 1);
