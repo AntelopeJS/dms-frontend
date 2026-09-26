@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2.8
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.7...v0.2.8)
+
+### 🩹 Fixes
+
+- **vue:** Resolve server-rendered async components before hydrating ([#32](https://github.com/AntelopeJS/dms-frontend/pull/32))
+- **router:** Keep the page mounted when only the query or hash changes ([#37](https://github.com/AntelopeJS/dms-frontend/pull/37))
+- **vue:** Share cookie refs and read them from the rendered request ([#36](https://github.com/AntelopeJS/dms-frontend/pull/36))
+- **vue:** Match active links on path segments ([#35](https://github.com/AntelopeJS/dms-frontend/pull/35))
+- **vue:** Resolve a single @vueuse/core aligned with Nuxt UI ([#31](https://github.com/AntelopeJS/dms-frontend/pull/31))
+
+### 📖 Documentation
+
+- **readme:** Import components rendered inside <svg> directly ([#38](https://github.com/AntelopeJS/dms-frontend/pull/38))
+
+### ❤️ Contributors
+
+- Alessandro Aloisio ([@alessaloisio](http://github.com/alessaloisio))
+
 ## v0.2.7
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.6...v0.2.7)
