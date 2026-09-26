@@ -21,6 +21,7 @@ import {
   resolveDmsAccessRedirect,
   setDmsServerRuntimeResolver,
   setupFrontendModules,
+  trackDmsServerScopes,
 } from "./frontend-module";
 import { frontendModules } from "./frontend-modules.generated";
 
@@ -52,8 +53,14 @@ interface DmsSsrContext {
 }
 
 const SSR_ASYNC_DATA_ID = "dms-ssr-async-data";
-const runtimeStorage = new AsyncLocalStorage<DmsFrontendRuntime>();
-setDmsServerRuntimeResolver(() => runtimeStorage.getStore());
+// Holds the runtime rather than being it: every socket, timer and promise a
+// render starts keeps this store for its whole life, and a pooled backend
+// connection then serving an SSE stream lives for hours. Emptied once the
+// render is over, the store no longer ties the render to them.
+const runtimeStorage = new AsyncLocalStorage<{
+  runtime?: DmsFrontendRuntime;
+}>();
+setDmsServerRuntimeResolver(() => runtimeStorage.getStore()?.runtime);
 
 function asyncDataScript(runtime: DmsFrontendRuntime): string {
   const value = JSON.stringify(serializeDmsAsyncData(runtime)).replaceAll(
@@ -89,9 +96,14 @@ export async function renderDmsPage(
     true,
     requestCookies,
   );
-  return runtimeStorage.run(runtime, () =>
-    renderDmsPageWithRuntime(page, runtime, serverFetch),
-  );
+  const store = { runtime };
+  try {
+    return await runtimeStorage.run(store, () =>
+      renderDmsPageWithRuntime(page, runtime, serverFetch),
+    );
+  } finally {
+    store.runtime = undefined;
+  }
 }
 
 async function renderDmsPageWithRuntime(
@@ -100,64 +112,73 @@ async function renderDmsPageWithRuntime(
   serverFetch?: DmsServerFetch,
 ): Promise<DmsSsrResult> {
   await preloadDmsPage(page.props);
-  const head = createHead();
-  const ssrContext: DmsSsrContext = {};
-  let asyncComponents = new Set<string>();
-  const inertiaResult = await createInertiaApp({
-    page,
-    render: (app) => renderToString(app, ssrContext),
-    resolve: resolveDmsInertiaPage,
-    async setup({ App, props, plugin }) {
-      const app = createSSRApp({ render: () => h(App, props) });
-      asyncComponents = trackDmsAsyncComponents(app);
-      const configured = await configureDmsApp({
-        app,
-        head,
-        initialPageProps: page.props,
-        initialPageUrl: page.url,
-        inertiaPlugin: plugin,
-        runtime,
+  let stopScopes = () => {};
+  try {
+    const head = createHead();
+    const ssrContext: DmsSsrContext = {};
+    let asyncComponents = new Set<string>();
+    const inertiaResult = await createInertiaApp({
+      page,
+      render: (app) => renderToString(app, ssrContext),
+      resolve: resolveDmsInertiaPage,
+      async setup({ App, props, plugin }) {
+        const app = createSSRApp({ render: () => h(App, props) });
+        asyncComponents = trackDmsAsyncComponents(app);
+        stopScopes = trackDmsServerScopes(app);
+        const configured = await configureDmsApp({
+          app,
+          head,
+          initialPageProps: page.props,
+          initialPageUrl: page.url,
+          inertiaPlugin: plugin,
+          runtime,
+          serverFetch,
+        });
+        return app;
+      },
+    });
+    if (!inertiaResult) throw new Error("Inertia SSR returned no result");
+    await runtime.pendingNavigation;
+    if (runtime.serverRedirect) {
+      return {
+        body: "",
+        head: { bodyAttrs: "", headTags: "", htmlAttrs: "" },
+        overlays: "",
+        redirect: runtime.serverRedirect,
+      };
+    }
+    if (runtime.currentError.value && !page.props.error) {
+      const failure = runtime.currentError.value as Error & DmsErrorData;
+      const expected =
+        Number.isInteger(failure.statusCode) &&
+        failure.statusCode! >= 400 &&
+        failure.statusCode! <= 599;
+      const error = {
+        statusCode: expected ? failure.statusCode : 500,
+        message: expected ? failure.message : "An unexpected error occurred",
+        statusMessage: expected ? failure.statusMessage : "Application error",
+      };
+      return renderDmsPage(
+        { ...page, props: { ...page.props, error } },
         serverFetch,
-      });
-      return app;
-    },
-  });
-  if (!inertiaResult) throw new Error("Inertia SSR returned no result");
-  await runtime.pendingNavigation;
-  if (runtime.serverRedirect) {
+        runtime.requestCookies,
+      );
+    }
+    const renderedHead = await renderSSRHead(head);
     return {
-      body: "",
-      head: { bodyAttrs: "", headTags: "", htmlAttrs: "" },
-      overlays: "",
-      redirect: runtime.serverRedirect,
+      error: page.props.error,
+      body: `${inertiaResult.body}${asyncDataScript(runtime)}${asyncComponentsScript(asyncComponents)}`,
+      head: {
+        bodyAttrs: renderedHead.bodyAttrs,
+        headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,
+        htmlAttrs: renderedHead.htmlAttrs,
+      },
+      overlays: ssrContext.teleports?.["#dms-overlays"] ?? "",
     };
+  } finally {
+    // Only once the head and the async data are serialized: both still read
+    // state the rendered components own.
+    stopScopes();
+    runtime.scope.stop();
   }
-  if (runtime.currentError.value && !page.props.error) {
-    const failure = runtime.currentError.value as Error & DmsErrorData;
-    const expected =
-      Number.isInteger(failure.statusCode) &&
-      failure.statusCode! >= 400 &&
-      failure.statusCode! <= 599;
-    const error = {
-      statusCode: expected ? failure.statusCode : 500,
-      message: expected ? failure.message : "An unexpected error occurred",
-      statusMessage: expected ? failure.statusMessage : "Application error",
-    };
-    return renderDmsPage(
-      { ...page, props: { ...page.props, error } },
-      serverFetch,
-      runtime.requestCookies,
-    );
-  }
-  const renderedHead = await renderSSRHead(head);
-  return {
-    error: page.props.error,
-    body: `${inertiaResult.body}${asyncDataScript(runtime)}${asyncComponentsScript(asyncComponents)}`,
-    head: {
-      bodyAttrs: renderedHead.bodyAttrs,
-      headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,
-      htmlAttrs: renderedHead.htmlAttrs,
-    },
-    overlays: ssrContext.teleports?.["#dms-overlays"] ?? "",
-  };
 }
