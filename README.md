@@ -133,6 +133,19 @@ export default frontendModule;
 
 The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
 
+### Redirecting typed access refusals
+
+A backend can refuse a whole surface with a typed 403 whose body is a machine-readable code, such as a tenant access gate blocking a suspended workspace. A module that owns such a code registers where a refused page visit goes instead of the error page:
+
+```ts
+sdk.registerAccessRedirect(
+  "saas.errors.workspace.access_blocked",
+  "/workspace-suspended",
+);
+```
+
+The server answers the refused visit, document or Inertia, with a redirect to that path before anything renders, so a reload lands there directly. The body may be the bare code or JSON (`"code"` or `{ "message": "code" }`). A destination refused in turn keeps the error page instead of looping. The first registration of a code wins, in manifest-priority order.
+
 ### Components rendered inside `<svg>`
 
 Modules usually register their components lazily, with `defineAsyncComponent`, and the page is rendered under a `<Suspense>`. Vue mounts an async component that resolves under a `<Suspense>` with the `<Suspense>`'s element namespace rather than the namespace of the place it is rendered: a component resolved by name (`resolveComponent` or a template tag) whose root is an SVG element (`<path>`, `<g>`, …) is created as an HTML element inside the `<svg>`, and the browser draws nothing ([vuejs/core#15639](https://github.com/vuejs/core/issues/15639)). Import such components directly instead, for example the node and edge types passed to Vue Flow:

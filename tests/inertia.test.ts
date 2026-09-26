@@ -33,11 +33,29 @@ interface SessionTemplate {
     session: Record<string, unknown>,
     accountId: string,
   ) => void;
+  writeSession: (response: unknown, session: Record<string, unknown>) => void;
 }
 
 const sessions = import(
   join(process.cwd(), "templates", "vue", "server", "auth", "session.mjs")
 ) as Promise<SessionTemplate>;
+
+const SSR_DIRECTORY = join(process.cwd(), "templates", "vue", "dist", "ssr");
+const ACCESS_BLOCKED_CODE = "saas.errors.workspace.access_blocked";
+// Node caches the first renderer import for the whole run: every test that
+// needs one writes this same module.
+const SSR_RENDERER_FIXTURE = `export async function renderDmsPage(page) {
+  const serialized = JSON.stringify(page).replaceAll("/", "\\\\/");
+  return { body: \`<script data-page="app" type="application/json">\${serialized}</script><div data-server-rendered="true" id="app"></div>\`, head: { headTags: "", htmlAttrs: "", bodyAttrs: "" }, overlays: "" };
+}
+export function accessRedirect(code) {
+  return code === "${ACCESS_BLOCKED_CODE}" ? "/workspace-suspended" : undefined;
+}\n`;
+
+async function writeSsrRendererFixture(): Promise<void> {
+  await mkdir(SSR_DIRECTORY, { recursive: true });
+  await writeFile(join(SSR_DIRECTORY, "ssr-renderer.js"), SSR_RENDERER_FIXTURE);
+}
 
 function serviceToken(secret: string): string {
   const header = Buffer.from('{"alg":"HS256","typ":"JWT"}').toString(
@@ -374,16 +392,7 @@ describe("Inertia HTTP protocol", () => {
   });
 
   it("renders sanitized backend failures through Inertia for HTML and X-Inertia visits", async () => {
-    const ssrDirectory = join(process.cwd(), "templates", "vue", "dist", "ssr");
-    const ssrRenderer = join(ssrDirectory, "ssr-renderer.js");
-    await mkdir(ssrDirectory, { recursive: true });
-    await writeFile(
-      ssrRenderer,
-      `export async function renderDmsPage(page) {
-  const serialized = JSON.stringify(page).replaceAll("/", "\\\\/");
-  return { body: \`<script data-page="app" type="application/json">\${serialized}</script><div data-server-rendered="true" id="app"></div>\`, head: { headTags: "", htmlAttrs: "", bodyAttrs: "" }, overlays: "" };
-}\n`,
-    );
+    await writeSsrRendererFixture();
     const backend = createServer((_request, response) => {
       response.writeHead(503, { "content-type": "application/json" });
       response.end('{"secret":"must-not-leak"}');
@@ -411,7 +420,8 @@ describe("Inertia HTTP protocol", () => {
         const body = await response.text();
         assert.equal(response.status, 503);
         assert.doesNotMatch(body, /must-not-leak/);
-        assert.match(body, /DMS backend request failed/);
+        assert.doesNotMatch(body, /DMS backend request failed/);
+        assert.match(body, /An unexpected error occurred/);
         assert.match(body, /statusCode(?:&quot;|\\?"):503/);
         if ("x-inertia" in headers)
           assert.equal(response.headers.get("x-inertia"), "true");
@@ -504,6 +514,92 @@ describe("Inertia HTTP protocol", () => {
     } finally {
       frontend.close();
       backend.close();
+    }
+  });
+
+  it("redirects a typed access refusal to the page a frontend module registered", async () => {
+    process.env.DMS_SESSION_SECRET =
+      "test-secret-with-at-least-thirty-two-characters";
+    await writeSsrRendererFixture();
+    const refusals = new Map([
+      ["/projects", ACCESS_BLOCKED_CODE],
+      // The registered destination refused in turn keeps the error page.
+      ["/workspace-suspended", ACCESS_BLOCKED_CODE],
+      ["/json-refusal", JSON.stringify({ message: ACCESS_BLOCKED_CODE })],
+      ["/unregistered", "saas.errors.other"],
+    ]);
+    const backend = createServer((request, response) => {
+      const path =
+        new URL(request.url ?? "/", "http://backend.local").searchParams.get(
+          "path",
+        ) ?? "";
+      response.writeHead(403, { "content-type": "text/plain" });
+      response.end(refusals.get(path) ?? "forbidden");
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const address = backend.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    const runtime = await server;
+    const sessionRuntime = await sessions;
+    const cookieHeaders = new Map<string, string | string[]>();
+    sessionRuntime.writeSession(
+      {
+        getHeader: (name: string) => cookieHeaders.get(name),
+        setHeader: (name: string, value: string | string[]) =>
+          cookieHeaders.set(name, value),
+      },
+      {
+        accessToken: "access",
+        user: { id: "user-1", email: "a@example.com" },
+      },
+    );
+    const cookie = [cookieHeaders.get("set-cookie") ?? []]
+      .flat()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+    const frontend = createServer(runtime.handleRequestSafely);
+    await new Promise<void>((resolve) =>
+      frontend.listen(0, "127.0.0.1", resolve),
+    );
+    const frontendAddress = frontend.address();
+    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const base = `http://127.0.0.1:${frontendAddress.port}`;
+    const visit = (path: string, headers: Record<string, string>) =>
+      fetch(`${base}${path}`, {
+        headers: { cookie, ...headers },
+        redirect: "manual",
+      });
+    try {
+      for (const headers of [
+        { accept: "text/html" },
+        { "x-inertia": "true" },
+      ]) {
+        for (const path of ["/projects", "/json-refusal"]) {
+          const redirected = await visit(path, headers);
+          assert.equal(redirected.status, 302);
+          assert.equal(
+            redirected.headers.get("location"),
+            "/workspace-suspended",
+          );
+          assert.equal(redirected.headers.get("vary"), "X-Inertia");
+        }
+        for (const path of ["/workspace-suspended", "/unregistered"]) {
+          const refused = await visit(path, headers);
+          assert.equal(refused.status, 403);
+          assert.equal(refused.headers.get("location"), null);
+          assert.match(await refused.text(), /statusCode(?:&quot;|\\?"):403/);
+        }
+      }
+    } finally {
+      frontend.close();
+      backend.close();
+      await rm(join(process.cwd(), "templates", "vue", "dist"), {
+        force: true,
+        recursive: true,
+      });
     }
   });
 });
