@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.8...v0.3.0)
+
+### 💅 Refactors
+
+- **vue:** ⚠️  Remove the useColorMode shim ([#43](https://github.com/AntelopeJS/dms-frontend/pull/43))
+
+#### ⚠️ Breaking Changes
+
+- **vue:** ⚠️  Remove the useColorMode shim ([#43](https://github.com/AntelopeJS/dms-frontend/pull/43))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.2.8
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.7...v0.2.8)
