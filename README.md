@@ -112,6 +112,8 @@ An email entry exports `serverEmailTemplates` and may export a plain `appConfig`
 
 Email builds ship complete merged translation catalogs as JSON under `dist/server/locales/`, separate from executable JavaScript. Deploy the entire `dist/server` directory. Each render loads only its requested language and the English fallback; arbitrary translation keys and module overrides remain available. Unknown languages fall back to English, while missing or corrupt files for a supported language fail rendering rather than silently dropping translations. The source harness keeps the 256 KiB JavaScript ceiling and reports locale-data bytes separately.
 
+`ajs-dms dev` builds the email bundle too, once the dev server is ready, and rebuilds it whenever an email template changes. The build runs in a separate low-priority process, so page reloads and HMR never wait on it; a render requested while a build is running waits for that build to finish.
+
 ## Frontend modules
 
 A materialized module opts into the Vue adapter with a root `dms.frontend.ts`:
@@ -132,6 +134,19 @@ export default frontendModule;
 ```
 
 The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
+
+### Redirecting typed access refusals
+
+A backend can refuse a whole surface with a typed 403 whose body is a machine-readable code, such as a tenant access gate blocking a suspended workspace. A module that owns such a code registers where a refused page visit goes instead of the error page:
+
+```ts
+sdk.registerAccessRedirect(
+  "saas.errors.workspace.access_blocked",
+  "/workspace-suspended",
+);
+```
+
+The server answers the refused visit, document or Inertia, with a redirect to that path before anything renders, so a reload lands there directly. The body may be the bare code or JSON (`"code"` or `{ "message": "code" }`). A destination refused in turn keeps the error page instead of looping. The first registration of a code wins, in manifest-priority order.
 
 ### Components rendered inside `<svg>`
 

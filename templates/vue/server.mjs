@@ -18,9 +18,16 @@ import {
   refreshSession,
 } from "./server/auth/routes.mjs";
 import { readSession } from "./server/auth/session.mjs";
+import {
+  BackendResponseError,
+  backendResponseError,
+  redirectAccessRefusal,
+  UNEXPECTED_ERROR,
+  UNEXPECTED_ERROR_BODY,
+} from "./server/backend-response.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
-import { handleEmailRender } from "./server/email.mjs";
+import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import { handleTester } from "./server/tester.mjs";
@@ -29,6 +36,7 @@ import {
   htmlHeaders,
   inertiaAppHtml,
   inertiaHeaders,
+  isFrontendVisit,
   redirectFrontendVisit,
   handleAssetVersionMismatch,
 } from "./server/inertia.mjs";
@@ -72,13 +80,6 @@ let productionSsrRenderer;
 let vite;
 let vitePromise;
 let frontendHttpServer;
-
-class BackendResponseError extends Error {
-  constructor(status) {
-    super(`DMS backend returned ${status}`);
-    this.status = status;
-  }
-}
 
 async function developmentServer() {
   if (process.env.DMS_DEV !== "true") return undefined;
@@ -139,7 +140,7 @@ async function backendJson(path, request) {
     headers: backendHeaders(request),
   });
   if (!response.ok) {
-    throw new BackendResponseError(response.status);
+    throw await backendResponseError(response);
   }
   return response.json();
 }
@@ -183,14 +184,6 @@ function writeProxyHeaders(response, upstream) {
   const cookies = upstream.headers.getSetCookie?.() ?? [];
   if (cookies.length) headers["set-cookie"] = cookies;
   response.writeHead(upstream.status, headers);
-}
-
-function isFrontendVisit(request) {
-  if (request.method !== "GET") return false;
-  return (
-    Boolean(request.headers[INERTIA_HEADER]) ||
-    request.headers.accept?.includes("text/html")
-  );
 }
 
 function redirectToHomepage(request, response, pathname) {
@@ -386,14 +379,16 @@ async function writeBackendError(error, request, response) {
     redirectFrontendVisit(request, response, location);
     return;
   }
+  const loadRenderer = async () => ssrRenderer(await developmentServer());
+  if (await redirectAccessRefusal(error, request, response, loadRenderer))
+    return;
   console.error("DMS backend request failed", error);
   if (isFrontendVisit(request)) {
-    const statusMessage = "DMS backend request failed";
     const props = {
       path: pathname,
       page: {},
       ...publicSession(readSession(request)),
-      error: { statusCode: status, statusMessage, message: statusMessage },
+      error: { statusCode: status, ...UNEXPECTED_ERROR },
     };
     const page = createInertiaPage(request.url, props);
     if (request.headers[INERTIA_HEADER]) {
@@ -411,7 +406,7 @@ async function writeBackendError(error, request, response) {
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
       ? { message: error.message }
-      : { error: "DMS backend request failed" };
+      : UNEXPECTED_ERROR_BODY;
   response.writeHead(status, { "content-type": JSON_TYPE });
   response.end(JSON.stringify(payload));
 }
@@ -531,4 +526,7 @@ async function announceReady() {
       ? `[${address}]`
       : address;
   console.log(`✓ Server ready on http://${host}:${port}`);
+  // Only the production build produces the email bundle otherwise. Started
+  // once the server answers, so it never delays the first page.
+  if (process.env.DMS_DEV === "true") watchEmailBundle();
 }

@@ -18,6 +18,7 @@ import {
   createDmsFrontendRuntime,
   hasDmsPage,
   preloadDmsPage,
+  resolveDmsAccessRedirect,
   setDmsServerRuntimeResolver,
   setupFrontendModules,
 } from "./frontend-module";
@@ -71,6 +72,10 @@ await setupFrontendModules(frontendModules);
 
 export function isDmsFrontendPage(path: string): boolean {
   return hasDmsPage(path);
+}
+
+export function accessRedirect(code: string): string | undefined {
+  return resolveDmsAccessRedirect(code);
 }
 
 export async function renderDmsPage(

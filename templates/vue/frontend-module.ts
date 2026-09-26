@@ -256,6 +256,12 @@ export interface DmsFrontendSdk {
     handler: DmsMiddleware,
     options?: DmsMiddlewareRegistrationOptions,
   ): void;
+  /**
+   * Sends a page visit the backend refuses with a typed 403 (its body is
+   * `code`) to `path` instead of the error page. The server answers with the
+   * redirect before anything renders, so a reload lands on `path` directly.
+   */
+  registerAccessRedirect(code: string, path: string): void;
   provide<T>(key: string | InjectionKey<T>, value: T): void;
   use(plugin: Plugin): void;
 }
@@ -327,6 +333,7 @@ const plugins: Plugin[] = [];
 const pluginSetups: DmsPluginRegistration[] = [];
 const middleware: DmsMiddleware[] = [];
 const namedMiddleware = new Map<string, DmsMiddleware>();
+const accessRedirects = new Map<string, string>();
 const injections = new Map<string | symbol, unknown>();
 const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
@@ -1308,6 +1315,10 @@ function findDmsPageEntry(props: DmsPageProps): DmsFrontendEntry | undefined {
     : dynamicPages.get(CATCH_ALL_PAGE_KEY);
 }
 
+/** The path a frontend module registered for a typed backend refusal. */
+export function resolveDmsAccessRedirect(code: string): string | undefined {
+  return accessRedirects.get(code);
+}
 export function hasDmsPage(name: string): boolean {
   return pages.has(normalizeDmsPageKey(name));
 }
@@ -1429,6 +1440,9 @@ function createSdk(options: DmsModuleOptions): DmsFrontendSdk {
     registerMiddleware: (name, handler, options = {}) => {
       if (!namedMiddleware.has(name)) namedMiddleware.set(name, handler);
       if (options.global) middleware.push(handler);
+    },
+    registerAccessRedirect: (code, path) => {
+      if (!accessRedirects.has(code)) accessRedirects.set(code, path);
     },
     provide: (key, value) => {
       if (!injections.has(key)) injections.set(key, value);
