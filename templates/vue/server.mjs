@@ -226,7 +226,12 @@ async function proxy(request, response, fallbackOnNotFound = false) {
     return true;
   }
   const target = new URL(request.url, process.env.DMS_API_BASE_URL);
+  // Cancelling the body alone misses a client that leaves before the backend
+  // answers: its stream, an SSE feed above all, then stayed open for good.
+  const abandoned = new AbortController();
+  response.once("close", () => abandoned.abort());
   const upstream = await fetch(target, {
+    signal: abandoned.signal,
     method: request.method,
     headers: backendHeaders(request),
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
