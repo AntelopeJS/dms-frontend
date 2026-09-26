@@ -158,7 +158,6 @@ export default defineConfig({
               "showError",
               "useDmsAsyncData",
               "useDmsCookie",
-              "useColorMode",
               "useDmsFetch",
               "useHead",
               "useI18n",
