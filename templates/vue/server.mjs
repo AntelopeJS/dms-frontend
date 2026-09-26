@@ -30,6 +30,7 @@ import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
+import * as requestFailure from "./server/request-failure.mjs";
 import { handleTester } from "./server/tester.mjs";
 import {
   createInertiaPage,
@@ -428,6 +429,8 @@ export async function handleRequest(request, response) {
     return handleAuth(request, response, url);
   if (requestOwnership(request.method, pathname) === "server")
     return proxy(request, response);
+  if (requestFailure.hasMalformedPath(request.url))
+    return requestFailure.writeBadRequest(response);
   if (!isFrontendVisit(request) && (await proxy(request, response, true)))
     return;
   const devServer = await developmentServer();
@@ -467,31 +470,32 @@ export async function handleRequest(request, response) {
   );
 }
 
+async function writeRequestFailure(error, request, response) {
+  if (requestFailure.isResponseGone(error, response)) return;
+  if (
+    error instanceof BackendResponseError &&
+    error.status === 401 &&
+    request.method === "GET" &&
+    readSession(request) &&
+    !request.dmsSessionRetry
+  ) {
+    request.dmsSessionRetry = true;
+    if (await refreshSession(request, response)) {
+      await handleRequestSafely(request, response);
+      return;
+    }
+  }
+  await writeBackendError(error, request, response);
+}
+
 export async function handleRequestSafely(request, response) {
   try {
     await handleRequest(request, response);
   } catch (error) {
-    if (
-      error?.code === "ERR_STREAM_PREMATURE_CLOSE" ||
-      response.destroyed ||
-      response.writableEnded ||
-      response.headersSent
-    )
-      return;
-    if (
-      error instanceof BackendResponseError &&
-      error.status === 401 &&
-      request.method === "GET" &&
-      readSession(request) &&
-      !request.dmsSessionRetry
-    ) {
-      request.dmsSessionRetry = true;
-      if (await refreshSession(request, response)) {
-        await handleRequestSafely(request, response);
-        return;
-      }
-    }
-    await writeBackendError(error, request, response);
+    // An error page failing too must not reject: that would end the process.
+    await writeRequestFailure(error, request, response).catch((failure) =>
+      requestFailure.abandonResponse(failure, response),
+    );
   }
 }
 

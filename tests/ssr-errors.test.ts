@@ -47,7 +47,7 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
     );
     writeFileSync(
       join(workspace, "ui-stub.ts"),
-      `import {h} from 'vue'; export const useAppConfig=()=>({});export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
+      `import {h} from 'vue'; export const useAppConfig=()=>({});export const useToast=()=>({add(){}});export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
     );
     writeFileSync(
       join(workspace, "frontend-modules.generated.ts"),
