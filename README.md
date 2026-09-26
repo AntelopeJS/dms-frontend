@@ -319,6 +319,11 @@ the matching Inertia page object to the browser for hydration. Subsequent
 plugins and `DmsClientOnly` defer browser-only work while the same generated
 frontend-module registry drives server and client entries.
 
+Under `ajs dms dev`, an edit to a module's `i18n/locales/*.json` regenerates the
+merged catalogs the application imports: the next server render uses them, and
+the open page applies them in place, without a reload. Adding or removing a
+locale reloads the page instead.
+
 ## Options
 
 | Option | Environment | Purpose |

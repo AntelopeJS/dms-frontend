@@ -501,6 +501,95 @@ export function affectsLocaleMessages(relativePath: string): boolean {
 }
 
 /**
+ * The module the application imports its catalogs from: English bundled as
+ * the fallback, every other locale loaded on first use.
+ *
+ * In development the layer watcher regenerates the catalogs while the app
+ * runs, and this module accepts its own hot updates. The application keeps
+ * the exports of the instance it imported first, so every instance shares one
+ * state through `import.meta.hot.data` (the catalogs loaded so far and the
+ * i18n instances fed from them), and each new one refreshes it from the
+ * catalogs it imports. Accepting itself rather than its imports matters to
+ * the server renderer: Vite stops invalidating importers at a module that
+ * accepts the changed import, which would leave the next server render on the
+ * old catalogs. An added or removed locale changes what the application was
+ * set up with, so that update falls back to a full reload.
+ */
+function localeModuleSource(supportedLocales: string[]): string {
+  const loaders = supportedLocales
+    .filter((locale) => locale !== "en")
+    .map(
+      (locale) =>
+        `  ${JSON.stringify(locale)}: () => import(${JSON.stringify(`./locales.generated/${locale}`)}),`,
+    );
+  return `import defaultMessages from "./locales.generated/en";
+
+type LocaleMessages = Record<string, unknown>;
+type LocaleLoader = () => Promise<{ default: LocaleMessages }>;
+interface LocaleMessagesTarget {
+  setLocaleMessage(locale: string, messages: LocaleMessages): void;
+}
+interface LocaleState {
+  messages: Record<string, LocaleMessages>;
+  targets: Set<LocaleMessagesTarget>;
+  version: number;
+}
+
+export const supportedLocales = ${JSON.stringify(supportedLocales)};
+const localeLoaders: Record<string, LocaleLoader> = {
+  "en": async () => ({ default: defaultMessages }),
+${loaders.join("\n")}
+};
+const shared: LocaleState | undefined = import.meta.hot?.data.state;
+const state: LocaleState = shared ?? {
+  messages: { en: defaultMessages },
+  targets: new Set(),
+  version: 0,
+};
+export const localeMessages = state.messages;
+
+async function readLocaleMessages(locale: string): Promise<LocaleMessages> {
+  return (await localeLoaders[locale]()).default;
+}
+
+export async function loadLocaleMessages(locale: string): Promise<LocaleMessages> {
+  const normalized = locale.slice(0, 2);
+  if (!localeLoaders[normalized]) return localeMessages.en;
+  localeMessages[normalized] ??= await readLocaleMessages(normalized);
+  return localeMessages[normalized];
+}
+
+/** Development only: applies every regenerated catalog to \`target\`. */
+export function syncLocaleMessages(target: LocaleMessagesTarget): void {
+  if (import.meta.hot) state.targets.add(target);
+}
+
+async function refreshLocaleMessages(): Promise<void> {
+  const version = ++state.version;
+  const locales = Object.keys(localeMessages).filter(
+    (locale) => locale in localeLoaders,
+  );
+  const catalogs = await Promise.all(locales.map(readLocaleMessages));
+  if (version !== state.version) return;
+  locales.forEach((locale, index) => {
+    localeMessages[locale] = catalogs[index];
+    for (const target of state.targets)
+      target.setLocaleMessage(locale, catalogs[index]);
+  });
+}
+
+if (import.meta.hot) {
+  import.meta.hot.data.state = state;
+  if (shared) void refreshLocaleMessages();
+  import.meta.hot.accept((next) => {
+    if (next?.supportedLocales.join() !== supportedLocales.join())
+      import.meta.hot?.invalidate("the list of locales changed");
+  });
+}
+`;
+}
+
+/**
  * Merge every module's `i18n/locales/*.json` into one catalog per locale, in
  * manifest-priority order, and write what the app, the server renderer and
  * the email bundle import: `locales.generated/<locale>.{json,ts}`,
@@ -536,14 +625,8 @@ export function writeLocaleMessages(
     JSON.stringify(supportedLocales),
     join(workspaceDir, "email-locales.generated.json"),
   );
-  const loaders = supportedLocales
-    .filter((locale) => locale !== "en")
-    .map(
-      (locale) =>
-        `${JSON.stringify(locale)}: () => import(${JSON.stringify(`./locales.generated/${locale}`)})`,
-    );
   applyContent(
-    `import defaultMessages from "./locales.generated/en";\ninterface LocaleModule { default: Record<string, unknown>; }\ntype LocaleLoader = () => Promise<LocaleModule>;\nexport const supportedLocales = ${JSON.stringify(supportedLocales)};\nexport const localeMessages: Record<string, Record<string, unknown>> = { en: defaultMessages };\nconst localeLoaders: Record<string, LocaleLoader> = { ${loaders.join(", ")} };\nexport async function loadLocaleMessages(locale: string): Promise<Record<string, unknown>> {\n  const normalized = locale.slice(0, 2);\n  const existing = localeMessages[normalized];\n  if (existing) return existing;\n  const loader = localeLoaders[normalized];\n  if (!loader) return defaultMessages;\n  const messages = (await loader()).default;\n  localeMessages[normalized] = messages;\n  return messages;\n}\n`,
+    localeModuleSource(supportedLocales),
     join(workspaceDir, "locales.generated.ts"),
   );
   for (const name of readdirSync(outputDir)) {
