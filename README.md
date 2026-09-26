@@ -112,6 +112,8 @@ An email entry exports `serverEmailTemplates` and may export a plain `appConfig`
 
 Email builds ship complete merged translation catalogs as JSON under `dist/server/locales/`, separate from executable JavaScript. Deploy the entire `dist/server` directory. Each render loads only its requested language and the English fallback; arbitrary translation keys and module overrides remain available. Unknown languages fall back to English, while missing or corrupt files for a supported language fail rendering rather than silently dropping translations. The source harness keeps the 256 KiB JavaScript ceiling and reports locale-data bytes separately.
 
+`ajs-dms dev` builds the email bundle too, once the dev server is ready, and rebuilds it whenever an email template changes. The build runs in a separate low-priority process, so page reloads and HMR never wait on it; a render requested while a build is running waits for that build to finish.
+
 ## Frontend modules
 
 A materialized module opts into the Vue adapter with a root `dms.frontend.ts`:
