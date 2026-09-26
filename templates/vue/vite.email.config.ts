@@ -42,10 +42,14 @@ export default defineConfig({
         for (const file of readdirSync(directory).filter((name) =>
           name.endsWith(".json"),
         )) {
+          const catalog = resolve(directory, file);
+          // Read as data rather than imported: without this, a build in watch
+          // mode would keep emitting the catalogs of its first run.
+          this.addWatchFile(catalog);
           this.emitFile({
             type: "asset",
             fileName: `locales/${file}`,
-            source: readFileSync(resolve(directory, file), "utf8"),
+            source: readFileSync(catalog, "utf8"),
           });
         }
       },
