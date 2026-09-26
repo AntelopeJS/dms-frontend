@@ -17,6 +17,8 @@ import {
   type ComputedRef,
   computed,
   defineComponent,
+  type EffectScope,
+  effectScope,
   getCurrentInstance,
   getCurrentScope,
   h,
@@ -322,6 +324,11 @@ export interface DmsFrontendRuntime {
   pageVersion: number;
   /** The `Cookie` header of the request a server runtime renders. */
   requestCookies?: string;
+  /**
+   * Owns the effects plugins create while they set up. A server render stops
+   * it once done: nothing else would, since a server app is never unmounted.
+   */
+  scope: EffectScope;
 }
 
 const components = new Map<string, DmsComponentRegistration>();
@@ -381,6 +388,7 @@ export function createDmsFrontendRuntime(
     }),
     hasNavigationListener: false,
     pageVersion: 0,
+    scope: effectScope(true),
   };
 }
 
@@ -562,10 +570,14 @@ export function useDmsRoute(pattern?: string): DmsRoute {
   runtime.currentRoutePattern = pattern;
   const page = usePage();
   updateRoute(runtime, page.url);
-  watch(
-    () => page.url,
-    (url) => updateRoute(runtime, url),
-  );
+  // A server render never changes its URL, and Inertia's page is shared by
+  // every render the process runs: a watcher there would only tie this
+  // request's runtime to all the requests after it.
+  if (!runtime.isServer)
+    watch(
+      () => page.url,
+      (url) => updateRoute(runtime, url),
+    );
   return runtime.route;
 }
 
@@ -1235,6 +1247,29 @@ export function trackDmsAsyncComponents(app: App): Set<string> {
   return rendered;
 }
 
+/**
+ * Records the scope of every component a server render creates, and returns
+ * the function that stops them once the render is over.
+ *
+ * A server app is never mounted, so it is never unmounted either: Vue leaves
+ * the scope of each component it rendered running, and nothing handed to
+ * `onScopeDispose` is ever released. Nuxt UI's `useRuntimeHook` registers in
+ * a process-wide hook registry and only unregisters there, so every server
+ * render of the dashboard sidebar stayed reachable, its whole component tree
+ * and page props with it, until the server ran out of heap.
+ */
+export function trackDmsServerScopes(app: App): () => void {
+  const scopes: EffectScope[] = [];
+  app.mixin({
+    beforeCreate(this: ComponentPublicInstance) {
+      scopes.push(this.$.scope);
+    },
+  });
+  return () => {
+    for (const scope of scopes.splice(0)) scope.stop();
+  };
+}
+
 export async function resolveDmsAsyncComponents(
   names: readonly string[],
 ): Promise<void> {
@@ -1529,7 +1564,9 @@ export async function installDmsPlugins(
   });
   for (const registration of pluginSetups) {
     if (registration.clientOnly && typeof window === "undefined") continue;
-    await app.runWithContext(() => registration.setup(appContext));
+    await runtime.scope.run(() =>
+      app.runWithContext(() => registration.setup(appContext)),
+    );
   }
   return async () => {
     for (const callback of hooks.get("app:mounted") ?? []) await callback();

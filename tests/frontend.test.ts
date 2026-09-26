@@ -300,7 +300,10 @@ describe("Vite frontend generation", () => {
       "utf8",
     );
     assert.match(runtime, /for \(const registration of pluginSetups\)/);
-    assert.match(runtime, /await app\.runWithContext/);
+    assert.match(
+      runtime,
+      /await runtime\.scope\.run\(\(\) =>\s*app\.runWithContext/,
+    );
     const appRuntime = readFileSync(
       join("templates", "vue", "app-runtime.ts"),
       "utf8",
