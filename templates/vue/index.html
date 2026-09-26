@@ -4,16 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="data:," />
-    <script>
-      const preference = localStorage.getItem("dms-color-mode") || "system";
-      const mode =
-        preference === "system"
-          ? matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light"
-          : preference;
-      document.documentElement.classList.add(mode);
-    </script>
     <title>Antelope DMS</title>
   </head>
   <body>

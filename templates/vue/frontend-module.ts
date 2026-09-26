@@ -193,15 +193,8 @@ export interface DmsCookieOptions<T> {
   sameSite?: "strict" | "lax" | "none";
   secure?: boolean;
 }
-export type DmsColorModePreference = "system" | "light" | "dark";
 type DmsLinkPrefetchMode = "mount" | "hover" | "click";
 type DmsLinkPrefetch = boolean | DmsLinkPrefetchMode | DmsLinkPrefetchMode[];
-export interface DmsColorMode {
-  preference: DmsColorModePreference;
-  value: "light" | "dark";
-  unknown: boolean;
-  forced: boolean;
-}
 export interface DmsAppContext {
   provide<T>(key: string, value: T): void;
   vueApp: App;
@@ -332,15 +325,6 @@ const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
 const appConfig = ref<Record<string, unknown>>({});
-const COLOR_MODE_STORAGE_KEY = "dms-color-mode";
-const COLOR_MODE_CLASSES = ["light", "dark"];
-const colorMode = reactive<DmsColorMode>({
-  preference: "system",
-  value: "light",
-  unknown: false,
-  forced: false,
-});
-let isColorModeInitialized = false;
 const DMS_RUNTIME_KEY: InjectionKey<DmsFrontendRuntime> = Symbol("dms-runtime");
 type DmsRuntimeContext = DmsAppContext["runWithContext"];
 const runtimeContexts = new WeakMap<DmsFrontendRuntime, DmsRuntimeContext>();
@@ -1103,46 +1087,6 @@ export function useDmsCookie<T = string | null>(
       ) as Ref<unknown>,
     );
   return runtime.sharedState.get(key) as Ref<T>;
-}
-
-function preferredColorMode(): "light" | "dark" {
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
-function applyColorMode(preference: DmsColorModePreference): void {
-  colorMode.value = preference === "system" ? preferredColorMode() : preference;
-  document.documentElement.classList.remove(...COLOR_MODE_CLASSES);
-  document.documentElement.classList.add(colorMode.value);
-}
-
-function initializeColorMode(): void {
-  if (isColorModeInitialized) return;
-  isColorModeInitialized = true;
-  if (typeof window === "undefined") return;
-  const stored = window.localStorage.getItem(COLOR_MODE_STORAGE_KEY);
-  if (COLOR_MODE_CLASSES.includes(stored ?? "") || stored === "system") {
-    colorMode.preference = stored as DmsColorModePreference;
-  }
-  watch(
-    () => colorMode.preference,
-    (preference) => {
-      applyColorMode(preference);
-      window.localStorage.setItem(COLOR_MODE_STORAGE_KEY, preference);
-    },
-    { immediate: true },
-  );
-  window
-    .matchMedia?.("(prefers-color-scheme: dark)")
-    .addEventListener("change", () => {
-      if (colorMode.preference === "system") applyColorMode("system");
-    });
-}
-
-export function useColorMode(): DmsColorMode {
-  initializeColorMode();
-  return colorMode;
 }
 
 export function createError(
