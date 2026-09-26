@@ -15,6 +15,9 @@ export class UpstreamError extends Error {
 }
 
 const PUBLIC_AUTH_MESSAGE = /^error\.[a-z0-9_.-]{1,100}$/;
+// The API error contract's generic key: the technical cause of a failure the
+// backend did not describe stays in the server log.
+const GENERIC_ERROR_MESSAGE = "error.500.description";
 
 export function publicBackendMessage(data) {
   const message = typeof data === "string" ? data : data?.message;
@@ -47,8 +50,12 @@ export async function backend(path, request, options = {}) {
     data = response.ok ? {} : text;
   }
   if (!response.ok) {
-    const message = publicBackendMessage(data) ?? "DMS backend request failed";
-    throw new UpstreamError(response.status, message);
+    const message = publicBackendMessage(data);
+    if (!message)
+      console.error(
+        `DMS backend request failed: ${response.status} ${options.method ?? "GET"} ${path}`,
+      );
+    throw new UpstreamError(response.status, message ?? GENERIC_ERROR_MESSAGE);
   }
   return data;
 }

@@ -59,6 +59,18 @@ const HTML_RENDER_ROUTE = "/api/html/render";
 const TESTER_ROUTE = /^\/api\/_dms\/tester\/?$/;
 const AUTH_PAGE = "/auth";
 const ONBOARDING_PAGE = "/onboarding";
+// What a visitor sees when the backend fails: the technical cause only reaches
+// the server log. The page error mirrors the SSR renderer's unexpected-error
+// wording; JSON callers get the generic i18n key of the API error contract.
+const UNEXPECTED_ERROR = {
+  statusMessage: "Application error",
+  message: "An unexpected error occurred",
+};
+const GENERIC_ERROR_MESSAGE = "error.500.description";
+// A typed refusal carries a machine-readable i18n key as its body, bare or
+// JSON-encoded, e.g. `saas.errors.workspace.access_blocked`.
+const REFUSAL_CODE = /^[a-z0-9_-]+(?:\.[a-z0-9_-]+)+$/i;
+const REFUSAL_CODE_MAX_LENGTH = 200;
 const MINIMUM_COMPRESSION_BYTES = 1_024;
 const DYNAMIC_BROTLI_QUALITY = 4;
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
@@ -74,10 +86,26 @@ let vitePromise;
 let frontendHttpServer;
 
 class BackendResponseError extends Error {
-  constructor(status) {
+  constructor(status, code) {
     super(`DMS backend returned ${status}`);
     this.status = status;
+    this.code = code;
   }
+}
+
+async function refusalCode(response) {
+  const text = (await response.text().catch(() => "")).trim();
+  if (text.length > REFUSAL_CODE_MAX_LENGTH) return undefined;
+  let value = text;
+  try {
+    const data = JSON.parse(text);
+    value = typeof data === "string" ? data : data?.message;
+  } catch {
+    // A bare code.
+  }
+  return typeof value === "string" && REFUSAL_CODE.test(value)
+    ? value
+    : undefined;
 }
 
 async function developmentServer() {
@@ -139,7 +167,7 @@ async function backendJson(path, request) {
     headers: backendHeaders(request),
   });
   if (!response.ok) {
-    throw new BackendResponseError(response.status);
+    throw new BackendResponseError(response.status, await refusalCode(response));
   }
   return response.json();
 }
@@ -372,6 +400,36 @@ function renderRequestHtml(page, request) {
   return renderHtml(page, request.url, fetch, request.headers.cookie);
 }
 
+/**
+ * Where a frontend module sends a page visit the backend refused with a typed
+ * 403 (a suspended workspace, say), registered through the SDK's
+ * `registerAccessRedirect`. A refused destination keeps the error page:
+ * sending it to itself again would loop.
+ */
+async function accessRefusalRedirect(error, request, pathname) {
+  if (
+    !(error instanceof BackendResponseError) ||
+    error.status !== 403 ||
+    !error.code ||
+    !isFrontendVisit(request)
+  )
+    return undefined;
+  let location;
+  try {
+    const renderer = await ssrRenderer(await developmentServer());
+    location = renderer.accessRedirect?.(error.code);
+  } catch (rendererError) {
+    console.error("DMS access redirect lookup failed", rendererError);
+    return undefined;
+  }
+  if (!location) return undefined;
+  const target = new URL(location, "http://frontend.local");
+  return target.origin === "http://frontend.local" &&
+    target.pathname !== pathname
+    ? location
+    : undefined;
+}
+
 async function writeBackendError(error, request, response) {
   const status = Number.isInteger(error?.status) ? error.status : 502;
   const pathname = new URL(request.url, "http://frontend.local").pathname;
@@ -386,14 +444,18 @@ async function writeBackendError(error, request, response) {
     redirectFrontendVisit(request, response, location);
     return;
   }
+  const accessRedirect = await accessRefusalRedirect(error, request, pathname);
+  if (accessRedirect) {
+    redirectFrontendVisit(request, response, accessRedirect);
+    return;
+  }
   console.error("DMS backend request failed", error);
   if (isFrontendVisit(request)) {
-    const statusMessage = "DMS backend request failed";
     const props = {
       path: pathname,
       page: {},
       ...publicSession(readSession(request)),
-      error: { statusCode: status, statusMessage, message: statusMessage },
+      error: { statusCode: status, ...UNEXPECTED_ERROR },
     };
     const page = createInertiaPage(request.url, props);
     if (request.headers[INERTIA_HEADER]) {
@@ -411,7 +473,7 @@ async function writeBackendError(error, request, response) {
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
       ? { message: error.message }
-      : { error: "DMS backend request failed" };
+      : { message: GENERIC_ERROR_MESSAGE };
   response.writeHead(status, { "content-type": JSON_TYPE });
   response.end(JSON.stringify(payload));
 }
