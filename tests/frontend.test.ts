@@ -432,13 +432,17 @@ describe("Vite frontend generation", () => {
     assert.doesNotMatch(config, /"#imports"/);
   });
 
-  it("keeps dev-rewritten declaration files out of Tailwind's source scan", () => {
+  it("keeps dev-rewritten declaration files and build output out of Tailwind's source scan", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-gitignore-workspace-"));
     copyStaticTemplates(workspace);
     const ignored = readFileSync(join(workspace, ".gitignore"), "utf8")
       .split("\n")
       .filter((line) => line && !line.startsWith("#"));
-    assert.deepEqual(ignored.sort(), ["auto-imports.d.ts", "components.d.ts"]);
+    assert.deepEqual(ignored.sort(), [
+      "auto-imports.d.ts",
+      "components.d.ts",
+      "dist/",
+    ]);
   });
 
   it("provides explicit native runtime contracts", () => {
