@@ -1,5 +1,6 @@
 import UApp from "@nuxt/ui/components/App.vue";
 import UIcon from "@nuxt/ui/runtime/vue/components/Icon.vue";
+import { useToast } from "@nuxt/ui/composables/useToast";
 import { useAppConfig } from "@nuxt/ui/runtime/vue/composables/useAppConfig";
 import ui from "@nuxt/ui/vue-plugin";
 import { useHead } from "@unhead/vue";
@@ -44,6 +45,7 @@ import {
   localeMessages,
   supportedLocales,
 } from "./locales.generated";
+import { showNetworkErrors } from "./network-error";
 
 export interface DmsInertiaSetupProps {
   initialPage: unknown;
@@ -239,6 +241,10 @@ export async function configureDmsApp(
   options.app.runWithContext(() =>
     hydrateDmsPageProps(options.initialPageProps, options.initialPageUrl),
   );
+  if (typeof window !== "undefined") {
+    const toast = options.app.runWithContext(() => useToast());
+    showNetworkErrors(toast.add, i18n.global);
+  }
   // Resolve, before the app mounts, every async component the server
   // rendered: the page, its layout, and the components the render reached.
   // Hydration then adopts the server-rendered markup instead of discarding it.
