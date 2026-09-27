@@ -11,7 +11,7 @@ import {
   affectsLocaleMessages,
   createFrontendModuleRegistry,
   writeLocaleMessages,
-} from "./materialize";
+} from "./derived-outputs";
 
 import { ResolvedLayer } from "./workspace";
 import {
