@@ -115,6 +115,31 @@ describe("generated workspace typecheck", () => {
     assert.equal(result.code, 0, result.output);
   });
 
+  it("checks the shipped frontend runtime against Vue's public typings", () => {
+    // The registry imports `./frontend-module` and modules reach it through
+    // `#dms/frontend-module`, so every generated workspace typechecks the
+    // shipped runtime. This repository's own tsconfig only covers `src/`,
+    // which let an internal Vue field through to every consumer's check.
+    const workspace = generatedWorkspace({
+      "probe.ts":
+        'import { useDmsState } from "#dms/frontend-module";\nexport const probe = useDmsState("probe", () => 1);\n',
+    });
+    for (const file of ["frontend-module.ts", "globals.d.ts"]) {
+      cpSync(join(repoRoot, "templates", "vue", file), join(workspace, file));
+    }
+    writeFileSync(
+      join(workspace, "frontend-paths.generated.json"),
+      '{ "compilerOptions": { "paths": { "#dms/frontend-module": ["./frontend-module.ts"] } } }\n',
+    );
+    writeFileSync(
+      join(workspace, "frontend-modules.generated.ts"),
+      'import type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [];\n',
+    );
+
+    const result = typecheck(workspace);
+    assert.equal(result.code, 0, result.output);
+  });
+
   it("covers Vue single-file components too", () => {
     // `tsc` cannot parse `.vue`; vue-tsc, which the verifier runs, reads the
     // same `include`. Pin the effective globs so the two extensions cannot
