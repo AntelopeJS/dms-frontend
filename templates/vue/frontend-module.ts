@@ -299,6 +299,24 @@ interface DmsPluginRegistration {
   clientOnly: boolean;
 }
 
+/**
+ * What the frontend modules registered through their SDK. Modules are set up
+ * by descending priority, so the first one to claim a name keeps it.
+ */
+interface DmsFrontendRegistry {
+  components: Map<string, DmsComponentRegistration>;
+  pages: Map<string, DmsFrontendEntry>;
+  dynamicPages: Map<string, DmsFrontendEntry>;
+  layouts: Map<string, DmsFrontendEntry>;
+  errorPage?: DmsFrontendEntry;
+  plugins: Plugin[];
+  pluginSetups: DmsPluginRegistration[];
+  middleware: DmsMiddleware[];
+  namedMiddleware: Map<string, DmsMiddleware>;
+  accessRedirects: Map<string, string>;
+  injections: Map<string | symbol, unknown>;
+}
+
 export interface DmsFrontendRuntime {
   sharedState: Map<string, Ref<unknown>>;
   asyncData: Map<string, DmsAsyncData<unknown>>;
@@ -324,17 +342,23 @@ export interface DmsFrontendRuntime {
   scope: EffectScope;
 }
 
-const components = new Map<string, DmsComponentRegistration>();
-const pages = new Map<string, DmsFrontendEntry>();
-const dynamicPages = new Map<string, DmsFrontendEntry>();
-const layouts = new Map<string, DmsFrontendEntry>();
-let errorPage: DmsFrontendEntry | undefined;
-const plugins: Plugin[] = [];
-const pluginSetups: DmsPluginRegistration[] = [];
-const middleware: DmsMiddleware[] = [];
-const namedMiddleware = new Map<string, DmsMiddleware>();
-const accessRedirects = new Map<string, string>();
-const injections = new Map<string | symbol, unknown>();
+/** Creates the empty registry one setup of the frontend modules fills. */
+function createDmsFrontendRegistry(): DmsFrontendRegistry {
+  return {
+    components: new Map(),
+    pages: new Map(),
+    dynamicPages: new Map(),
+    layouts: new Map(),
+    plugins: [],
+    pluginSetups: [],
+    middleware: [],
+    namedMiddleware: new Map(),
+    accessRedirects: new Map(),
+    injections: new Map(),
+  };
+}
+
+const registry = createDmsFrontendRegistry();
 const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
@@ -506,9 +530,9 @@ async function runMiddleware(
   const declared = Array.isArray(to.meta.middleware) ? to.meta.middleware : [];
   const metadataNames = Object.keys(to.meta).filter((name) => to.meta[name]);
   const declaredHandlers = [...declared, ...metadataNames]
-    .map((name) => namedMiddleware.get(String(name)))
+    .map((name) => registry.namedMiddleware.get(String(name)))
     .filter((handler): handler is DmsMiddleware => !!handler);
-  for (const handler of [...middleware, ...declaredHandlers]) {
+  for (const handler of [...registry.middleware, ...declaredHandlers]) {
     const runWithContext = runtimeContexts.get(runtime);
     const result = await (runWithContext
       ? runWithContext(() => handler(to, runtime.route))
@@ -913,8 +937,8 @@ export function addDmsMiddleware(
   name?: string,
   isGlobal = false,
 ): void {
-  if (isGlobal) middleware.push(handler);
-  else if (name) namedMiddleware.set(name, handler);
+  if (isGlobal) registry.middleware.push(handler);
+  else if (name) registry.namedMiddleware.set(name, handler);
 }
 export const useHead = useUnhead;
 export const useSeoMeta = useUnheadSeoMeta;
@@ -1158,13 +1182,20 @@ export function useUserSession<
   };
 }
 
+function registerDmsComponentEntry(
+  entries: Map<string, DmsComponentRegistration>,
+  name: string,
+  component: Component,
+): void {
+  const key = normalizeDmsName(name);
+  if (!entries.has(key)) entries.set(key, { name, component });
+}
 /** Registers a component unless a higher-priority module already owns its name. */
 export function registerDmsComponent(name: string, component: Component): void {
-  const key = normalizeDmsName(name);
-  if (!components.has(key)) components.set(key, { name, component });
+  registerDmsComponentEntry(registry.components, name, component);
 }
 export function resolveDmsComponent(name: string): Component | undefined {
-  return components.get(normalizeDmsName(name))?.component;
+  return registry.components.get(normalizeDmsName(name))?.component;
 }
 export const getDmsComponent = resolveDmsComponent;
 
@@ -1177,7 +1208,7 @@ export const getDmsComponent = resolveDmsComponent;
  */
 export function trackDmsAsyncComponents(app: App): Set<string> {
   const names = new Map<Component, string>();
-  components.forEach(({ component, name }) => {
+  registry.components.forEach(({ component, name }) => {
     if ((component as DmsAsyncComponent).__asyncLoader)
       names.set(component, name);
   });
@@ -1293,30 +1324,35 @@ function findDmsPageEntry(props: DmsPageProps): DmsFrontendEntry | undefined {
     props.page.componentName,
     props.page.route?.fullSlug,
     props.path,
-  ].find((candidate) => candidate && pages.has(normalizeDmsPageKey(candidate)));
+  ].find(
+    (candidate) =>
+      candidate && registry.pages.has(normalizeDmsPageKey(candidate)),
+  );
   return name
-    ? pages.get(normalizeDmsPageKey(name))
-    : dynamicPages.get(CATCH_ALL_PAGE_KEY);
+    ? registry.pages.get(normalizeDmsPageKey(name))
+    : registry.dynamicPages.get(CATCH_ALL_PAGE_KEY);
 }
 
 /** The path a frontend module registered for a typed backend refusal. */
 export function resolveDmsAccessRedirect(code: string): string | undefined {
-  return accessRedirects.get(code);
+  return registry.accessRedirects.get(code);
 }
 export function hasDmsPage(name: string): boolean {
-  return pages.has(normalizeDmsPageKey(name));
+  return registry.pages.has(normalizeDmsPageKey(name));
 }
 export function getDmsPage(props: DmsPageProps): Component | undefined {
-  if (props.error) return errorPage?.component;
+  if (props.error) return registry.errorPage?.component;
   return findDmsPageEntry(props)?.component;
 }
 export function getDmsDynamicPage(name = "default"): Component | undefined {
-  return dynamicPages.get(name)?.component;
+  return registry.dynamicPages.get(name)?.component;
 }
 export function getDmsLayout(props: DmsPageProps): Component | undefined {
   const layout = props.page.layout;
   const name = layout?.layout?.componentName ?? layout?.componentName;
-  return name ? layouts.get(normalizeDmsName(name))?.component : undefined;
+  return name
+    ? registry.layouts.get(normalizeDmsName(name))?.component
+    : undefined;
 }
 export function getDmsLayoutProps(
   props: DmsPageProps,
@@ -1362,18 +1398,18 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
     layoutUrl && props.page.layout ? { [layoutUrl]: props.page.layout } : {};
 }
 export function getDmsErrorPage(): Component | undefined {
-  return errorPage?.component;
+  return registry.errorPage?.component;
 }
 
 export async function preloadDmsPage(props: DmsPageProps): Promise<void> {
   const layoutName =
     props.page.layout?.layout?.componentName ??
     props.page.layout?.componentName;
-  const page = findDmsPageEntry(props) ?? dynamicPages.get("default");
+  const page = findDmsPageEntry(props) ?? registry.dynamicPages.get("default");
   const layout = layoutName
-    ? layouts.get(normalizeDmsName(layoutName))
+    ? registry.layouts.get(normalizeDmsName(layoutName))
     : undefined;
-  const entries = props.error ? [errorPage] : [page, layout];
+  const entries = props.error ? [registry.errorPage] : [page, layout];
   // `preload` only warms the module; the async wrapper stays unresolved until
   // its own loader runs. Hydrating an unresolved wrapper defers it, and the
   // first parent render (Inertia's initial swap) then makes Vue drop the
@@ -1394,44 +1430,53 @@ export function useDmsInjection<T>(
 }
 
 function registerDmsFrontendEntry(
-  registry: Map<string, DmsFrontendEntry>,
+  entries: Map<string, DmsFrontendEntry>,
   name: string,
   component: Component,
   preload?: DmsComponentPreloader,
 ): void {
-  if (!registry.has(name)) registry.set(name, { component, preload });
+  if (!entries.has(name)) entries.set(name, { component, preload });
 }
 
-function createSdk(options: DmsModuleOptions): DmsFrontendSdk {
+function createSdk(
+  target: DmsFrontendRegistry,
+  options: DmsModuleOptions,
+): DmsFrontendSdk {
   return {
     options,
-    registerComponent: registerDmsComponent,
+    registerComponent: (name, component) =>
+      registerDmsComponentEntry(target.components, name, component),
     registerPage: (name, component, preload) => {
       const key = normalizeDmsPageKey(name);
-      registerDmsFrontendEntry(pages, key, component, preload);
+      registerDmsFrontendEntry(target.pages, key, component, preload);
     },
     registerDynamicPage: (name, component, preload) =>
-      registerDmsFrontendEntry(dynamicPages, name, component, preload),
+      registerDmsFrontendEntry(target.dynamicPages, name, component, preload),
     registerLayout: (name, component, preload) => {
       const key = normalizeDmsName(name);
-      registerDmsFrontendEntry(layouts, key, component, preload);
+      registerDmsFrontendEntry(target.layouts, key, component, preload);
     },
     registerErrorPage: (component, preload) => {
-      errorPage ??= { component, preload };
+      target.errorPage ??= { component, preload };
     },
     registerPlugin: (setup, options = {}) =>
-      pluginSetups.push({ setup, clientOnly: options.clientOnly ?? false }),
+      target.pluginSetups.push({
+        setup,
+        clientOnly: options.clientOnly ?? false,
+      }),
     registerMiddleware: (name, handler, options = {}) => {
-      if (!namedMiddleware.has(name)) namedMiddleware.set(name, handler);
-      if (options.global) middleware.push(handler);
+      if (!target.namedMiddleware.has(name))
+        target.namedMiddleware.set(name, handler);
+      if (options.global) target.middleware.push(handler);
     },
     registerAccessRedirect: (code, path) => {
-      if (!accessRedirects.has(code)) accessRedirects.set(code, path);
+      if (!target.accessRedirects.has(code))
+        target.accessRedirects.set(code, path);
     },
     provide: (key, value) => {
-      if (!injections.has(key)) injections.set(key, value);
+      if (!target.injections.has(key)) target.injections.set(key, value);
     },
-    use: (plugin) => plugins.push(plugin),
+    use: (plugin) => target.plugins.push(plugin),
   };
 }
 
@@ -1444,7 +1489,7 @@ export async function setupFrontendModules(
       runtimeConfig.value.public,
       registration.options.public,
     );
-    await registration.module.setup(createSdk(registration.options));
+    await registration.module.setup(createSdk(registry, registration.options));
   }
 }
 
@@ -1502,16 +1547,16 @@ export async function installDmsPlugins(
   );
   app.component("DmsLink", DmsLink);
   app.component("DmsClientOnly", DmsClientOnly);
-  components.forEach(({ component, name }) => {
+  registry.components.forEach(({ component, name }) => {
     app.component(name, component);
   });
-  injections.forEach((value, key) => {
+  registry.injections.forEach((value, key) => {
     app.provide(key, value);
   });
-  plugins.forEach((plugin) => {
+  registry.plugins.forEach((plugin) => {
     app.use(plugin);
   });
-  for (const registration of pluginSetups) {
+  for (const registration of registry.pluginSetups) {
     if (registration.clientOnly && typeof window === "undefined") continue;
     await runtime.scope.run(() =>
       app.runWithContext(() => registration.setup(appContext)),

@@ -299,7 +299,10 @@ describe("Vite frontend generation", () => {
       join("templates", "vue", "frontend-module.ts"),
       "utf8",
     );
-    assert.match(runtime, /for \(const registration of pluginSetups\)/);
+    assert.match(
+      runtime,
+      /for \(const registration of registry\.pluginSetups\)/,
+    );
     assert.match(
       runtime,
       /await runtime\.scope\.run\(\(\) =>\s*app\.runWithContext/,
@@ -324,8 +327,8 @@ describe("Vite frontend generation", () => {
       join("templates", "vue", "vite.config.ts"),
       "utf8",
     );
-    assert.match(runtime, /if \(!namedMiddleware\.has\(name\)\)/);
-    assert.match(runtime, /if \(!injections\.has\(key\)\)/);
+    assert.match(runtime, /if \(!target\.namedMiddleware\.has\(name\)\)/);
+    assert.match(runtime, /if \(!target\.injections\.has\(key\)\)/);
     assert.match(
       runtime,
       /defu\(\s*runtimeConfig\.value\.public,\s*registration\.options\.public/,
@@ -352,10 +355,10 @@ describe("Vite frontend generation", () => {
       join("templates", "vue", "app-runtime.ts"),
       "utf8",
     );
-    assert.match(runtime, /const dynamicPages = new Map/);
-    assert.match(runtime, /const layouts = new Map/);
+    assert.match(runtime, /dynamicPages: new Map\(\)/);
+    assert.match(runtime, /layouts: new Map\(\)/);
     assert.doesNotMatch(runtime, /props\.path, "default"/);
-    assert.match(runtime, /if \(props\.error\) return errorPage/);
+    assert.match(runtime, /if \(props\.error\) return registry\.errorPage/);
     assert.match(appRuntime, /getDmsLayout\(props\)/);
   });
 
@@ -401,7 +404,10 @@ describe("Vite frontend generation", () => {
       "utf8",
     );
     assert.match(runtime, /pages\.has\(normalizeDmsPageKey\(candidate\)\)/);
-    assert.match(runtime, /return pages\.has\(normalizeDmsPageKey\(name\)\)/);
+    assert.match(
+      runtime,
+      /return registry\.pages\.has\(normalizeDmsPageKey\(name\)\)/,
+    );
     assert.match(runtime, /const key = normalizeDmsPageKey\(name\)/);
     assert.match(runtime, /dynamicPages\.get\(CATCH_ALL_PAGE_KEY\)/);
     assert.match(runtime, /const CATCH_ALL_PAGE_KEY = "\[\.\.\.slug\]"/);
