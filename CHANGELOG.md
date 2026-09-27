@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.2
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.1...v0.3.2)
+
+### 🩹 Fixes
+
+- **server:** Track render scopes through the public Vue API ([#54](https://github.com/AntelopeJS/dms-frontend/pull/54))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.1
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.0...v0.3.1)
