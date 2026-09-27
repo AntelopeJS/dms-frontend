@@ -4,10 +4,11 @@ import chalk from "chalk";
 import { Command } from "commander";
 import {
   getWorkspaceDir,
-  manifestHtmlRenderSecret,
+  collectManifestSecrets,
   Options,
   readCachedManifest,
-  resolveHtmlRenderSecret,
+  reportManifestSecrets,
+  resolveManifestSecrets,
   resolveSessionSecret,
   runCommand,
 } from "../common";
@@ -51,15 +52,16 @@ export function cmdStart(): Command {
       console.log("");
       info(`Starting production server on port ${chalk.cyan(options.port)}...`);
       console.log(chalk.dim(`  Workspace: ${workspaceDir}`));
-      console.log("");
 
-      // The build cached the manifest it was made from: the backend's render
-      // secret comes from there unless the environment sets its own.
-      const htmlRenderSecret = resolveHtmlRenderSecret(
-        manifestHtmlRenderSecret(
+      // The build cached the manifest it was made from: the backend's
+      // secrets come from there unless the environment sets its own.
+      const secrets = resolveManifestSecrets(
+        collectManifestSecrets(
           readCachedManifest(workspaceDir)?.manifest.modules ?? [],
         ),
       );
+      reportManifestSecrets(secrets, "build-time manifest");
+      console.log("");
 
       const code = await runCommand("node", [serverPath], {
         cwd: workspaceDir,
@@ -68,7 +70,7 @@ export function cmdStart(): Command {
           PORT: options.port,
           DMS_API_BASE_URL: options.backendUrl,
           DMS_SESSION_SECRET: sessionSecret,
-          DMS_HTML_RENDER_SECRET: htmlRenderSecret,
+          ...secrets.env,
           DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "true",
         },
       });

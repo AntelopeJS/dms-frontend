@@ -16,7 +16,10 @@ import {
   assertCachedArchivesExist,
 } from "./layers";
 import { assertCachedLayerPathsExist, resolveManifest } from "./manifest";
-import { manifestHtmlRenderSecret } from "./html-render-secret";
+import {
+  collectManifestSecrets,
+  type ManifestSecrets,
+} from "./manifest-secrets";
 import {
   writeFrontendModuleRegistry,
   copyStaticTemplates,
@@ -262,8 +265,8 @@ export interface SetupWorkspaceResult {
   manifestFromCache: boolean;
   /** ISO timestamp of the cached manifest, when `manifestFromCache` is true */
   manifestFetchedAt?: string;
-  /** HTML render secret the backend published in the manifest, if any */
-  htmlRenderSecret?: string;
+  /** Server secrets the backend published in the manifest */
+  manifestSecrets: ManifestSecrets;
 }
 
 /**
@@ -343,7 +346,7 @@ export async function setupWorkspace(
     layers,
     manifestFromCache: fromCache,
     manifestFetchedAt: fetchedAt,
-    htmlRenderSecret: manifestHtmlRenderSecret(manifest.modules),
+    manifestSecrets: collectManifestSecrets(manifest.modules),
   };
 }
 
