@@ -2,24 +2,31 @@
 // copied from them: the module registry and loader, the type paths, the public
 // assets, the locale catalogs and the aggregated shortcuts.
 //
+// Materialization writes all of them. In development the layer watcher
+// rewrites those a change can affect (`DERIVED_OUTPUTS`), from the same
+// writers.
+//
 // Split out of materialize.ts, whose size the linter caps.
 
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   rmSync,
-  writeFileSync,
 } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { FRONTEND_MODULE_ENTRY, LAYERS_SUBDIR } from "./config";
-import { frontendLayerTypePaths } from "./layer-aliases";
+import { frontendLayerTypePaths, MODULE_LAYERS_DIRNAME } from "./layer-aliases";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
 import { FrontendModuleOptions, ResolvedLayer } from "./workspace";
 
-import { applyContent, collectFiles, toPosixPath } from "./fs-sync";
+import {
+  applyContent,
+  collectFiles,
+  mirrorFiles,
+  toPosixPath,
+} from "./fs-sync";
 
 export interface FrontendModuleRegistryEntry {
   id: string;
@@ -92,10 +99,10 @@ export function createFrontendModuleRegistry(
  * collisions in favour of the last root, hence the reversal: the
  * highest-priority module is the one that keeps the alias.
  */
-export function writeFrontendTypePaths(
+function writeFrontendTypePaths(
   workspaceDir: string,
   registry: FrontendModuleRegistry,
-): void {
+): boolean {
   const paths: Record<string, string[]> = {
     "#dms/frontend-module": ["./frontend-module.ts"],
     "@frontend/*": ["./frontend-modules/*"],
@@ -105,16 +112,16 @@ export function writeFrontendTypePaths(
     ),
   };
   const config = { compilerOptions: { paths } };
-  writeFileSync(
-    join(workspaceDir, "frontend-paths.generated.json"),
+  return applyContent(
     `${JSON.stringify(config, null, 2)}\n`,
+    join(workspaceDir, "frontend-paths.generated.json"),
   );
 }
 
-export function writeFrontendModuleLoader(
+function writeFrontendModuleLoader(
   workspaceDir: string,
   registry: FrontendModuleRegistry,
-): void {
+): boolean {
   const modules = registry.modules.filter((module) => module.entry);
   const imports = modules
     .map(
@@ -129,7 +136,25 @@ export function writeFrontendModuleLoader(
     )
     .join(", ");
   const content = `${imports}\n\nimport type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [${registrations}];\n`;
-  writeFileSync(join(workspaceDir, "frontend-modules.generated.ts"), content);
+  return applyContent(
+    content,
+    join(workspaceDir, "frontend-modules.generated.ts"),
+  );
+}
+
+/**
+ * The registry itself, which the generated configs and server read, and the
+ * loader through which the application imports each module's entry.
+ */
+function writeModuleRegistry(
+  workspaceDir: string,
+  registry: FrontendModuleRegistry,
+): boolean {
+  const wroteRegistry = applyContent(
+    `${JSON.stringify(registry, null, 2)}\n`,
+    join(workspaceDir, "generated-frontend-modules.json"),
+  );
+  return writeFrontendModuleLoader(workspaceDir, registry) || wroteRegistry;
 }
 
 interface DiscoveredAsset {
@@ -153,20 +178,29 @@ function moduleAssetRoots(moduleRoot: string): AssetRoot[] {
   }));
 }
 
-export function writePublicAssets(
+/** Where each asset root keeps the files served as they are. */
+const PUBLIC_DIRECTORY = "public";
+
+/**
+ * Merge every module's public files into the workspace's `public/`, which the
+ * dev server serves and the build copies. Modules go in increasing priority,
+ * so the highest-priority one keeps a contested path, as does the last of a
+ * module's layers.
+ */
+function writePublicAssets(
   workspaceDir: string,
   registry: FrontendModuleRegistry,
-): void {
-  const destination = join(workspaceDir, "public");
-  rmSync(destination, { force: true, recursive: true });
+): boolean {
+  const files = new Map<string, string>();
   for (const module of [...registry.modules].reverse()) {
     for (const root of moduleAssetRoots(module.root)) {
-      const source = join(root.absolutePath, "public");
-      if (existsSync(source)) {
-        cpSync(source, destination, { force: true, recursive: true });
+      const source = join(root.absolutePath, PUBLIC_DIRECTORY);
+      for (const file of collectFiles(source)) {
+        files.set(file, join(source, file));
       }
     }
   }
+  return mirrorFiles(files, join(workspaceDir, PUBLIC_DIRECTORY));
 }
 
 function discoverAssets(
@@ -243,19 +277,40 @@ function readLocaleMessages(
 }
 
 /**
- * Whether a change at `relativePath`, relative to a module root, can change
- * the generated catalogs: anything under a locale directory, or a directory on
- * the way to one, whose creation or removal brings or takes a whole set of
- * locale files at once.
+ * Whether `relativePath`, relative to a module root, names its `layers/`
+ * directory or one of the layers in it, whose creation or removal adds or
+ * removes an asset root with everything in it.
  */
-export function affectsLocaleMessages(relativePath: string): boolean {
+function isLayerDirectory(relativePath: string): boolean {
   const segments = toPosixPath(relativePath).split("/");
-  if (segments[0] === "layers" && segments.length <= 2) return true;
-  const withinRoot = segments[0] === "layers" ? segments.slice(2) : segments;
-  return LOCALE_DIRECTORY.split("/").every(
-    (segment, index) =>
-      index >= withinRoot.length || withinRoot[index] === segment,
-  );
+  return segments[0] === MODULE_LAYERS_DIRNAME && segments.length <= 2;
+}
+
+/**
+ * Whether a change at `relativePath`, relative to a module root, can change
+ * what its asset roots hold under `directory`: anything under it, or a
+ * directory on the way to it, whose creation or removal brings or takes a
+ * whole set of files at once.
+ */
+function affectsAssetDirectory(
+  directory: string,
+  relativePath: string,
+): boolean {
+  if (isLayerDirectory(relativePath)) return true;
+  const segments = toPosixPath(relativePath).split("/");
+  const withinRoot =
+    segments[0] === MODULE_LAYERS_DIRNAME ? segments.slice(2) : segments;
+  return directory
+    .split("/")
+    .every(
+      (segment, index) =>
+        index >= withinRoot.length || withinRoot[index] === segment,
+    );
+}
+
+/** Whether a change at `relativePath` can change the generated catalogs. */
+export function affectsLocaleMessages(relativePath: string): boolean {
+  return affectsAssetDirectory(LOCALE_DIRECTORY, relativePath);
 }
 
 /**
@@ -363,41 +418,50 @@ if (import.meta.hot) {
 export function writeLocaleMessages(
   workspaceDir: string,
   registry: FrontendModuleRegistry,
-): void {
+): boolean {
   const locales = discoverAssets(registry, LOCALE_DIRECTORY, [".json"]);
   const messages = readLocaleMessages(locales, registry);
   const outputDir = join(workspaceDir, "locales.generated");
   const outputs = new Set<string>();
+  let changed = false;
+  const apply = (content: string, path: string): void => {
+    changed = applyContent(content, path) || changed;
+  };
   mkdirSync(outputDir, { recursive: true });
   for (const [locale, value] of Object.entries(messages)) {
     const catalog = JSON.stringify(value);
-    applyContent(catalog, join(outputDir, `${locale}.json`));
-    applyContent(
+    apply(catalog, join(outputDir, `${locale}.json`));
+    apply(
       `const messages = ${catalog};\nexport default messages;\n`,
       join(outputDir, `${locale}.ts`),
     );
     outputs.add(`${locale}.json`).add(`${locale}.ts`);
   }
   const supportedLocales = Object.keys(messages);
-  applyContent(
+  apply(
     JSON.stringify(supportedLocales),
     join(workspaceDir, "email-locales.generated.json"),
   );
-  applyContent(
+  apply(
     localeModuleSource(supportedLocales),
     join(workspaceDir, "locales.generated.ts"),
   );
   for (const name of readdirSync(outputDir)) {
-    if (!outputs.has(name))
-      rmSync(join(outputDir, name), { recursive: true, force: true });
+    if (outputs.has(name)) continue;
+    rmSync(join(outputDir, name), { recursive: true, force: true });
+    changed = true;
   }
+  return changed;
 }
 
-export function writeShortcutExports(
+/** Where each asset root keeps its shortcut registry. */
+const SHORTCUTS_DIRECTORY = "app/config";
+
+function writeShortcutExports(
   workspaceDir: string,
   registry: FrontendModuleRegistry,
-): void {
-  const registries = discoverAssets(registry, "app/config", [
+): boolean {
+  const registries = discoverAssets(registry, SHORTCUTS_DIRECTORY, [
     "shortcuts-registry.ts",
     "shortcuts-registry.js",
   ]);
@@ -407,8 +471,69 @@ export function writeShortcutExports(
   );
   const spreads = registries.map((_, index) => `...registry${index}`);
   const content = `${imports.join("\n")}\nconst aggregatedShortcuts = [${spreads.join(", ")}];\nexport { aggregatedShortcuts };\nexport default aggregatedShortcuts;\n`;
-  writeFileSync(
-    join(workspaceDir, "shortcuts-aggregated.generated.ts"),
+  return applyContent(
     content,
+    join(workspaceDir, "shortcuts-aggregated.generated.ts"),
   );
 }
+
+/**
+ * One file, or one set of files, of the workspace derived from the module
+ * sources. Materialization writes every one, and the dev layer watcher
+ * rewrites those whose sources a change touched.
+ */
+export interface DerivedOutput {
+  /** How the watcher's warnings name the output. */
+  name: string;
+  /** Whether a change at a path relative to a module root can change it. */
+  affects(relativePath: string): boolean;
+  /**
+   * Writes the output, only the files whose content changes, and tells
+   * whether any did.
+   */
+  write(workspaceDir: string, registry: FrontendModuleRegistry): boolean;
+  /**
+   * For an output the running dev server cannot apply: what the watcher
+   * prints when a change rewrites it.
+   */
+  restartNotice?: string;
+}
+
+/**
+ * Every derived output, in the order they are written.
+ *
+ * The dev server serves `public/` from disk, and Vite follows the generated
+ * modules through its own watcher. The type paths are the exception: they list
+ * the layer directories, from which the generated Vite configs also derive the
+ * `#<layer>` aliases and the auto-imported directories, once, at startup. An
+ * added or removed layer is applied by a restart only, and the watcher says so.
+ */
+export const DERIVED_OUTPUTS: readonly DerivedOutput[] = [
+  {
+    name: "module registry",
+    affects: (path) => toPosixPath(path) === FRONTEND_MODULE_ENTRY,
+    write: writeModuleRegistry,
+  },
+  {
+    name: "type paths",
+    affects: isLayerDirectory,
+    write: writeFrontendTypePaths,
+    restartNotice:
+      "A layer directory was added or removed: restart 'ajs dms dev' to apply it. Vite reads the '#<layer>' aliases and the auto-imported directories at startup only.",
+  },
+  {
+    name: "locale catalogs",
+    affects: affectsLocaleMessages,
+    write: writeLocaleMessages,
+  },
+  {
+    name: "aggregated shortcuts",
+    affects: (path) => affectsAssetDirectory(SHORTCUTS_DIRECTORY, path),
+    write: writeShortcutExports,
+  },
+  {
+    name: "public assets",
+    affects: (path) => affectsAssetDirectory(PUBLIC_DIRECTORY, path),
+    write: writePublicAssets,
+  },
+];

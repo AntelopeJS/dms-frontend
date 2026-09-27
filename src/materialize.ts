@@ -22,11 +22,7 @@ import {
 } from "./config";
 import {
   createFrontendModuleRegistry,
-  writeFrontendModuleLoader,
-  writeFrontendTypePaths,
-  writeLocaleMessages,
-  writePublicAssets,
-  writeShortcutExports,
+  DERIVED_OUTPUTS,
 } from "./derived-outputs";
 import { getLayerWorkspacePath } from "./layers";
 import { ResolvedLayer } from "./workspace";
@@ -255,16 +251,8 @@ export function writeFrontendModuleRegistry(
   layers: ResolvedLayer[],
 ): void {
   const registry = createFrontendModuleRegistry(workspaceDir, layers);
-  writeFileSync(
-    join(workspaceDir, "generated-frontend-modules.json"),
-    `${JSON.stringify(registry, null, 2)}\n`,
-  );
   writeAuthEstablishEndpoints(workspaceDir, layers);
-  writeFrontendTypePaths(workspaceDir, registry);
-  writeFrontendModuleLoader(workspaceDir, registry);
-  writeLocaleMessages(workspaceDir, registry);
-  writeShortcutExports(workspaceDir, registry);
-  writePublicAssets(workspaceDir, registry);
+  for (const output of DERIVED_OUTPUTS) output.write(workspaceDir, registry);
 }
 
 /**

@@ -29,7 +29,8 @@ loader's contract with a renderer has three parts:
   `templates/<renderer>/` — `templates/vue/` today. `TEMPLATE_FILES` in
   `src/config.ts` lists what is copied verbatim, and `src/materialize.ts`
   resolves the template root, copies it, materializes the frontend modules
-  under `frontend-modules/`, and writes `generated-frontend-modules.json` in
+  under `frontend-modules/`, and writes the files derived from them
+  (`src/derived-outputs.ts`), `generated-frontend-modules.json` first, in
   manifest-priority order.
 - **Generated server.** `templates/vue/server.mjs` and `templates/vue/server/`
   become the Node server that `ajs dms start` runs from the built workspace:
@@ -323,6 +324,15 @@ Under `ajs dms dev`, an edit to a module's `i18n/locales/*.json` regenerates the
 merged catalogs the application imports: the next server render uses them, and
 the open page applies them in place, without a reload. Adding or removing a
 locale reloads the page instead.
+
+The other files the workspace derives from every module follow their sources
+the same way. A file added to, changed in or removed from a module's `public/`
+is served, or no longer served, at once. Adding or removing an
+`app/config/shortcuts-registry.ts` or a `dms.frontend.ts` regenerates the
+aggregated shortcuts or the module loader, and the page reloads. A layer
+directory added to or removed from `layers/` is the exception: Vite reads the
+`#<layer>` aliases and the auto-imported directories at startup only, so the
+dev server says it needs a restart.
 
 ## Options
 

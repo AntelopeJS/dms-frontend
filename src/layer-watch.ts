@@ -8,9 +8,10 @@ import { join, relative } from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 import { getLayerWorkspacePath } from "./layers";
 import {
-  affectsLocaleMessages,
   createFrontendModuleRegistry,
-  writeLocaleMessages,
+  DERIVED_OUTPUTS,
+  type DerivedOutput,
+  type FrontendModuleRegistry,
 } from "./derived-outputs";
 
 import { ResolvedLayer } from "./workspace";
@@ -28,13 +29,13 @@ import {
 const WATCH_DEBOUNCE_MS = 80;
 
 /**
- * Delay between the last pass that touched a locale file and the regeneration
- * of the catalogs, shared by every layer. It must stay above the 50 ms during
+ * Delay between the last pass that touched the sources of a derived output and
+ * its regeneration, shared by every layer. It must stay above the 50 ms during
  * which Vite's file watcher (chokidar, without FSEvents, so on Linux) drops a
  * second change to the same file: two regenerations closer than that would
  * leave the dev server on the first one.
  */
-const LOCALE_REFRESH_DEBOUNCE_MS = 100;
+const DERIVED_REFRESH_DEBOUNCE_MS = 100;
 
 /**
  * Per-layer event batcher. Watcher events are coalesced over
@@ -173,32 +174,61 @@ function createLayerSync(
 }
 
 /**
- * Regenerate the merged locale catalogs from the workspace copies, once the
- * passes that touched a locale file have settled. The catalogs merge every
+ * Regenerate the derived outputs whose sources the passes touched, from the
+ * workspace copies, once those passes have settled. Each output merges every
  * layer, so passes of several layers flushed together (a checkout, an editor
- * saving several files) make one regeneration with all of their changes. Only
- * the files whose content changed are rewritten, and Vite's own watcher takes
- * it from there.
+ * saving several files) make one regeneration per output with all of their
+ * changes, and an output no pass touched is left alone. Only the files whose
+ * content changed are rewritten, and Vite's own watcher takes it from there,
+ * except for an output it reads at startup only: that one says a restart is
+ * needed.
  */
-function createLocaleRefresher(workspaceDir: string, layers: ResolvedLayer[]) {
-  const registry = createFrontendModuleRegistry(workspaceDir, layers);
+function createDerivedOutputRefresher(
+  workspaceDir: string,
+  layers: ResolvedLayer[],
+) {
+  const pending = new Set<DerivedOutput>();
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const refresh = (): void => {
-    timer = null;
+  const regenerate = (
+    output: DerivedOutput,
+    registry: FrontendModuleRegistry,
+  ): void => {
     try {
-      writeLocaleMessages(workspaceDir, registry);
+      if (output.write(workspaceDir, registry) && output.restartNotice)
+        console.warn(`[ajs-dms] ${output.restartNotice}`);
     } catch (err) {
-      // Same reason as `warnFailure`: a catalog saved half-written must not
-      // take the dev process down. The previous catalogs stay in place.
-      console.warn("[ajs-dms] locale catalogs not regenerated:", err);
+      // Same reason as `warnFailure`: a file saved half-written, a catalog
+      // for instance, must not take the dev process down. The previous
+      // output stays in place.
+      console.warn(`[ajs-dms] ${output.name} not regenerated:`, err);
     }
   };
 
+  const refresh = (): void => {
+    timer = null;
+    const outputs = DERIVED_OUTPUTS.filter((output) => pending.has(output));
+    pending.clear();
+    let registry: FrontendModuleRegistry;
+    try {
+      // Built again: a module may have added or removed its entry since.
+      registry = createFrontendModuleRegistry(workspaceDir, layers);
+    } catch (err) {
+      console.warn("[ajs-dms] derived files not regenerated:", err);
+      return;
+    }
+    for (const output of outputs) regenerate(output, registry);
+  };
+
   return {
-    schedule() {
+    schedule(paths: string[]) {
+      const affected = DERIVED_OUTPUTS.filter((output) =>
+        paths.some((path) => output.affects(path)),
+      );
+      if (affected.length === 0) return;
+      for (const output of affected) pending.add(output);
       if (timer) clearTimeout(timer);
-      timer = setTimeout(refresh, LOCALE_REFRESH_DEBOUNCE_MS);
+      timer = setTimeout(refresh, DERIVED_REFRESH_DEBOUNCE_MS);
     },
     flushNow() {
       if (!timer) return;
@@ -226,10 +256,11 @@ function createLocaleRefresher(workspaceDir: string, layers: ResolvedLayer[]) {
  * through a debounced, content-gated, atomic applier (see
  * `createLayerSync`).
  *
- * Mirroring is not enough for the translations: the app imports the catalogs
- * materialization merged from every module, never a module's own locale
- * files, so a pass that touches one regenerates them (see
- * `createLocaleRefresher`).
+ * Mirroring is not enough for the files materialization derives from every
+ * module (the locale catalogs, the public assets, the aggregated shortcuts,
+ * the module loader and the type paths): the app reads those, never a
+ * module's own copy, so a pass that touches their sources regenerates them
+ * (see `createDerivedOutputRefresher`).
  */
 export function startLayerWatchers(
   workspaceDir: string,
@@ -237,15 +268,15 @@ export function startLayerWatchers(
 ): () => Promise<void> {
   const watchers: FSWatcher[] = [];
   const syncs: Array<ReturnType<typeof createLayerSync>> = [];
-  const localeRefresher = createLocaleRefresher(workspaceDir, layers);
+  const refresher = createDerivedOutputRefresher(workspaceDir, layers);
 
   for (const layer of layers) {
     if (!layer.packageName) continue;
     const dest = getLayerWorkspacePath(workspaceDir, layer);
     const src = layer.path;
-    const sync = createLayerSync(src, dest, (paths) => {
-      if (paths.some(affectsLocaleMessages)) localeRefresher.schedule();
-    });
+    const sync = createLayerSync(src, dest, (paths) =>
+      refresher.schedule(paths),
+    );
     syncs.push(sync);
 
     const watcher = chokidar.watch(src, {
@@ -266,7 +297,7 @@ export function startLayerWatchers(
   return async () => {
     await Promise.all(watchers.map((w) => w.close().catch(() => {})));
     for (const sync of syncs) sync.flushNow();
-    localeRefresher.flushNow();
+    refresher.flushNow();
   };
 }
 
