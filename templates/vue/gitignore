@@ -1,3 +1,9 @@
+# Translation catalogs are data, not markup, and Tailwind's automatic source
+# detection honors this file. A catalog it scans reloads the whole page when it
+# changes, where the dev server would otherwise apply the edited translations
+# in place.
+locales.generated/
+frontend-modules/**/i18n/locales/
 # Rewritten by the auto-import plugins while the dev server discovers new
 # components and composables. Tailwind's automatic source detection honors this
 # file: without it, every rewrite invalidates the stylesheets and triggers a

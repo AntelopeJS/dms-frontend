@@ -435,7 +435,7 @@ describe("Vite frontend generation", () => {
     assert.doesNotMatch(config, /"#imports"/);
   });
 
-  it("keeps dev-rewritten declaration files and build output out of Tailwind's source scan", () => {
+  it("keeps dev-rewritten declaration files, build output and translation catalogs out of Tailwind's source scan", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-gitignore-workspace-"));
     copyStaticTemplates(workspace);
     const ignored = readFileSync(join(workspace, ".gitignore"), "utf8")
@@ -445,6 +445,8 @@ describe("Vite frontend generation", () => {
       "auto-imports.d.ts",
       "components.d.ts",
       "dist/",
+      "frontend-modules/**/i18n/locales/",
+      "locales.generated/",
     ]);
   });
 

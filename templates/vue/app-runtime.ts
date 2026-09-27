@@ -44,6 +44,7 @@ import {
   loadLocaleMessages,
   localeMessages,
   supportedLocales,
+  syncLocaleMessages,
 } from "./locales.generated";
 import { showNetworkErrors } from "./network-error";
 
@@ -250,6 +251,9 @@ export async function configureDmsApp(
     fallbackLocale: DEFAULT_LOCALE,
     messages: { ...localeMessages, [locale]: messages },
   });
+  // A translation changed in a layer during development reaches the page
+  // without a reload. A server render imports the new catalogs instead.
+  if (typeof window !== "undefined") syncLocaleMessages(i18n.global);
   provideDmsFrontendRuntime(options.app, runtime);
   options.app.component("Icon", UIcon);
   options.app.use(options.inertiaPlugin).use(options.head).use(ui).use(i18n);

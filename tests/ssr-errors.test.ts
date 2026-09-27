@@ -43,7 +43,7 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
     );
     writeFileSync(
       join(workspace, "locales.generated.ts"),
-      'export const localeMessages={en:{},fr:{}};export const supportedLocales=["en","fr"];export const loadLocaleMessages=async()=>({});',
+      'export const localeMessages={en:{},fr:{}};export const supportedLocales=["en","fr"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );
     writeFileSync(
       join(workspace, "ui-stub.ts"),
