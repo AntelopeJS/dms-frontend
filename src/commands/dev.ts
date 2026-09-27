@@ -5,6 +5,7 @@ import {
   Options,
   projectWorkspaceKey,
   resolveBootstrapSecret,
+  resolveHtmlRenderSecret,
   resolveSessionSecret,
   runCommand,
   setupWorkspace,
@@ -117,16 +118,21 @@ export function cmdDev(): Command {
       await spinner.start();
 
       try {
-        const { workspaceDir, layers, manifestFromCache, manifestFetchedAt } =
-          await setupWorkspace({
-            backendUrl,
-            force: !!options.force,
-            mode: "dev",
-            offline: options.offline,
-            clientUrl,
-            workspaceKey,
-            bootstrapSecret,
-          });
+        const {
+          workspaceDir,
+          layers,
+          manifestFromCache,
+          manifestFetchedAt,
+          htmlRenderSecret,
+        } = await setupWorkspace({
+          backendUrl,
+          force: !!options.force,
+          mode: "dev",
+          offline: options.offline,
+          clientUrl,
+          workspaceKey,
+          bootstrapSecret,
+        });
 
         await spinner.succeed("Workspace ready");
 
@@ -169,6 +175,7 @@ export function cmdDev(): Command {
             DMS_API_BASE_URL: backendUrl,
             DMS_BOOTSTRAP_SECRET: bootstrapSecret,
             DMS_SESSION_SECRET: sessionSecret,
+            DMS_HTML_RENDER_SECRET: resolveHtmlRenderSecret(htmlRenderSecret),
             NODE_OPTIONS: "--max-old-space-size=4096",
             NODE_PATH: nodeModulesDir,
           },

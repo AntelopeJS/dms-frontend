@@ -6,6 +6,7 @@ export * from "./layers";
 export * from "./layer-aliases";
 export * from "./manifest";
 export * from "./fs-sync";
+export * from "./html-render-secret";
 export * from "./layer-watch";
 export * from "./materialize";
 export * from "./workspace";

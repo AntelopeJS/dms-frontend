@@ -336,6 +336,7 @@ locale reloads the page instead.
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
 | | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
+| | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests. `ajs dms dev` and `ajs dms start` default it to the `htmlRender.serviceSecret` the backend publishes in the frontend manifest; set it to override that value |
 | | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Extra backend endpoints `/auth/establish` may open a session from, on top of those the backend's modules declare (comma-separated, empty by default) |
 | | `DMS_CLIENT_BASE_URL` | Public frontend URL used in generated links and emails |
 
