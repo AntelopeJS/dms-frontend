@@ -1201,12 +1201,17 @@ export function trackDmsAsyncComponents(app: App): Set<string> {
  * a process-wide hook registry and only unregisters there, so every server
  * render of the dashboard sidebar stayed reachable, its whole component tree
  * and page props with it, until the server ran out of heap.
+ *
+ * The component's scope is read through `getCurrentScope`: Vue makes it the
+ * active scope before it calls `beforeCreate`, and the instance's own `scope`
+ * field is internal, absent from the typings a generated workspace checks.
  */
 export function trackDmsServerScopes(app: App): () => void {
   const scopes: EffectScope[] = [];
   app.mixin({
-    beforeCreate(this: ComponentPublicInstance) {
-      scopes.push(this.$.scope);
+    beforeCreate() {
+      const scope = getCurrentScope();
+      if (scope) scopes.push(scope);
     },
   });
   return () => {

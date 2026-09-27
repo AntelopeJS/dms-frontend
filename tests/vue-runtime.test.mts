@@ -9,6 +9,7 @@ import {
   defineComponent,
   h,
   nextTick,
+  onScopeDispose,
   ref,
 } from "vue";
 import {
@@ -21,6 +22,7 @@ import {
   resolveDmsAsyncComponents,
   serializeDmsAsyncData,
   trackDmsAsyncComponents,
+  trackDmsServerScopes,
   useDmsAsyncData,
   useError,
   useDmsRuntimeHooks,
@@ -557,5 +559,25 @@ describe("Async component hydration", () => {
     assert.equal(block.__asyncResolved, undefined);
     await resolveDmsAsyncComponents(["ResolvedAheadBlock", "UnknownBlock"]);
     assert.ok(block.__asyncResolved);
+  });
+});
+
+describe("Server render scopes", () => {
+  it("stops the scope of every component a server render created", async () => {
+    const disposed: string[] = [];
+    const disposable = (label: string, child?: () => unknown) =>
+      defineComponent({
+        setup() {
+          onScopeDispose(() => disposed.push(label));
+          return () => h("span", [label, child?.()]);
+        },
+      });
+    const Leaf = disposable("leaf");
+    const app = createSSRApp(disposable("root", () => h(Leaf)));
+    const stopScopes = trackDmsServerScopes(app);
+    assert.match(await renderToString(app), /root.*leaf/);
+    assert.deepEqual(disposed, []);
+    stopScopes();
+    assert.deepEqual(disposed, ["root", "leaf"]);
   });
 });
