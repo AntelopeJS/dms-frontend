@@ -135,6 +135,8 @@ export default frontendModule;
 
 The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
 
+Within one setup, the first module to register a name keeps it. `ajs-dms dev` sets every module up again each time a change to a layer reaches the server renderer, into empty registries, so the next server render uses the edited component without a restart. A `setup` may therefore run more than once in a process: it should only register, and keep no state of its own between runs.
+
 ### Redirecting typed access refusals
 
 A backend can refuse a whole surface with a typed 403 whose body is a machine-readable code, such as a tenant access gate blocking a suspended workspace. A module that owns such a code registers where a refused page visit goes instead of the error page:

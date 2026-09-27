@@ -358,7 +358,9 @@ function createDmsFrontendRegistry(): DmsFrontendRegistry {
   };
 }
 
-const registry = createDmsFrontendRegistry();
+// Replaced, never refilled, by each setup of the modules: see
+// `setupFrontendModules`.
+let registry = createDmsFrontendRegistry();
 const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
@@ -1480,17 +1482,35 @@ function createSdk(
   };
 }
 
-/** Initializes frontend adapters in their generated priority order. */
+/**
+ * Sets the frontend modules up in their generated priority order, into a
+ * registry of their own that replaces the previous one once complete.
+ *
+ * The browser and a production server set the modules up once. A development
+ * server sets them up again each time Vite evaluates the server renderer anew
+ * after a layer changes, but keeps this module and its state: registering into
+ * the previous registry, the new components lost their names to the ones they
+ * replace, so the server kept rendering the old ones, and every list gained the
+ * same entries once more. A render still in progress keeps reading a complete
+ * registry: the new one is only published once every module is set up.
+ */
 export async function setupFrontendModules(
   registrations: DmsFrontendModuleRegistration[],
 ): Promise<void> {
+  const next = createDmsFrontendRegistry();
+  // Modules read and extend these two while they are set up (the DMS layout
+  // merges its app config into `useDmsAppConfig()`), so they restart empty
+  // here rather than being published with the registry.
+  runtimeConfig.value.public = {} as PublicRuntimeConfig;
+  appConfig.value = {};
   for (const registration of registrations) {
     runtimeConfig.value.public = defu(
       runtimeConfig.value.public,
       registration.options.public,
     );
-    await registration.module.setup(createSdk(registry, registration.options));
+    await registration.module.setup(createSdk(next, registration.options));
   }
+  registry = next;
 }
 
 export async function installDmsPlugins(

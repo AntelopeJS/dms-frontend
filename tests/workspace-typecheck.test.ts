@@ -57,6 +57,27 @@ function generatedWorkspace(moduleFiles: Record<string, string>): string {
   return workspace;
 }
 
+/**
+ * A generated workspace wired to the shipped runtime the way `materialize`
+ * wires it: the registry imports `./frontend-module`, and modules reach it
+ * through `#dms/frontend-module`.
+ */
+function shippedRuntimeWorkspace(moduleFiles: Record<string, string>): string {
+  const workspace = generatedWorkspace(moduleFiles);
+  for (const file of ["frontend-module.ts", "globals.d.ts"]) {
+    cpSync(join(repoRoot, "templates", "vue", file), join(workspace, file));
+  }
+  writeFileSync(
+    join(workspace, "frontend-paths.generated.json"),
+    '{ "compilerOptions": { "paths": { "#dms/frontend-module": ["./frontend-module.ts"] } } }\n',
+  );
+  writeFileSync(
+    join(workspace, "frontend-modules.generated.ts"),
+    'import type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [];\n',
+  );
+  return workspace;
+}
+
 function typecheck(workspace: string): { code: number; output: string } {
   try {
     const output = execFileSync(
@@ -120,21 +141,23 @@ describe("generated workspace typecheck", () => {
     // `#dms/frontend-module`, so every generated workspace typechecks the
     // shipped runtime. This repository's own tsconfig only covers `src/`,
     // which let an internal Vue field through to every consumer's check.
-    const workspace = generatedWorkspace({
+    const workspace = shippedRuntimeWorkspace({
       "probe.ts":
         'import { useDmsState } from "#dms/frontend-module";\nexport const probe = useDmsState("probe", () => 1);\n',
     });
-    for (const file of ["frontend-module.ts", "globals.d.ts"]) {
-      cpSync(join(repoRoot, "templates", "vue", file), join(workspace, file));
-    }
-    writeFileSync(
-      join(workspace, "frontend-paths.generated.json"),
-      '{ "compilerOptions": { "paths": { "#dms/frontend-module": ["./frontend-module.ts"] } } }\n',
-    );
-    writeFileSync(
-      join(workspace, "frontend-modules.generated.ts"),
-      'import type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [];\n',
-    );
+
+    const result = typecheck(workspace);
+    assert.equal(result.code, 0, result.output);
+  });
+
+  it("checks the shipped frontend runtime against the config modules declare", () => {
+    // Modules declare their public options on `PublicRuntimeConfig`, and the
+    // DMS layout makes its `dms` key required: the runtime must not type an
+    // empty config as one, not even while it rebuilds it for a new setup.
+    const workspace = shippedRuntimeWorkspace({
+      "runtime-config.d.ts":
+        'declare module "#dms/frontend-module" {\n  interface PublicRuntimeConfig {\n    dms: { baseURL: string };\n  }\n}\n\nexport {};\n',
+    });
 
     const result = typecheck(workspace);
     assert.equal(result.code, 0, result.output);
