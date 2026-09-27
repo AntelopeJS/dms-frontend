@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.0...v0.3.1)
+
+### 🩹 Fixes
+
+- **server:** Clean error pages, server-side access redirects and dev email bundle ([#41](https://github.com/AntelopeJS/dms-frontend/pull/41))
+- **server:** Resilient dev server and network-error feedback ([#42](https://github.com/AntelopeJS/dms-frontend/pull/42))
+- **server:** Stop the production server from keeping every render it serves ([#44](https://github.com/AntelopeJS/dms-frontend/pull/44))
+- **dev:** Release the reserved port while a client is connected to it ([#48](https://github.com/AntelopeJS/dms-frontend/pull/48))
+- **dev:** Apply translations changed in a layer without a restart ([#49](https://github.com/AntelopeJS/dms-frontend/pull/49))
+- **server:** Pass the manifest's secrets to the frontend server ([#53](https://github.com/AntelopeJS/dms-frontend/pull/53))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+- Alessandro Aloisio ([@alessaloisio](http://github.com/alessaloisio))
+
 ## v0.3.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.2.8...v0.3.0)
