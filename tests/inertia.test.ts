@@ -327,6 +327,53 @@ describe("Inertia HTTP protocol", () => {
     assert.equal(writeCount, 0);
   });
 
+  it("releases the backend stream of a client that leaves before it answers", async () => {
+    let backendClosed: () => void = () => {};
+    const released = new Promise<void>((settle) => {
+      backendClosed = settle;
+    });
+    const backend = createServer((request, response) => {
+      request.socket.once("close", backendClosed);
+      setTimeout(() => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write(": open\n\n");
+      }, 100);
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const address = backend.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    const runtime = await server;
+    const frontend = createServer(runtime.handleRequestSafely);
+    await new Promise<void>((resolve) =>
+      frontend.listen(0, "127.0.0.1", resolve),
+    );
+    const frontendAddress = frontend.address();
+    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    try {
+      await assert.rejects(
+        fetch(`http://127.0.0.1:${frontendAddress.port}/api/feed`, {
+          headers: { accept: "text/event-stream" },
+          signal: AbortSignal.timeout(20),
+        }),
+      );
+      const timeout = new Promise<string>((settle) =>
+        setTimeout(() => settle("still open"), 2_000).unref(),
+      );
+      assert.equal(
+        await Promise.race([released.then(() => "released"), timeout]),
+        "released",
+      );
+    } finally {
+      frontend.closeAllConnections();
+      frontend.close();
+      backend.closeAllConnections();
+      backend.close();
+    }
+  });
+
   it("injects the SSR body without replacement-token expansion", async () => {
     const source = await import("node:fs/promises").then(({ readFile }) =>
       readFile(join(process.cwd(), "templates", "vue", "server.mjs"), "utf8"),
