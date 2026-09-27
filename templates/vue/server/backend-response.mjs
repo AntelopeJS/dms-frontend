@@ -6,13 +6,10 @@
 import { GENERIC_ERROR_MESSAGE } from "./auth/backend.mjs";
 import { isFrontendVisit, redirectFrontendVisit } from "./inertia.mjs";
 
-// What a visitor sees when the backend fails: the technical cause only reaches
-// the server log. A page gets the SSR renderer's unexpected-error wording, a
-// JSON caller the generic i18n key of the API error contract.
-export const UNEXPECTED_ERROR = {
-  statusMessage: "Application error",
-  message: "An unexpected error occurred",
-};
+// What a JSON caller gets when the backend fails: the generic i18n key of the
+// API error contract. A page gets the status code alone, which the DMS error
+// page describes in the visitor's language; the technical cause only reaches
+// the server log.
 export const UNEXPECTED_ERROR_BODY = { message: GENERIC_ERROR_MESSAGE };
 // A typed refusal carries a machine-readable i18n key as its body, bare or
 // JSON-encoded, e.g. `saas.errors.workspace.access_blocked`.

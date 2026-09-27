@@ -421,8 +421,12 @@ describe("Inertia HTTP protocol", () => {
         assert.equal(response.status, 503);
         assert.doesNotMatch(body, /must-not-leak/);
         assert.doesNotMatch(body, /DMS backend request failed/);
-        assert.match(body, /An unexpected error occurred/);
-        assert.match(body, /statusCode(?:&quot;|\\?"):503/);
+        assert.doesNotMatch(body, /An unexpected error occurred/);
+        assert.doesNotMatch(body, /Application error/);
+        assert.match(
+          body,
+          /error(?:&quot;|\\?"):\{(?:&quot;|\\?")statusCode(?:&quot;|\\?"):503\}/,
+        );
         if ("x-inertia" in headers)
           assert.equal(response.headers.get("x-inertia"), "true");
         else

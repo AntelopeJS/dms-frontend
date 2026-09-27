@@ -76,7 +76,7 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('exact',defineComponent({setup(){return()=>h('p','Exact registered page:'+(exactPreloads>0)+':catch-all:'+catchAllPreloads)}}),async()=>{exactPreloads++});
  sdk.registerDynamicPage('[...slug]',defineComponent({setup(){return()=>h('p','Registered catch-all page:'+(catchAllPreloads>0))}}),async()=>{catchAllPreloads++});
  sdk.registerAccessRedirect('fixture.errors.access_blocked','/blocked-screen');
- sdk.registerErrorPage(defineComponent({props:['error'],setup(props){return()=>h('main',{id:'error'},props.error.statusCode+': '+props.error.message)}}));
+ sdk.registerErrorPage(defineComponent({props:['error'],setup(props){return()=>h('main',{id:'error'},props.error.statusCode+': '+(props.error.message??'no message')+' / '+(props.error.statusMessage??'no status message'))}}));
 }}}];`,
     );
     writeFileSync(
@@ -173,7 +173,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     });
     assert.equal(unexpected.status, 500);
     const unexpectedHtml = await unexpected.text();
-    assert.match(unexpectedHtml, /500: An unexpected error occurred/);
+    assert.match(unexpectedHtml, /500: no message \/ no status message/);
     assert.doesNotMatch(unexpectedHtml, /private database hostname/);
     const exact = await fetch(`${base}/exact`, {
       headers: { accept: "text/html" },
@@ -277,7 +277,10 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.equal(failedSession.status, 503);
     const failedSessionBody = await failedSession.text();
     assert.match(failedSessionBody, /account-bob|tenant-bob/);
-    assert.match(failedSessionBody, /An unexpected error occurred/);
+    assert.equal(
+      JSON.stringify(JSON.parse(failedSessionBody).props.error),
+      '{"statusCode":503}',
+    );
     assert.doesNotMatch(failedSessionBody, /DMS backend request failed/);
     assert.doesNotMatch(
       failedSessionBody,

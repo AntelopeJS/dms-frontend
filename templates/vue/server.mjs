@@ -22,7 +22,6 @@ import {
   BackendResponseError,
   backendResponseError,
   redirectAccessRefusal,
-  UNEXPECTED_ERROR,
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
@@ -388,7 +387,7 @@ async function writeBackendError(error, request, response) {
       path: pathname,
       page: {},
       ...publicSession(readSession(request)),
-      error: { statusCode: status, ...UNEXPECTED_ERROR },
+      error: { statusCode: status },
     };
     const page = createInertiaPage(request.url, props);
     if (request.headers[INERTIA_HEADER]) {
