@@ -336,10 +336,14 @@ locale reloads the page instead.
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
 | | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
+| | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests; without it, e-mail renders are refused. Defaults to the `htmlRender.serviceSecret` the backend publishes in the frontend manifest |
+| | `DMS_OAUTH_RELAY_SECRET` | Secret the server presents to the backend's OAuth endpoints; without it, the backend refuses OAuth sign-in. Defaults to the `oauth.relaySecret` the backend publishes in the frontend manifest |
 | | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Extra backend endpoints `/auth/establish` may open a session from, on top of those the backend's modules declare (comma-separated, empty by default) |
 | | `DMS_CLIENT_BASE_URL` | Public frontend URL used in generated links and emails |
 
 All of these can be set in the project's `.env` instead of the environment; see [Configuration](#configuration).
+
+`ajs dms dev` takes the two manifest secrets from the manifest it fetches, and `ajs dms start` from the manifest cached by `ajs dms build`. An explicitly set variable always wins over the manifest value. Before the server starts, both commands log where each secret comes from (`env`, `manifest`, `build-time manifest` or `not set`), never its value. When several modules publish the same secret, the first one in manifest-priority order wins, and a module publishing a different value is named in a warning.
 
 Use pnpm for all repository and workspace operations.
 

@@ -52,10 +52,12 @@ export interface ManifestModule {
   priority: number;
   options?: FrontendModuleOptions;
   /**
-   * Secrets the backend serves to an authenticated caller. The loader itself
-   * consumes none of them — the generated server reads its OAuth relay and
-   * HTML render secrets from the environment — but they land verbatim in the
-   * manifest cache, which is why that file is written 0600.
+   * Secrets the backend serves to an authenticated caller. The generated
+   * server reads its OAuth relay and HTML render secrets from the
+   * environment; `dev` and `start` hand it the ones found here (see
+   * `MANIFEST_SECRET_ENV`) unless the environment sets them. They land
+   * verbatim in the manifest
+   * cache, which is why that file is written 0600.
    */
   privateOptions?: FrontendModuleOptions;
   configKey?: string;

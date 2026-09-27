@@ -5,6 +5,8 @@ import {
   Options,
   projectWorkspaceKey,
   resolveBootstrapSecret,
+  reportManifestSecrets,
+  resolveManifestSecrets,
   resolveSessionSecret,
   runCommand,
   setupWorkspace,
@@ -117,16 +119,21 @@ export function cmdDev(): Command {
       await spinner.start();
 
       try {
-        const { workspaceDir, layers, manifestFromCache, manifestFetchedAt } =
-          await setupWorkspace({
-            backendUrl,
-            force: !!options.force,
-            mode: "dev",
-            offline: options.offline,
-            clientUrl,
-            workspaceKey,
-            bootstrapSecret,
-          });
+        const {
+          workspaceDir,
+          layers,
+          manifestFromCache,
+          manifestFetchedAt,
+          manifestSecrets,
+        } = await setupWorkspace({
+          backendUrl,
+          force: !!options.force,
+          mode: "dev",
+          offline: options.offline,
+          clientUrl,
+          workspaceKey,
+          bootstrapSecret,
+        });
 
         await spinner.succeed("Workspace ready");
 
@@ -154,6 +161,8 @@ export function cmdDev(): Command {
         console.log(
           chalk.dim(`  Watching:  ${layers.length} layer source tree(s)`),
         );
+        const secrets = resolveManifestSecrets(manifestSecrets);
+        reportManifestSecrets(secrets);
         console.log("");
 
         const nodeModulesDir = join(workspaceDir, "node_modules");
@@ -169,6 +178,7 @@ export function cmdDev(): Command {
             DMS_API_BASE_URL: backendUrl,
             DMS_BOOTSTRAP_SECRET: bootstrapSecret,
             DMS_SESSION_SECRET: sessionSecret,
+            ...secrets.env,
             NODE_OPTIONS: "--max-old-space-size=4096",
             NODE_PATH: nodeModulesDir,
           },

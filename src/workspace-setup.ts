@@ -17,6 +17,10 @@ import {
 } from "./layers";
 import { assertCachedLayerPathsExist, resolveManifest } from "./manifest";
 import {
+  collectManifestSecrets,
+  type ManifestSecrets,
+} from "./manifest-secrets";
+import {
   writeFrontendModuleRegistry,
   copyStaticTemplates,
   materializeLayers,
@@ -261,6 +265,8 @@ export interface SetupWorkspaceResult {
   manifestFromCache: boolean;
   /** ISO timestamp of the cached manifest, when `manifestFromCache` is true */
   manifestFetchedAt?: string;
+  /** Server secrets the backend published in the manifest */
+  manifestSecrets: ManifestSecrets;
 }
 
 /**
@@ -340,6 +346,7 @@ export async function setupWorkspace(
     layers,
     manifestFromCache: fromCache,
     manifestFetchedAt: fetchedAt,
+    manifestSecrets: collectManifestSecrets(manifest.modules),
   };
 }
 
