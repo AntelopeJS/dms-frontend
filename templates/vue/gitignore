@@ -4,3 +4,6 @@
 # CSS hot update on plain navigation.
 auto-imports.d.ts
 components.d.ts
+# Build output, which the email bundle watcher rewrites during development:
+# read as Tailwind sources, each rebuild would push a burst of CSS updates.
+dist/

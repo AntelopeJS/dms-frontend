@@ -18,6 +18,7 @@ import {
   createDmsFrontendRuntime,
   hasDmsPage,
   preloadDmsPage,
+  resolveDmsAccessRedirect,
   setDmsServerRuntimeResolver,
   setupFrontendModules,
 } from "./frontend-module";
@@ -71,6 +72,10 @@ await setupFrontendModules(frontendModules);
 
 export function isDmsFrontendPage(path: string): boolean {
   return hasDmsPage(path);
+}
+
+export function accessRedirect(code: string): string | undefined {
+  return resolveDmsAccessRedirect(code);
 }
 
 export async function renderDmsPage(
@@ -133,11 +138,17 @@ async function renderDmsPageWithRuntime(
       Number.isInteger(failure.statusCode) &&
       failure.statusCode! >= 400 &&
       failure.statusCode! <= 599;
-    const error = {
-      statusCode: expected ? failure.statusCode : 500,
-      message: expected ? failure.message : "An unexpected error occurred",
-      statusMessage: expected ? failure.statusMessage : "Application error",
-    };
+    // An unexpected failure reaches the page as its status code alone, which
+    // the DMS error page describes in the visitor's language; the technical
+    // cause only reaches the server log.
+    if (!expected) console.error("DMS page render failed", failure);
+    const error = expected
+      ? {
+          statusCode: failure.statusCode,
+          message: failure.message,
+          statusMessage: failure.statusMessage,
+        }
+      : { statusCode: 500 };
     return renderDmsPage(
       { ...page, props: { ...page.props, error } },
       serverFetch,

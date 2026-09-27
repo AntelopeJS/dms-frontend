@@ -24,6 +24,11 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
       response.end('{"message":"Not found"}');
       return;
     }
+    if (path === "/suspended") {
+      response.writeHead(403, { "content-type": "text/plain" });
+      response.end("fixture.errors.access_blocked");
+      return;
+    }
     if (path === "/broken") response.statusCode = 503;
     response.end(JSON.stringify({ componentName: path.slice(1) }));
   });
@@ -70,7 +75,8 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('healthy',defineComponent({async setup(){await new Promise(r=>setTimeout(r,5));return()=>h('p','Healthy request')}}));
  sdk.registerPage('exact',defineComponent({setup(){return()=>h('p','Exact registered page:'+(exactPreloads>0)+':catch-all:'+catchAllPreloads)}}),async()=>{exactPreloads++});
  sdk.registerDynamicPage('[...slug]',defineComponent({setup(){return()=>h('p','Registered catch-all page:'+(catchAllPreloads>0))}}),async()=>{catchAllPreloads++});
- sdk.registerErrorPage(defineComponent({props:['error'],setup(props){return()=>h('main',{id:'error'},props.error.statusCode+': '+props.error.message)}}));
+ sdk.registerAccessRedirect('fixture.errors.access_blocked','/blocked-screen');
+ sdk.registerErrorPage(defineComponent({props:['error'],setup(props){return()=>h('main',{id:'error'},props.error.statusCode+': '+(props.error.message??'no message')+' / '+(props.error.statusMessage??'no status message'))}}));
 }}}];`,
     );
     writeFileSync(
@@ -167,7 +173,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     });
     assert.equal(unexpected.status, 500);
     const unexpectedHtml = await unexpected.text();
-    assert.match(unexpectedHtml, /500: An unexpected error occurred/);
+    assert.match(unexpectedHtml, /500: no message \/ no status message/);
     assert.doesNotMatch(unexpectedHtml, /private database hostname/);
     const exact = await fetch(`${base}/exact`, {
       headers: { accept: "text/html" },
@@ -271,10 +277,23 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.equal(failedSession.status, 503);
     const failedSessionBody = await failedSession.text();
     assert.match(failedSessionBody, /account-bob|tenant-bob/);
+    assert.equal(
+      JSON.stringify(JSON.parse(failedSessionBody).props.error),
+      '{"statusCode":503}',
+    );
+    assert.doesNotMatch(failedSessionBody, /DMS backend request failed/);
     assert.doesNotMatch(
       failedSessionBody,
       /private-access-token|private-refresh-token/,
     );
+    for (const headers of [{ accept: "text/html" }, { "x-inertia": "true" }]) {
+      const suspended = await fetch(`${base}/suspended`, {
+        headers: { ...headers, cookie: sessionCookie("bob", "en") },
+        redirect: "manual",
+      });
+      assert.equal(suspended.status, 302);
+      assert.equal(suspended.headers.get("location"), "/blocked-screen");
+    }
   } finally {
     frontend?.close();
     backend.close();
