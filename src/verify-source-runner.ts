@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import {
+  assertLayersSupportRenderer,
   createFrontendModuleRegistry,
   getPackageRoot,
   materializeLayers,
@@ -63,6 +64,7 @@ const layers: ResolvedLayer[] = roots.map((root) => ({
   packageName: JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
     .name,
 }));
+assertLayersSupportRenderer(layers);
 materializeLayers(workspace, layers);
 const registry = createFrontendModuleRegistry(workspace, layers);
 registry.modules.forEach((module) => {

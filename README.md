@@ -138,6 +138,25 @@ The SDK also exposes `use` for Vue plugins. Entries execute by descending manife
 
 Within one setup, the first module to register a name keeps it. `ajs-dms dev` sets every module up again each time a change to a layer reaches the server renderer, into empty registries, so the next server render uses the edited component without a restart. A `setup` may therefore run more than once in a process: it should only register, and keep no state of its own between runs.
 
+### Declaring the loader releases a module supports
+
+A frontend module names the `@antelopejs/dms-frontend` releases it runs on in its own `package.json`, the way a package names the Node.js versions it supports:
+
+```json
+{
+  "name": "@acme/dms-billing-frontend-vue",
+  "engines": {
+    "@antelopejs/dms-frontend": ">=0.3.2 <0.4.0"
+  }
+}
+```
+
+`prepare`, `dev`, `build` and `verify-source` read it before they generate anything, whether the manifest was just fetched or replayed from the cache, and stop when this release falls outside a module's range: `dev`, `build` and `verify-source` exit 1, and `prepare` warns and exits 0, as it does for any setup it cannot complete. The message names each such module, its range and this release, rather than letting the build, the type-check or a render fail later on an API the release no longer has, or does not have yet. A prerelease is checked as the release it leads to: `0.4.0-next.1` is outside `<0.4.0`. A module that declares no range still loads, and a warning names it once. `start` checks nothing: it runs what `build` produced.
+
+Cap the range below the next breaking release, which is the next minor release while this package is 0.x, and widen it once the module has been checked against that release. A range left open to `<1.0.0` admits the very release that removes something the module calls.
+
+The range is an engine rather than a peer dependency: the generated workspace installs every module as a workspace package, and pnpm installs a workspace package's peer dependencies, optional ones included, so a peer on the loader would pull a copy of it into every workspace. Package managers ignore an engine they do not know, and so does a loader released before this check.
+
 ### Redirecting typed access refusals
 
 A backend can refuse a whole surface with a typed 403 whose body is a machine-readable code, such as a tenant access gate blocking a suspended workspace. A module that owns such a code registers where a refused page visit goes instead of the error page:
@@ -370,6 +389,6 @@ ajs dms verify-source \
   --local-package @antelopejs/dms=/path/to/dms
 ```
 
-The verifier prints its generated workspace path, builds client, SSR, and email bundles, runs `vue-tsc`, renders eight DMS email templates, and checks that the email bundle excludes browser-only modules. It leaves the generated workspace in the temporary directory for inspection. It does not start a backend or publish packages. Repository development can invoke the same runner with `DMS_LAYER_SOURCE` through `pnpm test:real-source`.
+A supplied package whose declared range excludes this adapter version is refused before anything is installed (see [Declaring the loader releases a module supports](#declaring-the-loader-releases-a-module-supports)). The verifier prints its generated workspace path, builds client, SSR, and email bundles, runs `vue-tsc`, renders eight DMS email templates, and checks that the email bundle excludes browser-only modules. It leaves the generated workspace in the temporary directory for inspection. It does not start a backend or publish packages. Repository development can invoke the same runner with `DMS_LAYER_SOURCE` through `pnpm test:real-source`.
 
 Refresh rotation is single-flight within one frontend process. Horizontally scaled deployments must use sticky routing so a browser reaches the same process, or replace this process-local behavior with an external session adapter. It does not provide a distributed rotation guarantee.

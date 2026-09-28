@@ -72,18 +72,31 @@ function sortModulesByPriority<T extends ManifestModule>(modules: T[]): T[] {
   return [...modules].sort((a, b) => b.priority - a.priority);
 }
 
+/** The fields of a layer's package.json the loader reads. */
+export interface LayerPackage {
+  name?: unknown;
+  engines?: Record<string, unknown>;
+}
+
+/**
+ * Read a layer's package.json, or undefined when it is missing or unreadable.
+ */
+export function readLayerPackage(layerPath: string): LayerPackage | undefined {
+  const pkgPath = join(layerPath, "package.json");
+  if (!existsSync(pkgPath)) return undefined;
+  try {
+    return JSON.parse(readFileSync(pkgPath, "utf-8"));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Read a layer's npm package name from its package.json "name" field.
  */
 function readLayerPackageName(layerPath: string): string | undefined {
-  const pkgPath = join(layerPath, "package.json");
-  if (!existsSync(pkgPath)) return undefined;
-  try {
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-    return typeof pkg.name === "string" ? pkg.name : undefined;
-  } catch {
-    return undefined;
-  }
+  const name = readLayerPackage(layerPath)?.name;
+  return typeof name === "string" ? name : undefined;
 }
 
 function resolveLayer(layerPath: string, mod: ManifestModule): ResolvedLayer {
