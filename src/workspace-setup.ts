@@ -20,6 +20,7 @@ import {
   collectManifestSecrets,
   type ManifestSecrets,
 } from "./manifest-secrets";
+import { assertLayersSupportRenderer } from "./renderer-range";
 import {
   writeFrontendModuleRegistry,
   copyStaticTemplates,
@@ -270,10 +271,11 @@ export interface SetupWorkspaceResult {
 }
 
 /**
- * Full workspace setup: fetch the manifest, resolve frontend modules, copy
- * templates, write the workspace package.json with `workspace:*` deps,
- * materialize each module under `<workspace>/frontend-modules/<safeName>/`,
- * write the generated module registry and dms-main.css, and install deps.
+ * Full workspace setup: fetch the manifest, resolve frontend modules, check
+ * that each supports this loader release, copy templates, write the workspace
+ * package.json with `workspace:*` deps, materialize each module under
+ * `<workspace>/frontend-modules/<safeName>/`, write the generated module
+ * registry and dms-main.css, and install deps.
  */
 export async function setupWorkspace(
   opts: SetupWorkspaceOptions,
@@ -323,6 +325,8 @@ export async function setupWorkspace(
     }
     layers = await buildLayersFromCache(manifest.modules, cacheDir);
   }
+
+  assertLayersSupportRenderer(layers);
 
   copyStaticTemplates(workspaceDir);
   writeWorkspacePackageJson(workspaceDir, layers);

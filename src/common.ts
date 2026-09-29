@@ -10,5 +10,6 @@ export * from "./manifest-secrets";
 export * from "./layer-watch";
 export * from "./materialize";
 export * from "./derived-outputs";
+export * from "./renderer-range";
 export * from "./workspace";
 export * from "./workspace-setup";
