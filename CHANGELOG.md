@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.3.3
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.2...v0.3.3)
+
+### 🚀 Enhancements
+
+- **workspace:** Refuse a frontend module whose range excludes this release ([#59](https://github.com/AntelopeJS/dms-frontend/pull/59))
+
+### 🩹 Fixes
+
+- **dev:** Render an edited component on the server without a restart ([#55](https://github.com/AntelopeJS/dms-frontend/pull/55))
+- **dev:** Refresh every file derived from the layers without a restart ([#56](https://github.com/AntelopeJS/dms-frontend/pull/56))
+
+### ✅ Tests
+
+- **email:** Treat a catalog read mid-rebuild as not rebuilt yet ([#58](https://github.com/AntelopeJS/dms-frontend/pull/58))
+
+### ❤️ Contributors
+
+- Alessandro Aloisio ([@alessaloisio](http://github.com/alessaloisio))
+
 ## v0.3.2
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.1...v0.3.2)
