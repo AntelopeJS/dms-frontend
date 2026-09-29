@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import {
   cpSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -39,10 +38,15 @@ it("rebuilds the email catalogs when they are regenerated during a watch-mode bu
     packageName: "@fixture/mail",
   };
   const emitted = join(workspace, "dist", "server", "locales", "en.json");
-  const subject = (): string | undefined =>
-    existsSync(emitted)
-      ? JSON.parse(readFileSync(emitted, "utf8")).subject
-      : undefined;
+  // Rollup rewrites the emitted catalog in place, so a read can find it
+  // missing or half written while a rebuild runs: not there yet.
+  const subject = (): string | undefined => {
+    try {
+      return JSON.parse(readFileSync(emitted, "utf8")).subject;
+    } catch {
+      return undefined;
+    }
+  };
   try {
     mkdirSync(join(layer.path, "i18n", "locales"), { recursive: true });
     writeFileSync(
