@@ -108,12 +108,14 @@ export function filesIdentical(srcPath: string, destPath: string): boolean {
  * package.json) — `applyFile` would always copy in that case because the
  * on-disk dest is never byte-identical to the untransformed source, defeating
  * the content-gate for that file.
+ *
+ * @returns Whether it wrote the file
  */
-export function applyContent(content: string, destPath: string): void {
+export function applyContent(content: string, destPath: string): boolean {
   const buf = Buffer.from(content);
   if (existsSync(destPath)) {
     try {
-      if (readFileSync(destPath).equals(buf)) return;
+      if (readFileSync(destPath).equals(buf)) return false;
     } catch {
       // unreadable dest — fall through and overwrite
     }
@@ -126,6 +128,7 @@ export function applyContent(content: string, destPath: string): void {
   } finally {
     if (existsSync(tmp)) rmSync(tmp, { force: true });
   }
+  return true;
 }
 
 /**
@@ -133,9 +136,11 @@ export function applyContent(content: string, destPath: string): void {
  * Writes to a temp sibling then `rename`s into place, so a reader (e.g.
  * unimport's export scanner during `regenerateImports`) never observes a
  * half-written file — the root of the `ENOENT ... scanExports` crashes.
+ *
+ * @returns Whether it copied the file
  */
-export function applyFile(srcPath: string, destPath: string): void {
-  if (filesIdentical(srcPath, destPath)) return;
+export function applyFile(srcPath: string, destPath: string): boolean {
+  if (filesIdentical(srcPath, destPath)) return false;
   mkdirSync(dirname(destPath), { recursive: true });
   const tmp = `${destPath}.ajs-dms-tmp-${process.pid}-${Date.now()}`;
   try {
@@ -144,6 +149,78 @@ export function applyFile(srcPath: string, destPath: string): void {
   } finally {
     if (existsSync(tmp)) rmSync(tmp, { force: true });
   }
+  return true;
+}
+
+/**
+ * Remove what stands in the way of the file `target` under `root`: a file
+ * where one of its directories goes, or a directory where it goes itself.
+ * Either one would make the copy fail.
+ */
+function clearWayTo(root: string, target: string): boolean {
+  let cleared = false;
+  for (
+    let dir = dirname(target);
+    dir.length > root.length;
+    dir = dirname(dir)
+  ) {
+    if (existsSync(dir) && !statSync(dir).isDirectory()) {
+      rmSync(dir, { force: true });
+      cleared = true;
+    }
+  }
+  if (existsSync(target) && statSync(target).isDirectory()) {
+    rmSync(target, { recursive: true, force: true });
+    cleared = true;
+  }
+  return cleared;
+}
+
+/** Remove every file under `dir` that `keep` does not list, then the directories left empty. */
+function pruneFiles(
+  dir: string,
+  keep: ReadonlySet<string>,
+  root: string = dir,
+): boolean {
+  let pruned = false;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (!entry.isDirectory()) {
+      if (keep.has(relative(root, path))) continue;
+      rmSync(path, { force: true });
+      pruned = true;
+      continue;
+    }
+    pruned = pruneFiles(path, keep, root) || pruned;
+    if (readdirSync(path).length === 0) {
+      rmSync(path, { recursive: true, force: true });
+      pruned = true;
+    }
+  }
+  return pruned;
+}
+
+/**
+ * Make `dest` hold exactly `files`, a map from paths relative to it to the
+ * file each one copies: every copy content-gated and atomic (see `applyFile`),
+ * then the files no entry lists removed, last, with the directories they
+ * leave empty. What stands in the way of a copy, like a file left where a
+ * directory now goes, is removed first.
+ *
+ * @returns Whether anything under `dest` changed
+ */
+export function mirrorFiles(
+  files: ReadonlyMap<string, string>,
+  dest: string,
+): boolean {
+  let changed = false;
+  for (const [file, source] of files) {
+    const target = join(dest, file);
+    changed = clearWayTo(dest, target) || changed;
+    changed = applyFile(source, target) || changed;
+  }
+  if (!existsSync(dest)) return changed;
+  return pruneFiles(dest, new Set(files.keys())) || changed;
 }
 
 function loadGitignore(layerPath: string): ReturnType<typeof ignore> {

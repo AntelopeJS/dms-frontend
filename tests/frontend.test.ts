@@ -341,7 +341,7 @@ describe("Vite frontend generation", () => {
     // contested name to the last root, so the reversal is what hands it to
     // the highest-priority module.
     assert.match(
-      readFileSync(join("src", "materialize.ts"), "utf8"),
+      readFileSync(join("src", "derived-outputs.ts"), "utf8"),
       /\[\.\.\.registry\.modules\]\.reverse\(\)\.map/,
     );
   });
