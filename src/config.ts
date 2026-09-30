@@ -76,6 +76,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["main.ts", "main.ts"],
   ["app-runtime.ts", "app-runtime.ts"],
   ["network-error.ts", "network-error.ts"],
+  ["ui-app-config.ts", "ui-app-config.ts"],
   ["ssr-renderer.ts", "ssr-renderer.ts"],
   ["frontend-module.ts", "frontend-module.ts"],
   ["globals.d.ts", "globals.d.ts"],

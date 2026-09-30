@@ -6,7 +6,6 @@ import { en as uiEn, fr as uiFr } from "@nuxt/ui/locale";
 import ui from "@nuxt/ui/vue-plugin";
 import { useHead } from "@unhead/vue";
 import type { VueHeadClient } from "@unhead/vue/types";
-import { defu } from "defu";
 import type { FetchOptions } from "ofetch";
 import {
   type App,
@@ -48,6 +47,7 @@ import {
   syncLocaleMessages,
 } from "./locales.generated";
 import { showNetworkErrors } from "./network-error";
+import { createUiAppConfigMerger } from "./ui-app-config";
 
 export interface DmsInertiaSetupProps {
   initialPage: unknown;
@@ -233,20 +233,10 @@ function renderDmsPersistentLayout(
   );
 }
 
-/**
- * Nuxt UI keeps one app config for the whole process, and defu concatenates
- * arrays: merged into it on every server render, the compound variants the DMS
- * declares piled up, and every class list built from them grew with each
- * request. Each config is merged once; a new one, after a reload, is merged
- * again.
- */
-const mergedUiAppConfigs = new WeakSet<object>();
+const mergeUiAppConfig = createUiAppConfigMerger();
 
 function mergeDmsAppConfig(): void {
-  const uiAppConfig = useAppConfig();
-  if (mergedUiAppConfigs.has(uiAppConfig)) return;
-  Object.assign(uiAppConfig, defu(useDmsAppConfig(), uiAppConfig));
-  mergedUiAppConfigs.add(uiAppConfig);
+  mergeUiAppConfig(useAppConfig(), useDmsAppConfig());
 }
 
 export async function configureDmsApp(
