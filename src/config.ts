@@ -81,6 +81,8 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["globals.d.ts", "globals.d.ts"],
   ["compress-assets.mjs", "compress-assets.mjs"],
   ["head-order.mjs", "head-order.mjs"],
+  ["icon-api.mjs", "icon-api.mjs"],
+  ["icon-scan.mjs", "icon-scan.mjs"],
   ["email-renderer.ts", "email-renderer.ts"],
   ["email-runtime.ts", "email-runtime.ts"],
   ["email-locales.ts", "email-locales.ts"],

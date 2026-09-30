@@ -355,6 +355,25 @@ directory added to or removed from `layers/` is the exception: Vite reads the
 `#<layer>` aliases and the auto-imported directories at startup only, so the
 dev server says it needs a restart.
 
+### Icons
+
+The browser never asks a third party for an icon, so a Content-Security-Policy
+needs no exception for the Iconify API. Icons reach the page two ways:
+
+- **Bundled.** Nuxt UI's client bundle holds every icon its scanner finds in
+  the workspace's Vue, Markdown and YAML files, the TypeScript of each layer's
+  `app/` directory — `app.config.ts` and its `ui.icons` mappings included — and
+  Nuxt UI's own defaults.
+- **Served.** Any other icon, such as a page icon a backend module declares,
+  is fetched from the frontend server itself: `main.ts` points `@iconify/vue`
+  at `GET /api/_dms/icons/<prefix>.json?icons=<name>,…`, which answers in the
+  Iconify API format from the collections installed in the workspace
+  (`@iconify-json/<prefix>`, or `@iconify/json`). The workspace ships
+  `@iconify-json/lucide` and `@iconify-json/ph`; a module using another
+  collection depends on its `@iconify-json/*` package. An unknown collection
+  answers `404`, and a name outside Iconify's naming rule `400`. `ajs dms dev`
+  and `ajs dms start` run the same server, so both serve the route.
+
 ## Options
 
 | Option | Environment | Purpose |

@@ -4,6 +4,7 @@ import ui from "@nuxt/ui/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig, normalizePath, type Plugin } from "vite";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
+import { iconScanGlobs } from "./icon-scan.mjs";
 
 interface FrontendModuleRegistryEntry {
   id: string;
@@ -128,7 +129,11 @@ export default defineConfig({
     vue(),
     ui({
       router: "inertia",
-      icon: { clientBundle: { scan: true } },
+      icon: {
+        clientBundle: {
+          scan: { globInclude: iconScanGlobs(__dirname, frontendSourceRoots) },
+        },
+      },
       components: { dirs: [] },
       autoImport: {
         dirs: importDirectories,
@@ -183,7 +188,9 @@ export default defineConfig({
     paintBeforeHydrate(),
   ],
   resolve: {
-    dedupe: ["vue", "reka-ui", "@nuxt/ui", "@vueuse/core"],
+    // `@iconify/vue` keeps its API providers in module state: `main.ts` and
+    // Nuxt UI's `Icon` must share one copy for the same-origin provider to apply.
+    dedupe: ["vue", "reka-ui", "@nuxt/ui", "@vueuse/core", "@iconify/vue"],
     alias: {
       "#dms/frontend-module": resolve(__dirname, "frontend-module.ts"),
       "#build/nuxt-icon-client-bundle": "virtual:nuxt-ui-icons",
