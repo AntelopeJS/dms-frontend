@@ -249,6 +249,19 @@ describe("Vite frontend generation", () => {
     assert.doesNotMatch(appRuntime, /default: \(\) => content/);
   });
 
+  it("hands Nuxt UI the locale of the DMS so its built-in strings follow it", () => {
+    const appRuntime = readFileSync(
+      join("templates", "vue", "app-runtime.ts"),
+      "utf8",
+    );
+    assert.match(appRuntime, /from "@nuxt\/ui\/locale"/);
+    assert.match(appRuntime, /locale: uiLocale\(locale\)/);
+    assert.match(
+      appRuntime,
+      /renderDmsPersistentLayout\([\s\S]*i18n\.locale\.value,\s*\)/,
+    );
+  });
+
   it("replaces a failed Inertia page slot with the captured error page", () => {
     const appRuntime = readFileSync(
       join("templates", "vue", "app-runtime.ts"),

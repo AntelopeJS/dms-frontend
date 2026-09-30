@@ -87,7 +87,7 @@ it("releases every server render once it is sent", async () => {
     );
     writeFileSync(
       join(workspace, "ui-stub.ts"),
-      `import {h} from 'vue'; export const useAppConfig=()=>globalThis.__dmsLeakProbe.uiAppConfig;export const useToast=()=>({add(){}});export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
+      `import {h} from 'vue'; export const useAppConfig=()=>globalThis.__dmsLeakProbe.uiAppConfig;export const useToast=()=>({add(){}});export const en={code:"en"};export const fr={code:"fr"};export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
     );
     // Stands for Nuxt UI's `useRuntimeHook`: a process-wide registry a
     // component only leaves when its scope is disposed. The hook holds the
