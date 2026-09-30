@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.4
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.3...v0.3.4)
+
+### 🩹 Fixes
+
+- **vue:** Localise Nuxt UI built-in strings with the DMS locale ([#66](https://github.com/AntelopeJS/dms-frontend/pull/66))
+
+### 🏡 Chore
+
+- **lint:** Check @antelopejs/interface-* ranges ([#65](https://github.com/AntelopeJS/dms-frontend/pull/65))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.3
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.2...v0.3.3)
