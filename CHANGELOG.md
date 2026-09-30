@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.3.6
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.5...v0.3.6)
+
+### 🩹 Fixes
+
+- **dev:** Answer 500 with Vite's error for a module that fails to transform ([#69](https://github.com/AntelopeJS/dms-frontend/pull/69))
+- **range:** Report a refused range cleanly in verify-source and name each layer by its path ([#70](https://github.com/AntelopeJS/dms-frontend/pull/70))
+- **manifest:** Refuse a manifest the backend serves even when a cache exists ([#71](https://github.com/AntelopeJS/dms-frontend/pull/71))
+- **dev:** Report the port the system picked when -p 0 asks for any port ([#72](https://github.com/AntelopeJS/dms-frontend/pull/72))
+
+### 💅 Refactors
+
+- Drop the unused runtime exports, an orphan doc comment and inline requires ([#73](https://github.com/AntelopeJS/dms-frontend/pull/73))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.5
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.4...v0.3.5)
