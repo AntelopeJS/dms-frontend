@@ -238,7 +238,10 @@ describe("Vite frontend generation", () => {
     assert.match(runtime, /export function hydrateDmsPageProps/);
     assert.match(runtime, /export async function preloadComponents/);
     assert.match(appRuntime, /hydrateDmsPageProps\(props\.value\)/);
-    assert.match(appRuntime, /defu\(useDmsAppConfig\(\), uiAppConfig\)/);
+    assert.match(
+      appRuntime,
+      /mergeUiAppConfig\(useAppConfig\(\), useDmsAppConfig\(\)\)/,
+    );
     assert.match(appRuntime, /preloadDmsPage\(props\.value\)/);
     assert.match(appRuntime, /component\("Icon", UIcon\)/);
     assert.match(appRuntime, /getDmsLayoutProps\(props\)/);
