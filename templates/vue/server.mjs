@@ -4,11 +4,6 @@ import { extname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
-import {
-  createBrotliCompress,
-  createGzip,
-  constants as zlibConstants,
-} from "node:zlib";
 import { ofetch } from "ofetch";
 import { RequestBodyError, UpstreamError } from "./server/auth/backend.mjs";
 import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./server/auth/client-ip.mjs";
@@ -25,10 +20,12 @@ import {
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
+import { writeContent } from "./server/content.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
+import { handleIcons, isIconRequest } from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
 import { handleTester } from "./server/tester.mjs";
 import {
@@ -65,10 +62,12 @@ const AUTH_SERVER_ROUTES = [
 ];
 const HTML_RENDER_ROUTE = "/api/html/render";
 const TESTER_ROUTE = /^\/api\/_dms\/tester\/?$/;
+const LOCAL_ROUTES = [
+  [(pathname) => TESTER_ROUTE.test(pathname), handleTester],
+  [isIconRequest, handleIcons],
+];
 const AUTH_PAGE = "/auth";
 const ONBOARDING_PAGE = "/onboarding";
-const MINIMUM_COMPRESSION_BYTES = 1_024;
-const DYNAMIC_BROTLI_QUALITY = 4;
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
 const BUILT_SSR_RENDERER_PATH = join(PROJECT_ROOT, "dist/ssr/ssr-renderer.js");
 // The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
@@ -282,36 +281,6 @@ function serveAsset(pathname, request, response) {
   return true;
 }
 
-function responseEncoder(request, content) {
-  if (Buffer.byteLength(content) < MINIMUM_COMPRESSION_BYTES) return undefined;
-  const accepted = request.headers["accept-encoding"] ?? "";
-  if (accepted.includes("br"))
-    return {
-      encoding: "br",
-      stream: createBrotliCompress({
-        params: {
-          [zlibConstants.BROTLI_PARAM_QUALITY]: DYNAMIC_BROTLI_QUALITY,
-        },
-      }),
-    };
-  if (accepted.includes("gzip"))
-    return { encoding: "gzip", stream: createGzip() };
-}
-
-async function writeContent(request, response, status, headers, content) {
-  const encoder = responseEncoder(request, content);
-  const vary = [headers.vary, "Accept-Encoding"].filter(Boolean).join(", ");
-  const encodedHeaders = { ...headers, vary };
-  if (!encoder) {
-    response.writeHead(status, encodedHeaders);
-    response.end(content);
-    return;
-  }
-  encodedHeaders["content-encoding"] = encoder.encoding;
-  response.writeHead(status, encodedHeaders);
-  await pipeline(Readable.from([content]), encoder.stream, response);
-}
-
 async function ssrRenderer(devServer) {
   if (devServer) return devServer.ssrLoadModule("/ssr-renderer.ts");
   productionSsrRenderer ??= import(BUILT_SSR_RENDERER_PATH);
@@ -419,7 +388,8 @@ async function writeBackendError(error, request, response) {
 export async function handleRequest(request, response) {
   const url = new URL(request.url, "http://frontend.local");
   const pathname = url.pathname;
-  if (TESTER_ROUTE.test(pathname)) return handleTester(request, response);
+  const localRoute = LOCAL_ROUTES.find(([matches]) => matches(pathname));
+  if (localRoute) return localRoute[1](request, response);
   if (pathname === "/api/_auth/session")
     return handleAuth(request, response, url);
   if (request.method === "POST" && pathname === HTML_RENDER_ROUTE)

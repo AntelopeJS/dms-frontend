@@ -1,10 +1,12 @@
 import "./dms-main.css";
+import { addAPIProvider } from "@iconify/vue";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { createHead } from "@unhead/vue/client";
 import { createApp, createSSRApp, h } from "vue";
 import { configureDmsApp, resolveDmsInertiaPage } from "./app-runtime";
 import { setupFrontendModules } from "./frontend-module";
 import { frontendModules } from "./frontend-modules.generated";
+import { sameOriginIconProvider } from "./icon-api.mjs";
 
 const DEV_STYLE_ATTRIBUTE = "data-dms-dev-style";
 
@@ -46,6 +48,9 @@ function markDmsReady(): void {
 }
 
 if (import.meta.env.DEV) adoptViteDevStyles();
+// Before any module or component can render an icon the client bundle lacks:
+// the generated server answers those queries from the installed collections.
+addAPIProvider("", sameOriginIconProvider(location.origin));
 
 await setupFrontendModules(frontendModules);
 
