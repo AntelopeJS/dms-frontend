@@ -59,7 +59,7 @@
     "test": "node --import tsx --test tests/*.test.ts tests/*.test.mts",
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
-    "lint": "oxlint && oxfmt --check .",
+    "lint": "oxlint && oxfmt --check . && antelopejs-check-interface-ranges",
     "typecheck": "tsc --noEmit",
     "lint:fix": "oxlint --fix --max-warnings=1000000 && oxfmt .",
     "knip": "knip --dependencies",
@@ -76,7 +76,7 @@
     "unzipper": "^0.12.3"
   },
   "devDependencies": {
-    "@antelopejs/tooling-configs": ">=0.0.6 <1.0.0",
+    "@antelopejs/tooling-configs": ">=0.0.7 <1.0.0",
     "@inertiajs/vue3": "^3.7.1",
     "@types/figlet": "^1.7.0",
     "@types/node": "^24.8.1",
