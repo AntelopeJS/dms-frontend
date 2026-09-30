@@ -64,7 +64,12 @@ const layers: ResolvedLayer[] = roots.map((root) => ({
   packageName: JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
     .name,
 }));
-assertLayersSupportRenderer(layers);
+try {
+  assertLayersSupportRenderer(layers);
+} catch (error) {
+  console.error(`Error: ${(error as Error).message}`);
+  process.exit(1);
+}
 materializeLayers(workspace, layers);
 const registry = createFrontendModuleRegistry(workspace, layers);
 registry.modules.forEach((module) => {
