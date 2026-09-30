@@ -1,10 +1,15 @@
 import * as assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   fetchManifest,
   type Manifest,
+  ManifestRefusedError,
   ManifestUnauthorizedError,
+  resolveManifest,
 } from "../src/common";
 
 const manifest: Manifest = { pack: "/dms/frontend/modules", modules: [] };
@@ -216,5 +221,80 @@ describe("fetchManifest", () => {
     } finally {
       await closeServer(server);
     }
+  });
+});
+
+describe("resolveManifest with a cached manifest", () => {
+  async function withCachedWorkspace(
+    run: (workspace: string) => Promise<void>,
+  ): Promise<void> {
+    const workspace = mkdtempSync(join(tmpdir(), "dms-manifest-cache-"));
+    const { server, baseUrl } = await startBackend();
+    try {
+      await resolveManifest(workspace, baseUrl, false);
+      await run(workspace);
+    } finally {
+      await closeServer(server);
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  }
+
+  async function resolveAgainst(
+    workspace: string,
+    status = 200,
+  ): Promise<ReturnType<typeof resolveManifest>> {
+    const { server, baseUrl } = await startBackend(status);
+    try {
+      return await resolveManifest(workspace, baseUrl, false);
+    } finally {
+      await closeServer(server);
+    }
+  }
+
+  it("refuses an unsupported protocol version instead of replaying the cache", async () => {
+    await withCachedWorkspace(async (workspace) => {
+      const previousVersion = frontendManifest.version;
+      frontendManifest.version = 2;
+      try {
+        await assert.rejects(
+          () => resolveAgainst(workspace),
+          (err: Error) =>
+            err instanceof ManifestRefusedError &&
+            /Unsupported frontend manifest version: 2/.test(err.message),
+        );
+      } finally {
+        frontendManifest.version = previousVersion;
+      }
+    });
+  });
+
+  it("refuses a mismatched renderer instead of replaying the cache", async () => {
+    await withCachedWorkspace(async (workspace) => {
+      const previousModules = frontendManifest.modules;
+      frontendManifest.modules = [
+        {
+          name: "wrong",
+          archiveName: "wrong",
+          priority: 0,
+          renderer: { name: "react", version: "19" },
+        },
+      ];
+      try {
+        await assert.rejects(
+          () => resolveAgainst(workspace),
+          ManifestRefusedError,
+        );
+      } finally {
+        frontendManifest.modules = previousModules;
+      }
+    });
+  });
+
+  it("still replays the cache when the backend fails", async () => {
+    await withCachedWorkspace(async (workspace) => {
+      const resolved = await resolveAgainst(workspace, 503);
+      assert.equal(resolved.fromCache, true);
+      assert.deepEqual(resolved.manifest, manifest);
+    });
   });
 });
