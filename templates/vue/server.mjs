@@ -21,6 +21,11 @@ import {
 } from "./server/backend-response.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { writeContent } from "./server/content.mjs";
+import {
+  captureViteErrors,
+  runViteMiddlewares,
+  writeViteError,
+} from "./server/vite-errors.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
@@ -88,7 +93,11 @@ async function developmentServer() {
       const serverOptions = { middlewareMode: true };
       if (frontendHttpServer)
         serverOptions.hmr = { server: frontendHttpServer };
-      return createViteServer({ server: serverOptions, appType: "custom" });
+      return createViteServer({
+        server: serverOptions,
+        appType: "custom",
+        plugins: [captureViteErrors()],
+      });
     })
     .then((server) => {
       vite = server;
@@ -385,6 +394,12 @@ async function writeBackendError(error, request, response) {
   response.end(JSON.stringify(payload));
 }
 
+async function answeredByVite(devServer, request, response) {
+  const result = await runViteMiddlewares(devServer, request, response);
+  if (result.status === "failed") writeViteError(response, result.error);
+  return result.status !== "unhandled";
+}
+
 export async function handleRequest(request, response) {
   const url = new URL(request.url, "http://frontend.local");
   const pathname = url.pathname;
@@ -409,11 +424,7 @@ export async function handleRequest(request, response) {
     return;
   const devServer = await developmentServer();
   if (devServer && pathname !== "/") {
-    const handled = await new Promise((resolve) => {
-      devServer.middlewares(request, response, () => resolve(false));
-      response.once("finish", () => resolve(true));
-    });
-    if (handled) return;
+    if (await answeredByVite(devServer, request, response)) return;
   }
   if (!devServer && serveAsset(pathname, request, response)) return;
   if (handleAssetVersionMismatch(request, response)) return;
