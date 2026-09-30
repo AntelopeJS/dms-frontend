@@ -36,6 +36,19 @@ export class ManifestUnauthorizedError extends Error {
 }
 
 /**
+ * The backend answered with a manifest this renderer cannot run: another
+ * protocol version, or modules built for another renderer. Unlike an outage,
+ * the cache must not stand in for it, since the backend has just said the
+ * cached modules are not what it serves any more.
+ */
+export class ManifestRefusedError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "ManifestRefusedError";
+  }
+}
+
+/**
  * Fetch the layers manifest from the DMS backend. `clientUrl` tells a
  * dev-mode backend where the frontend will actually be reachable (real
  * resolved port included) so it can serve a matching `clientBaseUrl` and
@@ -67,7 +80,7 @@ export async function fetchManifest(
 
   const manifest = (await response.json()) as FrontendManifest;
   if (manifest.version !== FRONTEND_MANIFEST_VERSION) {
-    throw new Error(
+    throw new ManifestRefusedError(
       `Unsupported frontend manifest version: ${String(manifest.version)}`,
     );
   }
@@ -76,7 +89,7 @@ export async function fetchManifest(
       module.renderer?.name !== "vue" || module.renderer?.version !== "3",
   );
   if (incompatible.length) {
-    throw new Error(
+    throw new ManifestRefusedError(
       `Frontend manifest contains incompatible renderer modules: ${incompatible.map((module) => module.name).join(", ")}`,
     );
   }
@@ -148,8 +161,10 @@ export interface ResolvedManifest {
  * instead, which is exactly what lets the cache survive backend port
  * changes between runs.)
  *
- * A rejected credential is the one failure that does not fall back: the
- * backend is actively withholding what the cache may still contain. The cache
+ * A rejected credential and a refused manifest are the failures that do not
+ * fall back: the backend answered, and either withholds what the cache may
+ * still contain or serves something this renderer cannot run. Only a backend
+ * that cannot be reached, or fails, is replaced by the cache. The cache
  * is deliberately not keyed on the credential beyond that — a development
  * backend mints a fresh secret on every boot (the previous one dies with its
  * pid even though the handshake file stays behind), so binding the entry to it
@@ -174,6 +189,7 @@ export async function resolveManifest(
       return { manifest, fromCache: false };
     } catch (err) {
       if (err instanceof ManifestUnauthorizedError) throw err;
+      if (err instanceof ManifestRefusedError) throw err;
       const cached = readCachedManifest(workspaceDir);
       if (!cached) throw err;
       return fromCachedEntry(cached);
