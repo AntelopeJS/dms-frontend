@@ -73,7 +73,7 @@ it("serves an edited component on the next server render in development", async 
     );
     writeFileSync(
       join(workspace, "ui-stub.ts"),
-      "import {h} from 'vue'; const appConfig={}; export const useAppConfig=()=>appConfig;export const useToast=()=>({add(){}});export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};",
+      "import {h} from 'vue'; const appConfig={}; export const useAppConfig=()=>appConfig;export const useToast=()=>({add(){}});export const en={code:'en'};export const fr={code:'fr'};export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};",
     );
     // Both modules claim the page; `high` comes first, as the generated
     // loader orders modules by descending priority.

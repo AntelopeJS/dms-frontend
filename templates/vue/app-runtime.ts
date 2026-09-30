@@ -2,6 +2,7 @@ import UApp from "@nuxt/ui/components/App.vue";
 import UIcon from "@nuxt/ui/runtime/vue/components/Icon.vue";
 import { useToast } from "@nuxt/ui/composables/useToast";
 import { useAppConfig } from "@nuxt/ui/runtime/vue/composables/useAppConfig";
+import { en as uiEn, fr as uiFr } from "@nuxt/ui/locale";
 import ui from "@nuxt/ui/vue-plugin";
 import { useHead } from "@unhead/vue";
 import type { VueHeadClient } from "@unhead/vue/types";
@@ -79,6 +80,19 @@ export type DmsServerFetch = (
 const SSR_ASYNC_DATA_ID = "dms-ssr-async-data";
 export const SSR_ASYNC_COMPONENTS_ID = "dms-ssr-async-components";
 const DEFAULT_LOCALE = "en";
+
+/**
+ * Nuxt UI ships its own strings (placeholders, empty states, aria labels).
+ * Only the locales the DMS translates are imported: the full catalog would
+ * weigh on every bundle. A locale missing here falls back to English.
+ */
+const UI_LOCALES = { en: uiEn, fr: uiFr };
+
+type UiLocale = (typeof UI_LOCALES)[keyof typeof UI_LOCALES];
+
+function uiLocale(locale: string): UiLocale {
+  return UI_LOCALES[locale as keyof typeof UI_LOCALES] ?? UI_LOCALES.en;
+}
 
 function pageLocale(props: DmsPageProps): string {
   const language = props.user?.language;
@@ -164,6 +178,7 @@ const DmsPersistentLayout = defineComponent({
         error,
         content,
         overlays.value,
+        i18n.locale.value,
       );
     };
   },
@@ -198,6 +213,7 @@ function renderDmsPersistentLayout(
   error: DmsPageProps["error"],
   children: VNode[] | undefined,
   overlays: string[],
+  locale: string,
 ) {
   const layout = error ? undefined : getDmsLayout(props);
   const content = layout
@@ -205,7 +221,7 @@ function renderDmsPersistentLayout(
     : children;
   return h(
     UApp,
-    { portal: "#dms-overlays" },
+    { portal: "#dms-overlays", locale: uiLocale(locale) },
     {
       default: () => [
         ...overlays.map((name) =>
