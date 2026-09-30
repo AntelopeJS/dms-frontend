@@ -43,12 +43,22 @@ const OWN_RELEASE: RendererRelease = require("../package.json");
  */
 const noticedModules = new Set<string>();
 
+/**
+ * A module as the messages name it: its package name and where it was loaded
+ * from, since two layers may share a name (every playground layer is
+ * `playground-frontend-vue`).
+ */
+function moduleLabel(layer: ResolvedLayer): string {
+  if (!layer.packageName) return layer.path;
+  return `${layer.packageName} (${layer.path})`;
+}
+
 function declaredRange(
   layer: ResolvedLayer,
   rendererName: string,
 ): DeclaredRange {
   return {
-    module: layer.packageName ?? layer.path,
+    module: moduleLabel(layer),
     range: readLayerPackage(layer.path)?.engines?.[rendererName],
   };
 }

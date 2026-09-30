@@ -78,7 +78,7 @@ describe("renderer range", () => {
         );
         assert.match(
           err.message,
-          /@acme\/dms-billing supports >=0\.2\.8 <0\.4\.0/,
+          /@acme\/dms-billing \(.+\) supports >=0\.2\.8 <0\.4\.0/,
         );
         return true;
       },
@@ -94,8 +94,8 @@ describe("renderer range", () => {
           declaring("too-new", ">=0.5.0"),
         ]),
       (err: Error) => {
-        assert.match(err.message, /too-old supports <0\.4\.0/);
-        assert.match(err.message, /too-new supports >=0\.5\.0/);
+        assert.match(err.message, /too-old \(.+\) supports <0\.4\.0/);
+        assert.match(err.message, /too-new \(.+\) supports >=0\.5\.0/);
         assert.doesNotMatch(err.message, /fine/);
         return true;
       },
@@ -117,6 +117,17 @@ describe("renderer range", () => {
     assert.deepEqual(check([undeclared]), []);
   });
 
+  it("tells apart two modules that share a package name", () => {
+    const first = declaring("playground-frontend-vue", "<0.4.0");
+    const second = declaring("playground-frontend-vue", "<0.4.0");
+    assert.throws(
+      () => check([first, second]),
+      (err: Error) =>
+        err.message.includes(`playground-frontend-vue (${first.path})`) &&
+        err.message.includes(`playground-frontend-vue (${second.path})`),
+    );
+  });
+
   it("says where the missing range belongs", () => {
     const [warning] = check([layer("undeclared-hint", { node: ">=20" })]);
     assert.match(warning, /undeclared-hint/);
@@ -127,7 +138,7 @@ describe("renderer range", () => {
   it("checks a prerelease as the release it leads to", () => {
     assert.throws(
       () => check([declaring("before-0.4", "<0.4.0")], "0.4.0-next.1"),
-      /before-0\.4 supports <0\.4\.0/,
+      /before-0\.4 \(.+\) supports <0\.4\.0/,
     );
     assert.deepEqual(
       check([declaring("on-0.3", ">=0.3.2 <0.4.0")], "0.3.3-next.0"),
@@ -239,7 +250,7 @@ describe("commands refusing a module that does not support this release", () => 
           output,
           /Setup failed: These frontend modules do not run on/,
         );
-        assert.match(output, /excluding-module supports >=999\.0\.0/);
+        assert.match(output, /excluding-module \(.+\) supports >=999\.0\.0/);
       }
       const workspaces = join(home, ".antelopejs", "dms-frontend");
       for (const workspace of readdirSync(workspaces))
@@ -262,8 +273,10 @@ describe("commands refusing a module that does not support this release", () => 
       [],
       { env: { DMS_LAYER_SOURCE: layerPath } },
     );
-    assert.notEqual(status, 0);
-    assert.match(output, /excluding-source supports >=999\.0\.0/);
+    assert.equal(status, 1, output);
+    assert.match(output, /Error: These frontend modules do not run on/);
+    assert.match(output, /excluding-source \(.+\) supports >=999\.0\.0/);
     assert.doesNotMatch(output, /Generated workspace/);
+    assert.doesNotMatch(output, /^\s+at /m, "no stack trace");
   });
 });
