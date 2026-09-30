@@ -25,6 +25,16 @@ function closeServer(server: Server): Promise<void> {
 }
 
 describe("reserveFreePort", () => {
+  it("reports the port the system picked when asked for port 0", async () => {
+    const reserved = await reserveFreePort(0, 0);
+    try {
+      assert.notEqual(reserved.port, 0);
+      assert.ok(reserved.port > 0);
+    } finally {
+      await reserved.release();
+    }
+  });
+
   it("returns the requested port when it is free", async () => {
     // Grab an ephemeral port then release it: it is almost certainly
     // still free when we probe it right after.

@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:net";
+import { type AddressInfo, createServer, type Server } from "node:net";
 
 // ============================================================================
 // Frontend port reservation
@@ -60,7 +60,7 @@ export async function reserveFreePort(
     const server = await tryListen(port);
     if (server) {
       return {
-        port,
+        port: (server.address() as AddressInfo).port,
         release: () =>
           new Promise((resolve) => {
             server.close(() => resolve());
