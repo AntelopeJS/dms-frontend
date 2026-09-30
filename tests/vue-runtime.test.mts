@@ -13,7 +13,6 @@ import {
   ref,
 } from "vue";
 import {
-  addDmsMiddleware,
   createDmsFrontendRuntime,
   hydrateDmsPageProps,
   navigateDms,
@@ -30,6 +29,8 @@ import {
   useDmsState,
   useDmsFetch,
   useDmsRouter,
+  setupFrontendModules,
+  type DmsMiddleware,
 } from "../templates/vue/frontend-module.ts";
 
 function application(label: string, hydrated = {}, isServer = false) {
@@ -77,13 +78,30 @@ function mountRuntime(runtime, root) {
   return app;
 }
 
+async function registerGlobalMiddleware(
+  ...handlers: DmsMiddleware[]
+): Promise<void> {
+  await setupFrontendModules([
+    {
+      module: {
+        setup(sdk) {
+          handlers.forEach((handler, index) =>
+            sdk.registerMiddleware(`test-middleware-${index}`, handler, {
+              global: true,
+            }),
+          );
+        },
+      },
+      options: { public: {} },
+    },
+  ]);
+}
+
 describe("Vue request runtime", () => {
   it("keeps relative middleware redirects out of the browser router during SSR", async (context) => {
     const { app } = application("server", {}, true);
-    addDmsMiddleware(
-      (to) => (to.path === "/requires-onboarding" ? "/onboarding" : undefined),
-      undefined,
-      true,
+    await registerGlobalMiddleware((to) =>
+      to.path === "/requires-onboarding" ? "/onboarding" : undefined,
     );
     const visit = context.mock.method(router, "visit", (url: string) => {
       new URL(url);
@@ -446,20 +464,14 @@ describe("Vue request runtime", () => {
     const first = application("first");
     const second = application("second");
     const capturedErrors = new Map<string, ReturnType<typeof useError>>();
-    addDmsMiddleware(
+    await registerGlobalMiddleware(
       async () => {
         await Promise.resolve();
       },
-      undefined,
-      true,
-    );
-    addDmsMiddleware(
       (to) => {
         capturedErrors.set(to.path, useError());
         return false;
       },
-      undefined,
-      true,
     );
     await Promise.all([
       first.app.runWithContext(() => navigateDms("/first-middleware")),

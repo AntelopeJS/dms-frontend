@@ -239,7 +239,6 @@ export function collectFiles(dir: string, baseDir: string = dir): string[] {
   const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
-    const { relative } = require("node:path");
     const relPath = relative(baseDir, fullPath);
     if (entry.isDirectory()) {
       files.push(...collectFiles(fullPath, baseDir));
@@ -274,7 +273,6 @@ export function syncDirectories(src: string, dest: string): void {
 }
 
 function cleanEmptyDirs(dir: string): void {
-  const { statSync } = require("node:fs");
   if (!existsSync(dir) || !statSync(dir).isDirectory()) return;
 
   for (const entry of readdirSync(dir)) {

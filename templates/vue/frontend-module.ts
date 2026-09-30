@@ -906,9 +906,6 @@ export function useDmsRuntimeConfig(): DmsRuntimeConfig {
 export function useDmsAppConfig(): DmsAppConfig {
   return appConfig.value as DmsAppConfig;
 }
-export function configureDmsRuntime(config: DmsRuntimeConfig): void {
-  runtimeConfig.value = config;
-}
 export function defineAppConfig<T extends Record<string, unknown>>(
   config: T,
 ): T {
@@ -933,14 +930,6 @@ export function defineDmsPageMeta(meta: Record<string, unknown>): void {
 }
 export function abortNavigation(): false {
   return false;
-}
-export function addDmsMiddleware(
-  handler: DmsMiddleware,
-  name?: string,
-  isGlobal = false,
-): void {
-  if (isGlobal) registry.middleware.push(handler);
-  else if (name) registry.namedMiddleware.set(name, handler);
 }
 export const useHead = useUnhead;
 export const useSeoMeta = useUnheadSeoMeta;
