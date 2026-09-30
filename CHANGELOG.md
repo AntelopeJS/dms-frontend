@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.5
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.4...v0.3.5)
+
+### 🩹 Fixes
+
+- **renderer:** Let an app.config.ts edit reach the server render in development ([#67](https://github.com/AntelopeJS/dms-frontend/pull/67))
+- **vue:** Serve icons from the frontend server instead of the Iconify API ([#68](https://github.com/AntelopeJS/dms-frontend/pull/68))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.4
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.3...v0.3.4)
