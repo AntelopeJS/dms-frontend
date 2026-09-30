@@ -290,11 +290,3 @@ ${sources}
 
   writeFileSync(join(workspaceDir, "dms-main.css"), content);
 }
-
-// ============================================================================
-// Dependency Management
-// ============================================================================
-
-/**
- * Compute a hash of all layer package.json files to detect dependency changes
- */
