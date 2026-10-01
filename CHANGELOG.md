@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.7
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.6...v0.3.7)
+
+### 🩹 Fixes
+
+- **server:** Log a hint when the frontend refuses oversized request headers ([#74](https://github.com/AntelopeJS/dms-frontend/pull/74))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.6
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.5...v0.3.6)
