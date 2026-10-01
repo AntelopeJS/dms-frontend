@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { router } from "@inertiajs/vue3";
+import { createInertiaApp, router } from "@inertiajs/vue3";
 import { renderToString } from "@vue/server-renderer";
 import {
   createSSRApp,
@@ -14,6 +14,7 @@ import {
 } from "vue";
 import {
   createDmsFrontendRuntime,
+  defineDmsPageMeta,
   hydrateDmsPageProps,
   navigateDms,
   provideDmsFrontendRuntime,
@@ -28,6 +29,7 @@ import {
   useDmsCookie,
   useDmsState,
   useDmsFetch,
+  useDmsRoute,
   useDmsRouter,
   setupFrontendModules,
   type DmsMiddleware,
@@ -591,5 +593,84 @@ describe("Server render scopes", () => {
     assert.deepEqual(disposed, []);
     stopScopes();
     assert.deepEqual(disposed, ["root", "leaf"]);
+  });
+});
+
+describe("Page meta", () => {
+  // What the DMS catch-all page does: it declares `auth`, then reads its
+  // route. A plugin (dms-ui's `register`) reads the route while it sets up.
+  const DeclaringPage = defineComponent({
+    setup() {
+      defineDmsPageMeta({ auth: true });
+      useDmsRoute();
+      return () => h("p", "page");
+    },
+  });
+
+  async function renderDeclaringPage(url: string): Promise<void> {
+    const runtime = createDmsFrontendRuntime(undefined, {}, true);
+    const props = { path: new URL(url, "http://frontend.local").pathname };
+    await createInertiaApp({
+      page: {
+        component: "Page",
+        props: { ...props, page: {} },
+        url,
+        version: "",
+      },
+      render: renderToString,
+      resolve: () => DeclaringPage,
+      setup({ App, props: inertiaProps }) {
+        const app = createSSRApp({ render: () => h(App, inertiaProps) });
+        provideDmsFrontendRuntime(app, runtime);
+        app.runWithContext(() => {
+          hydrateDmsPageProps({ ...props, page: {} }, url);
+          useDmsRoute();
+        });
+        return app;
+      },
+    });
+    await runtime.pendingNavigation;
+  }
+
+  it("keeps the meta a page declared once it reads its route", async () => {
+    const seen: unknown[] = [];
+    await setupFrontendModules([
+      {
+        options: { public: {} },
+        module: {
+          setup(sdk) {
+            sdk.registerMiddleware(
+              "awaits",
+              async () => {
+                await Promise.resolve();
+              },
+              { global: true },
+            );
+            sdk.registerMiddleware("auth", (to) => {
+              seen.push(to.meta.auth);
+            });
+          },
+        },
+      },
+    ]);
+    await renderDeclaringPage("/first?tab=a");
+    await renderDeclaringPage("/second");
+    assert.deepEqual(seen, [true, true]);
+  });
+
+  it("keeps a page's meta while it stays on screen and drops it for the next page", async () => {
+    await setupFrontendModules([]);
+    const { app, runtime } = application("first");
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared");
+      defineDmsPageMeta({ auth: true });
+      // A visit that only changes the query keeps the page mounted.
+      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared?tab=b");
+    });
+    assert.deepEqual(runtime.route.meta, { auth: true });
+    app.runWithContext(() =>
+      hydrateDmsPageProps({ path: "/next", page: {} }, "/next"),
+    );
+    assert.deepEqual(runtime.route.meta, {});
   });
 });
