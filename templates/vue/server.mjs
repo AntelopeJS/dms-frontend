@@ -1,5 +1,5 @@
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, maxHeaderSize } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -19,6 +19,7 @@ import {
   redirectAccessRefusal,
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
+import { handleClientError } from "./server/client-error.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { writeContent } from "./server/content.mjs";
 import {
@@ -489,6 +490,9 @@ if (
   import.meta.url === new URL(`file://${process.argv[1]}`).href
 ) {
   frontendHttpServer = createServer(handleRequestSafely);
+  frontendHttpServer.on("clientError", (error, socket) =>
+    handleClientError(error, socket, maxHeaderSize),
+  );
   frontendHttpServer.listen(
     Number(process.env.PORT ?? 3001),
     process.env.HOST ?? "0.0.0.0",
