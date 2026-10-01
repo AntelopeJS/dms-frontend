@@ -295,6 +295,60 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
+  it("serves a built asset without asking the backend first", async () => {
+    const backendPaths: string[] = [];
+    const backend = createServer((request, response) => {
+      backendPaths.push(request.url ?? "");
+      const found = request.url === "/media/asset-1/photo.webp";
+      response.writeHead(found ? 200 : 404, { "content-type": "image/webp" });
+      response.end(found ? "backend media" : "");
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const address = backend.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    const runtime = await server;
+    const frontend = createServer(runtime.handleRequestSafely);
+    await new Promise<void>((resolve) =>
+      frontend.listen(0, "127.0.0.1", resolve),
+    );
+    const frontendAddress = frontend.address();
+    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const base = `http://127.0.0.1:${frontendAddress.port}`;
+    const assetName = `probe-${randomUUID()}.js`;
+    const assets = join(
+      process.cwd(),
+      "templates",
+      "vue",
+      "dist",
+      "client",
+      "assets",
+    );
+    await mkdir(assets, { recursive: true });
+    await writeFile(join(assets, assetName), "export const probe = 1;\n");
+    try {
+      const asset = await fetch(`${base}/assets/${assetName}`);
+      assert.equal(asset.status, 200);
+      assert.equal(await asset.text(), "export const probe = 1;\n");
+      assert.equal(
+        asset.headers.get("cache-control"),
+        "public, max-age=31536000, immutable",
+      );
+      assert.deepEqual(backendPaths, []);
+      // A file the build does not have is still the backend's to serve.
+      const media = await fetch(`${base}/media/asset-1/photo.webp`);
+      assert.equal(media.status, 200);
+      assert.equal(await media.text(), "backend media");
+      assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
+    } finally {
+      await rm(join(assets, assetName), { force: true });
+      frontend.close();
+      backend.close();
+    }
+  });
+
   it("does not write a second response after a client disconnect", async () => {
     const runtime = await server;
     let writeCount = 0;

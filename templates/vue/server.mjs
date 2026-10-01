@@ -400,6 +400,22 @@ async function answeredByVite(devServer, request, response) {
   return result.status !== "unhandled";
 }
 
+/**
+ * Vite's own URLs (`/@vite/client`, `/@id/…`, `/@fs/…`) and paths with an
+ * extension name files: modules, stylesheets, fonts, images, built assets.
+ * The backend's routes outside `/api` and `/dms` are mostly the paths of the
+ * pages they serve data for, which have none (`/<page>/pagelayout`).
+ */
+function isFilePath(pathname) {
+  return pathname.startsWith("/@") || extname(pathname) !== "";
+}
+
+/** Vite's files in development, the build's in production. */
+async function answeredWithFile(devServer, request, response, pathname) {
+  if (!devServer) return serveAsset(pathname, request, response);
+  return pathname !== "/" && answeredByVite(devServer, request, response);
+}
+
 export async function handleRequest(request, response) {
   const url = new URL(request.url, "http://frontend.local");
   const pathname = url.pathname;
@@ -420,13 +436,18 @@ export async function handleRequest(request, response) {
     return proxy(request, response);
   if (requestFailure.hasMalformedPath(request.url))
     return requestFailure.writeBadRequest(response);
-  if (!isFrontendVisit(request) && (await proxy(request, response, true)))
-    return;
   const devServer = await developmentServer();
-  if (devServer && pathname !== "/") {
-    if (await answeredByVite(devServer, request, response)) return;
-  }
-  if (!devServer && serveAsset(pathname, request, response)) return;
+  const visit = isFrontendVisit(request);
+  // A file is looked for among the frontend's own before the backend is asked
+  // for it: asking first cost a backend round trip for each of the hundreds of
+  // modules a development page loads, and for each built asset. A file the
+  // frontend does not have, a media file, is still the backend's.
+  const fileFirst = !visit && isFilePath(pathname);
+  const serveFile = () =>
+    answeredWithFile(devServer, request, response, pathname);
+  if (fileFirst && (await serveFile())) return;
+  if (!visit && (await proxy(request, response, true))) return;
+  if (!fileFirst && (await serveFile())) return;
   if (handleAssetVersionMismatch(request, response)) return;
   if (redirectToHomepage(request, response, pathname)) return;
   const props = await pageProps(request);
