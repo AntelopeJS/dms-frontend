@@ -333,8 +333,11 @@ export interface DmsFrontendRuntime {
   pendingNavigation?: Promise<void>;
   hasNavigationListener: boolean;
   pageVersion: number;
-  /** The path of the page on screen, whose meta `route.meta` holds. */
-  pagePath?: string;
+  /**
+   * Identifies the page on screen (its path, or the error page shown at that
+   * path), whose meta `route.meta` holds.
+   */
+  pageKey?: string;
   /** The `Cookie` header of the request a server runtime renders. */
   requestCookies?: string;
   /**
@@ -1366,10 +1369,11 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
   const runtime = useDmsRuntime();
   if (url) updateRoute(runtime, url);
   // Pages are keyed by path: another path mounts another page, which declares
-  // its own meta. A visit that only changes the query keeps the page, and so
-  // its meta.
-  if (props.path !== runtime.pagePath) {
-    runtime.pagePath = props.path;
+  // its own meta, and so does an error page shown in place of the page. A
+  // visit that only changes the query keeps the page, and so its meta.
+  const pageKey = props.error ? `error:${props.path}` : props.path;
+  if (pageKey !== runtime.pageKey) {
+    runtime.pageKey = pageKey;
     runtime.route.meta = {};
   }
   runtime.pageVersion++;

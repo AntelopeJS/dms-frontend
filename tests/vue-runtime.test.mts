@@ -673,4 +673,18 @@ describe("Page meta", () => {
     );
     assert.deepEqual(runtime.route.meta, {});
   });
+
+  it("drops a page's meta when an error page replaces it at the same path", async () => {
+    await setupFrontendModules([]);
+    const { app, runtime } = application("first");
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared");
+      defineDmsPageMeta({ auth: true });
+      hydrateDmsPageProps(
+        { path: "/declared", page: {}, error: { statusCode: 500 } },
+        "/declared",
+      );
+    });
+    assert.deepEqual(runtime.route.meta, {});
+  });
 });
