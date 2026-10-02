@@ -333,6 +333,11 @@ export interface DmsFrontendRuntime {
   pendingNavigation?: Promise<void>;
   hasNavigationListener: boolean;
   pageVersion: number;
+  /**
+   * Identifies the page on screen (its path, or the error page shown at that
+   * path), whose meta `route.meta` holds.
+   */
+  pageKey?: string;
   /** The `Cookie` header of the request a server runtime renders. */
   requestCookies?: string;
   /**
@@ -495,7 +500,10 @@ function parseRoute(runtime: DmsFrontendRuntime, url: string): DmsRoute {
 }
 
 function updateRoute(runtime: DmsFrontendRuntime, url: string): void {
-  Object.assign(runtime.route, parseRoute(runtime, url));
+  // The meta is the page's, not the URL's: a page declares it, then reads its
+  // route, and the middleware the meta selected must still find it.
+  const { meta: _pageMeta, ...location } = parseRoute(runtime, url);
+  Object.assign(runtime.route, location);
 }
 
 function locationToUrl(
@@ -1366,6 +1374,14 @@ export function getDmsLayoutProps(
 export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
   const runtime = useDmsRuntime();
   if (url) updateRoute(runtime, url);
+  // Pages are keyed by path: another path mounts another page, which declares
+  // its own meta, and so does an error page shown in place of the page. A
+  // visit that only changes the query keeps the page, and so its meta.
+  const pageKey = props.error ? `error:${props.path}` : props.path;
+  if (pageKey !== runtime.pageKey) {
+    runtime.pageKey = pageKey;
+    runtime.route.meta = {};
+  }
   runtime.pageVersion++;
   runtime.currentError.value = null;
   useDmsState<DmsUser | null>("dms-user", () => null).value =
