@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.8
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.7...v0.3.8)
+
+### 🩹 Fixes
+
+- **vue:** Read the request's own URL in useDmsRoute() on the server ([#79](https://github.com/AntelopeJS/dms-frontend/pull/79))
+- **vue:** Keep the meta a page declared when it reads its route ([#81](https://github.com/AntelopeJS/dms-frontend/pull/81))
+- **server:** Serve the frontend's own files before asking the backend ([#80](https://github.com/AntelopeJS/dms-frontend/pull/80))
+
+### ❤️ Contributors
+
+- Alessandro Aloisio
+
 ## v0.3.7
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.6...v0.3.7)
