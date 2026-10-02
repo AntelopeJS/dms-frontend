@@ -123,6 +123,19 @@ const uiInertiaLinkImport = resolve(
   __dirname,
   "node_modules/@nuxt/ui/dist/runtime/vue/overrides/inertia/Link.vue",
 );
+/**
+ * Nuxt UI's Link and route stub read Inertia's page to know the current URL.
+ * Inertia keeps a single page for the whole process, written by each server
+ * render as it starts: a link rendered after an await could take another
+ * request's URL to set its active state. Their `usePage()` is the DMS one,
+ * which gives the page of the request being rendered.
+ */
+const uiInertiaPageImport =
+  /import\s*\{\s*usePage\s*\}\s*from\s*["']@inertiajs\/vue3["']/;
+const dmsInertiaPageImport =
+  'import { useDmsInertiaPage as usePage } from "#dms/frontend-module"';
+const isNuxtUiFile = (id: string) =>
+  normalizePath(id).includes("/node_modules/@nuxt/ui/");
 
 export default defineConfig({
   logLevel,
@@ -132,6 +145,17 @@ export default defineConfig({
       enforce: "pre",
       resolveId(id) {
         return id === uiLinkImport ? uiInertiaLinkImport : null;
+      },
+    },
+    {
+      name: "dms-ui-inertia-page",
+      enforce: "pre",
+      transform(code, id) {
+        if (!isNuxtUiFile(id) || !uiInertiaPageImport.test(code)) return null;
+        return {
+          code: code.replace(uiInertiaPageImport, dmsInertiaPageImport),
+          map: null,
+        };
       },
     },
     vue(),

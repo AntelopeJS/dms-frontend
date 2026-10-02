@@ -382,7 +382,12 @@ export interface DmsFrontendRuntime {
    * it once done: nothing else would, since a server app is never unmounted.
    */
   scope: EffectScope;
+  /** The Inertia page a server runtime renders: see `useDmsInertiaPage`. */
+  inertiaPage?: DmsInertiaPage;
 }
+
+/** Inertia's page, as `usePage()` returns it. */
+export type DmsInertiaPage = ReturnType<typeof usePage>;
 
 /** Creates the empty registry one setup of the frontend modules fills. */
 function createDmsFrontendRegistry(): DmsFrontendRegistry {
@@ -684,6 +689,18 @@ export function useDmsRoute(pattern?: string): DmsRoute {
     (url) => updateRoute(runtime, url),
   );
   return runtime.route;
+}
+
+/**
+ * Inertia's page, as `usePage()` returns it, for the request being rendered.
+ * Inertia keeps a single page for the whole process, written by each server
+ * render as it starts: read after an await, it may be another request's. Nuxt
+ * UI's Link and route stub read this one instead (see `vite.config.ts`).
+ */
+export function useDmsInertiaPage(): DmsInertiaPage {
+  const runtime = useDmsRuntime();
+  if (runtime.isServer && runtime.inertiaPage) return runtime.inertiaPage;
+  return usePage();
 }
 
 export function useDmsRouter(): DmsRouter {

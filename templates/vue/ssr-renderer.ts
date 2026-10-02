@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { createHead, renderSSRHead } from "@unhead/vue/server";
 import { renderToString } from "@vue/server-renderer";
-import { createSSRApp, h } from "vue";
+import { createSSRApp, h, readonly } from "vue";
 import {
   type DmsServerFetch,
   SSR_ASYNC_COMPONENTS_ID,
@@ -14,6 +14,7 @@ import {
 import {
   type DmsErrorData,
   type DmsFrontendRuntime,
+  type DmsInertiaPage,
   type DmsPageProps,
   createDmsFrontendRuntime,
   hasDmsPage,
@@ -111,6 +112,8 @@ export async function renderDmsPage(
     true,
     requestCookies,
   );
+  // The page Inertia's app sets as it starts, held by the request's runtime.
+  runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
   const store = { runtime };
   try {
     return await runtimeStorage.run(store, () =>
