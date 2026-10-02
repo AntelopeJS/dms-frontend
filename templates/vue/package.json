@@ -26,6 +26,7 @@
     "@vue/server-renderer": "^3.5.0",
     "@vueuse/core": "^14.3.0",
     "defu": "^6.1.4",
+    "devalue": "^5.9.4",
     "ofetch": "^1.4.1",
     "reka-ui": "^2.6.0",
     "tailwindcss": "^4.0.0",

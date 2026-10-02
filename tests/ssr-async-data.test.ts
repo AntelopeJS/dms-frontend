@@ -5,14 +5,17 @@ import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
+import { parse } from "devalue";
 
 // The pages render through the real SSR entry: the payload the browser
 // hydrates with is only what the HTML of the same render shows.
 const FIXTURE_MODULES = `
 import {defineComponent,h} from 'vue';
-import {$fetch,defineDmsPageMeta,useDmsAsyncData,useDmsLazyAsyncData} from './frontend-module';
+import {Icon,addIcon} from '@iconify/vue';
+import {$fetch,createError,defineDmsPageMeta,useDmsAsyncData,useDmsLazyAsyncData,useDmsState} from './frontend-module';
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 export const frontendModules=[{options:{public:{}},module:{setup(sdk){
+ addIcon('fixture:dot',{body:'<circle cx="1" cy="1" r="1"/>',width:2,height:2});
  sdk.registerPlugin(async()=>{const {data,refresh}=useDmsLazyAsyncData('plugin-key',()=>$fetch('/plugin-data'));if(!data.value)await refresh()});
  sdk.registerMiddleware('late-data',async to=>{if(to.path!=='/late')return;await sleep(5);await useDmsAsyncData('late-key',async()=>'never rendered')},{global:true});
  const Lazy=defineComponent({setup(){const {data,status}=useDmsLazyAsyncData('lazy-key',async()=>{await sleep(1);return 'fresh'});return()=>h('p','lazy '+status.value+':'+data.value)}});
@@ -21,17 +24,35 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('late',defineComponent({setup(){defineDmsPageMeta({});return()=>h('p','late page')}}));
  sdk.registerPage('client-only',defineComponent({setup(){const {data,status}=useDmsAsyncData('client-key',()=>$fetch('/client-data'),{server:false,default:()=>'default'});return()=>h('p','client '+status.value+':'+data.value)}}));
  sdk.registerPage('plugin',defineComponent({setup(){const {data}=useDmsLazyAsyncData('plugin-key',()=>$fetch('/plugin-data'));return()=>h('p','plugin:'+data.value)}}));
+ sdk.registerPage('payload',defineComponent({setup(){
+  const seen=useDmsState('seen',()=>new Set(['a','b']),{transfer:true});
+  useDmsState('since',()=>new Date('2026-10-02T00:00:00.000Z'),{transfer:true});
+  useDmsState('closing',()=>'</script><script>alert(1)</script>',{transfer:true});
+  useDmsState('server-only',()=>'private-value');
+  useDmsState('instance',()=>new (class Box{value=1})(),{transfer:true});
+  const {status}=useDmsAsyncData('missing',async()=>{throw createError({statusCode:404,statusMessage:'Not Found',data:'orders.not_found'})});
+  return()=>h('p',['payload '+status.value+':'+seen.value.size,h(Icon,{icon:'fixture:dot'})])}}));
 }}}];`;
 
-function payload(html: string): Record<string, unknown> {
-  const match = html.match(
-    /<script id="dms-ssr-async-data" type="application\/json">(.*?)<\/script>/s,
-  );
-  assert.ok(match, "every server render carries its async data");
-  return JSON.parse(match[1]) as Record<string, unknown>;
+interface Payload {
+  data: Record<string, unknown>;
+  errors: Record<string, unknown>;
+  state: Record<string, unknown>;
 }
 
-it("hydrates a server render with exactly the data its HTML shows", async () => {
+function serverPayload(html: string): Payload {
+  const match = html.match(
+    /<script id="dms-payload" type="application\/json">(.*?)<\/script>/s,
+  );
+  assert.ok(match, "every server render carries its payload");
+  return parse(match[1]) as Payload;
+}
+
+function payload(html: string): Record<string, unknown> {
+  return serverPayload(html).data;
+}
+
+it("hydrates a server render with exactly the data its HTML shows", async (context) => {
   const workspace = mkdtempSync(resolve(".ssr-async-data-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backendCalls: string[] = [];
@@ -138,6 +159,47 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.deepEqual(
       backendCalls.filter((path) => path === "/plugin-data"),
       ["/plugin-data"],
+    );
+
+    // One script carries the data, the failures and the state a key opted
+    // into, in a format that keeps what JSON cannot: a Set, a Date. A value
+    // it cannot write is left out, and the page still renders.
+    const logged = context.mock.method(console, "error", () => {});
+    const page = await render("/payload");
+    logged.mock.restore();
+    assert.match(page, /payload error:2/);
+    // The icons the render drew travel beside the payload, in their own
+    // script: the browser loads them before it hydrates.
+    assert.match(page, /<circle cx="1" cy="1" r="1"/);
+    const icons = page.match(
+      /<script id="dms-ssr-icons" type="application\/json">(.*?)<\/script>/s,
+    );
+    assert.ok(icons, "the icons script follows the payload");
+    assert.deepEqual(Object.keys(JSON.parse(icons[1])), ["fixture:dot"]);
+    assert.doesNotMatch(page, /dms-ssr-async-data/);
+    assert.doesNotMatch(page, /<\/script><script>alert/);
+    assert.doesNotMatch(page, /private-value/);
+    const transferred = serverPayload(page);
+    assert.deepEqual(transferred.state.seen, new Set(["a", "b"]));
+    assert.deepEqual(
+      transferred.state.since,
+      new Date("2026-10-02T00:00:00.000Z"),
+    );
+    assert.equal(
+      transferred.state.closing,
+      "</script><script>alert(1)</script>",
+    );
+    assert.deepEqual(transferred.errors.missing, {
+      statusCode: 404,
+      statusMessage: "Not Found",
+      message: "Not Found",
+      data: "orders.not_found",
+    });
+    assert.equal("instance" in transferred.state, false);
+    assert.ok(
+      logged.mock.calls.some((call) =>
+        String(call.arguments[0]).includes('"instance" cannot be serialized'),
+      ),
     );
   } finally {
     frontend?.close();

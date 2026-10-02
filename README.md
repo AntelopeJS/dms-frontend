@@ -561,6 +561,20 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
   render did: once its setup awaits the call, or right before it renders. A
   value its setup derives from data it did not await, in an immediate
   watcher for instance, is then the one the server rendered.
+- **A failure is transferred too,** so hydration does not run the handler
+  again: an HTTP failure keeps its `statusCode`, `statusMessage`, `message`
+  and `data`, any other failure becomes a `500` whose cause only the server
+  logs. A fetch error's message names the backend's address on a server, so
+  its status text replaces it.
+- **`useDmsState(key, init, { transfer: true })`** hands the server's value
+  to the browser, which then starts from it instead of calling `init`. State
+  is never transferred unless a key opts in, and must never hold a token or
+  a secret: the value is written into the page.
+- One `<script id="dms-payload" type="application/json">` carries the data,
+  the failures and the transferred state, in
+  [devalue](https://github.com/sveltejs/devalue)'s format, which keeps a
+  `Set`, a `Map` or a `Date`, escaped like Inertia's page object. A value it
+  cannot write, such as a class instance, is left out and logged.
 - Data no component shows any more is dropped at the next navigation, and
   `deep: false` makes `data` a shallow ref.
 

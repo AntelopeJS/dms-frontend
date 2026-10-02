@@ -2,23 +2,26 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { createHead, renderSSRHead } from "@unhead/vue/server";
 import { renderToString } from "@vue/server-renderer";
+import { stringify } from "devalue";
 import { createSSRApp, h } from "vue";
 import {
+  DMS_PAYLOAD_ID,
   type DmsServerFetch,
   SSR_ASYNC_COMPONENTS_ID,
   configureDmsApp,
   resolveDmsInertiaPage,
-  serializeDmsAsyncData,
   trackDmsAsyncComponents,
 } from "./app-runtime";
 import {
   type DmsErrorData,
   type DmsFrontendRuntime,
   type DmsPageProps,
+  type DmsPayload,
   createDmsFrontendRuntime,
   hasDmsPage,
   preloadDmsPage,
   resolveDmsAccessRedirect,
+  serializeDmsPayload,
   setDmsServerRuntimeResolver,
   setupFrontendModules,
   trackDmsServerScopes,
@@ -59,7 +62,6 @@ interface DmsSsrContext {
   teleports?: Record<string, string>;
 }
 
-const SSR_ASYNC_DATA_ID = "dms-ssr-async-data";
 // Holds the runtime rather than being it: every socket, timer and promise a
 // render starts keeps this store for its whole life, and a pooled backend
 // connection then serving an SSE stream lives for hours. Emptied once the
@@ -69,9 +71,35 @@ const runtimeStorage = new AsyncLocalStorage<{
 }>();
 setDmsServerRuntimeResolver(() => runtimeStorage.getStore()?.runtime);
 
-function asyncDataScript(asyncData: Record<string, unknown>): string {
-  const value = JSON.stringify(asyncData).replaceAll("<", "\\u003c");
-  return `<script id="${SSR_ASYNC_DATA_ID}" type="application/json">${value}</script>`;
+/**
+ * The payload in devalue's format, which keeps what JSON cannot (a Set, a
+ * Date). A value it cannot write, such as a class instance a transform
+ * returned, is left out rather than failing the page: the browser starts over
+ * for that key, as it did before the key was transferred.
+ */
+function stringifyPayload(payload: DmsPayload): string {
+  try {
+    return stringify(payload);
+  } catch {
+    const kept: DmsPayload = { data: {}, errors: {}, state: {} };
+    for (const part of ["data", "errors", "state"] as const)
+      for (const [key, value] of Object.entries(payload[part]))
+        try {
+          stringify(value);
+          kept[part][key] = value as never;
+        } catch (error) {
+          console.error(`DMS payload: "${key}" cannot be serialized`, error);
+        }
+    return stringify(kept);
+  }
+}
+
+function payloadScript(payload: DmsPayload): string {
+  // Escaped like Inertia's page object, so that no value can end the script.
+  const value = stringifyPayload(payload)
+    .replaceAll("/", "\\/")
+    .replaceAll("<", "\\u003c");
+  return `<script id="${DMS_PAYLOAD_ID}" type="application/json">${value}</script>`;
 }
 
 function asyncComponentsScript(names: Set<string>): string {
@@ -130,14 +158,14 @@ async function renderDmsPageWithRuntime(
     const ssrContext: DmsSsrContext = {};
     let asyncComponents = new Set<string>();
     let icons = new Set<string>();
-    let asyncData: Record<string, unknown> = {};
+    let payload: DmsPayload = { data: {}, errors: {}, state: {} };
     const inertiaResult = await createInertiaApp({
       page,
       // Read as the HTML is complete: data a run settles afterwards was never
       // rendered, and the browser must not hydrate the page with it.
       render: async (app) => {
         const html = await renderToString(app, ssrContext);
-        asyncData = serializeDmsAsyncData(runtime);
+        payload = serializeDmsPayload(runtime);
         return html;
       },
       resolve: resolveDmsInertiaPage,
@@ -194,7 +222,7 @@ async function renderDmsPageWithRuntime(
     const renderedHead = await renderSSRHead(head);
     return {
       error: page.props.error,
-      body: `${inertiaResult.body}${asyncDataScript(asyncData)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
+      body: `${inertiaResult.body}${payloadScript(payload)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
       head: {
         bodyAttrs: renderedHead.bodyAttrs,
         headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,

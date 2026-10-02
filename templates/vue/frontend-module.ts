@@ -39,6 +39,7 @@ import {
   readonly,
   ref,
   shallowRef,
+  toRaw,
   watch,
 } from "vue";
 import type { Composer } from "vue-i18n";
@@ -226,6 +227,20 @@ export interface DmsErrorData {
   data?: unknown;
   fatal?: boolean;
 }
+/** What a server render hands the browser along with its HTML. */
+export interface DmsPayload {
+  data: Record<string, unknown>;
+  errors: Record<string, DmsErrorData>;
+  state: Record<string, unknown>;
+}
+export interface DmsStateOptions {
+  /**
+   * Hands the server's value to the browser, which then starts from it
+   * instead of calling `init` again. Never for tokens or secrets: the value
+   * is written into the page.
+   */
+  transfer?: boolean;
+}
 export interface DmsUserSession<TUser = DmsUser, TSession = DmsSession> {
   user: Ref<TUser | null>;
   session: Ref<TSession | null>;
@@ -392,6 +407,10 @@ export interface DmsFrontendRuntime {
   asyncData: Map<string, DmsAsyncData<unknown>>;
   /** The server's data, which the browser takes over once per key. */
   hydratedAsyncData: Map<string, unknown>;
+  /** The server's failures, which the browser takes over once per key. */
+  hydratedAsyncErrors: Map<string, DmsErrorData>;
+  /** The state keys a server render hands to the browser. */
+  transferredState: Set<string>;
   /**
    * Whether the browser is still hydrating the page the server rendered,
    * whose first render must match the server's HTML.
@@ -472,6 +491,8 @@ export function createDmsFrontendRuntime(
     sharedState: new Map(),
     asyncData: new Map(),
     hydratedAsyncData: new Map(Object.entries(hydratedAsyncData ?? {})),
+    hydratedAsyncErrors: new Map(),
+    transferredState: new Set(),
     // A browser handed the server's data, even none, hydrates its HTML.
     hydrating: !isServer && hydratedAsyncData !== undefined,
     serverPrefetches: new Set(),
@@ -874,6 +895,7 @@ interface AsyncDataBindingHandle {
 /** What a key holds before any run of the browser's own. */
 interface AsyncDataInitialState<T> {
   data: T | null;
+  error: unknown;
   status: DmsAsyncDataStatus;
 }
 
@@ -913,7 +935,7 @@ function createAsyncDataEntry<T>(
   const data = (
     deep ? ref(initial.data) : shallowRef(initial.data)
   ) as Ref<T | null>;
-  const error = ref<unknown>(null);
+  const error = ref<unknown>(initial.error);
   const status = ref<DmsAsyncDataStatus>(initial.status);
   const pending = computed(() => status.value === "pending");
   const bindings: AsyncDataBinding<T>[] = [];
@@ -925,6 +947,7 @@ function createAsyncDataEntry<T>(
   const adoptNow = () => {
     if (!heldBack) return;
     data.value = heldBack.data;
+    error.value = heldBack.error;
     status.value = heldBack.status;
     heldBack = undefined;
   };
@@ -1031,13 +1054,24 @@ function createAsyncDataEntry<T>(
   };
 }
 
-/** The state the server's render left a key in, if it rendered the key. */
+/**
+ * The state the server's render left a key in, if it rendered the key: its
+ * data, or its failure next to the default it rendered.
+ */
 function serverAsyncDataState<T>(
   runtime: DmsFrontendRuntime,
   key: string,
+  fallback: AsyncDataInitialState<T>,
 ): AsyncDataInitialState<T> | undefined {
-  if (!runtime.hydratedAsyncData.has(key)) return undefined;
-  return { data: runtime.hydratedAsyncData.get(key) as T, status: "success" };
+  if (runtime.hydratedAsyncData.has(key))
+    return {
+      data: runtime.hydratedAsyncData.get(key) as T,
+      error: null,
+      status: "success",
+    };
+  const failure = runtime.hydratedAsyncErrors.get(key);
+  if (!failure) return undefined;
+  return { data: fallback.data, error: createError(failure), status: "error" };
 }
 
 function asyncDataEntry<T>(
@@ -1050,10 +1084,13 @@ function asyncDataEntry<T>(
   if (shared) return asyncDataEntries.get(shared) as AsyncDataEntry<T>;
   const fallback: AsyncDataInitialState<T> = {
     data: options.default?.() ?? null,
+    error: null,
     status: "idle",
   };
   const server =
-    key === undefined ? undefined : serverAsyncDataState<T>(runtime, key);
+    key === undefined
+      ? undefined
+      : serverAsyncDataState<T>(runtime, key, fallback);
   const entry = createAsyncDataEntry<T>(
     runtime,
     server && !inComponent ? server : fallback,
@@ -1064,6 +1101,7 @@ function asyncDataEntry<T>(
   if (server && inComponent) entry.adoptLater(server);
   if (key === undefined) return entry;
   runtime.hydratedAsyncData.delete(key);
+  runtime.hydratedAsyncErrors.delete(key);
   const result = entry.result as DmsAsyncData<unknown>;
   runtime.asyncData.set(key, result);
   asyncDataEntries.set(result, entry as AsyncDataEntry<unknown>);
@@ -1176,12 +1214,95 @@ export function serializeDmsAsyncData(
   return Object.fromEntries(
     [...runtime.asyncData.entries()]
       .filter(([, entry]) => entry.status.value === "success")
-      .map(([key, entry]) => [key, entry.data.value]),
+      .map(([key, entry]) => [key, toRaw(entry.data.value)]),
   );
 }
 
-export function useDmsState<T>(key: string, init?: () => T): Ref<T> {
+const HTTP_ERROR_STATUS = { min: 400, max: 599 };
+const SERVER_FAILURE_STATUS = 500;
+const FETCH_ERROR_NAME = "FetchError";
+
+/** The fields of a failure, under the names `createError` and ofetch use. */
+interface DmsFailure extends DmsErrorData {
+  name?: string;
+  status?: number;
+  statusText?: string;
+}
+
+/**
+ * What of a failure a page may carry, by the rule the error page follows: an
+ * HTTP failure keeps its status, status text, body and message, anything else
+ * is a server failure whose cause only reaches the server log. A fetch error
+ * names the URL it requested, which on a server is the backend's own address:
+ * its status text stands for it.
+ */
+function transferredError(key: string, reason: unknown): DmsErrorData {
+  const failure = (reason ?? {}) as DmsFailure;
+  const statusCode = failure.statusCode ?? failure.status;
+  if (
+    statusCode === undefined ||
+    !Number.isInteger(statusCode) ||
+    statusCode < HTTP_ERROR_STATUS.min ||
+    statusCode > HTTP_ERROR_STATUS.max
+  ) {
+    console.error(`DMS async data "${key}" failed`, reason);
+    return { statusCode: SERVER_FAILURE_STATUS };
+  }
+  const statusMessage = failure.statusMessage ?? failure.statusText;
+  return {
+    statusCode,
+    statusMessage,
+    message:
+      failure.name === FETCH_ERROR_NAME ? statusMessage : failure.message,
+    data: failure.data,
+  };
+}
+
+/**
+ * Everything a server render hands the browser: the data and the failures of
+ * its keys, and the state keys opted into. Read as the HTML is complete.
+ */
+export function serializeDmsPayload(runtime: DmsFrontendRuntime): DmsPayload {
+  const errors = [...runtime.asyncData.entries()]
+    .filter(([, entry]) => entry.status.value === "error")
+    .map(([key, entry]): [string, DmsErrorData] => [
+      key,
+      transferredError(key, entry.error.value),
+    ]);
+  const state = [...runtime.transferredState]
+    .map((key): [string, unknown] => [
+      key,
+      toRaw(runtime.sharedState.get(key)?.value),
+    ])
+    .filter(([, value]) => value !== undefined);
+  return {
+    data: serializeDmsAsyncData(runtime),
+    errors: Object.fromEntries(errors),
+    state: Object.fromEntries(state),
+  };
+}
+
+/** Starts a browser runtime from what the server rendered. */
+export function restoreDmsPayload(
+  runtime: DmsFrontendRuntime,
+  payload: Partial<DmsPayload>,
+): void {
+  runtime.hydrating = true;
+  for (const [key, value] of Object.entries(payload.data ?? {}))
+    runtime.hydratedAsyncData.set(key, value);
+  for (const [key, failure] of Object.entries(payload.errors ?? {}))
+    runtime.hydratedAsyncErrors.set(key, failure);
+  for (const [key, value] of Object.entries(payload.state ?? {}))
+    runtime.sharedState.set(key, ref(value));
+}
+
+export function useDmsState<T>(
+  key: string,
+  init?: () => T,
+  options: DmsStateOptions = {},
+): Ref<T> {
   const runtime = useDmsRuntime();
+  if (options.transfer) runtime.transferredState.add(key);
   if (!runtime.sharedState.has(key))
     runtime.sharedState.set(key, ref(init?.()));
   return runtime.sharedState.get(key) as Ref<T>;
@@ -1817,6 +1938,7 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
 function endHydration(runtime: DmsFrontendRuntime): void {
   runtime.hydrating = false;
   runtime.hydratedAsyncData.clear();
+  runtime.hydratedAsyncErrors.clear();
 }
 
 export function getDmsErrorPage(): Component | undefined {

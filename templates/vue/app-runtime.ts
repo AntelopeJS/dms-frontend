@@ -7,6 +7,7 @@ import ui from "@nuxt/ui/vue-plugin";
 import { useHead } from "@unhead/vue";
 import type { VueHeadClient } from "@unhead/vue/types";
 import type { IconifyIcon } from "@iconify/vue";
+import { parse } from "devalue";
 import type { FetchOptions } from "ofetch";
 import {
   type App,
@@ -24,6 +25,7 @@ import DmsDynamicPage from "./DmsDynamicPage.vue";
 import {
   type DmsLocaleLoader,
   type DmsPageProps,
+  type DmsPayload,
   type DmsUser,
   createDmsFrontendRuntime,
   dmsPageSuspenseProps,
@@ -38,7 +40,7 @@ import {
   readDmsLocaleCookie,
   resolveDmsAsyncComponents,
   resolveDmsComponent,
-  serializeDmsAsyncData,
+  restoreDmsPayload,
   trackDmsAsyncComponents,
   useDmsAppConfig,
   useDmsState,
@@ -87,7 +89,7 @@ export type DmsServerFetch = (
   options?: FetchOptions,
 ) => Promise<unknown>;
 
-const SSR_ASYNC_DATA_ID = "dms-ssr-async-data";
+export const DMS_PAYLOAD_ID = "dms-payload";
 export const SSR_ASYNC_COMPONENTS_ID = "dms-ssr-async-components";
 const DEFAULT_LOCALE = "en";
 
@@ -112,16 +114,37 @@ function userLocale(user: DmsUser | null | undefined): string | undefined {
   return supportedLocales.includes(locale) ? locale : undefined;
 }
 
-function readServerRendered<T>(id: string, empty: T): T {
+function readServerRendered<T>(
+  id: string,
+  empty: T,
+  parseText: (text: string) => unknown = JSON.parse,
+): T {
   if (typeof document === "undefined") return empty;
   const element = document.getElementById(id);
   if (!element?.textContent) return empty;
-  const value = JSON.parse(element.textContent) as T;
+  const value = parseText(element.textContent) as T;
   element.remove();
   return value;
 }
 
 drawLoadedIconsAtOnce();
+
+/** A browser runtime, started from what the server rendered, if it did. */
+function createBrowserRuntime(
+  serverFetch?: DmsServerFetch,
+): DmsConfiguredApp["runtime"] {
+  const runtime = createDmsFrontendRuntime(
+    serverFetch as typeof import("ofetch").ofetch,
+  );
+  // Nothing when the server did not render the page: no hydration then.
+  const payload = readServerRendered<DmsPayload | undefined>(
+    DMS_PAYLOAD_ID,
+    undefined,
+    parse,
+  );
+  if (payload) restoreDmsPayload(runtime, payload);
+  return runtime;
+}
 
 const DmsInertiaPage = defineComponent({
   name: "DmsInertiaPage",
@@ -255,16 +278,7 @@ export async function configureDmsApp(
   options: DmsAppOptions,
 ): Promise<DmsConfiguredApp> {
   mergeDmsAppConfig();
-  const runtime =
-    options.runtime ??
-    createDmsFrontendRuntime(
-      options.serverFetch as typeof import("ofetch").ofetch,
-      // Nothing when the server did not render the page: no hydration then.
-      readServerRendered<Record<string, unknown> | undefined>(
-        SSR_ASYNC_DATA_ID,
-        undefined,
-      ),
-    );
+  const runtime = options.runtime ?? createBrowserRuntime(options.serverFetch);
   // The signed-in user's language, else the one this browser picked, which is
   // how a visitor's choice on a public page survives a reload.
   const locale =
@@ -313,4 +327,4 @@ export async function configureDmsApp(
   return { mounted, runtime };
 }
 
-export { serializeDmsAsyncData, trackDmsAsyncComponents };
+export { trackDmsAsyncComponents };

@@ -565,3 +565,121 @@ describe("Async data in the browser", () => {
     assert.equal(isShallow(deep.data), false);
   });
 });
+
+describe("Server payload", () => {
+  const serverPayload = async (setup: () => () => ReturnType<typeof h>) => {
+    const { runtime, render } = serverRender(defineComponent({ setup }));
+    const html = await render();
+    return { html, payload: runtimeModule.serializeDmsPayload(runtime) };
+  };
+
+  it("transfers a failed server run, so hydration does not run it again (E5)", async () => {
+    const { html, payload } = await serverPayload(() => {
+      const { status, error } = useDmsAsyncData("e5", async () => {
+        throw runtimeModule.createError({
+          statusCode: 404,
+          statusMessage: "Not Found",
+          message: "No such order",
+          data: { message: "orders.not_found" },
+        });
+      });
+      return () =>
+        h(
+          "p",
+          `${status.value}:${(error.value as { statusCode?: number })?.statusCode}`,
+        );
+    });
+    assert.equal(html, "<p>error:404</p>");
+    assert.deepEqual(payload.errors, {
+      e5: {
+        statusCode: 404,
+        statusMessage: "Not Found",
+        message: "No such order",
+        data: { message: "orders.not_found" },
+      },
+    });
+
+    const runtime = createDmsFrontendRuntime();
+    runtimeModule.restoreDmsPayload(runtime, payload);
+    let calls = 0;
+    const { app } = clientApp(runtime);
+    const entry = await app.runWithContext(() =>
+      useDmsAsyncData("e5", async () => ++calls, { default: () => 0 }),
+    );
+
+    assert.equal(calls, 0);
+    assert.equal(entry.status.value, "error");
+    assert.equal(entry.data.value, 0, "the default the server rendered");
+    assert.equal(
+      (entry.error.value as { statusCode?: number }).statusCode,
+      404,
+    );
+    assert.deepEqual((entry.error.value as { data?: unknown }).data, {
+      message: "orders.not_found",
+    });
+  });
+
+  it("keeps the backend's address out of a fetch error it transfers", async () => {
+    const { payload } = await serverPayload(() => {
+      useDmsAsyncData("fetch-error", async () => {
+        throw Object.assign(
+          new Error(
+            '[GET] "http://10.0.0.5:5500/api/x": 503 Service Unavailable',
+          ),
+          {
+            name: "FetchError",
+            statusCode: 503,
+            statusMessage: "Service Unavailable",
+            data: "error.backend",
+          },
+        );
+      });
+      return () => h("p");
+    });
+
+    assert.deepEqual(payload.errors["fetch-error"], {
+      statusCode: 503,
+      statusMessage: "Service Unavailable",
+      message: "Service Unavailable",
+      data: "error.backend",
+    });
+  });
+
+  it("transfers an unexpected failure as its status alone", async (context) => {
+    context.mock.method(console, "error", () => {});
+    const { payload } = await serverPayload(() => {
+      useDmsAsyncData("unexpected", async () => {
+        throw new Error("private database hostname");
+      });
+      return () => h("p");
+    });
+
+    assert.deepEqual(payload.errors, { unexpected: { statusCode: 500 } });
+  });
+
+  it("transfers only the state a key opts into (E5)", async () => {
+    let browserInit = 0;
+    const { payload } = await serverPayload(() => {
+      runtimeModule.useDmsState("onboarding", () => ({ done: true }), {
+        transfer: true,
+      });
+      runtimeModule.useDmsState("server-only", () => "not for the browser");
+      return () => h("p");
+    });
+    assert.deepEqual(payload.state, { onboarding: { done: true } });
+
+    const runtime = createDmsFrontendRuntime();
+    runtimeModule.restoreDmsPayload(runtime, payload);
+    const { app } = clientApp(runtime);
+    const onboarding = app.runWithContext(() =>
+      runtimeModule.useDmsState("onboarding", () => {
+        browserInit++;
+        return { done: false };
+      }),
+    );
+
+    assert.equal(browserInit, 0, "the browser starts from the server's state");
+    assert.deepEqual(onboarding.value, { done: true });
+    assert.equal(runtime.hydrating, true);
+  });
+});
