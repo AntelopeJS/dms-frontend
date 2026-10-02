@@ -683,3 +683,128 @@ describe("Server payload", () => {
     assert.equal(runtime.hydrating, true);
   });
 });
+
+describe("useDmsFetch", () => {
+  function fetchingRuntime(isServer: boolean) {
+    const requests: Array<{ url: string; options: Record<string, unknown> }> =
+      [];
+    const runtime = createDmsFrontendRuntime(
+      (async (url: string, options: Record<string, unknown> = {}) => {
+        requests.push({ url, options });
+        return `data:${url}`;
+      }) as never,
+      undefined,
+      isServer,
+    );
+    return { runtime, requests };
+  }
+
+  it("renders and transfers a server response instead of discarding it (E1)", async () => {
+    const { runtime, requests } = fetchingRuntime(true);
+    const app = createSSRApp(
+      defineComponent({
+        setup() {
+          const { data } = runtimeModule.useDmsFetch<string>("/api/e1");
+          return () => h("p", String(data.value));
+        },
+      }),
+    );
+    provideDmsFrontendRuntime(app, runtime);
+
+    assert.equal(await renderToString(app), "<p>data:/api/e1</p>");
+    assert.deepEqual(
+      requests.map(({ url }) => url),
+      ["/api/e1"],
+    );
+    const payload = runtimeModule.serializeDmsPayload(runtime);
+    assert.deepEqual(Object.values(payload.data), ["data:/api/e1"]);
+
+    const browser = fetchingRuntime(false);
+    runtimeModule.restoreDmsPayload(browser.runtime, payload);
+    const { app: client } = clientApp(browser.runtime);
+    const hydrated = await client.runWithContext(() =>
+      runtimeModule.useDmsFetch<string>("/api/e1"),
+    );
+    assert.equal(hydrated.data.value, "data:/api/e1");
+    assert.deepEqual(browser.requests, [], "hydration does not fetch again");
+  });
+
+  it("shares one request per method, URL, query and body, whatever the headers", async () => {
+    const { runtime, requests } = fetchingRuntime(false);
+    const { app } = clientApp(runtime);
+    const load = (url: string, options = {}) =>
+      app.runWithContext(() => runtimeModule.useDmsFetch(url, options));
+
+    await Promise.all([
+      load("/api/list", { query: { page: 1, sort: "name" } }),
+      load("/api/list", {
+        query: { sort: "name", page: 1 },
+        headers: { "x-trace": "a" },
+      }),
+      load("/api/list", { query: { page: 2, sort: "name" } }),
+      load("/api/list", { method: "POST", body: { page: 1 } }),
+      load("/api/list", { method: "POST", body: { page: 2 } }),
+    ]);
+
+    assert.deepEqual(
+      requests.map(({ url, options }) => [
+        url,
+        options.method ?? "GET",
+        JSON.stringify(options.query ?? options.body),
+      ]),
+      [
+        ["/api/list", "GET", '{"page":1,"sort":"name"}'],
+        ["/api/list", "GET", '{"page":2,"sort":"name"}'],
+        ["/api/list", "POST", '{"page":1}'],
+        ["/api/list", "POST", '{"page":2}'],
+      ],
+    );
+  });
+
+  it("follows a URL getter to the key of each URL, showing the previous data meanwhile", async () => {
+    const runtime = createDmsFrontendRuntime();
+    const id = ref(1);
+    const answers = new Map<string, ReturnType<typeof deferred<string>>>();
+    const signals: AbortSignal[] = [];
+    const fetcher = ((url: string, options: { signal: AbortSignal }) => {
+      signals.push(options.signal);
+      const answer = deferred<string>();
+      answers.set(url, answer);
+      return answer.promise;
+    }) as never;
+    let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
+    const Consumer = defineComponent({
+      setup() {
+        entry = runtimeModule.useDmsFetch<string>(
+          () => `/api/orders/${id.value}`,
+          { $fetch: fetcher },
+        );
+        return () => h("p");
+      },
+    });
+    const app = mountRuntime(runtime, { render: () => h(Consumer) });
+    answers.get("/api/orders/1")!.resolve("order 1");
+    await settle();
+    assert.equal(entry!.data.value, "order 1");
+
+    id.value = 2;
+    await nextTick();
+    assert.equal(entry!.status.value, "pending");
+    assert.equal(entry!.data.value, "order 1", "no flash while it loads");
+    answers.get("/api/orders/2")!.resolve("order 2");
+    await settle();
+    assert.equal(entry!.data.value, "order 2");
+    assert.equal(signals.length, 2, "the custom fetcher gets the signal");
+    assert.ok(signals.every((signal) => signal instanceof AbortSignal));
+
+    app.runWithContext(() =>
+      hydrateDmsPageProps({ path: "/elsewhere", page: {} }),
+    );
+    assert.deepEqual(
+      [...runtime.asyncData.values()].map((result) => result.data.value),
+      ["order 2"],
+      "the first URL's data went with the key nobody shows",
+    );
+    app.unmount();
+  });
+});

@@ -388,9 +388,10 @@ describe("Vue request runtime", () => {
     assert.deepEqual(second.requests, ["/request/1"]);
     assert.equal(first.runtime.sharedState.get("identity")?.value, 0);
     assert.equal(second.runtime.sharedState.get("identity")?.value, 1);
-    assert.deepEqual(serializeDmsAsyncData(first.runtime), {
-      "same-key": "first",
-    });
+    // The fetch each one ran is transferred too, from its own runtime only.
+    const transferred = serializeDmsAsyncData(first.runtime);
+    assert.equal(transferred["same-key"], "first");
+    assert.deepEqual(new Set(Object.values(transferred)), new Set(["first"]));
     assert.throws(() => useDmsState("identity"), /outside a Vue application/);
   });
 

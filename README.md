@@ -577,6 +577,11 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
   cannot write, such as a class instance, is left out and logged.
 - Data no component shows any more is dropped at the next navigation, and
   `deep: false` makes `data` a shallow ref.
+- **`useDmsFetch(url, options)`** is `useDmsAsyncData` around a request,
+  keyed on its method, base URL, URL, query and body (not its headers): the
+  callers of one request share it, and a server render transfers it. A URL
+  getter moves the caller to the key of each URL; `key` names one instead,
+  and `$fetch` replaces the fetch function, which receives the signal.
 
 ### Icons
 
