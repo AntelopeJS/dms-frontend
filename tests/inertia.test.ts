@@ -326,7 +326,9 @@ describe("Inertia HTTP protocol", () => {
       "client",
       "assets",
     );
-    await mkdir(assets, { recursive: true });
+    // The first directory this test creates, if any: removing it leaves no
+    // `dist/` behind to switch later tests to the production paths.
+    const created = await mkdir(assets, { recursive: true });
     await writeFile(join(assets, assetName), "export const probe = 1;\n");
     try {
       const asset = await fetch(`${base}/assets/${assetName}`);
@@ -343,7 +345,10 @@ describe("Inertia HTTP protocol", () => {
       assert.equal(await media.text(), "backend media");
       assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
     } finally {
-      await rm(join(assets, assetName), { force: true });
+      await rm(created ?? join(assets, assetName), {
+        recursive: true,
+        force: true,
+      });
       frontend.close();
       backend.close();
     }
