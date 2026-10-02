@@ -69,11 +69,8 @@ const runtimeStorage = new AsyncLocalStorage<{
 }>();
 setDmsServerRuntimeResolver(() => runtimeStorage.getStore()?.runtime);
 
-function asyncDataScript(runtime: DmsFrontendRuntime): string {
-  const value = JSON.stringify(serializeDmsAsyncData(runtime)).replaceAll(
-    "<",
-    "\\u003c",
-  );
+function asyncDataScript(asyncData: Record<string, unknown>): string {
+  const value = JSON.stringify(asyncData).replaceAll("<", "\\u003c");
   return `<script id="${SSR_ASYNC_DATA_ID}" type="application/json">${value}</script>`;
 }
 
@@ -133,9 +130,16 @@ async function renderDmsPageWithRuntime(
     const ssrContext: DmsSsrContext = {};
     let asyncComponents = new Set<string>();
     let icons = new Set<string>();
+    let asyncData: Record<string, unknown> = {};
     const inertiaResult = await createInertiaApp({
       page,
-      render: (app) => renderToString(app, ssrContext),
+      // Read as the HTML is complete: data a run settles afterwards was never
+      // rendered, and the browser must not hydrate the page with it.
+      render: async (app) => {
+        const html = await renderToString(app, ssrContext);
+        asyncData = serializeDmsAsyncData(runtime);
+        return html;
+      },
       resolve: resolveDmsInertiaPage,
       async setup({ App, props, plugin }) {
         const app = createSSRApp({ render: () => h(App, props) });
@@ -190,7 +194,7 @@ async function renderDmsPageWithRuntime(
     const renderedHead = await renderSSRHead(head);
     return {
       error: page.props.error,
-      body: `${inertiaResult.body}${asyncDataScript(runtime)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
+      body: `${inertiaResult.body}${asyncDataScript(asyncData)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
       head: {
         bodyAttrs: renderedHead.bodyAttrs,
         headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,

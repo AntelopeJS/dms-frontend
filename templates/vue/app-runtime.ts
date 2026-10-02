@@ -259,7 +259,11 @@ export async function configureDmsApp(
     options.runtime ??
     createDmsFrontendRuntime(
       options.serverFetch as typeof import("ofetch").ofetch,
-      readServerRendered<Record<string, unknown>>(SSR_ASYNC_DATA_ID, {}),
+      // Nothing when the server did not render the page: no hydration then.
+      readServerRendered<Record<string, unknown> | undefined>(
+        SSR_ASYNC_DATA_ID,
+        undefined,
+      ),
     );
   // The signed-in user's language, else the one this browser picked, which is
   // how a visitor's choice on a public page survives a reload.

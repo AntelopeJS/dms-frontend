@@ -535,6 +535,35 @@ directory added to or removed from `layers/` is the exception: Vite reads the
 `#<layer>` aliases and the auto-imported directories at startup only, so the
 dev server says it needs a restart.
 
+### Data loading
+
+`useDmsAsyncData(key, handler, options)` loads data once for every component
+that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
+
+- **A server render waits for it.** A component's data is awaited before the
+  component renders, whether or not its setup awaits the call, and the browser
+  takes the result over while it hydrates instead of fetching it again. Keys a
+  setup does not await load in parallel. Data a plugin starts is awaited
+  before the page renders.
+- **The result works with or without `await`.** Its refs are there at once;
+  awaiting it waits for the data.
+- **`lazy: true`** spares client navigations the wait; a server render still
+  waits. `useDmsLazyAsyncData` is the same call with `lazy`.
+- **`server: false`** leaves the data to the browser: the server renders the
+  default, and the browser fetches the data once the page is mounted.
+- **The handler receives `{ signal }`.** It is aborted when a newer run
+  replaces this one (`dedupe: "cancel"`, the default; `"defer"` waits for the
+  run in flight instead), when `clear()` resets the data, or when the last
+  component showing the key unmounts.
+- **The browser hydrates with what the HTML shows.** Data that settles once
+  the HTML is complete, such as a middleware's after it awaited, is left to
+  the browser. A component receives the server's data when the server's
+  render did: once its setup awaits the call, or right before it renders. A
+  value its setup derives from data it did not await, in an immediate
+  watcher for instance, is then the one the server rendered.
+- Data no component shows any more is dropped at the next navigation, and
+  `deep: false` makes `data` a shallow ref.
+
 ### Icons
 
 The browser never asks a third party for an icon, so a Content-Security-Policy
