@@ -578,16 +578,22 @@ async function visit(
 export function useDmsRoute(pattern?: string): DmsRoute {
   const runtime = useDmsRuntime();
   runtime.currentRoutePattern = pattern;
+  // A server render answers one request, whose URL the runtime was given with
+  // its page, and never changes it. Inertia's page is one ref for the whole
+  // process, written by each render as it starts: after an await it may hold
+  // another request's URL, and while the plugins set up, the previous one's.
+  if (runtime.isServer) {
+    updateRoute(runtime, runtime.route.fullPath);
+    return runtime.route;
+  }
   const page = usePage();
-  updateRoute(runtime, page.url);
-  // A server render never changes its URL, and Inertia's page is shared by
-  // every render the process runs: a watcher there would only tie this
-  // request's runtime to all the requests after it.
-  if (!runtime.isServer)
-    watch(
-      () => page.url,
-      (url) => updateRoute(runtime, url),
-    );
+  // The browser's plugins set up before Inertia has a page: until then the
+  // runtime's route is the initial page's.
+  if (page.url !== undefined) updateRoute(runtime, page.url);
+  watch(
+    () => page.url,
+    (url) => updateRoute(runtime, url),
+  );
   return runtime.route;
 }
 
