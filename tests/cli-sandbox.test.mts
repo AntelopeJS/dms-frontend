@@ -192,7 +192,12 @@ describe("following the ajs output contract", () => {
     for (const args of [[], ["--no-color"], ["--no-update-check"]]) {
       const result = await runCli(args);
       assert.equal(result.code, 0, args.join(" "));
-      assert.match(result.stdout, /^Usage: ajs dms \[options\] \[command\]\n/);
+      assert.match(
+        result.stdout,
+        new RegExp(
+          `^ajs dms ${packageJson.version} · DMS frontend for AntelopeJS \\(Vue 3, Vite, Inertia\\)\n\nUsage: ajs dms \\[options\\] \\[command\\]\n`,
+        ),
+      );
       assert.equal(result.stderr, "");
     }
   });
@@ -319,6 +324,96 @@ function closeServer(server: Server): Promise<void> {
     server.close(() => resolve());
   });
 }
+
+const COMMANDS = [
+  "dev",
+  "build",
+  "start",
+  "prepare",
+  "workspaces",
+  "clean",
+  "verify-source",
+];
+const HELP_WIDTH = 80;
+
+describe("documenting the commands", () => {
+  it("lists one-line summaries, examples and the environment topic", async () => {
+    const result = await runCli(["--help"]);
+    assert.equal(result.code, 0);
+    assert.match(
+      result.stdout,
+      /\n {2}build {14}Build the production frontend\n/,
+    );
+    assert.doesNotMatch(result.stdout, /\[options\]\s{2,}/);
+    assert.doesNotMatch(result.stdout, /React|Environment:|Workspaces:/);
+    assert.match(result.stdout, /\nExamples:\n {2}# .+\n {2}\$ ajs dms dev\n/);
+    assert.match(result.stdout, /ajs dms help environment for the variables/);
+  });
+
+  it("gives every command examples, within 80 columns", async () => {
+    for (const command of ["", ...COMMANDS]) {
+      const result = await runCli(command ? [command, "--help"] : ["--help"]);
+      assert.equal(result.code, 0, command);
+      if (command) {
+        assert.match(
+          result.stdout,
+          new RegExp(`\nExamples:\n {2}# .+\n {2}\\$ ajs dms ${command}\\b`),
+          command,
+        );
+      }
+      assert.match(result.stdout, / {2}-h, --help +Show help for a command\n/);
+      for (const line of result.stdout.split("\n")) {
+        assert.ok(line.length <= HELP_WIDTH, `${command}: ${line}`);
+      }
+      assert.doesNotMatch(result.stdout, /\(default: (\[\]|false)\)/, command);
+      assert.doesNotMatch(result.stdout, /env: (\w+)[\s\S]*env: \1\b/, command);
+    }
+  });
+
+  it("describes -b as each command uses it", async () => {
+    const help = async (command: string) =>
+      (await runCli([command, "--help"])).stdout.replace(/\s+/g, " ");
+    assert.match(
+      await help("dev"),
+      /-b, --backend-url <url> Backend URL; when omitted, discovered from the enclosing antelope project's \.antelope\/dev\.json \(env: DMS_API_BASE_URL\)/,
+    );
+    for (const command of ["build", "start"]) {
+      const text = await help(command);
+      assert.match(text, /-b, --backend-url <url> Backend URL[^(]*; required/);
+      assert.doesNotMatch(text, /discover/);
+    }
+    const clean = await help("clean");
+    assert.match(
+      clean,
+      /Backend URL whose workspace to remove; DMS_API_BASE_URL is never read/,
+    );
+    assert.doesNotMatch(clean, /env: DMS_API_BASE_URL/);
+    assert.match(
+      await help("verify-source"),
+      /-l, --layer <path> Root of the DMS frontend package to verify \(required\)/,
+    );
+  });
+
+  it("prints the environment topic on stdout", async () => {
+    for (const args of [
+      ["help", "environment"],
+      ["--no-color", "help", "environment"],
+    ]) {
+      const result = await runCli(args);
+      assert.equal(result.code, 0, args.join(" "));
+      assert.equal(result.stderr, "");
+      assert.match(
+        result.stdout,
+        /^Environment \(read from the shell, then \.\/\.env\.local, then \.\/\.env\)\n\n {2}DMS_API_BASE_URL {14}Backend URL, same as -b; clean ignores it\n/,
+      );
+      assert.match(result.stdout, /\n {2}NO_UPDATE_NOTIFIER, CI {8}Either one/);
+      assert.match(result.stdout, /ajs dms workspaces lists them\.\n$/);
+      for (const line of result.stdout.split("\n")) {
+        assert.ok(line.length <= HELP_WIDTH, line);
+      }
+    }
+  });
+});
 
 describe("validating options before any work", () => {
   it("rejects a port outside 0-65535 in dev and start", async () => {
@@ -644,6 +739,23 @@ describe("telling a skipped prepare from a failed one", () => {
     assert.match(strict.stderr, /^✖ Backend URL is required\n/);
   });
 
+  it("reads --strict from DMS_PREPARE_STRICT, in the environment or ./.env", async () => {
+    const fromEnv = await runCli(["prepare"], {
+      env: { DMS_PREPARE_STRICT: "1" },
+    });
+    assert.equal(fromEnv.code, 2);
+    const fromFile = await runCli(["prepare"], {
+      files: { ".env": "DMS_PREPARE_STRICT=true\n" },
+    });
+    assert.equal(fromFile.code, 2);
+    for (const value of ["0", "false", "off", ""]) {
+      const off = await runCli(["prepare"], {
+        env: { DMS_PREPARE_STRICT: value },
+      });
+      assert.equal(off.code, 0, value);
+    }
+  });
+
   it("skips while the backend is out of reach, and fails with --strict", async () => {
     const backendUrl = await closedBackendUrl();
     const skipped = await runCli(["prepare", "-b", backendUrl]);
@@ -786,12 +898,15 @@ describe("loading the project .env", () => {
     assert.match(result.stderr, /Backend URL is required/);
   });
 
-  it("documents the .env contract in the help epilogue", async () => {
-    const result = await runCli(["--help"]);
+  it("documents the .env contract in the environment topic", async () => {
+    const result = await runCli(["help", "environment"]);
 
     assert.equal(result.code, 0);
-    assert.match(result.stdout, /\.env\.local then \.env/);
-    assert.match(result.stdout, /already\s+set in the environment always wins/);
+    assert.match(result.stdout, /then \.\/\.env\.local, then \.\/\.env\)/);
+    assert.match(
+      result.stdout,
+      /set in the shell wins over both files, and \.env\.local wins over \.env/,
+    );
   });
 });
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import {
   formatUsageErrors,
+  getProcessPalette,
+  getProcessUi,
   isVerboseRun,
   runWithErrorBoundary,
 } from "@antelopejs/core/cli";
@@ -12,7 +14,14 @@ import { cmdPrepare } from "./commands/prepare";
 import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
 import { cmdWorkspaces } from "./commands/workspaces";
-import { ENV_FILE_NAMES, loadProjectEnv } from "./env-file";
+import { loadProjectEnv } from "./env-file";
+import {
+  applyHelpConventions,
+  ENVIRONMENT_TOPIC,
+  formatEnvironmentHelp,
+  formatExamples,
+  type HelpExample,
+} from "./help";
 import { reportStopped } from "./output";
 import { checkForUpdate, stripUpdateCheckFlag } from "./update-check";
 import { CancelledError } from "./workspace-setup";
@@ -24,6 +33,39 @@ const { version } = require("../package.json");
  * like a bare `ajs dms`.
  */
 const GLOBAL_FLAGS = ["--no-color", "--verbose"];
+
+const ROOT_EXAMPLES: HelpExample[] = [
+  {
+    description: "Inside a project started with ajs project dev",
+    command: "ajs dms dev",
+  },
+  {
+    description: "Build for production, then serve the build",
+    command: "ajs dms build -b https://dms.example.com",
+  },
+  {
+    description: "Serve it on another port",
+    command: "ajs dms start -b https://dms.example.com -p 3001",
+  },
+];
+
+function describeVersion(version: string): string {
+  return `${getProcessPalette("result").bold(`ajs dms ${version}`)} · DMS frontend for AntelopeJS (Vue 3, Vite, Inertia)\n`;
+}
+
+function describeHelpFooter(): string {
+  return (
+    `\n${formatExamples(ROOT_EXAMPLES)}\n\n` +
+    `Run ajs dms <command> --help for its options and examples, and\n` +
+    `ajs dms help ${ENVIRONMENT_TOPIC} for the variables read from the environment.`
+  );
+}
+
+/** Whether the arguments, global flags aside, are exactly `rest`. */
+function isInvocation(args: string[], rest: string[]): boolean {
+  const own = args.filter((arg) => !GLOBAL_FLAGS.includes(arg));
+  return own.length === rest.length && own.every((arg, i) => arg === rest[i]);
+}
 
 const runCLI = async () => {
   // Before anything reads the environment: every command option binds to an
@@ -41,46 +83,22 @@ const runCLI = async () => {
 
   const program = new Command()
     .name("ajs dms")
-    .description(
-      `Antelope DMS - Frontend Loader v${version}\n\n` +
-        `Materializes frontend modules from an AntelopeJS backend and starts a Vue or React Vite and Inertia application.`,
-    )
-    .version(version, "-v, --version", "Display version number")
+    .version(version, "-v, --version", "Print the version")
     // Read by the core output module straight from the command line and the
     // environment; declared so Commander accepts them after a command name.
     .option("--no-color", "Disable colors (also NO_COLOR=1)")
     .option(
       "--verbose",
-      "Stream the pnpm and Vite output, and show stack traces in failures (also ANTELOPEJS_VERBOSE)",
+      "Show full output and stack traces (also ANTELOPEJS_VERBOSE)",
     )
     // Registered for `--help` only: `stripUpdateCheckFlag` removes the flag
     // before Commander parses, so it is accepted after a subcommand name too.
     .option(
       "--no-update-check",
-      "Skip the daily check for a newer DMS frontend release",
+      "Skip the daily update check (also NO_UPDATE_NOTIFIER=1)",
     )
-    .helpCommand("help [command]", "Display help for a specific command")
-    .addHelpText(
-      "after",
-      `
-Environment:
-  Every command reads ${ENV_FILE_NAMES.join(" then ")} from the current directory before parsing
-  its options, so DMS_API_BASE_URL, DMS_BOOTSTRAP_SECRET, DMS_SESSION_SECRET and
-  the other variables below can live in the project's .env. A variable already
-  set in the environment always wins over a file, and .env.local wins over .env.
-  The generated workspace never loads a .env of its own.
-  'dev' generates an ephemeral 32-byte DMS_SESSION_SECRET when it is absent;
-  restarting dev invalidates its sessions. 'build' and 'start' require a
-  configured secret of at least 32 characters.
-
-Workspaces:
-  Each canonical backend URL gets its own workspace under
-  ~/.antelopejs/dms-frontend. 'dev' without -b is the exception: it keys the
-  workspace on the antelope project directory instead, so a backend that lands
-  on a different port between runs keeps its node_modules and manifest cache.
-  Pass -b to 'dev' to share one workspace with 'build' and 'start'.
-  'workspaces' lists them, with their size and last use.`,
-    );
+    .addHelpText("before", describeVersion(version))
+    .addHelpText("after", describeHelpFooter());
 
   program.addCommand(cmdDev());
   program.addCommand(cmdBuild());
@@ -89,11 +107,16 @@ Workspaces:
   program.addCommand(cmdWorkspaces());
   program.addCommand(cmdClean());
   program.addCommand(cmdVerifySource());
+  applyHelpConventions(program);
   formatUsageErrors(program);
 
   const args = stripUpdateCheckFlag(argv);
-  if (args.every((arg) => GLOBAL_FLAGS.includes(arg))) {
+  if (isInvocation(args, [])) {
     program.outputHelp();
+    return;
+  }
+  if (isInvocation(args, ["help", ENVIRONMENT_TOPIC])) {
+    getProcessUi().value(formatEnvironmentHelp());
     return;
   }
   try {

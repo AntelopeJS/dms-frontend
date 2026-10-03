@@ -12,6 +12,7 @@ import {
   parseBackendUrl,
   parsePort,
   projectWorkspaceKey,
+  flagOrEnv,
   resolveBootstrapSecret,
   reportManifestSecrets,
   resolveManifestSecrets,
@@ -19,6 +20,7 @@ import {
   startLayerWatchers,
 } from "../common";
 import { describeDiscoveryFailure, discoverBackend } from "../discovery";
+import { type HelpExample, withExamples } from "../help";
 import {
   cachedAge,
   showPath,
@@ -85,19 +87,42 @@ function resolveBackend(options: DevOptions): ResolvedBackend {
   };
 }
 
+const DEV_EXAMPLES: HelpExample[] = [
+  {
+    description: "Inside a project started with ajs project dev",
+    command: "ajs dms dev",
+  },
+  {
+    description: "Share one workspace with build and start",
+    command: "ajs dms dev -b http://localhost:5010 -p 3001",
+  },
+];
+
 export function cmdDev(): Command {
-  return new Command("dev")
+  const command = new Command("dev")
+    .summary("Run the dev server against a local backend, with hot reload")
     .description(
-      "Start development server with hot reload (direct paths, same machine)",
+      "Run the dev server with hot reload. It reads the frontend modules in place, from the backend's own directories, so the backend runs on this machine.",
     )
-    .addOption(Options.backendUrl)
+    .addOption(
+      Options.backendUrl(
+        "Backend URL; when omitted, discovered from the enclosing antelope project's .antelope/dev.json",
+      ),
+    )
     .addOption(Options.port)
-    .addOption(Options.force)
-    .addOption(Options.offline)
-    .addOption(Options.bootstrapSecret)
+    .addOption(Options.force("Reinstall the workspace dependencies"))
+    .addOption(
+      Options.offline("Reuse the last cached manifest instead of fetching it"),
+    )
+    .addOption(
+      Options.bootstrapSecret(
+        "Discovered from .antelope/dms-dev.json for the project's own backend",
+      ),
+    )
     .action(async (options: DevOptions) => {
       const startedAt = Date.now();
       const requestedPort = parsePort(options.port);
+      const offline = flagOrEnv(options.offline, "DMS_OFFLINE");
       const sessionSecret = resolveSessionSecret("dev");
       const { backendUrl, workspaceKey, projectDir } = resolveBackend(options);
       const bootstrapSecret = resolveBootstrapSecret(
@@ -131,7 +156,7 @@ export function cmdDev(): Command {
         backendUrl,
         force: !!options.force,
         mode: "dev",
-        offline: options.offline,
+        offline,
         clientUrl,
         workspaceKey,
         bootstrapSecret,
@@ -144,7 +169,7 @@ export function cmdDev(): Command {
       }
       if (manifestFromCache) {
         const manifest = `the layers manifest${cachedAge(manifestFetchedAt)}`;
-        if (options.offline) {
+        if (offline) {
           ui.message("info", `Offline: using ${manifest}`);
         } else {
           ui.message("warn", `Backend unreachable: using ${manifest}`, {
@@ -206,4 +231,5 @@ export function cmdDev(): Command {
 
       process.exitCode = code;
     });
+  return withExamples(command, DEV_EXAMPLES);
 }
