@@ -1,9 +1,12 @@
-import { getProcessUi } from "@antelopejs/core/cli";
+import { formatDuration, getProcessUi, pluralize } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
+  BackendUnreachableError,
   CancelledError,
+  NoCachedManifestError,
   Options,
   parseBackendUrl,
+  requireBackendUrl,
   resolveBootstrapSecret,
   type SetupWorkspaceResult,
 } from "../common";
@@ -19,7 +22,25 @@ interface PrepareOptions {
   backendUrl?: string;
   force?: boolean;
   offline?: boolean;
+  strict?: boolean;
   bootstrapSecret?: string;
+}
+
+const NOT_GENERATED = "The types and the module registry were not generated.";
+const STRICT_HINT =
+  "prepare never fails an install; add --strict to make this an error.";
+
+/**
+ * Whether a failure only means the backend is out of reach, as it is in CI,
+ * so a later run with the backend up prepares the workspace. Any other one
+ * (a refused credential, an incompatible manifest or renderer range, a
+ * mistyped URL) fails again until someone fixes it.
+ */
+function isSkip(error: unknown): boolean {
+  return (
+    error instanceof BackendUnreachableError ||
+    error instanceof NoCachedManifestError
+  );
 }
 
 export function cmdPrepare(): Command {
@@ -30,8 +51,10 @@ export function cmdPrepare(): Command {
     .addOption(Options.backendUrl)
     .addOption(Options.force)
     .addOption(Options.offline)
+    .addOption(Options.strict)
     .addOption(Options.bootstrapSecret)
     .action(async (options: PrepareOptions) => {
+      const startedAt = Date.now();
       const ui = getProcessUi();
       const hint = ui.symbols.levels.hint;
       // The prepare command is often run from CI (e.g. as a `postinstall`
@@ -39,37 +62,46 @@ export function cmdPrepare(): Command {
       // is configured. We don't want CI installs to fail in that case — types
       // can be regenerated later in a dev environment. Warn and exit 0
       // instead of erroring, after falling back to a workspace-less prepare
-      // without leaving a partially generated workspace.
+      // without leaving a partially generated workspace. --strict turns the
+      // warning back into the error.
       if (!options.backendUrl) {
+        if (options.strict) requireBackendUrl(options.backendUrl);
         ui.message("warn", "Skipped prepare: no backend URL", {
           details: [
             `${hint} Pass -b <url> or set DMS_API_BASE_URL to generate the types`,
+            STRICT_HINT,
           ],
         });
         return;
       }
 
-      writeHeader("prepare", [options.backendUrl]);
       let result: SetupWorkspaceResult;
       try {
+        const backendUrl = parseBackendUrl(options.backendUrl);
+        const bootstrapSecret = resolveBootstrapSecret(
+          options.bootstrapSecret,
+          options.backendUrl,
+        );
+        writeHeader("prepare", [backendUrl]);
         result = await setUpWorkspace({
-          backendUrl: parseBackendUrl(options.backendUrl),
+          backendUrl,
           force: !!options.force,
           mode: "dev",
           offline: options.offline,
-          bootstrapSecret: resolveBootstrapSecret(
-            options.bootstrapSecret,
-            options.backendUrl,
-          ),
+          bootstrapSecret,
         });
       } catch (err) {
-        if (err instanceof CancelledError) throw err;
+        if (err instanceof CancelledError || options.strict) throw err;
         const [title, ...details] = failureDetails(err, ui);
-        ui.message("warn", `Skipped prepare: ${title}`, { details });
+        const outcome = isSkip(err) ? "Skipped prepare" : "Prepare failed";
+        ui.message("warn", `${outcome}: ${title}`, {
+          details: [...details, NOT_GENERATED, STRICT_HINT],
+        });
         return;
       }
 
-      const { workspaceDir, manifestFromCache, manifestFetchedAt } = result;
+      const { workspaceDir, layers, manifestFromCache, manifestFetchedAt } =
+        result;
       if (manifestFromCache) {
         const manifest = `the frontend-module manifest${cachedAge(manifestFetchedAt)}`;
         if (options.offline) {
@@ -79,7 +111,13 @@ export function cmdPrepare(): Command {
         }
       }
 
-      ui.message("success", "Prepared the Vite workspace", {
+      const summary = [
+        "Prepared the workspace",
+        pluralize(layers.length, "module"),
+        "types and registry written",
+        formatDuration(Date.now() - startedAt),
+      ];
+      ui.message("success", summary.join(" · "), {
         detail: showWorkspace(workspaceDir),
       });
     });
