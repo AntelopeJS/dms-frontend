@@ -6,6 +6,7 @@ import { after, describe, it } from "node:test";
 import {
   normalizeBootstrapSecret,
   resolveBootstrapSecret,
+  UsageError,
 } from "../src/common";
 import {
   type DevHandshake,
@@ -133,19 +134,42 @@ describe("normalizeBootstrapSecret", () => {
     assert.equal(normalizeBootstrapSecret(undefined), undefined);
   });
 
-  it("names the problem for a credential that cannot travel in a header", () => {
-    assert.throws(
-      () => normalizeBootstrapSecret("bad\rvalue"),
-      /cannot travel in an HTTP header/,
-    );
-    assert.throws(() => normalizeBootstrapSecret("séance"), /HTTP header/);
+  it("names the character that keeps a credential out of a header", () => {
+    const cases: Array<[string, string]> = [
+      ["bad\rvalue", "a line break"],
+      ["abc def", "a space"],
+      ["abc\tdef", "a tab"],
+      ["séance", "a non-ASCII character"],
+      ["abc\x7fdef", "a control character"],
+    ];
+    for (const [value, culprit] of cases) {
+      assert.throws(
+        () => normalizeBootstrapSecret(value),
+        (err: unknown) => {
+          assert.ok(err instanceof UsageError);
+          assert.match(err.message, /cannot travel in an HTTP header/);
+          assert.equal(
+            err.details[0],
+            `DMS_BOOTSTRAP_SECRET contains ${culprit}.`,
+          );
+          return true;
+        },
+      );
+    }
   });
 
   it("names where the credential came from", () => {
     assert.throws(
       () =>
         normalizeBootstrapSecret("bad\rvalue", "/proj/.antelope/dms-dev.json"),
-      /Check \/proj\/\.antelope\/dms-dev\.json/,
+      (err: unknown) => {
+        assert.ok(err instanceof UsageError);
+        assert.match(
+          err.details[0],
+          /^\/proj\/\.antelope\/dms-dev\.json contains/,
+        );
+        return true;
+      },
     );
   });
 });

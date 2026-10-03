@@ -4,6 +4,8 @@ import { Command } from "commander";
 import {
   CancelledError,
   Options,
+  parseBackendUrl,
+  parsePort,
   projectWorkspaceKey,
   resolveBootstrapSecret,
   reportManifestSecrets,
@@ -56,7 +58,7 @@ interface ResolvedBackend {
 
 function resolveBackend(options: DevOptions): ResolvedBackend {
   if (options.backendUrl) {
-    return { backendUrl: options.backendUrl };
+    return { backendUrl: parseBackendUrl(options.backendUrl) };
   }
 
   const result = discoverBackend(process.cwd());
@@ -85,12 +87,13 @@ export function cmdDev(): Command {
     .addOption(Options.offline)
     .addOption(Options.bootstrapSecret)
     .action(async (options: DevOptions) => {
+      const requestedPort = parsePort(options.port);
+      const sessionSecret = resolveSessionSecret("dev");
       const { backendUrl, workspaceKey } = resolveBackend(options);
       const bootstrapSecret = resolveBootstrapSecret(
         options.bootstrapSecret,
         backendUrl,
       );
-      const sessionSecret = resolveSessionSecret("dev");
 
       // Resolve the frontend port BEFORE the manifest fetch: the real
       // port is sent to the backend as clientUrl so a dev backend can
@@ -98,11 +101,6 @@ export function cmdDev(): Command {
       // We reserve (not just probe) the port — the holding socket stays
       // bound through the whole workspace setup and is released right
       // before the frontend server binds, so nothing can steal it in between.
-      const requestedPort = Number.parseInt(options.port, 10);
-      if (Number.isNaN(requestedPort)) {
-        error(`Invalid port: ${options.port}`);
-        process.exit(1);
-      }
       let reserved: ReservedPort;
       try {
         reserved = await reserveFreePort(requestedPort);
@@ -111,9 +109,6 @@ export function cmdDev(): Command {
         process.exit(1);
       }
       const port = reserved.port;
-      if (port !== requestedPort) {
-        warning(`Port ${requestedPort} in use, using ${port} instead`);
-      }
       const clientUrl = `http://${clientHost()}:${port}`;
 
       const spinner = new Spinner("Setting up workspace...");
@@ -139,6 +134,11 @@ export function cmdDev(): Command {
 
         await spinner.succeed("Workspace ready");
 
+        // Reported once the setup succeeded: a failed setup makes the
+        // fallback port irrelevant.
+        if (port !== requestedPort) {
+          warning(`Port ${requestedPort} in use, using ${port} instead`);
+        }
         if (manifestFromCache) {
           warning(
             `Using cached layers manifest${manifestFetchedAt ? ` (cached on ${manifestFetchedAt})` : ""} — API calls will fail until the backend is up`,

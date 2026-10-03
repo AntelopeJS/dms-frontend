@@ -4,9 +4,10 @@ import {
   describeWorkspace,
   getWorkspaceDir,
   listWorkspaces,
-  Options,
+  parseBackendUrl,
+  UsageError,
 } from "../common";
-import { info, success, warning } from "../utils/cli-ui";
+import { info, success } from "../utils/cli-ui";
 
 interface CleanOptions {
   backendUrl?: string;
@@ -14,14 +15,19 @@ interface CleanOptions {
 }
 
 export function cmdClean(): Command {
+  // -b is not the shared option: clean deletes, so its target is never taken
+  // from DMS_API_BASE_URL, which a project's .env sets without the user
+  // having it in mind.
   return new Command("clean")
     .description("Remove workspace build artifacts")
-    .addOption(Options.backendUrl)
+    .option(
+      "-b, --backend-url <url>",
+      "Backend DMS URL whose workspace to remove",
+    )
     .option("-a, --all", "Clean all workspaces")
     .action(async (options: CleanOptions) => {
-      console.error("");
-
       if (options.all) {
+        console.error("");
         // Clean all workspaces
         info("Cleaning all workspaces...");
         const workspaces = listWorkspaces();
@@ -42,16 +48,14 @@ export function cmdClean(): Command {
       }
 
       if (!options.backendUrl) {
-        warning(
-          "Specify -b <url> to clean a specific workspace, or --all to clean everything.\n" +
-            "  -b only reaches the workspace 'build', 'start' and 'dev -b' share for that URL;\n" +
-            "  a workspace 'dev' created without -b is keyed on the project directory and is\n" +
-            "  only removable with --all.",
-        );
-        process.exit(1);
+        throw new UsageError("Nothing to clean: pass -b <url> or --all", [
+          "clean never uses DMS_API_BASE_URL from the environment or ./.env.",
+          "-b reaches the workspace 'build', 'start' and 'dev -b' share for that URL;",
+          "a workspace 'dev' created without -b is only removable with --all.",
+        ]);
       }
-
-      const workspaceDir = getWorkspaceDir(options.backendUrl);
+      const workspaceDir = getWorkspaceDir(parseBackendUrl(options.backendUrl));
+      console.error("");
 
       if (!existsSync(workspaceDir)) {
         info("Workspace not found — nothing to clean.");
