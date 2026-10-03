@@ -1,17 +1,15 @@
-// The CLI half of the child-lifetime test: spawns a long-lived child through
-// runCommand, the way `ajs dms start` and `ajs dms dev` spawn server.mjs.
-//
-// argv: <pid file> <mode>, mode being "wait" (exit with the child's code) or
-// "self-exit" (the CLI dies on its own while the child is still running).
+// A CLI that dies on its own while the child it spawned through runCommand is
+// still running, the way an uncaught exception would end `ajs dms dev`.
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "../../src/workspace-setup";
 
-const [pidFile, mode] = process.argv.slice(2);
-const child = join(dirname(fileURLToPath(import.meta.url)), "holds-port.mjs");
-const finished = runCommand(process.execPath, [child, pidFile], {
-  stdio: "ignore",
-});
+const child = join(dirname(fileURLToPath(import.meta.url)), "process-tree.mjs");
+void runCommand(process.execPath, [child], { stdio: "ignore" });
 
-if (mode === "self-exit") setTimeout(() => process.exit(3), 1500);
-else void finished.then((code) => process.exit(code));
+const published = setInterval(() => {
+  if (!existsSync(process.env.DMS_TEST_PID_FILE ?? "")) return;
+  clearInterval(published);
+  process.exit(3);
+}, 50);
