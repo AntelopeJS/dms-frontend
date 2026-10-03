@@ -321,7 +321,7 @@ export async function setupWorkspace(
 
   let layers: ResolvedLayer[];
   if (mode === "dev") {
-    assertLayerPathsServed(manifest.modules);
+    assertLayerPathsServed(manifest.modules, backendUrl, bootstrapSecret);
     if (fromCache) {
       assertCachedLayerPathsExist(manifest.modules, fetchedAt);
     }

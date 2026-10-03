@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { writeSecretBearingFile } from "./config";
+import { parseBackendUrl, UsageError, writeSecretBearingFile } from "./config";
 import {
   Manifest,
   bootstrapHeaders,
@@ -23,16 +23,119 @@ export class ManifestUnauthorizedError extends Error {
   constructor(
     readonly url: string,
     readonly status: number,
+    credentialSent: boolean,
   ) {
     super(
-      `Backend refused the layers request (${status}) at ${url}.\n` +
-        "  This DMS backend requires a bootstrap credential for its layer endpoints.\n" +
-        "  • Production/CI: set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret.\n" +
-        "  • Local dev: run inside the antelope project started with `ajs project dev` —\n" +
-        "    the credential is read from .antelope/dms-dev.json automatically.",
+      (credentialSent
+        ? `The backend refused the bootstrap credential (${status}) at ${url}.\n`
+        : `The backend requires a bootstrap credential (${status}) at ${url}, and none was sent.\n`) +
+        "  → Production/CI: set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret\n" +
+        "  → Local dev: run inside the antelope project started with `ajs project dev`;\n" +
+        "    the credential is read from .antelope/dms-dev.json automatically",
     );
     this.name = "ManifestUnauthorizedError";
   }
+}
+
+const UNREACHABLE_REASONS: Record<string, string> = {
+  ECONNREFUSED: "Connection refused",
+  ECONNRESET: "Connection reset",
+  ENOTFOUND: "Unknown host",
+  EAI_AGAIN: "Host name lookup failed",
+  ETIMEDOUT: "Connection timed out",
+  UND_ERR_CONNECT_TIMEOUT: "Connection timed out",
+};
+
+const UNKNOWN_HOST_CODES = ["ENOTFOUND", "EAI_AGAIN"];
+
+/**
+ * `fetch` reports every transport failure as a bare "fetch failed" and keeps
+ * the reason in its `cause`. Still a plain failure for `resolveManifest`, so
+ * the cache can stand in for a backend that is down.
+ */
+export class BackendUnreachableError extends Error {
+  readonly code?: string;
+
+  constructor(
+    readonly url: string,
+    failure: unknown,
+  ) {
+    const cause = (failure as { cause?: unknown })?.cause ?? failure;
+    const code = errorCode(cause);
+    const detail = code
+      ? (UNREACHABLE_REASONS[code] ?? errorMessage(cause))
+      : `The request failed: ${errorMessage(cause)}`;
+    const reason = code ? `${detail} (${code})` : detail;
+    const fix =
+      code && UNKNOWN_HOST_CODES.includes(code)
+        ? `→ Check the host name '${new URL(url).hostname}' in -b <url> or DMS_API_BASE_URL`
+        : "→ Start the backend (`ajs project dev` for a local one), or pass its URL with -b <url>";
+    super(`Cannot reach the DMS backend at ${url}\n  ${reason}.\n  ${fix}`, {
+      cause: failure,
+    });
+    this.name = "BackendUnreachableError";
+    this.code = code;
+  }
+}
+
+function errorCode(err: unknown): string | undefined {
+  const { code, errors } = (err ?? {}) as { code?: unknown; errors?: unknown };
+  if (typeof code === "string") return code;
+  return Array.isArray(errors) ? errorCode(errors[0]) : undefined;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * A URL as shown in a message: without the query string the CLI adds for the
+ * backend, and without credentials a user may have put in it.
+ */
+export function displayUrl(url: string | URL): string {
+  const { origin, pathname } = new URL(url);
+  return `${origin}${pathname.replace(/\/$/, "")}`;
+}
+
+/**
+ * The URL of an endpoint of the backend. The command line rejects a URL fetch
+ * cannot use, but a discovered backend never went through that check.
+ */
+export function backendEndpoint(backendUrl: string, path: string): URL {
+  try {
+    return new URL(`${parseBackendUrl(backendUrl)}${path}`);
+  } catch (err) {
+    if (!(err instanceof UsageError)) throw err;
+    throw new Error([err.message, ...err.details].join("\n  "), {
+      cause: err,
+    });
+  }
+}
+
+/**
+ * Request an endpoint of the backend, presenting the bootstrap credential
+ * when there is one. A backend that cannot be reached fails with its URL and
+ * the cause, and a refused credential with the endpoint that refused it.
+ */
+export async function fetchFromBackend(
+  backendUrl: string,
+  url: URL,
+  bootstrapSecret?: string,
+): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(url, { headers: bootstrapHeaders(bootstrapSecret) });
+  } catch (err) {
+    throw new BackendUnreachableError(displayUrl(backendUrl), err);
+  }
+  if (isUnauthorized(response.status)) {
+    throw new ManifestUnauthorizedError(
+      displayUrl(url),
+      response.status,
+      !!bootstrapSecret,
+    );
+  }
+  return response;
 }
 
 /**
@@ -59,22 +162,20 @@ export async function fetchManifest(
   clientUrl?: string,
   bootstrapSecret?: string,
 ): Promise<Manifest> {
-  const frontendUrl = new URL(`${backendUrl}/dms/frontend`);
+  const frontendUrl = backendEndpoint(backendUrl, "/dms/frontend");
   frontendUrl.searchParams.set("renderer", "vue");
   frontendUrl.searchParams.set("rendererVersion", "3");
   if (clientUrl) {
     frontendUrl.searchParams.set("clientUrl", clientUrl);
   }
-  const response = await fetch(frontendUrl, {
-    headers: bootstrapHeaders(bootstrapSecret),
-  });
-
-  if (isUnauthorized(response.status)) {
-    throw new ManifestUnauthorizedError(frontendUrl.href, response.status);
-  }
+  const response = await fetchFromBackend(
+    backendUrl,
+    frontendUrl,
+    bootstrapSecret,
+  );
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch manifest from ${frontendUrl.href} (${response.status})`,
+      `Failed to fetch manifest from ${displayUrl(frontendUrl)} (${response.status})`,
     );
   }
 
@@ -232,12 +333,5 @@ export function assertCachedLayerPathsExist(
       "\nStart the backend and re-run to refresh the cache.",
   );
 }
-
-/**
- * Dev mode extends each layer from its source directory on this machine, so
- * a manifest without those paths cannot drive it. The backend withholds them
- * from production instances and from callers it did not authenticate, which
- * are two very different mistakes — name both.
- */
 
 export type ServedWithPath = ManifestModule & { path: string };

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
+  BackendUnreachableError,
   fetchManifest,
   type Manifest,
   ManifestRefusedError,
@@ -65,6 +66,12 @@ function closeServer(server: Server): Promise<void> {
   return new Promise((resolve) => {
     server.close(() => resolve());
   });
+}
+
+async function closedBackendUrl(): Promise<string> {
+  const { server, baseUrl } = await startBackend();
+  await closeServer(server);
+  return baseUrl;
 }
 
 describe("fetchManifest", () => {
@@ -211,6 +218,89 @@ describe("fetchManifest", () => {
     }
   });
 
+  it("names a missing credential apart from a refused one", async () => {
+    const { server, baseUrl } = await startBackend(401);
+    try {
+      await assert.rejects(() => fetchManifest(baseUrl), /none was sent/);
+      await assert.rejects(
+        () => fetchManifest(baseUrl, undefined, "wrong"),
+        /refused the bootstrap credential/,
+      );
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it("keeps its own query string out of error messages", async () => {
+    for (const status of [401, 500]) {
+      const { server, baseUrl } = await startBackend(status);
+      try {
+        await assert.rejects(
+          () => fetchManifest(baseUrl, "http://localhost:3001"),
+          (err: Error) => {
+            assert.ok(err.message.includes(`${baseUrl}/dms/frontend`));
+            assert.doesNotMatch(err.message, /\?|renderer=|clientUrl/);
+            return true;
+          },
+        );
+      } finally {
+        await closeServer(server);
+      }
+    }
+  });
+
+  it("names the URL and the refused connection instead of 'fetch failed'", async () => {
+    const backendUrl = await closedBackendUrl();
+    await assert.rejects(
+      () => fetchManifest(backendUrl),
+      (err: Error) => {
+        assert.ok(err instanceof BackendUnreachableError);
+        assert.equal(err.code, "ECONNREFUSED");
+        assert.equal(
+          err.message.split("\n")[0],
+          `Cannot reach the DMS backend at ${backendUrl}`,
+        );
+        assert.match(err.message, /Connection refused \(ECONNREFUSED\)/);
+        assert.match(err.message, /→ Start the backend/);
+        assert.doesNotMatch(err.message, /fetch failed/);
+        return true;
+      },
+    );
+  });
+
+  it("names an unknown host", async () => {
+    await assert.rejects(
+      () => fetchManifest("http://dms-backend.invalid:5010"),
+      (err: Error) => {
+        assert.ok(err instanceof BackendUnreachableError);
+        assert.match(err.code ?? "", /^(ENOTFOUND|EAI_AGAIN)$/);
+        assert.match(
+          err.message,
+          /^Cannot reach the DMS backend at http:\/\/dms-backend\.invalid:5010\n/,
+        );
+        assert.match(err.message, /'dms-backend\.invalid'/);
+        return true;
+      },
+    );
+  });
+
+  it("rejects a backend URL fetch cannot use, before any request", async () => {
+    for (const backendUrl of ["localhost:5010", "http://dms backend:5010"]) {
+      await assert.rejects(
+        () => fetchManifest(backendUrl),
+        (err: Error) => {
+          assert.ok(!(err instanceof BackendUnreachableError));
+          assert.match(
+            err.message,
+            new RegExp(`^Invalid backend URL '${backendUrl}'\n  → `),
+          );
+          return true;
+        },
+        backendUrl,
+      );
+    }
+  });
+
   it("keeps a backend outage a plain error, so the cache can absorb it", async () => {
     const { server, baseUrl } = await startBackend(500);
     try {
@@ -287,6 +377,18 @@ describe("resolveManifest with a cached manifest", () => {
       } finally {
         frontendManifest.modules = previousModules;
       }
+    });
+  });
+
+  it("replays the cache when the backend cannot be reached", async () => {
+    await withCachedWorkspace(async (workspace) => {
+      const resolved = await resolveManifest(
+        workspace,
+        await closedBackendUrl(),
+        false,
+      );
+      assert.equal(resolved.fromCache, true);
+      assert.deepEqual(resolved.manifest, manifest);
     });
   });
 

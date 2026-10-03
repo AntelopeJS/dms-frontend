@@ -390,6 +390,34 @@ describe("validating options before any work", () => {
   });
 });
 
+describe("explaining an unreachable backend", () => {
+  async function closedBackendUrl(): Promise<string> {
+    const { server, port } = await listenOnFreePort();
+    await closeServer(server);
+    return `http://127.0.0.1:${port}`;
+  }
+
+  it("names the URL and the cause in dev, build and prepare", async () => {
+    const backendUrl = await closedBackendUrl();
+    for (const command of ["dev", "build", "prepare"]) {
+      const result = await runCli([command, "-b", backendUrl], {
+        env: { DMS_SESSION_SECRET: SESSION_SECRET },
+      });
+      assert.equal(result.code, command === "prepare" ? 0 : 1, command);
+      assert.match(
+        result.stderr,
+        new RegExp(
+          `(Setup failed|Skipping prepare): Cannot reach the DMS backend at ${backendUrl}\n`,
+        ),
+        command,
+      );
+      assert.match(result.stderr, /Connection refused \(ECONNREFUSED\)\./);
+      assert.match(result.stderr, /→ Start the backend/);
+      assert.doesNotMatch(result.stderr, /fetch failed/);
+    }
+  });
+});
+
 /**
  * `start` is the cheapest command that proves a variable reached Commander:
  * it needs only a backend URL, touches no network, and names the URL it
