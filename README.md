@@ -85,11 +85,13 @@ ajs dms prepare -b http://localhost:5010
 ajs dms dev -b http://localhost:5010 -p 3001
 ajs dms build -b https://dms.example.com
 ajs dms start -b https://dms.example.com -p 3001
+ajs dms workspaces
+ajs dms workspaces --json
 ajs dms clean -b https://dms.example.com
 ajs dms clean --all
 ```
 
-`--help`, `--version` and `clean` run from any directory. `build` and `start`
+`--help`, `--version`, `workspaces` and `clean` run from any directory. `build` and `start`
 need a backend URL through `-b` or `DMS_API_BASE_URL`, and exit 2 without one.
 `dev` also discovers it from the enclosing antelope project's
 `.antelope/dev.json`, and exits 1 when there is none to discover.
@@ -358,11 +360,21 @@ different port between runs and re-keying on the URL would discard
 `node_modules`, the manifest cache and the client-side appId scope every time it
 does. The consequence is that `ajs dms dev` followed by `ajs dms build -b <url>`
 against the same backend creates two workspaces of their own — several hundred
-megabytes each. Pass `-b` to `dev` to share a single one. `clean --all` lists
-both and names the project a workspace is keyed on; `clean -b <url>` only
-reaches the URL-keyed one. `clean` takes its target from `-b` or `--all` only:
-it never reads `DMS_API_BASE_URL` from the environment or `.env`, so running it
-without either is an error rather than a deletion.
+megabytes each. Pass `-b` to `dev` to share a single one. `workspaces` lists
+both, with the project a workspace is keyed on, its size and its last use;
+`clean -b <url>` only reaches the URL-keyed one. `clean` takes its target from
+`-b` or `--all` only: it never reads `DMS_API_BASE_URL` from the environment or
+`.env`, so running it without either is an error rather than a deletion.
+
+`workspaces` prints an aligned table on a terminal. Piped, it prints one
+tab-separated line per workspace, without a header: id, backend URL, key type
+(`url` or `project`), project directory, size in bytes, last use (ISO 8601) and
+workspace directory. `--json` prints one JSON document with the same fields;
+everything else the command says goes to stderr.
+
+`clean --all` lists what it removes and asks before removing it. Without a
+terminal to ask on (a pipe, CI), it exits 2 unless `--yes` is given. Both forms
+of `clean` say how much space they freed.
 
 A `DMS_API_BASE_URL` line in `.env` counts as an explicit backend, so a project
 that configures one gets the single shared workspace and gives up autodiscovery

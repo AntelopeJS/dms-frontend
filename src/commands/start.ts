@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { CliError, formatDuration } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
+  canonicalizeBackendUrl,
   getWorkspaceDir,
   collectManifestSecrets,
   describeSecretSources,
@@ -13,6 +14,7 @@ import {
   requireBackendUrl,
   resolveManifestSecrets,
   resolveSessionSecret,
+  writeWorkspaceMeta,
 } from "../common";
 import {
   formatAge,
@@ -52,6 +54,12 @@ export function cmdStart(): Command {
         });
       }
 
+      // Serving from the workspace is a use, which `workspaces` reports.
+      writeWorkspaceMeta(
+        workspaceDir,
+        backendUrl,
+        canonicalizeBackendUrl(backendUrl),
+      );
       const builtAt = statSync(clientPath).mtime.toISOString();
       writeHeader("start", [
         backendUrl,
