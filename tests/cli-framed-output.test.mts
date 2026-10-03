@@ -124,16 +124,28 @@ function serveManifest(
   });
 }
 
+/** A URL nothing listens on. */
+function closedBackendUrl(): Promise<string> {
+  return new Promise((settle) => {
+    const server = createServer().listen({ port: 0, host: "127.0.0.1" }, () => {
+      const address = server.address();
+      if (address === null || typeof address === "string")
+        throw new Error("No address");
+      server.close(() => settle(`http://127.0.0.1:${address.port}`));
+    });
+  });
+}
+
 /**
  * A home holding the manifest and the layers archive a previous build
- * downloaded, so `build --offline` runs without a backend. The manifest
- * names `<sandbox>/frontend-vue` as the layer's source.
+ * downloaded from `backendUrl`, so `build --offline` runs without a backend.
+ * The manifest names `<sandbox>/frontend-vue` as the layer's source.
  */
-function offlineBuildHome(sandbox: string): void {
+function cachedBuildHome(sandbox: string, backendUrl: string): void {
   const workspace = join(
     sandbox,
     ".antelopejs/dms-frontend",
-    createHash("sha256").update(OFFLINE_BACKEND).digest("hex"),
+    createHash("sha256").update(backendUrl).digest("hex"),
   );
   const source = join(sandbox, "frontend-vue");
   writeLayer(source);
@@ -148,6 +160,10 @@ function offlineBuildHome(sandbox: string): void {
       fetchedAt: new Date().toISOString(),
     }),
   );
+}
+
+function offlineBuildHome(sandbox: string): void {
+  cachedBuildHome(sandbox, OFFLINE_BACKEND);
 }
 
 const offlineBuild = ["build", "-b", OFFLINE_BACKEND, "--offline"];
@@ -244,6 +260,19 @@ describePosix("framing pnpm install and the production build", () => {
           `${DONE}▲ 1 Vite warning\n  \\(!\\) Some chunks are larger than 500 kB`,
       ),
     );
+    assert.match(
+      run.stderr,
+      new RegExp(
+        [
+          "",
+          "Built the production frontend → \\./\\.antelopejs/dms-frontend/[0-9a-f]{64}/dist · \\d+(?:ms|\\.\\ds)",
+          "",
+          "Next steps",
+          `  ajs dms start -b ${OFFLINE_BACKEND.replaceAll(".", "\\.")}  with the DMS_SESSION_SECRET this build used`,
+          "",
+        ].join("\n") + "$",
+      ),
+    );
     const steps = run.calls.slice(1);
     assert.deepEqual(
       steps.map((call) => call.args),
@@ -252,6 +281,29 @@ describePosix("framing pnpm install and the production build", () => {
       ),
     );
     assert.ok(steps.every((call) => call.env.viteLogLevel === "warn"));
+  });
+
+  it("fails when the backend is down instead of building from the cache", async () => {
+    const backendUrl = await closedBackendUrl();
+    const run = await runCli(["build", "-b", backendUrl], {
+      setUp: (sandbox) => cachedBuildHome(sandbox, backendUrl),
+    });
+
+    assert.equal(run.code, 1);
+    assert.equal(run.stdout, "");
+    assert.match(
+      run.stderr,
+      new RegExp(
+        [
+          `✖ Cannot reach the DMS backend at ${backendUrl.replaceAll(".", "\\.")}`,
+          "  Connection refused \\(ECONNREFUSED\\)\\. A manifest cached just now exists; a build uses it only with --offline\\.",
+          "  → Start the backend .*",
+          `  → Or build from the cache on purpose: ajs dms build -b ${backendUrl.replaceAll(".", "\\.")} --offline`,
+        ].join("\n"),
+      ),
+    );
+    assert.doesNotMatch(run.stderr, /Built|Workspace generated/);
+    assert.deepEqual(run.calls, []);
   });
 
   it("reports a Vite error once, at the layer source, without the stack", async () => {
