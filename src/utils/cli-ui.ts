@@ -2,7 +2,7 @@ import boxen, { type Options as BoxenOptions } from "boxen";
 import chalk from "chalk";
 import figlet from "figlet";
 
-const clearLine = () => process.stdout.write("\r\x1b[K");
+const clearLine = () => process.stderr.write("\r\x1b[K");
 const spinnerChars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 const SPINNER_INTERVAL_MS = 80;
@@ -11,7 +11,7 @@ const SPINNER_INTERVAL_MS = 80;
  * Check if output is a terminal (TTY)
  */
 function isTerminalOutput(): boolean {
-  return process.stdout.isTTY ?? false;
+  return process.stderr.isTTY ?? false;
 }
 
 /**
@@ -41,14 +41,14 @@ export class Spinner {
     this.currentCharIndex = 0;
 
     if (!this.isTerminal) {
-      console.log(`  ${this.text}`);
+      console.error(`  ${this.text}`);
       return this;
     }
 
     this.interval = setInterval(() => {
       if (this.isRunning) {
         const spinnerChar = spinnerChars[this.currentCharIndex];
-        process.stdout.write(`\r${chalk.cyan(spinnerChar)} ${this.text}`);
+        process.stderr.write(`\r${chalk.cyan(spinnerChar)} ${this.text}`);
         this.currentCharIndex =
           (this.currentCharIndex + 1) % spinnerChars.length;
       }
@@ -67,7 +67,7 @@ export class Spinner {
       clearLine();
       stream.write(`${message}\n`);
       const spinnerChar = spinnerChars[this.currentCharIndex];
-      process.stdout.write(`${chalk.cyan(spinnerChar)} ${this.text}`);
+      process.stderr.write(`${chalk.cyan(spinnerChar)} ${this.text}`);
     } else {
       stream.write(`${message}\n`);
     }
@@ -81,9 +81,9 @@ export class Spinner {
     const message = text || this.text;
 
     if (this.isTerminal) {
-      process.stdout.write(`\r${chalk.bold.green("✓")} ${message}\n`);
+      process.stderr.write(`\r${chalk.bold.green("✓")} ${message}\n`);
     } else {
-      console.log(`✓ ${message}`);
+      console.error(`✓ ${message}`);
     }
   }
 
@@ -94,9 +94,9 @@ export class Spinner {
     const message = text || this.text;
 
     if (this.isTerminal) {
-      process.stdout.write(`\r${chalk.bold.red("✗")} ${chalk.red(message)}\n`);
+      process.stderr.write(`\r${chalk.bold.red("✗")} ${chalk.red(message)}\n`);
     } else {
-      console.log(`✗ ${message}`);
+      console.error(`✗ ${message}`);
     }
   }
 
@@ -107,9 +107,9 @@ export class Spinner {
     const message = text || this.text;
 
     if (this.isTerminal) {
-      process.stdout.write(`\r${chalk.bold.blue("ℹ")} ${message}\n`);
+      process.stderr.write(`\r${chalk.bold.blue("ℹ")} ${message}\n`);
     } else {
-      console.log(`ℹ ${message}`);
+      console.error(`ℹ ${message}`);
     }
   }
 
@@ -120,9 +120,9 @@ export class Spinner {
     const message = text || this.text;
 
     if (this.isTerminal) {
-      process.stdout.write(`\r${chalk.bold.yellow("⚠")} ${message}\n`);
+      process.stderr.write(`\r${chalk.bold.yellow("⚠")} ${message}\n`);
     } else {
-      console.log(`⚠ ${message}`);
+      console.error(`⚠ ${message}`);
     }
   }
 
@@ -169,7 +169,7 @@ export function displayBox(
     titleAlignment: "center",
   };
 
-  console.log(boxen(message, { ...defaultOptions, ...options }));
+  console.error(boxen(message, { ...defaultOptions, ...options }));
 }
 
 /**
@@ -186,28 +186,28 @@ export function displayBanner(text: string, font?: string): void {
  * Displays a success message with green coloring and a checkmark
  */
 export function success(message: string): void {
-  console.log(`${chalk.green.bold("✓")} ${message}`);
+  console.error(`${chalk.green.bold("✓")} ${message}`);
 }
 
 /**
  * Displays an error message with red coloring and an X
  */
 export function error(message: string): void {
-  console.log(`${chalk.red.bold("✗")} ${chalk.red(message)}`);
+  console.error(`${chalk.red.bold("✗")} ${chalk.red(message)}`);
 }
 
 /**
  * Displays a warning message with yellow coloring and a warning symbol
  */
 export function warning(message: string): void {
-  console.log(`${chalk.yellow.bold("⚠")} ${chalk.yellow(message)}`);
+  console.error(`${chalk.yellow.bold("⚠")} ${chalk.yellow(message)}`);
 }
 
 /**
  * Displays an info message with blue coloring and an info symbol
  */
 export function info(message: string): void {
-  console.log(`${chalk.blue.bold("ℹ")} ${message}`);
+  console.error(`${chalk.blue.bold("ℹ")} ${message}`);
 }
 
 /**
@@ -223,9 +223,9 @@ export function stopped(message: string, signal: NodeJS.Signals): void {
  * Display a section header with a colored underline
  */
 export function header(text: string): void {
-  console.log("");
-  console.log(chalk.bold.blue(text));
-  console.log(chalk.blue("─".repeat(text.length)));
+  console.error("");
+  console.error(chalk.bold.blue(text));
+  console.error(chalk.blue("─".repeat(text.length)));
 }
 
 /**

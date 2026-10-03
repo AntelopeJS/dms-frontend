@@ -55,10 +55,10 @@ export function cmdBuild(): Command {
           );
         }
 
-        console.log("");
+        console.error("");
         info("Building for production...");
-        console.log(chalk.dim(`  Workspace: ${workspaceDir}`));
-        console.log("");
+        console.error(chalk.dim(`  Workspace: ${workspaceDir}`));
+        console.error("");
 
         const nodeModulesDir = join(workspaceDir, "node_modules");
         const code = await runCommand("pnpm", ["run", "build"], {
@@ -72,9 +72,9 @@ export function cmdBuild(): Command {
         });
 
         if (code === 0) {
-          console.log("");
+          console.error("");
           success("Build completed successfully!");
-          console.log(
+          console.error(
             chalk.dim("  Run 'ajs dms start' to start the production server"),
           );
         } else {
