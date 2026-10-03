@@ -50,7 +50,7 @@ const runCLI = async () => {
     .option("--no-color", "Disable colors (also NO_COLOR=1)")
     .option(
       "--verbose",
-      "Show stack traces in failures (also ANTELOPEJS_VERBOSE)",
+      "Stream the pnpm and Vite output, and show stack traces in failures (also ANTELOPEJS_VERBOSE)",
     )
     // Registered for `--help` only: `stripUpdateCheckFlag` removes the flag
     // before Commander parses, so it is accepted after a subcommand name too.
