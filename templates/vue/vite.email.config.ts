@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import vue from "@vitejs/plugin-vue";
 import AutoImport from "unplugin-auto-import/vite";
-import { defineConfig, normalizePath } from "vite";
+import { defineConfig, type LogLevel, normalizePath } from "vite";
 
 interface FrontendModuleRegistryEntry {
   id: string;
@@ -33,7 +33,11 @@ const stableModuleAliases = Object.fromEntries(
   }),
 );
 
+/** Set by `ajs dms build`, as in vite.config.ts. */
+const logLevel = (process.env.DMS_VITE_LOG_LEVEL ?? "info") as LogLevel;
+
 export default defineConfig({
+  logLevel,
   plugins: [
     {
       name: "dms-email-locale-assets",

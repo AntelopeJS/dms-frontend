@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import ui from "@nuxt/ui/vite";
 import vue from "@vitejs/plugin-vue";
-import { defineConfig, normalizePath, type Plugin } from "vite";
+import { defineConfig, type LogLevel, normalizePath, type Plugin } from "vite";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
 import { iconScanGlobs } from "./icon-scan.mjs";
 
@@ -117,7 +117,14 @@ const uiInertiaLinkImport = resolve(
   "node_modules/@nuxt/ui/dist/runtime/vue/overrides/inertia/Link.vue",
 );
 
+/**
+ * `ajs dms build` runs Vite at "warn" and reports the steps itself; a verbose
+ * run, `dev` and a hand-run build keep Vite's own output.
+ */
+const logLevel = (process.env.DMS_VITE_LOG_LEVEL ?? "info") as LogLevel;
+
 export default defineConfig({
+  logLevel,
   plugins: [
     {
       name: "dms-ui-inertia-link",
