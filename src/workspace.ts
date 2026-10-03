@@ -6,20 +6,20 @@
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { getProcessUi } from "@antelopejs/core/cli";
 import {
   DMS_FRONTEND_HOME,
   WORKSPACE_DIR_MODE,
   canonicalizeBackendUrl,
   sha256Hex,
 } from "./config";
-import { showPath } from "./output";
 
 // ============================================================================
 // Constants
@@ -177,57 +177,52 @@ export interface WorkspaceEntry {
    * workspaces for the same backend, which is otherwise invisible.
    */
   workspaceKey?: string;
+  /** When a command last set the workspace up or served from it, ISO 8601. */
+  lastUsedAt: string;
+}
+
+export interface WorkspaceListing {
+  workspaces: WorkspaceEntry[];
+  /** Directories under the loader home that are not workspaces it owns. */
+  skipped: string[];
 }
 
 /**
- * One line naming what a workspace is keyed on, for `clean --all`.
- *
- * A project-keyed workspace names its project directory as well as its
- * backend, because the same backend also has — or will have — a second,
- * URL-keyed workspace built by `build`, and the two are otherwise
- * indistinguishable in a listing of hashed directory names.
- */
-export function describeWorkspace(entry: WorkspaceEntry): string {
-  const projectDir = projectDirFromWorkspaceKey(entry.workspaceKey);
-  return projectDir
-    ? `${entry.backendUrl} · project ${showPath(projectDir)}`
-    : entry.backendUrl;
-}
-
-/**
- * List the workspaces this loader owns, with the backend each one is keyed on.
+ * List the workspaces this loader owns, with the backend each one is keyed on,
+ * most recently used first.
  *
  * A directory under the loader home is only a workspace once
  * `writeWorkspaceMeta` has stamped it, so one without a readable metadata file
  * is foreign (or a half-created directory from an interrupted run) and is
- * skipped with a warning rather than reported as a nameless workspace.
+ * reported as skipped rather than as a nameless workspace.
  */
-export function listWorkspaces(
-  warn: (message: string) => void = (message) =>
-    getProcessUi().message("warn", message),
-): WorkspaceEntry[] {
-  if (!existsSync(DMS_FRONTEND_HOME)) return [];
-  const workspaces: WorkspaceEntry[] = [];
+export function listWorkspaces(): WorkspaceListing {
+  const listing: WorkspaceListing = { workspaces: [], skipped: [] };
+  if (!existsSync(DMS_FRONTEND_HOME)) return listing;
   for (const entry of readdirSync(DMS_FRONTEND_HOME, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const dir = join(DMS_FRONTEND_HOME, entry.name);
     const meta = readWorkspaceMeta(dir);
     if (meta?.backendUrl === undefined) {
-      warn(`Skipped ${showPath(dir)}: no readable ${WORKSPACE_META_FILE}`);
+      listing.skipped.push(dir);
       continue;
     }
-    workspaces.push({
+    listing.workspaces.push({
       dir,
       backendUrl: meta.backendUrl,
       workspaceKey: meta.workspaceKey,
+      lastUsedAt: meta.updatedAt ?? metaModifiedAt(dir),
     });
   }
-  return workspaces;
+  listing.workspaces.sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
+  return listing;
 }
 
 function readWorkspaceMeta(
   dir: string,
-): { backendUrl?: string; workspaceKey?: string } | undefined {
+):
+  | { backendUrl?: string; workspaceKey?: string; updatedAt?: string }
+  | undefined {
   let meta: unknown;
   try {
     meta = JSON.parse(readFileSync(join(dir, WORKSPACE_META_FILE), "utf-8"));
@@ -237,6 +232,7 @@ function readWorkspaceMeta(
   const record = meta as {
     backendUrl?: unknown;
     workspaceKey?: unknown;
+    updatedAt?: unknown;
   } | null;
   return {
     backendUrl:
@@ -245,7 +241,53 @@ function readWorkspaceMeta(
       typeof record?.workspaceKey === "string"
         ? record.workspaceKey
         : undefined,
+    updatedAt:
+      typeof record?.updatedAt === "string" &&
+      !Number.isNaN(Date.parse(record.updatedAt))
+        ? new Date(record.updatedAt).toISOString()
+        : undefined,
   };
+}
+
+/** The date of a metadata file written before it recorded one. */
+function metaModifiedAt(dir: string): string {
+  return statSync(join(dir, WORKSPACE_META_FILE)).mtime.toISOString();
+}
+
+/**
+ * The bytes the files under a directory take, each counted once however many
+ * hard links it has, without following symbolic links: what removing the
+ * directory gives back, as `du` counts it.
+ */
+export function directorySize(dir: string): number {
+  const seen = new Set<string>();
+  const pending = [dir];
+  let total = 0;
+  for (let current = pending.pop(); current; current = pending.pop()) {
+    let entries;
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(path);
+        continue;
+      }
+      try {
+        const stats = lstatSync(path);
+        const inode = `${stats.dev}:${stats.ino}`;
+        if (stats.nlink > 1 && seen.has(inode)) continue;
+        seen.add(inode);
+        total += stats.size;
+      } catch {
+        // Removed while we walked: it no longer takes any space.
+      }
+    }
+  }
+  return total;
 }
 
 /**

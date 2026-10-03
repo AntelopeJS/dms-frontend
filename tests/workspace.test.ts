@@ -1,9 +1,12 @@
 import * as assert from "node:assert/strict";
 import {
+  linkSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +16,7 @@ import {
   assertLayerPathsServed,
   canonicalizeBackendUrl,
   computeDepsHash,
-  describeWorkspace,
+  directorySize,
   getWorkspaceDir,
   getWorkspaceDirForKey,
   type Manifest,
@@ -109,27 +112,6 @@ describe("workspace identity", () => {
     );
   });
 
-  it("names the project a dev workspace is keyed on", () => {
-    // `dev` without -b intentionally does NOT share the URL-keyed workspace,
-    // so `clean --all` has to say which of the two it is removing.
-    assert.equal(
-      describeWorkspace({
-        dir: "/home/user/.antelopejs/dms-frontend/abc",
-        backendUrl: "http://127.0.0.1:5010",
-        workspaceKey: projectWorkspaceKey("/home/user/my-project"),
-      }),
-      "http://127.0.0.1:5010 · project /home/user/my-project",
-    );
-    assert.equal(
-      describeWorkspace({
-        dir: "/home/user/.antelopejs/dms-frontend/abc",
-        backendUrl: "http://127.0.0.1:5010",
-        workspaceKey: canonicalizeBackendUrl("http://127.0.0.1:5010"),
-      }),
-      "http://127.0.0.1:5010",
-    );
-  });
-
   it("never collides a project key with a backend URL key", () => {
     // A pathological project path that *looks* like a URL still maps to a
     // different workspace than the URL itself, thanks to the `project:`
@@ -170,6 +152,24 @@ function makeWorkspace(entry: unknown): string {
   );
   return dir;
 }
+
+describe("workspace size", () => {
+  it("counts a hard-linked file once and never follows a symbolic link", () => {
+    const outside = mkdtempSync(join(tmpdir(), "dms-store-"));
+    const workspace = mkdtempSync(join(tmpdir(), "dms-workspace-"));
+    cleanupDirs.push(outside, workspace);
+    writeFileSync(join(outside, "big"), Buffer.alloc(4096));
+    mkdirSync(join(workspace, "node_modules"));
+    writeFileSync(join(workspace, "node_modules", "a.js"), Buffer.alloc(100));
+    linkSync(
+      join(workspace, "node_modules", "a.js"),
+      join(workspace, "node_modules", "b.js"),
+    );
+    symlinkSync(outside, join(workspace, "node_modules", "linked"));
+    const linkSize = Buffer.byteLength(outside);
+    assert.equal(directorySize(workspace), 100 + linkSize);
+  });
+});
 
 describe("manifest cache", () => {
   it("survives the credential rotating between runs", () => {
