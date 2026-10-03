@@ -156,16 +156,16 @@ export function cmdDev(): Command {
         process.once("SIGINT", handleShutdown);
         process.once("SIGTERM", handleShutdown);
 
-        console.log("");
+        console.error("");
         info(`Starting dev server on port ${chalk.cyan(String(port))}...`);
-        console.log(chalk.dim(`  Workspace: ${workspaceDir}`));
-        console.log(chalk.dim(`  Backend:   ${backendUrl}`));
-        console.log(
+        console.error(chalk.dim(`  Workspace: ${workspaceDir}`));
+        console.error(chalk.dim(`  Backend:   ${backendUrl}`));
+        console.error(
           chalk.dim(`  Watching:  ${layers.length} layer source tree(s)`),
         );
         const secrets = resolveManifestSecrets(manifestSecrets);
         reportManifestSecrets(secrets);
-        console.log("");
+        console.error("");
 
         const nodeModulesDir = join(workspaceDir, "node_modules");
         // Hand the reserved port over to the frontend server at the last moment.
