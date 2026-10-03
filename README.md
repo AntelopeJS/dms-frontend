@@ -89,13 +89,23 @@ ajs dms clean -b https://dms.example.com
 ajs dms clean --all
 ```
 
-`--help`, `--version` and `clean` run from any directory. `prepare` also runs
-anywhere: with no backend in reach it warns and exits 0, so a frontend module's
-`postinstall` hook never fails an install, and the generated types are refreshed
-later from a development environment. `build` and `start` need a backend URL
-through `-b` or `DMS_API_BASE_URL`, and exit 2 without one. `dev` also discovers
-it from the enclosing antelope project's `.antelope/dev.json`, and exits 1 when
-there is none to discover. `verify-source` needs `--layer` instead.
+`--help`, `--version` and `clean` run from any directory. `build` and `start`
+need a backend URL through `-b` or `DMS_API_BASE_URL`, and exit 2 without one.
+`dev` also discovers it from the enclosing antelope project's
+`.antelope/dev.json`, and exits 1 when there is none to discover.
+`verify-source` needs `--layer` instead.
+
+`prepare` runs anywhere: when it cannot prepare the workspace it warns on
+stderr and exits 0, so a frontend module's `postinstall` hook never fails an
+install. The warning says whether prepare was skipped or failed. Skipped means
+no backend is in reach (no URL, an unreachable backend, `--offline` without a
+cached manifest), as in CI: the generated types are refreshed later from a
+development environment. Failed means something a later run will not fix: a
+refused credential, an incompatible manifest or renderer range, an invalid URL.
+A step that needs the types, such as a CI type-check, passes `--strict` (or
+sets `DMS_PREPARE_STRICT=1`): prepare then exits 1 in every one of these cases,
+and 2 when the backend URL is missing or invalid. On success, it says how many
+modules it found and how long it took.
 
 `build` ends with where it wrote the production frontend (the `dist`
 directory of the workspace), how long it took, and the `ajs dms start` command
@@ -175,7 +185,7 @@ A frontend module names the `@antelopejs/dms-frontend` releases it runs on in it
 }
 ```
 
-`prepare`, `dev`, `build` and `verify-source` read it before they generate anything, whether the manifest was just fetched or replayed from the cache, and stop when this release falls outside a module's range: `dev`, `build` and `verify-source` exit 1, and `prepare` warns and exits 0, as it does for any setup it cannot complete. The message names each such module, its range and this release, rather than letting the build, the type-check or a render fail later on an API the release no longer has, or does not have yet. A prerelease is checked as the release it leads to: `0.4.0-next.1` is outside `<0.4.0`. A module that declares no range still loads, and a warning names it once. `start` checks nothing: it runs what `build` produced.
+`prepare`, `dev`, `build` and `verify-source` read it before they generate anything, whether the manifest was just fetched or replayed from the cache, and stop when this release falls outside a module's range: `dev`, `build` and `verify-source` exit 1, and `prepare` warns and exits 0, as it does for any setup it cannot complete, unless `--strict` is given. The message names each such module, its range and this release, rather than letting the build, the type-check or a render fail later on an API the release no longer has, or does not have yet. A prerelease is checked as the release it leads to: `0.4.0-next.1` is outside `<0.4.0`. A module that declares no range still loads, and a warning names it once. `start` checks nothing: it runs what `build` produced.
 
 Cap the range below the next breaking release, which is the next minor release while this package is 0.x, and widen it once the module has been checked against that release. A range left open to `<1.0.0` admits the very release that removes something the module calls.
 

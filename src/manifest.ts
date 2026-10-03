@@ -160,6 +160,20 @@ export class ManifestRefusedError extends CliError {
 }
 
 /**
+ * --offline on a workspace no backend has served yet: like an outage, the
+ * backend is out of reach rather than refusing anything.
+ */
+export class NoCachedManifestError extends CliError {
+  constructor() {
+    super({
+      title: "No cached manifest for this workspace",
+      fixes: ["Run once with the backend reachable before using --offline"],
+    });
+    this.name = "NoCachedManifestError";
+  }
+}
+
+/**
  * Fetch the layers manifest from the DMS backend. `clientUrl` tells a
  * dev-mode backend where the frontend will actually be reachable (real
  * resolved port included) so it can serve a matching `clientBaseUrl` and
@@ -316,12 +330,7 @@ export async function resolveManifest(
   }
 
   const cached = readCachedManifest(workspaceDir);
-  if (!cached) {
-    throw new CliError({
-      title: "No cached manifest for this workspace",
-      fixes: ["Run once with the backend reachable before using --offline"],
-    });
-  }
+  if (!cached) throw new NoCachedManifestError();
   return fromCachedEntry(cached);
 }
 

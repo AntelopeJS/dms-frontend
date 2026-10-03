@@ -8,6 +8,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -370,10 +371,19 @@ describe("validating options before any work", () => {
     }
   });
 
-  it("skips prepare for an invalid backend URL without failing the install", async () => {
+  it("fails prepare for an invalid backend URL without failing the install", async () => {
     const result = await runCli(["prepare", "-b", "localhost:5010"]);
     assert.equal(result.code, 0);
-    assert.match(result.stderr, /▲ Skipped prepare: Invalid backend URL/);
+    assert.match(result.stderr, /▲ Prepare failed: Invalid backend URL/);
+
+    const strict = await runCli([
+      "prepare",
+      "-b",
+      "localhost:5010",
+      "--strict",
+    ]);
+    assert.equal(strict.code, 2);
+    assert.match(strict.stderr, /^✖ Invalid backend URL 'localhost:5010'\n/);
   });
 
   it("names the character that keeps the bootstrap credential out of a header", async () => {
@@ -559,6 +569,132 @@ describe("explaining an unreachable backend", () => {
       assert.match(result.stderr, /→ Start the backend/);
       assert.doesNotMatch(result.stderr, /fetch failed/);
     }
+  });
+});
+
+describe("telling a skipped prepare from a failed one", () => {
+  const STRICT_HINT =
+    /\n {2}prepare never fails an install; add --strict to make this an error\.\n$/;
+
+  async function closedBackendUrl(): Promise<string> {
+    const { server, port } = await listenOnFreePort();
+    await closeServer(server);
+    return `http://127.0.0.1:${port}`;
+  }
+
+  /** A backend answering every request with `status` and `body`. */
+  async function withBackend(
+    status: number,
+    body: unknown,
+    run: (backendUrl: string) => Promise<void>,
+  ): Promise<void> {
+    const server = createHttpServer((_req, res) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    });
+    await new Promise<void>((settle) =>
+      server.listen({ port: 0, host: "127.0.0.1" }, settle),
+    );
+    const address = server.address();
+    if (address === null || typeof address === "string")
+      throw new Error("No address");
+    try {
+      await run(`http://127.0.0.1:${address.port}`);
+    } finally {
+      await new Promise((settle) => server.close(settle));
+    }
+  }
+
+  it("skips without a backend URL, and needs one with --strict", async () => {
+    const skipped = await runCli(["prepare"]);
+    assert.equal(skipped.code, 0);
+    assert.match(skipped.stderr, /^▲ Skipped prepare: no backend URL\n/);
+    assert.match(skipped.stderr, STRICT_HINT);
+
+    const strict = await runCli(["prepare", "--strict"]);
+    assert.equal(strict.code, 2);
+    assert.equal(strict.stdout, "");
+    assert.match(strict.stderr, /^✖ Backend URL is required\n/);
+  });
+
+  it("skips while the backend is out of reach, and fails with --strict", async () => {
+    const backendUrl = await closedBackendUrl();
+    const skipped = await runCli(["prepare", "-b", backendUrl]);
+    assert.equal(skipped.code, 0);
+    assert.match(
+      skipped.stderr,
+      /▲ Skipped prepare: Cannot reach the DMS backend/,
+    );
+    assert.match(
+      skipped.stderr,
+      /\n {2}The types and the module registry were not generated\.\n/,
+    );
+    assert.match(skipped.stderr, STRICT_HINT);
+
+    const strict = await runCli(["prepare", "-b", backendUrl, "--strict"]);
+    assert.equal(strict.code, 1);
+    assert.match(strict.stderr, /\n✖ Cannot reach the DMS backend at /);
+    assert.doesNotMatch(strict.stderr, /Skipped prepare|--strict/);
+  });
+
+  it("skips offline without a cached manifest, and fails with --strict", async () => {
+    const args = ["prepare", "-b", BACKEND_URL, "--offline"];
+    const skipped = await runCli(args);
+    assert.equal(skipped.code, 0);
+    assert.match(
+      skipped.stderr,
+      /▲ Skipped prepare: No cached manifest for this workspace\n/,
+    );
+
+    const strict = await runCli([...args, "--strict"]);
+    assert.equal(strict.code, 1);
+    assert.match(strict.stderr, /✖ No cached manifest for this workspace\n/);
+  });
+
+  it("reports a refused credential as a failure, an error with --strict", async () => {
+    await withBackend(401, {}, async (backendUrl) => {
+      const env = { DMS_BOOTSTRAP_SECRET: undefined };
+      const failed = await runCli(["prepare", "-b", backendUrl], { env });
+      assert.equal(failed.code, 0);
+      assert.equal(failed.stdout, "");
+      assert.match(
+        failed.stderr,
+        /▲ Prepare failed: The backend requires a bootstrap credential \(401\)/,
+      );
+      assert.match(failed.stderr, /→ Production\/CI: set DMS_BOOTSTRAP_SECRET/);
+      assert.match(failed.stderr, STRICT_HINT);
+
+      const strict = await runCli(["prepare", "-b", backendUrl, "--strict"], {
+        env,
+      });
+      assert.equal(strict.code, 1);
+      assert.match(
+        strict.stderr,
+        /\n✖ The backend requires a bootstrap credential \(401\)/,
+      );
+    });
+  });
+
+  it("reports an incompatible manifest as a failure, an error with DMS_PREPARE_STRICT", async () => {
+    await withBackend(200, { version: 2, modules: [] }, async (backendUrl) => {
+      const args = ["prepare", "-b", backendUrl];
+      const failed = await runCli(args);
+      assert.equal(failed.code, 0);
+      assert.match(
+        failed.stderr,
+        /▲ Prepare failed: Unsupported frontend manifest version: 2\n/,
+      );
+
+      const strict = await runCli(args, { env: { DMS_PREPARE_STRICT: "1" } });
+      assert.equal(strict.code, 1);
+      assert.match(
+        strict.stderr,
+        /\n✖ Unsupported frontend manifest version: 2\n/,
+      );
+
+      const off = await runCli(args, { env: { DMS_PREPARE_STRICT: "0" } });
+      assert.equal(off.code, 0);
+    });
   });
 });
 

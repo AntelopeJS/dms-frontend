@@ -267,6 +267,14 @@ export const Options = {
     ).default(booleanFromEnv("DMS_OFFLINE"));
   },
 
+  /** Built on access, like `offline`, to read `DMS_PREPARE_STRICT` from the `.env`. */
+  get strict(): Option {
+    return new Option(
+      "--strict",
+      "Exit 1 when the workspace cannot be prepared, and 2 when the backend URL is missing or invalid, instead of warning and exiting 0 (env: DMS_PREPARE_STRICT)",
+    ).default(booleanFromEnv("DMS_PREPARE_STRICT"));
+  },
+
   bootstrapSecret: new Option(
     "--bootstrap-secret <secret>",
     "Credential presented to the backend's layer endpoints (env: DMS_BOOTSTRAP_SECRET, preferred — " +
