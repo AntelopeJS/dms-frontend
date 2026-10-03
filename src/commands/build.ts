@@ -12,6 +12,7 @@ import {
   type PathMapper,
 } from "../child-output";
 import {
+  flagOrEnv,
   type FramedCommandResult,
   normalizeBootstrapSecret,
   Options,
@@ -19,6 +20,7 @@ import {
   resolveSessionSecret,
   runFramedCommand,
 } from "../common";
+import { type HelpExample, withExamples } from "../help";
 import {
   cachedAge,
   showWorkspace,
@@ -146,13 +148,39 @@ async function runBuildStep(
   task.succeed(step.done);
 }
 
+const BUILD_EXAMPLES: HelpExample[] = [
+  {
+    description: "With DMS_SESSION_SECRET set in the environment or ./.env",
+    command: "ajs dms build -b https://dms.example.com",
+  },
+  {
+    description: "Rebuild from the cache while the backend is down",
+    command: "ajs dms build -b https://dms.example.com --offline",
+  },
+];
+
 export function cmdBuild(): Command {
-  return new Command("build")
-    .description("Build for production (downloads layers via ZIP from backend)")
-    .addOption(Options.backendUrl)
-    .addOption(Options.force)
-    .addOption(Options.offline)
-    .addOption(Options.bootstrapSecret)
+  const command = new Command("build")
+    .summary("Build the production frontend")
+    .description(
+      "Build the production frontend from the manifest and layers archive the backend serves, into the workspace's dist directory. Needs a DMS_SESSION_SECRET of 32 characters or more.",
+    )
+    .addOption(
+      Options.backendUrl(
+        "Backend URL to build for; required, as -b or the variable",
+      ),
+    )
+    .addOption(
+      Options.force(
+        "Extract the layers archive from scratch and reinstall the workspace dependencies",
+      ),
+    )
+    .addOption(
+      Options.offline(
+        "Build from the last cached manifest and layers archive, without the backend",
+      ),
+    )
+    .addOption(Options.bootstrapSecret())
     .action(async (options: BuildOptions) => {
       const startedAt = Date.now();
       const backendUrl = requireBackendUrl(options.backendUrl);
@@ -166,7 +194,7 @@ export function cmdBuild(): Command {
           backendUrl,
           force: !!options.force,
           mode: "build",
-          offline: options.offline,
+          offline: flagOrEnv(options.offline, "DMS_OFFLINE"),
           bootstrapSecret,
         });
 
@@ -212,4 +240,5 @@ export function cmdBuild(): Command {
         ],
       });
     });
+  return withExamples(command, BUILD_EXAMPLES);
 }

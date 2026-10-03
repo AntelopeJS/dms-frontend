@@ -11,6 +11,7 @@ import {
   listWorkspaces,
   projectDirFromWorkspaceKey,
 } from "../common";
+import { type HelpExample, withExamples } from "../help";
 import {
   formatAge,
   formatSize,
@@ -110,9 +111,21 @@ export function reportSkipped(ui: Ui, skipped: string[]): void {
   }
 }
 
+const WORKSPACES_EXAMPLES: HelpExample[] = [
+  {
+    description: "On a terminal: an aligned table",
+    command: "ajs dms workspaces",
+  },
+  {
+    description: "In a script",
+    command: "ajs dms workspaces --json",
+  },
+];
+
 export function cmdWorkspaces(): Command {
-  return new Command("workspaces")
-    .description("List generated workspaces, with their size and last use")
+  const command = new Command("workspaces")
+    .summary("List generated workspaces")
+    .description("List generated workspaces, with their size and last use.")
     .option("--json", "Print the list as one JSON document on stdout")
     .addHelpText(
       "after",
@@ -132,4 +145,5 @@ last use (ISO 8601) and workspace directory.`,
       });
       reportSkipped(ui, skipped);
     });
+  return withExamples(command, WORKSPACES_EXAMPLES);
 }

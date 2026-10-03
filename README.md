@@ -89,7 +89,12 @@ ajs dms workspaces
 ajs dms workspaces --json
 ajs dms clean -b https://dms.example.com
 ajs dms clean --all
+ajs dms help environment
 ```
+
+`ajs dms <command> --help` shows what a command does, its options and a few
+examples. `ajs dms help environment` lists every variable the CLI and the
+generated server read, from the environment or the project's `.env`.
 
 `--help`, `--version`, `workspaces` and `clean` run from any directory. `build` and `start`
 need a backend URL through `-b` or `DMS_API_BASE_URL`, and exit 2 without one.
@@ -428,9 +433,11 @@ needs no exception for the Iconify API. Icons reach the page two ways:
 | --- | --- | --- |
 | `-b, --backend-url` | `DMS_API_BASE_URL` (except `clean`) | DMS backend URL, `http://` or `https://` |
 | `-p, --port` | `PORT` | Frontend port from 1 to 65535, default `3001`; `dev` moves to the next free port, `start` stops when it is in use |
-| `-f, --force` | | Reinstall workspace dependencies |
+| `-f, --force` | | Reinstall workspace dependencies; `build` also extracts the layers archive from scratch |
 | `--offline` | `DMS_OFFLINE` | Reuse cached manifest and archives; the only way `build` uses them |
+| `--strict` | `DMS_PREPARE_STRICT` | Make `prepare` fail instead of warning; see [Commands](#commands) |
 | `--bootstrap-secret` | `DMS_BOOTSTRAP_SECRET` | Backend bootstrap credential |
+| | `HOST` | Address the frontend server binds to (default `0.0.0.0`) |
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
 | | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
