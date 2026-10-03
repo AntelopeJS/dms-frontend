@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CliError, FAILURE_EXIT_CODE } from "@antelopejs/core/cli";
 import { parseBackendUrl, UsageError, writeSecretBearingFile } from "./config";
-import { formatAge } from "./output";
+import { cachedAge, formatAge } from "./output";
 import {
   Manifest,
   bootstrapHeaders,
@@ -252,6 +252,14 @@ function writeCachedManifest(workspaceDir: string, manifest: Manifest): void {
   );
 }
 
+/**
+ * When the cached manifest stands in for the backend: `fallback` replays it
+ * when the backend cannot be reached or fails (dev, prepare), `offline`
+ * without asking the backend, and `never` fails instead (build, whose output
+ * is deployed: a stale frontend must be asked for with --offline).
+ */
+export type ManifestCacheUse = "fallback" | "offline" | "never";
+
 export interface ResolvedManifest {
   manifest: Manifest;
   fromCache: boolean;
@@ -261,7 +269,8 @@ export interface ResolvedManifest {
 /**
  * Get the manifest, preferring the live backend. On fetch failure we fall
  * back to the cached copy (with `fromCache: true` so callers can surface a
- * warning). With `offline` we skip the network call entirely.
+ * warning), unless `cacheUse` is `never`. With `offline` we skip the network
+ * call entirely.
  *
  * Note the workspace directory is derived from the backend URL hash, so a
  * mistyped URL maps to a different (empty) workspace and still fails hard
@@ -283,11 +292,11 @@ export interface ResolvedManifest {
 export async function resolveManifest(
   workspaceDir: string,
   backendUrl: string,
-  offline: boolean,
+  cacheUse: ManifestCacheUse,
   clientUrl?: string,
   bootstrapSecret?: string,
 ): Promise<ResolvedManifest> {
-  if (!offline) {
+  if (cacheUse !== "offline") {
     try {
       const manifest = await fetchManifest(
         backendUrl,
@@ -301,6 +310,7 @@ export async function resolveManifest(
       if (err instanceof ManifestRefusedError) throw err;
       const cached = readCachedManifest(workspaceDir);
       if (!cached) throw err;
+      if (cacheUse === "never") throw cacheNotUsed(err, backendUrl, cached);
       return fromCachedEntry(cached);
     }
   }
@@ -313,6 +323,33 @@ export async function resolveManifest(
     });
   }
   return fromCachedEntry(cached);
+}
+
+/**
+ * The backend failure a build stops on when a cache could have replaced it:
+ * the failure itself, then how to build from the cache on purpose.
+ */
+function cacheNotUsed(
+  failure: unknown,
+  backendUrl: string,
+  cached: ManifestCacheEntry,
+): CliError {
+  const problem =
+    failure instanceof CliError
+      ? failure.problem
+      : { title: errorMessage(failure) };
+  const cache = `A manifest${cachedAge(cached.fetchedAt)} exists; a build uses it only with --offline.`;
+  return new CliError(
+    {
+      ...problem,
+      reason: problem.reason ? `${problem.reason} ${cache}` : cache,
+      fixes: [
+        ...(problem.fixes ?? []),
+        `Or build from the cache on purpose: ajs dms build -b ${displayUrl(backendUrl)} --offline`,
+      ],
+    },
+    { cause: failure },
+  );
 }
 
 function fromCachedEntry(cached: ManifestCacheEntry): ResolvedManifest {

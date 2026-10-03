@@ -97,6 +97,14 @@ through `-b` or `DMS_API_BASE_URL`, and exit 2 without one. `dev` also discovers
 it from the enclosing antelope project's `.antelope/dev.json`, and exits 1 when
 there is none to discover. `verify-source` needs `--layer` instead.
 
+`build` ends with where it wrote the production frontend (the `dist`
+directory of the workspace), how long it took, and the `ajs dms start` command
+to run next, with the same backend URL and `DMS_SESSION_SECRET`. Its output is
+deployed, so it never builds silently from the cache: when the backend cannot
+be reached or fails, `build` exits 1, says whether a cached manifest exists and
+how old it is, and builds from it only when asked with `--offline`. `dev` and
+`prepare` still fall back to the cache, with a warning.
+
 The commands follow the output contract of `ajs`: what the CLI itself prints
 on stdout is only the help and the version, and everything else (progress,
 warnings, errors) goes to stderr. The dependency install and each step of the
@@ -229,7 +237,7 @@ which is the order the loader itself materializes them in.
 
 In development, `ajs dms` discovers the backend from the nearest live `.antelope/dev.json`. It reads the local bootstrap credential from `.antelope/dms-dev.json` only when that discovered backend matches the destination URL. For production and CI, set `DMS_API_BASE_URL` and `DMS_BOOTSTRAP_SECRET` in the environment, or in the project's `.env`, rather than passing credentials on the command line.
 
-Each canonical backend URL gets an owner-only workspace under `~/.antelopejs/dms-frontend` (see [Workspaces](#workspaces) for how the key is derived). Manifest caches, private module configuration, and extracted archives retain restrictive permissions. `--offline` reuses the last successful manifest and archive; an authorization failure never falls back to privileged cached data.
+Each canonical backend URL gets an owner-only workspace under `~/.antelopejs/dms-frontend` (see [Workspaces](#workspaces) for how the key is derived). Manifest caches, private module configuration, and extracted archives retain restrictive permissions. `--offline` reuses the last successful manifest and archive; `dev` and `prepare` also fall back to them when the backend cannot be reached or fails, and `build` only with `--offline`. An authorization failure never falls back to privileged cached data.
 
 ## Configuration
 
@@ -399,7 +407,7 @@ needs no exception for the Iconify API. Icons reach the page two ways:
 | `-b, --backend-url` | `DMS_API_BASE_URL` (except `clean`) | DMS backend URL, `http://` or `https://` |
 | `-p, --port` | `PORT` | Frontend port from 1 to 65535, default `3001`; `dev` moves to the next free port, `start` stops when it is in use |
 | `-f, --force` | | Reinstall workspace dependencies |
-| `--offline` | `DMS_OFFLINE` | Reuse cached manifest and archives |
+| `--offline` | `DMS_OFFLINE` | Reuse cached manifest and archives; the only way `build` uses them |
 | `--bootstrap-secret` | `DMS_BOOTSTRAP_SECRET` | Backend bootstrap credential |
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
