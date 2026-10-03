@@ -11,6 +11,7 @@ import { cmdDev } from "./commands/dev";
 import { cmdPrepare } from "./commands/prepare";
 import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
+import { cmdWorkspaces } from "./commands/workspaces";
 import { ENV_FILE_NAMES, loadProjectEnv } from "./env-file";
 import { reportStopped } from "./output";
 import { checkForUpdate, stripUpdateCheckFlag } from "./update-check";
@@ -77,13 +78,15 @@ Workspaces:
   ~/.antelopejs/dms-frontend. 'dev' without -b is the exception: it keys the
   workspace on the antelope project directory instead, so a backend that lands
   on a different port between runs keeps its node_modules and manifest cache.
-  Pass -b to 'dev' to share one workspace with 'build' and 'start'.`,
+  Pass -b to 'dev' to share one workspace with 'build' and 'start'.
+  'workspaces' lists them, with their size and last use.`,
     );
 
   program.addCommand(cmdDev());
   program.addCommand(cmdBuild());
   program.addCommand(cmdStart());
   program.addCommand(cmdPrepare());
+  program.addCommand(cmdWorkspaces());
   program.addCommand(cmdClean());
   program.addCommand(cmdVerifySource());
   formatUsageErrors(program);

@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
@@ -765,5 +766,138 @@ describe("loading the project .env", () => {
     assert.equal(result.code, 0);
     assert.match(result.stdout, /\.env\.local then \.env/);
     assert.match(result.stdout, /already\s+set in the environment always wins/);
+  });
+});
+
+/** A workspace stamped as the loader stamps one, holding `bytes` of files. */
+function stampedWorkspace(
+  workspaceKey: string,
+  backendUrl: string,
+  updatedAt: string,
+  bytes: number,
+): Record<string, string> {
+  const hash = createHash("sha256").update(workspaceKey).digest("hex");
+  const dir = join(".antelopejs", "dms-frontend", hash);
+  const meta = JSON.stringify({ backendUrl, workspaceKey, updatedAt });
+  return {
+    [join(dir, ".ajs-dms-meta.json")]: meta,
+    [join(dir, "node_modules", "pkg.js")]: "x".repeat(
+      bytes - Buffer.byteLength(meta),
+    ),
+  };
+}
+
+const URL_WORKSPACE = stampedWorkspace(
+  BACKEND_URL,
+  BACKEND_URL,
+  "2026-10-03T12:00:00.000Z",
+  2048,
+);
+const PROJECT_WORKSPACE = stampedWorkspace(
+  "project:/srv/demo",
+  BACKEND_URL,
+  "2026-10-03T13:00:00.000Z",
+  1024,
+);
+const STRAY_DIR = join(".antelopejs", "dms-frontend", "stray-dir", "file");
+
+describe("listing and removing workspaces", () => {
+  it("prints one JSON document on stdout, whatever else is said", async () => {
+    const result = await runCli(["workspaces", "--json"], {
+      files: {
+        ...URL_WORKSPACE,
+        ...PROJECT_WORKSPACE,
+        [STRAY_DIR]: "",
+        [join(".antelopejs", "dms-frontend", "update-check.json")]:
+          JSON.stringify({
+            checkedAt: Date.now(),
+            latestVersion: "999.0.0",
+            succeeded: true,
+          }),
+      },
+      env: { NO_UPDATE_NOTIFIER: undefined, CI: undefined },
+    });
+    assert.equal(result.code, 0);
+    // An update is due and a directory is skipped: both stay on stderr.
+    assert.match(result.stderr, /999\.0\.0/);
+    assert.match(result.stderr, /– Skipped .*stray-dir \(not a workspace\)/);
+    const listed = JSON.parse(result.stdout);
+    const home = join(result.sandbox, ".antelopejs", "dms-frontend");
+    assert.deepEqual(
+      listed.map((entry: { dir: string }) => entry.dir.startsWith(home)),
+      [true, true],
+    );
+    assert.deepEqual(
+      listed.map(({ dir: _dir, ...entry }: { dir: string }) => entry),
+      [
+        {
+          id: createHash("sha256").update("project:/srv/demo").digest("hex"),
+          backendUrl: BACKEND_URL,
+          key: { type: "project", path: "/srv/demo" },
+          sizeBytes: 1024,
+          lastUsedAt: "2026-10-03T13:00:00.000Z",
+        },
+        {
+          id: createHash("sha256").update(BACKEND_URL).digest("hex"),
+          backendUrl: BACKEND_URL,
+          key: { type: "url" },
+          sizeBytes: 2048,
+          lastUsedAt: "2026-10-03T12:00:00.000Z",
+        },
+      ],
+    );
+  });
+
+  it("prints an empty JSON list when there is no workspace", async () => {
+    const result = await runCli(["workspaces", "--json"]);
+    assert.equal(result.code, 0);
+    assert.deepEqual(JSON.parse(result.stdout), []);
+  });
+
+  it("prints tab-separated lines without a header in a pipe", async () => {
+    const result = await runCli(["workspaces"], { files: URL_WORKSPACE });
+    assert.equal(result.code, 0);
+    assert.equal(result.stderr, "");
+    const fields = result.stdout.trimEnd().split("\t");
+    assert.deepEqual(fields.slice(1, 6), [
+      BACKEND_URL,
+      "url",
+      "",
+      "2048",
+      "2026-10-03T12:00:00.000Z",
+    ]);
+  });
+
+  it("refuses to clean --all without a terminal to confirm on", async () => {
+    const result = await runCli(["clean", "--all"], { files: URL_WORKSPACE });
+    assert.equal(result.code, 2);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /^✖ Cannot prompt/);
+    assert.match(
+      result.stderr,
+      /→ Pass it as a flag: ajs dms clean --all --yes/,
+    );
+    assert.ok(existsSync(join(result.sandbox, workspaceDir(BACKEND_URL))));
+  });
+
+  it("removes every workspace with --yes and says how much it freed", async () => {
+    const result = await runCli(["clean", "--all", "--yes"], {
+      files: { ...URL_WORKSPACE, ...PROJECT_WORKSPACE, [STRAY_DIR]: "" },
+    });
+    assert.equal(result.code, 0);
+    assert.equal(result.stdout, "");
+    const lines = result.stderr.split("\n");
+    assert.equal(lines[0], "✔ Removed 2 workspaces · freed 3 KB");
+    assert.match(
+      lines[1],
+      /^ {2}[0-9a-f]{64} {2}http:\/\/127\.0\.0\.1:5010 {2}project \/srv\/demo$/,
+    );
+    assert.match(
+      lines[2],
+      /^ {2}[0-9a-f]{64} {2}http:\/\/127\.0\.0\.1:5010 {2}url$/,
+    );
+    assert.match(lines[3], /^– Skipped .*stray-dir \(not a workspace\)$/);
+    const home = join(result.sandbox, ".antelopejs", "dms-frontend");
+    assert.deepEqual(readdirSync(home), ["stray-dir"]);
   });
 });

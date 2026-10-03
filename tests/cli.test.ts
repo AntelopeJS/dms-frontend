@@ -8,10 +8,15 @@ import {
   parseLocalPackages,
 } from "../src/commands/verify-source";
 import { cmdBuild } from "../src/commands/build";
-import { cmdClean } from "../src/commands/clean";
+import { cmdClean, describeWorkspaces } from "../src/commands/clean";
 import { cmdDev } from "../src/commands/dev";
 import { cmdPrepare } from "../src/commands/prepare";
 import { cmdStart } from "../src/commands/start";
+import {
+  cmdWorkspaces,
+  renderWorkspaces,
+  type WorkspaceRecord,
+} from "../src/commands/workspaces";
 import {
   parseBackendUrl,
   parsePort,
@@ -22,9 +27,11 @@ import {
 import {
   formatAge,
   formatReadyBlock,
+  formatSize,
   formatTimedMessage,
   showPath,
   showWorkspace,
+  workspaceId,
 } from "../src/output";
 import { describeListenError, readyLines } from "../src/server-process";
 import { memoryUi, problemText } from "./fixtures/memory-ui";
@@ -147,11 +154,12 @@ describe("DMS CLI plugin", () => {
       cmdBuild(),
       cmdStart(),
       cmdPrepare(),
+      cmdWorkspaces(),
       cmdClean(),
     ];
     assert.deepEqual(
       commands.map((command) => command.name()),
-      ["dev", "build", "start", "prepare", "clean"],
+      ["dev", "build", "start", "prepare", "workspaces", "clean"],
     );
   });
 });
@@ -395,5 +403,96 @@ describe("CLI output", () => {
     assert.equal(formatAge("2026-10-02T14:00:00.000Z", now), "1 day ago");
     assert.equal(formatAge("2026-09-30T14:00:00.000Z", now), "3 days ago");
     assert.equal(formatAge("not a date", now), "not a date");
+  });
+
+  it("says how much space a workspace takes", () => {
+    assert.equal(formatSize(0), "0 B");
+    assert.equal(formatSize(900), "900 B");
+    assert.equal(formatSize(1536), "1.5 KB");
+    assert.equal(formatSize(536_870_912), "512 MB");
+    assert.equal(formatSize(1_610_612_736), "1.5 GB");
+  });
+
+  it("cuts a workspace id on a terminal only", () => {
+    const dir = `/home/user/.antelopejs/dms-frontend/${"a".repeat(64)}`;
+    assert.equal(workspaceId(dir, true), "aaaaaaaa");
+    assert.equal(workspaceId(dir, false), "a".repeat(64));
+  });
+});
+
+describe("workspace listing", () => {
+  const home = "/home/user/.antelopejs/dms-frontend";
+  const projectId = `76672b08${"0".repeat(56)}`;
+  const urlId = `f6af15c7${"1".repeat(56)}`;
+  const lastUsedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  const records: WorkspaceRecord[] = [
+    {
+      id: projectId,
+      dir: `${home}/${projectId}`,
+      backendUrl: "http://127.0.0.1:5010",
+      key: { type: "project", path: "/srv/demo" },
+      sizeBytes: 536_870_912,
+      lastUsedAt,
+    },
+    {
+      id: urlId,
+      dir: `${home}/${urlId}`,
+      backendUrl: "http://127.0.0.1:5011",
+      key: { type: "url" },
+      sizeBytes: 1536,
+      lastUsedAt,
+    },
+  ];
+
+  it("prints an aligned table with a header on a terminal", () => {
+    const output = memoryUi({ isTerminal: true });
+    renderWorkspaces(output.ui, records, true);
+    assert.equal(output.stderr(), "");
+    assert.deepEqual(output.stdout().split("\n"), [
+      "ID        BACKEND                KEY                SIZE    LAST USED",
+      "76672b08  http://127.0.0.1:5010  project /srv/demo  512 MB  5 min ago",
+      "f6af15c7  http://127.0.0.1:5011  url                1.5 KB  5 min ago",
+      "",
+    ]);
+  });
+
+  it("prints whole, tab-separated values without a header in a pipe", () => {
+    const output = memoryUi();
+    renderWorkspaces(output.ui, records, false);
+    assert.deepEqual(output.stdout().split("\n"), [
+      [
+        projectId,
+        "http://127.0.0.1:5010",
+        "project",
+        "/srv/demo",
+        "536870912",
+        lastUsedAt,
+        `${home}/${projectId}`,
+      ].join("\t"),
+      [
+        urlId,
+        "http://127.0.0.1:5011",
+        "url",
+        "",
+        "1536",
+        lastUsedAt,
+        `${home}/${urlId}`,
+      ].join("\t"),
+      "",
+    ]);
+  });
+
+  it("says there are none on stderr only", () => {
+    const output = memoryUi();
+    renderWorkspaces(output.ui, [], false);
+    assert.equal(output.stdout(), "");
+    assert.match(output.stderr(), /^ℹ No workspaces in /);
+  });
+
+  it("lists what clean --all removes, columns aligned", () => {
+    assert.deepEqual(describeWorkspaces(records, true), [
+      "76672b08  http://127.0.0.1:5010  project /srv/demo",
+      "f6af15c7  http://127.0.0.1:5011  url",
+    ]);
   });
 });
