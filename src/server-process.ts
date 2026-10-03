@@ -9,7 +9,8 @@ import {
   formatDuration,
 } from "@antelopejs/core/cli";
 import type { ReadyLine } from "./output";
-import { CancelledError, runCommand } from "./workspace-setup";
+import { CancelledError } from "./cancellation";
+import { runCommand } from "./workspace-setup";
 
 const READY_MESSAGE = "dms:ready";
 const LISTEN_ERROR_MESSAGE = "dms:listen-error";

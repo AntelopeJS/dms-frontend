@@ -26,7 +26,7 @@ import {
   describeChildFailure,
   type PathMapper,
 } from "./child-output";
-import { BUILD_STEPS, buildStepFailure } from "./commands/build";
+import { BUILD_STEPS, buildStepFailure } from "./commands/build-action";
 import {
   assertLayersSupportRenderer,
   CancelledError,
@@ -160,7 +160,6 @@ function removeDevelopmentDependencies(root: string): void {
 }
 
 function materializeWorkspace(workspace: string, layers: ResolvedLayer[]) {
-  assertLayersSupportRenderer(layers);
   const templateRoot = join(getPackageRoot(), "templates", "vue");
   const templateFiles = readdirSync(templateRoot).filter(
     (file) => !file.startsWith("npmrc"),
@@ -489,6 +488,8 @@ function describeError(error: unknown, isVerbose: boolean): CliProblem {
 async function verifySources(): Promise<VerificationResult> {
   const layers = readSources();
   writeHeader("verify-source", [pluralize(layers.length, "module")]);
+  // Before the first task, so its notice does not land inside one.
+  assertLayersSupportRenderer(layers);
   const workspace = createTemporaryWorkspace("dms-frontend-real-source-");
   const isVerbose = isVerboseRun();
   const context: VerificationContext = {

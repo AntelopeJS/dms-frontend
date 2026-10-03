@@ -10,7 +10,6 @@ import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 import { buffer } from "node:stream/consumers";
 import { CliError } from "@antelopejs/core/cli";
-import { Open } from "unzipper";
 import {
   backendEndpoint,
   displayUrl,
@@ -166,6 +165,8 @@ export async function downloadAndExtractLayers(
   }
 
   const modulesBlob = await buffer(Readable.fromWeb(response.body as any));
+  // Only build needs it, and it is the heaviest module the CLI loads.
+  const { Open } = await import("unzipper");
 
   const cacheExists = existsSync(cacheDir);
 

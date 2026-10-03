@@ -2,17 +2,22 @@
 //
 // Every invocation goes through here, so the check is written to be
 // invisible when it cannot help: it never blocks the command, never throws,
-// and never writes to stdout, which callers pipe into other tools.
+// and only speaks to a terminal, on stderr, once the command is done.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { type ClientRequest, get as httpGet } from "node:http";
 import { get as httpsGet } from "node:https";
 import { dirname, join } from "node:path";
-import semver from "semver";
+import { getProcessUi, type Ui } from "@antelopejs/core/cli";
 import { DMS_FRONTEND_HOME } from "./config";
+import { isTerminalFeedback, writeFeedback } from "./output";
 
 export const UPDATE_CHECK_PACKAGE = "@antelopejs/dms-frontend";
 
 const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org/";
+
+const UPDATE_COMMAND = "ajs update dms";
+
+const DUMB_TERMINAL = "dumb";
 
 /** One notice a day is a reminder; one an hour is noise. */
 export const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -44,7 +49,8 @@ export const UPDATE_CHECK_TIMEOUT_MS = 3000;
  */
 export const NO_UPDATE_CHECK_FLAG = "--no-update-check";
 
-const HELP_OR_VERSION_FLAGS = ["--help", "-h", "--version", "-v"];
+/** Flags whose output a script is the most likely to parse. */
+const SILENT_FLAGS = ["--help", "-h", "--version", "-v", "--json"];
 
 /**
  * Options whose value is the next argv token. A flag spelled in that
@@ -85,12 +91,36 @@ export interface UpdateCheckOptions {
   /** Arguments after the node executable and script path. */
   argv?: readonly string[];
   env?: NodeJS.ProcessEnv;
+  /** Whether stderr is a terminal a person reads; the notice is only for one. */
+  isTerminal?: boolean;
   now?: () => number;
   cacheFile?: string;
   /** Resolves to the registry's `latest` version, or undefined on any failure. */
   fetchLatestVersion?: (packageName: string) => Promise<string | undefined>;
-  /** Sink for the notice; stderr in production. */
-  write?: (message: string) => void;
+  /** Symbols and colors of the notice; the process's own in production. */
+  ui?: Ui;
+  /** Sink for each line of the notice; stderr, above any running task, in production. */
+  write?: (line: string) => void;
+}
+
+export interface UpdateNoticeOptions {
+  /**
+   * Whether more output follows the notice, as a running server's does after
+   * its ready block: the notice is then set apart from what follows it
+   * rather than from what precedes it.
+   */
+  isFollowed?: boolean;
+}
+
+export interface UpdateCheck {
+  /** Settles once the lookup is over; at once when the cache answered. */
+  readonly completion: Promise<void>;
+  /**
+   * Print the notice when a newer release is known by now, once per check.
+   * It never waits for the lookup: a command that finishes first ends at its
+   * usual speed and leaves the answer to a later run.
+   */
+  report(options?: UpdateNoticeOptions): Promise<void>;
 }
 
 /**
@@ -131,9 +161,10 @@ export function stripUpdateCheckFlag(argv: readonly string[]): string[] {
 /**
  * Decide whether this invocation may check the registry.
  *
- * `--help` and `--version` answer from the binary itself and are the two
- * commands a script is most likely to parse, so they stay silent. `CI` and
- * `NO_UPDATE_NOTIFIER` are the two conventional environment opt-outs.
+ * `--help` and `--version` answer from the binary itself, and they and
+ * `--json` are what a script is most likely to parse, so they stay silent.
+ * `CI` and `NO_UPDATE_NOTIFIER` are the two conventional environment
+ * opt-outs, and a dumb terminal is one nobody reads a notice on.
  */
 export function isUpdateCheckEnabled(
   argv: readonly string[],
@@ -141,9 +172,10 @@ export function isUpdateCheckEnabled(
 ): boolean {
   if (env.CI) return false;
   if (env.NO_UPDATE_NOTIFIER) return false;
+  if (env.TERM === DUMB_TERMINAL) return false;
   if (argv[0] === "help") return false;
   if (flagIndexes(argv, [NO_UPDATE_CHECK_FLAG]).length) return false;
-  return flagIndexes(argv, HELP_OR_VERSION_FLAGS).length === 0;
+  return flagIndexes(argv, SILENT_FLAGS).length === 0;
 }
 
 /**
@@ -261,22 +293,37 @@ export function fetchLatestVersionFromRegistry(
   });
 }
 
-function formatNotice(currentVersion: string, latestVersion: string): string {
+/** `ℹ ajs dms 0.3.8 is available (you have 0.3.7) → ajs update dms`. */
+function formatNotice(
+  currentVersion: string,
+  latestVersion: string,
+  ui: Ui,
+): string {
+  const palette = ui.palette("feedback");
+  const { info, hint } = ui.symbols.levels;
   return (
-    `A newer DMS frontend version is available: ${currentVersion} -> ${latestVersion}. ` +
-    "Run `ajs update dms` to update.\n"
+    `${palette.blue(info)} ajs dms ${latestVersion} is available ` +
+    `(you have ${currentVersion}) ${palette.cyan(`${hint} ${UPDATE_COMMAND}`)}`
   );
 }
 
-function isNewer(currentVersion: string, latestVersion: string): boolean {
-  const current = semver.valid(currentVersion);
-  const latest = semver.valid(latestVersion);
+/** Loads semver only when there is a version to compare, rarely. */
+async function isNewer(
+  currentVersion: string,
+  latestVersion: string,
+): Promise<boolean> {
+  if (currentVersion === latestVersion) return false;
+  const { lt, valid } = await import("semver");
+  const current = valid(currentVersion);
+  const latest = valid(latestVersion);
   if (!current || !latest) return false;
-  return semver.lt(current, latest);
+  return lt(current, latest);
 }
 
 /**
- * Notify about a newer release, at most one registry round-trip a day.
+ * Start the check for a newer release, at most one registry round-trip a
+ * day, before the command runs: the lookup then has the whole command to
+ * answer in, a `pnpm install` or a build included.
  *
  * The cached version still produces a notice inside the interval: the
  * throttle is on the network call, not on the reminder. A failed lookup
@@ -287,25 +334,26 @@ function isNewer(currentVersion: string, latestVersion: string): boolean {
  * the last attempt answered: a lookup lost to a busy event loop or a dropped
  * connection otherwise costs a full day of silence.
  *
- * @param options Injection points for the clock, the registry and the sink
- * @returns A promise that settles once the check is done; production callers
- *   drop it, tests await it
+ * @param options Injection points for the clock, the registry and the output
+ * @returns The running check, or undefined when this invocation stays silent
  */
-export async function checkForUpdate(
+export function startUpdateCheck(
   options: UpdateCheckOptions,
-): Promise<void> {
+): UpdateCheck | undefined {
   try {
     const {
       currentVersion,
       argv = process.argv.slice(2),
       env = process.env,
+      isTerminal = isTerminalFeedback(),
       now = Date.now,
       cacheFile = updateCheckCacheFile(),
       fetchLatestVersion = fetchLatestVersionFromRegistry,
-      write = (message: string) => process.stderr.write(message),
+      ui = getProcessUi(),
+      write = writeFeedback,
     } = options;
 
-    if (!isUpdateCheckEnabled(argv, env)) return;
+    if (!isTerminal || !isUpdateCheckEnabled(argv, env)) return undefined;
 
     const cached = readCache(cacheFile);
     const checkedAt = now();
@@ -318,20 +366,56 @@ export async function checkForUpdate(
       cached !== undefined && checkedAt - cached.checkedAt < interval;
 
     let latestVersion = cached?.latestVersion;
-    if (!withinInterval) {
-      const published = await fetchLatestVersion(UPDATE_CHECK_PACKAGE);
-      latestVersion = published ?? latestVersion;
-      writeCache(cacheFile, {
-        checkedAt,
-        latestVersion,
-        succeeded: published !== undefined,
-      });
-    }
+    const completion = withinInterval
+      ? Promise.resolve()
+      : fetchLatestVersion(UPDATE_CHECK_PACKAGE).then(
+          (published) => {
+            latestVersion = published ?? latestVersion;
+            writeCache(cacheFile, {
+              checkedAt,
+              latestVersion,
+              succeeded: published !== undefined,
+            });
+          },
+          () => {
+            // A version notice is never worth failing a command over.
+          },
+        );
 
-    if (latestVersion && isNewer(currentVersion, latestVersion)) {
-      write(formatNotice(currentVersion, latestVersion));
-    }
+    let isReported = false;
+    const report = async (placement: UpdateNoticeOptions = {}) => {
+      if (isReported) return;
+      isReported = true;
+      const known = latestVersion;
+      if (!known || !(await isNewer(currentVersion, known))) return;
+      const line = formatNotice(currentVersion, known, ui);
+      for (const text of placement.isFollowed ? [line, ""] : ["", line]) {
+        write(text);
+      }
+    };
+    return {
+      completion,
+      report: (placement) => report(placement).catch(() => undefined),
+    };
   } catch {
     // A version notice is never worth failing a command over.
+    return undefined;
   }
+}
+
+let processUpdateCheck: UpdateCheck | undefined;
+
+/** Start the process's own check; see `startUpdateCheck`. */
+export function startProcessUpdateCheck(options: UpdateCheckOptions): void {
+  processUpdateCheck = startUpdateCheck(options);
+}
+
+/**
+ * Print the process's notice, at most once: as the last lines of a command
+ * that succeeded, or under the ready block of a server that keeps running.
+ */
+export async function reportAvailableUpdate(
+  options?: UpdateNoticeOptions,
+): Promise<void> {
+  await processUpdateCheck?.report(options);
 }
