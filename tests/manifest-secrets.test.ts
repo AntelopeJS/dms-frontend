@@ -19,6 +19,7 @@ import {
   resolveManifestSecrets,
 } from "../src/manifest-secrets";
 import type { ManifestModule } from "../src/workspace";
+import { memoryUi } from "./fixtures/memory-ui";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST_SECRET = "manifest-render-secret";
@@ -221,7 +222,6 @@ describe("the server secrets log block", () => {
   });
 
   it("never prints a secret value", () => {
-    const lines: string[] = [];
     const resolved = resolveManifestSecrets(
       collectManifestSecrets([
         dmsModule(MANIFEST_SECRET),
@@ -232,8 +232,9 @@ describe("the server secrets log block", () => {
       ]),
       { DMS_OAUTH_RELAY_SECRET: "deployment-relay" },
     );
-    reportManifestSecrets(resolved, "manifest", (line) => lines.push(line));
-    const output = lines.join("\n");
+    const memory = memoryUi();
+    reportManifestSecrets(resolved, "manifest", memory.ui);
+    const output = memory.stderr();
     assert.match(output, /Server secrets/);
     assert.match(output, /@fixture\/other/);
     for (const value of [

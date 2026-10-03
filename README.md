@@ -71,6 +71,8 @@ pnpm add @antelopejs/core @antelopejs/dms-frontend
 pnpm add -g @antelopejs/core @antelopejs/dms-frontend
 ```
 
+The plugin prints through the output module of `@antelopejs/core`
+(`@antelopejs/core/cli`), so it needs `@antelopejs/core` 1.12.0 or later.
 `npm install -g` works too; this repository and every generated workspace use
 pnpm. Inside a package script, `ajs` resolves from `node_modules/.bin`, and the
 `dms` command it delegates to resolves the project-local plugin, so a script
@@ -90,10 +92,21 @@ ajs dms clean --all
 `--help`, `--version` and `clean` run from any directory. `prepare` also runs
 anywhere: with no backend in reach it warns and exits 0, so a frontend module's
 `postinstall` hook never fails an install, and the generated types are refreshed
-later from a development environment. `dev`, `build` and `start` need a backend
-URL, either through `-b` or through the enclosing antelope project's
-`.antelope/dev.json`, and say so on exit 1 when they have neither;
-`verify-source` needs `--layer` instead.
+later from a development environment. `build` and `start` need a backend URL
+through `-b` or `DMS_API_BASE_URL`, and exit 2 without one. `dev` also discovers
+it from the enclosing antelope project's `.antelope/dev.json`, and exits 1 when
+there is none to discover. `verify-source` needs `--layer` instead.
+
+The commands follow the output contract of `ajs`: what the CLI itself prints
+on stdout is only the help and the version, and everything else (progress,
+warnings, errors) goes to stderr; `pnpm`, Vite and the server it runs keep their
+own output. A command exits 0 on success, 1 on a failure, 2 on a usage error (an
+unknown command or option, a missing or invalid argument, a missing
+configuration value) and 130 when stopped with Ctrl+C. `--no-color` or
+`NO_COLOR=1` turns colors off, and terminals that cannot draw Unicode, such as
+`TERM=dumb`, get ASCII symbols. `--verbose` or `ANTELOPEJS_VERBOSE` adds the
+stack trace of the underlying error to a failure. `ajs --no-color dms …` and
+`ajs --verbose dms …` set those variables for the plugin.
 
 The CLI checks npm for a newer release at most once a day and prints a one-line
 notice on stderr. A lookup that comes back empty — offline, throttled, or simply

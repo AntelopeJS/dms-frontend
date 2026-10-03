@@ -148,8 +148,9 @@ describe("normalizeBootstrapSecret", () => {
         (err: unknown) => {
           assert.ok(err instanceof UsageError);
           assert.match(err.message, /cannot travel in an HTTP header/);
+          assert.equal(err.exitCode, 2);
           assert.equal(
-            err.details[0],
+            err.problem.reason,
             `DMS_BOOTSTRAP_SECRET contains ${culprit}.`,
           );
           return true;
@@ -165,7 +166,7 @@ describe("normalizeBootstrapSecret", () => {
       (err: unknown) => {
         assert.ok(err instanceof UsageError);
         assert.match(
-          err.details[0],
+          err.problem.reason ?? "",
           /^\/proj\/\.antelope\/dms-dev\.json contains/,
         );
         return true;

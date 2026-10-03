@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { constants as osConstants } from "node:os";
 import { join } from "node:path";
+import { CliError } from "@antelopejs/core/cli";
 import {
   assertLayerPathsServed,
   buildLayersFromCache,
@@ -333,9 +334,11 @@ export async function setupWorkspace(
       // last online run, after checking the extraction is complete —
       // `buildLayersFromCache` silently skips missing archives.
       if (!existsSync(cacheDir)) {
-        throw new Error(
-          "Backend unreachable and no previously downloaded layers archive — run once with the backend reachable first.",
-        );
+        throw new CliError({
+          title:
+            "The backend is unreachable and no layers archive was downloaded before",
+          fixes: ["Run once with the backend reachable first"],
+        });
       }
       assertCachedArchivesExist(manifest.modules, cacheDir, fetchedAt);
     } else {

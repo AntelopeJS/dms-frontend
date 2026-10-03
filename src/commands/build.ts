@@ -1,16 +1,20 @@
 import { join } from "node:path";
-import chalk from "chalk";
+import { CliError, getProcessUi } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
-  CancelledError,
   normalizeBootstrapSecret,
   Options,
-  parseBackendUrl,
+  requireBackendUrl,
   resolveSessionSecret,
   runCommand,
-  setupWorkspace,
 } from "../common";
-import { error, info, Spinner, success, warning } from "../utils/cli-ui";
+import {
+  cachedAge,
+  showWorkspace,
+  writeBlankLine,
+  writeHeader,
+} from "../output";
+import { setUpWorkspace } from "./workspace-task";
 
 interface BuildOptions {
   backendUrl?: string;
@@ -27,68 +31,53 @@ export function cmdBuild(): Command {
     .addOption(Options.offline)
     .addOption(Options.bootstrapSecret)
     .action(async (options: BuildOptions) => {
-      if (!options.backendUrl) {
-        error("Backend URL is required. Use -b <url> or set DMS_API_BASE_URL.");
-        process.exit(1);
-      }
-
-      const backendUrl = parseBackendUrl(options.backendUrl);
+      const backendUrl = requireBackendUrl(options.backendUrl);
       const sessionSecret = resolveSessionSecret("build");
       const bootstrapSecret = normalizeBootstrapSecret(options.bootstrapSecret);
+      const ui = getProcessUi();
 
-      const spinner = new Spinner("Setting up workspace...");
-      await spinner.start();
-
-      try {
-        const { workspaceDir, manifestFromCache, manifestFetchedAt } =
-          await setupWorkspace({
-            backendUrl,
-            force: !!options.force,
-            mode: "build",
-            offline: options.offline,
-            bootstrapSecret,
-            beforeInstall: () => spinner.pause(),
-          });
-
-        await spinner.succeed("Workspace ready");
-
-        if (manifestFromCache) {
-          warning(
-            `Building from cached manifest and layers archive${manifestFetchedAt ? ` (cached on ${manifestFetchedAt})` : ""} — output may not match the current backend`,
-          );
-        }
-
-        console.error("");
-        info("Building for production...");
-        console.error(chalk.dim(`  Workspace: ${workspaceDir}`));
-        console.error("");
-
-        const nodeModulesDir = join(workspaceDir, "node_modules");
-        const code = await runCommand("pnpm", ["run", "build"], {
-          cwd: workspaceDir,
-          env: {
-            ...process.env,
-            DMS_SESSION_SECRET: sessionSecret,
-            NODE_OPTIONS: "--max-old-space-size=4096",
-            NODE_PATH: nodeModulesDir,
-          },
+      writeHeader("build", [backendUrl, "production"]);
+      const { workspaceDir, manifestFromCache, manifestFetchedAt } =
+        await setUpWorkspace({
+          backendUrl,
+          force: !!options.force,
+          mode: "build",
+          offline: options.offline,
+          bootstrapSecret,
         });
 
-        if (code === 0) {
-          console.error("");
-          success("Build completed successfully!");
-          console.error(
-            chalk.dim("  Run 'ajs dms start' to start the production server"),
-          );
-        } else {
-          error("Build failed");
-        }
-
-        process.exit(code);
-      } catch (err: any) {
-        if (err instanceof CancelledError) throw err;
-        await spinner.fail(`Setup failed: ${err.message}`);
-        process.exit(1);
+      if (manifestFromCache) {
+        ui.message(
+          "warn",
+          `Building from the manifest and layers archive${cachedAge(manifestFetchedAt)}`,
+          { detail: "The output may not match the current backend." },
+        );
       }
+
+      ui.message("info", "Building for production", {
+        detail: `Workspace  ${showWorkspace(workspaceDir)}`,
+      });
+      writeBlankLine();
+
+      const nodeModulesDir = join(workspaceDir, "node_modules");
+      const code = await runCommand("pnpm", ["run", "build"], {
+        cwd: workspaceDir,
+        env: {
+          ...process.env,
+          DMS_SESSION_SECRET: sessionSecret,
+          NODE_OPTIONS: "--max-old-space-size=4096",
+          NODE_PATH: nodeModulesDir,
+        },
+      });
+      writeBlankLine();
+
+      if (code !== 0) {
+        throw new CliError({
+          title: "The production build failed",
+          reason: `pnpm run build exited with code ${code}; its output is above.`,
+        });
+      }
+      ui.message("success", "Built the production frontend");
+      ui.message("hint", "Run ajs dms start to start the production server");
     });
 }

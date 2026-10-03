@@ -17,7 +17,5 @@ export default antelopeKnipConfig({
     "ofetch",
     "unplugin-auto-import",
     "vue-i18n",
-    // Ambient to the figlet import; nothing references the @types package.
-    "@types/figlet",
   ],
 });

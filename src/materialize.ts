@@ -14,6 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { getProcessUi } from "@antelopejs/core/cli";
 import {
   AUTH_ESTABLISH_FILE,
   LAYERS_SUBDIR,
@@ -218,8 +219,9 @@ export function collectAuthEstablishEndpoints(
         endpoints.add(endpoint);
         continue;
       }
-      console.warn(
-        `⚠ Ignoring malformed authEstablishEndpoints entry ${JSON.stringify(endpoint)} ` +
+      getProcessUi().message(
+        "warn",
+        `Ignoring malformed authEstablishEndpoints entry ${JSON.stringify(endpoint)} ` +
           `declared by ${layer.packageName ?? layer.path}: expected an absolute ` +
           "backend API path under /api/ with no query string.",
       );

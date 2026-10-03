@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { CliError, getProcessUi } from "@antelopejs/core/cli";
 import {
   assertLayersSupportRenderer,
   createFrontendModuleRegistry,
@@ -67,7 +68,8 @@ const layers: ResolvedLayer[] = roots.map((root) => ({
 try {
   assertLayersSupportRenderer(layers);
 } catch (error) {
-  console.error(`Error: ${(error as Error).message}`);
+  if (!(error instanceof CliError)) throw error;
+  getProcessUi().problem(error.problem);
   process.exit(1);
 }
 materializeLayers(workspace, layers);

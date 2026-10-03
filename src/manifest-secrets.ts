@@ -7,7 +7,7 @@
 // named here. The table is closed on purpose: modules cannot add entries, so
 // a manifest can only ever fill the variables listed below.
 
-import chalk from "chalk";
+import { getProcessUi, type Ui } from "@antelopejs/core/cli";
 import type { FrontendModuleValue, ManifestModule } from "./workspace";
 
 export const MANIFEST_SECRET_ENV = {
@@ -167,15 +167,15 @@ export function formatSecretSources(
   });
 }
 
-/** Logs the conflicts, then the sources block. */
+/** Warns about the conflicts, then lists where each secret comes from. */
 export function reportManifestSecrets(
   resolved: ResolvedManifestSecrets,
   manifestLabel = "manifest",
-  log: (line: string) => void = console.error,
+  ui: Ui = getProcessUi(),
 ): void {
   for (const line of formatSecretConflicts(resolved.conflicts))
-    log(`${chalk.yellow.bold("⚠")} ${chalk.yellow(line)}`);
-  log(chalk.dim("  Server secrets:"));
-  for (const line of formatSecretSources(resolved.sources, manifestLabel))
-    log(chalk.dim(`    ${line}`));
+    ui.message("warn", line);
+  ui.message("info", "Server secrets", {
+    details: formatSecretSources(resolved.sources, manifestLabel),
+  });
 }
