@@ -21,6 +21,7 @@ import {
   projectWorkspaceKey,
   readCachedManifest,
 } from "../src/common";
+import { problemText } from "./fixtures/memory-ui";
 
 describe("dependency fingerprint", () => {
   it("changes when the generated workspace dependencies change", () => {
@@ -117,7 +118,7 @@ describe("workspace identity", () => {
         backendUrl: "http://127.0.0.1:5010",
         workspaceKey: projectWorkspaceKey("/home/user/my-project"),
       }),
-      "http://127.0.0.1:5010, keyed on project /home/user/my-project",
+      "http://127.0.0.1:5010 · project /home/user/my-project",
     );
     assert.equal(
       describeWorkspace({
@@ -198,7 +199,7 @@ describe("layer paths withheld by the backend", () => {
     try {
       assertLayerPathsServed(pathless, backendUrl, bootstrapSecret);
     } catch (err) {
-      return (err as Error).message;
+      return problemText(err);
     }
     assert.fail("expected the pathless manifest to be refused");
   }
@@ -207,7 +208,7 @@ describe("layer paths withheld by the backend", () => {
     const message = messageFor();
     assert.match(
       message,
-      /^The backend at http:\/\/127\.0\.0\.1:5010 did not send layer source paths \(2 of 2 modules\)\./,
+      /^✖ The backend at http:\/\/127\.0\.0\.1:5010 did not send layer source paths \(2 of 2 modules\)\n/,
     );
     assert.doesNotMatch(message, /@scope\//);
   });

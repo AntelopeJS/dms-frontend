@@ -1,4 +1,5 @@
 import { type AddressInfo, createServer, type Server } from "node:net";
+import { CliError } from "@antelopejs/core/cli";
 
 // ============================================================================
 // Frontend port reservation
@@ -60,7 +61,10 @@ export async function reserveFreePort(
     const reserved = await reservePort(port);
     if (reserved) return reserved;
   }
-  throw new Error(`No free port found between ${preferred} and ${end}.`);
+  throw new CliError({
+    title: `No free port found between ${preferred} and ${end}`,
+    fixes: ["Free one of these ports, or pass another one: -p <port>"],
+  });
 }
 
 /**

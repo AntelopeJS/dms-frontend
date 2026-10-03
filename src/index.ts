@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-import chalk from "chalk";
+import {
+  formatUsageErrors,
+  isVerboseRun,
+  runWithErrorBoundary,
+} from "@antelopejs/core/cli";
 import { Command } from "commander";
 import { cmdBuild } from "./commands/build";
 import { cmdClean } from "./commands/clean";
@@ -7,13 +11,18 @@ import { cmdDev } from "./commands/dev";
 import { cmdPrepare } from "./commands/prepare";
 import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
-import { UsageError } from "./config";
 import { ENV_FILE_NAMES, loadProjectEnv } from "./env-file";
+import { reportStopped } from "./output";
 import { checkForUpdate, stripUpdateCheckFlag } from "./update-check";
-import { displayBanner, error, stopped } from "./utils/cli-ui";
 import { CancelledError } from "./workspace-setup";
 
 const { version } = require("../package.json");
+
+/**
+ * Options shared with `ajs` itself. A run given nothing else prints the help,
+ * like a bare `ajs dms`.
+ */
+const GLOBAL_FLAGS = ["--no-color", "--verbose"];
 
 const runCLI = async () => {
   // Before anything reads the environment: every command option binds to an
@@ -29,18 +38,6 @@ const runCLI = async () => {
   // arrives.
   void checkForUpdate({ currentVersion: version, argv });
 
-  // Display banner if no args
-  if (process.argv.length <= 2) {
-    displayBanner("Antelope DMS");
-    console.log(
-      chalk.dim(`  Frontend Loader for AntelopeJS DMS - v${version}\n`),
-    );
-  }
-
-  // Everything printed from here on is feedback on stderr: color it when
-  // stderr supports color, whatever stdout is redirected to.
-  chalk.level = chalk.stderr.level;
-
   const program = new Command()
     .name("ajs dms")
     .description(
@@ -48,6 +45,13 @@ const runCLI = async () => {
         `Materializes frontend modules from an AntelopeJS backend and starts a Vue or React Vite and Inertia application.`,
     )
     .version(version, "-v, --version", "Display version number")
+    // Read by the core output module straight from the command line and the
+    // environment; declared so Commander accepts them after a command name.
+    .option("--no-color", "Disable colors (also NO_COLOR=1)")
+    .option(
+      "--verbose",
+      "Show stack traces in failures (also ANTELOPEJS_VERBOSE)",
+    )
     // Registered for `--help` only: `stripUpdateCheckFlag` removes the flag
     // before Commander parses, so it is accepted after a subcommand name too.
     .option(
@@ -82,21 +86,24 @@ Workspaces:
   program.addCommand(cmdPrepare());
   program.addCommand(cmdClean());
   program.addCommand(cmdVerifySource());
+  formatUsageErrors(program);
 
-  await program.parseAsync(stripUpdateCheckFlag(argv), { from: "user" });
+  const args = stripUpdateCheckFlag(argv);
+  if (args.every((arg) => GLOBAL_FLAGS.includes(arg))) {
+    program.outputHelp();
+    return;
+  }
+  try {
+    await program.parseAsync(args, { from: "user" });
+  } catch (err) {
+    if (!(err instanceof CancelledError)) throw err;
+    reportStopped(err.message, err.signal);
+    process.exitCode = err.exitCode;
+  }
 };
 
-// Run CLI
-runCLI().catch((err) => {
-  if (err instanceof CancelledError) {
-    stopped(err.message, err.signal);
-    process.exit(err.exitCode);
-  }
-  if (err instanceof UsageError) {
-    error(err.message);
-    for (const line of err.details) console.error(chalk.dim(`  ${line}`));
-    process.exit(err.exitCode);
-  }
-  console.error(chalk.red("Error:"), err.message || err);
-  process.exit(1);
-});
+// The commands leave their exit code in process.exitCode. Exiting here stops
+// what a finished command may leave behind, such as the update check.
+void runWithErrorBoundary(runCLI, { verbose: isVerboseRun() }).then(() =>
+  process.exit(),
+);

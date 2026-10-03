@@ -1,4 +1,5 @@
 import { existsSync, rmSync } from "node:fs";
+import { getProcessUi, pluralize } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
   describeWorkspace,
@@ -7,7 +8,7 @@ import {
   parseBackendUrl,
   UsageError,
 } from "../common";
-import { info, success } from "../utils/cli-ui";
+import { showWorkspace } from "../output";
 
 interface CleanOptions {
   backendUrl?: string;
@@ -26,43 +27,52 @@ export function cmdClean(): Command {
     )
     .option("-a, --all", "Clean all workspaces")
     .action(async (options: CleanOptions) => {
+      const ui = getProcessUi();
       if (options.all) {
-        console.error("");
-        // Clean all workspaces
-        info("Cleaning all workspaces...");
         const workspaces = listWorkspaces();
 
         if (workspaces.length === 0) {
-          info("No workspaces found.");
+          ui.message("info", "No workspaces found");
           return;
         }
 
         for (const ws of workspaces) {
           rmSync(ws.dir, { recursive: true, force: true });
-          success(`Removed ${ws.dir} (${describeWorkspace(ws)})`);
+          ui.message(
+            "success",
+            `Removed ${showWorkspace(ws.dir)} · ${describeWorkspace(ws)}`,
+          );
         }
-
-        console.error("");
-        success(`Cleaned ${workspaces.length} workspace(s).`);
+        ui.message(
+          "success",
+          `Cleaned ${pluralize(workspaces.length, "workspace")}`,
+        );
         return;
       }
 
       if (!options.backendUrl) {
-        throw new UsageError("Nothing to clean: pass -b <url> or --all", [
-          "clean never uses DMS_API_BASE_URL from the environment or ./.env.",
-          "-b reaches the workspace 'build', 'start' and 'dev -b' share for that URL;",
-          "a workspace 'dev' created without -b is only removable with --all.",
-        ]);
+        throw new UsageError({
+          title: "Nothing to clean: pass -b <url> or --all",
+          reason:
+            "clean never uses DMS_API_BASE_URL from the environment or ./.env.",
+          fixes: [
+            "Remove the workspace build, start and dev -b share for a URL: ajs dms clean -b <url>",
+            "Remove every workspace, including those dev created without -b: ajs dms clean --all",
+          ],
+        });
       }
-      const workspaceDir = getWorkspaceDir(parseBackendUrl(options.backendUrl));
-      console.error("");
+      const backendUrl = parseBackendUrl(options.backendUrl);
+      const workspaceDir = getWorkspaceDir(backendUrl);
 
       if (!existsSync(workspaceDir)) {
-        info("Workspace not found — nothing to clean.");
+        ui.message("info", `No workspace for ${backendUrl}: nothing to clean`);
         return;
       }
 
       rmSync(workspaceDir, { recursive: true, force: true });
-      success(`Removed workspace: ${workspaceDir}`);
+      ui.message(
+        "success",
+        `Removed workspace ${showWorkspace(workspaceDir)} · ${backendUrl}`,
+      );
     });
 }

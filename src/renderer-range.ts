@@ -13,6 +13,7 @@
 // ones included, so a peer on the loader would pull a copy of it into every
 // workspace. Package managers ignore an engine they do not know.
 
+import { CliError, getProcessUi } from "@antelopejs/core/cli";
 import semver from "semver";
 import { readLayerPackage } from "./layers";
 import { ResolvedLayer } from "./workspace";
@@ -95,7 +96,7 @@ function noticeUndeclared(
   if (modules.length === 0) return;
   for (const module of modules) noticedModules.add(module);
   warn(
-    `⚠ No supported ${renderer.name} range declared, so not checked against ` +
+    `No supported ${renderer.name} range declared, so not checked against ` +
       `${renderer.version}: ${modules.join(", ")}. A frontend module declares ` +
       `one in its package.json, under engines["${renderer.name}"].`,
   );
@@ -122,16 +123,22 @@ export function assertLayersSupportRenderer(
   const declarations = layers.map((layer) =>
     declaredRange(layer, renderer.name),
   );
-  noticeUndeclared(declarations, renderer, options.warn ?? console.warn);
+  noticeUndeclared(
+    declarations,
+    renderer,
+    options.warn ?? ((message) => getProcessUi().message("warn", message)),
+  );
   const problems = declarations
     .filter(({ range }) => range !== undefined)
     .map((declaration) => describeProblem(declaration, renderer.version))
     .filter((problem) => problem !== undefined);
   if (problems.length === 0) return;
-  throw new Error(
-    `These frontend modules do not run on ${renderer.name} ${renderer.version}:\n` +
-      problems.map((problem) => `  - ${problem}`).join("\n") +
-      `\nInstall a ${renderer.name} release their ranges allow, or upgrade those ` +
-      `modules to releases that support ${renderer.version}.`,
-  );
+  throw new CliError({
+    title: `These frontend modules do not run on ${renderer.name} ${renderer.version}`,
+    fixes: [
+      `Install a ${renderer.name} release their ranges allow, or upgrade those ` +
+        `modules to releases that support ${renderer.version}`,
+    ],
+    details: problems,
+  });
 }

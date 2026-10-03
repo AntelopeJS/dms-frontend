@@ -1,8 +1,7 @@
 import { join } from "node:path";
-import chalk from "chalk";
+import { CliError, getProcessUi, pluralize } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
-  CancelledError,
   Options,
   parseBackendUrl,
   parsePort,
@@ -12,12 +11,18 @@ import {
   resolveManifestSecrets,
   resolveSessionSecret,
   runCommand,
-  setupWorkspace,
   startLayerWatchers,
 } from "../common";
 import { describeDiscoveryFailure, discoverBackend } from "../discovery";
-import { type ReservedPort, reserveFreePort } from "../ports";
-import { error, info, Spinner, warning } from "../utils/cli-ui";
+import {
+  cachedAge,
+  showPath,
+  showWorkspace,
+  writeBlankLine,
+  writeHeader,
+} from "../output";
+import { reserveFreePort } from "../ports";
+import { setUpWorkspace } from "./workspace-task";
 
 interface DevOptions {
   backendUrl?: string;
@@ -54,6 +59,8 @@ function clientHost(): string {
 interface ResolvedBackend {
   backendUrl: string;
   workspaceKey?: string;
+  /** The project the backend was discovered from, when it was. */
+  projectDir?: string;
 }
 
 function resolveBackend(options: DevOptions): ResolvedBackend {
@@ -63,16 +70,12 @@ function resolveBackend(options: DevOptions): ResolvedBackend {
 
   const result = discoverBackend(process.cwd());
   if (result.status !== "found") {
-    error(describeDiscoveryFailure(result));
-    process.exit(1);
+    throw new CliError(describeDiscoveryFailure(result));
   }
-
-  info(
-    `Backend discovered from ${chalk.cyan(result.backend.projectDir)}: ${chalk.cyan(result.backend.backendUrl)}`,
-  );
   return {
     backendUrl: result.backend.backendUrl,
     workspaceKey: projectWorkspaceKey(result.backend.projectDir),
+    projectDir: result.backend.projectDir,
   };
 }
 
@@ -89,11 +92,17 @@ export function cmdDev(): Command {
     .action(async (options: DevOptions) => {
       const requestedPort = parsePort(options.port);
       const sessionSecret = resolveSessionSecret("dev");
-      const { backendUrl, workspaceKey } = resolveBackend(options);
+      const { backendUrl, workspaceKey, projectDir } = resolveBackend(options);
       const bootstrapSecret = resolveBootstrapSecret(
         options.bootstrapSecret,
         backendUrl,
       );
+      const ui = getProcessUi();
+
+      writeHeader("dev", [backendUrl, "development"]);
+      if (projectDir) {
+        ui.message("info", `Backend discovered from ${showPath(projectDir)}`);
+      }
 
       // Resolve the frontend port BEFORE the manifest fetch: the real
       // port is sent to the backend as clientUrl so a dev backend can
@@ -101,97 +110,81 @@ export function cmdDev(): Command {
       // We reserve (not just probe) the port — the holding socket stays
       // bound through the whole workspace setup and is released right
       // before the frontend server binds, so nothing can steal it in between.
-      let reserved: ReservedPort;
-      try {
-        reserved = await reserveFreePort(requestedPort);
-      } catch (err: any) {
-        error(err.message);
-        process.exit(1);
-      }
+      const reserved = await reserveFreePort(requestedPort);
       const port = reserved.port;
       const clientUrl = `http://${clientHost()}:${port}`;
 
-      const spinner = new Spinner("Setting up workspace...");
-      await spinner.start();
+      const {
+        workspaceDir,
+        layers,
+        manifestFromCache,
+        manifestFetchedAt,
+        manifestSecrets,
+      } = await setUpWorkspace({
+        backendUrl,
+        force: !!options.force,
+        mode: "dev",
+        offline: options.offline,
+        clientUrl,
+        workspaceKey,
+        bootstrapSecret,
+      });
 
-      try {
-        const {
-          workspaceDir,
-          layers,
-          manifestFromCache,
-          manifestFetchedAt,
-          manifestSecrets,
-        } = await setupWorkspace({
-          backendUrl,
-          force: !!options.force,
-          mode: "dev",
-          offline: options.offline,
-          clientUrl,
-          workspaceKey,
-          bootstrapSecret,
-          beforeInstall: () => spinner.pause(),
-        });
-
-        await spinner.succeed("Workspace ready");
-
-        // Reported once the setup succeeded: a failed setup makes the
-        // fallback port irrelevant.
-        if (port !== requestedPort) {
-          warning(`Port ${requestedPort} in use, using ${port} instead`);
-        }
-        if (manifestFromCache) {
-          warning(
-            `Using cached layers manifest${manifestFetchedAt ? ` (cached on ${manifestFetchedAt})` : ""} — API calls will fail until the backend is up`,
-          );
-        }
-
-        // Start a chokidar watcher per layer that mirrors source edits
-        // into the materialized workspace copy. Without this, HMR would
-        // be blind to any change made in the real layer source tree,
-        // since we copy (not symlink) layers into the workspace.
-        const stopWatchers = startLayerWatchers(workspaceDir, layers);
-        const handleShutdown = async () => {
-          await stopWatchers();
-        };
-        process.once("SIGINT", handleShutdown);
-        process.once("SIGTERM", handleShutdown);
-
-        console.error("");
-        info(`Starting dev server on port ${chalk.cyan(String(port))}...`);
-        console.error(chalk.dim(`  Workspace: ${workspaceDir}`));
-        console.error(chalk.dim(`  Backend:   ${backendUrl}`));
-        console.error(
-          chalk.dim(`  Watching:  ${layers.length} layer source tree(s)`),
-        );
-        const secrets = resolveManifestSecrets(manifestSecrets);
-        reportManifestSecrets(secrets);
-        console.error("");
-
-        const nodeModulesDir = join(workspaceDir, "node_modules");
-        // Hand the reserved port over to the frontend server at the last moment.
-        await reserved.release();
-        const code = await runCommand("node", ["server.mjs"], {
-          cwd: workspaceDir,
-          env: {
-            ...process.env,
-            PORT: String(port),
-            DMS_DEV: "true",
-            DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "false",
-            DMS_API_BASE_URL: backendUrl,
-            DMS_BOOTSTRAP_SECRET: bootstrapSecret,
-            DMS_SESSION_SECRET: sessionSecret,
-            ...secrets.env,
-            NODE_OPTIONS: "--max-old-space-size=4096",
-            NODE_PATH: nodeModulesDir,
-          },
-        });
-
-        await stopWatchers();
-        process.exit(code);
-      } catch (err: any) {
-        if (err instanceof CancelledError) throw err;
-        await spinner.fail(`Setup failed: ${err.message}`);
-        process.exit(1);
+      // Reported once the setup succeeded: a failed setup makes the
+      // fallback port irrelevant.
+      if (port !== requestedPort) {
+        ui.message("warn", `Port ${requestedPort} is busy, using ${port}`);
       }
+      if (manifestFromCache) {
+        ui.message(
+          "warn",
+          `Using the layers manifest${cachedAge(manifestFetchedAt)}`,
+          { detail: "API calls fail until the backend is up." },
+        );
+      }
+
+      // Start a chokidar watcher per layer that mirrors source edits
+      // into the materialized workspace copy. Without this, HMR would
+      // be blind to any change made in the real layer source tree,
+      // since we copy (not symlink) layers into the workspace.
+      const stopWatchers = startLayerWatchers(workspaceDir, layers);
+      const handleShutdown = async () => {
+        await stopWatchers();
+      };
+      process.once("SIGINT", handleShutdown);
+      process.once("SIGTERM", handleShutdown);
+
+      ui.message("info", `Starting the dev server on port ${port}`, {
+        details: [
+          `Workspace  ${showWorkspace(workspaceDir)}`,
+          `Backend    ${backendUrl}`,
+          `Watching   ${pluralize(layers.length, "layer source")}`,
+        ],
+      });
+      const secrets = resolveManifestSecrets(manifestSecrets);
+      reportManifestSecrets(secrets);
+      writeBlankLine();
+
+      const nodeModulesDir = join(workspaceDir, "node_modules");
+      // Hand the reserved port over to the frontend server at the last moment.
+      await reserved.release();
+      const code = await runCommand("node", ["server.mjs"], {
+        cwd: workspaceDir,
+        env: {
+          ...process.env,
+          PORT: String(port),
+          DMS_DEV: "true",
+          DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "false",
+          DMS_API_BASE_URL: backendUrl,
+          DMS_BOOTSTRAP_SECRET: bootstrapSecret,
+          DMS_SESSION_SECRET: sessionSecret,
+          ...secrets.env,
+          NODE_OPTIONS: "--max-old-space-size=4096",
+          NODE_PATH: nodeModulesDir,
+        },
+      });
+
+      await stopWatchers();
+      process.exitCode = code;
     });
 }
