@@ -544,6 +544,32 @@ describe("validating options before any work", () => {
   });
 });
 
+describe("reporting what the verify-source runner found", () => {
+  it("sends a package without package.json back as a usage error", async () => {
+    const result = await runCli(["verify-source", "-l", "packages"], {
+      files: { "packages/broken/dms.frontend.ts": "export default {};\n" },
+    });
+    assert.equal(result.code, 2, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(
+      result.stderr,
+      /^✖ No package\.json in \.\/packages\/broken\n {2}→ Pass the root of a DMS frontend package/,
+    );
+    assert.doesNotMatch(
+      result.stderr,
+      /ENOENT|Error:|^\s+at |Source verification failed/m,
+    );
+  });
+
+  it("names a directory without any package", async () => {
+    const result = await runCli(["verify-source", "-l", "empty"], {
+      files: { "empty/README.md": "" },
+    });
+    assert.equal(result.code, 2, result.stderr);
+    assert.match(result.stderr, /^✖ No frontend package in \.\/empty\n/);
+  });
+});
+
 describe("explaining an unreachable backend", () => {
   async function closedBackendUrl(): Promise<string> {
     const { server, port } = await listenOnFreePort();
