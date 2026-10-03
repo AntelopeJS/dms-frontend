@@ -5,6 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
+import { getProcessUi, type Ui } from "@antelopejs/core/cli";
 import chokidar, { type FSWatcher } from "chokidar";
 import { getLayerWorkspacePath } from "./layers";
 import {
@@ -14,6 +15,7 @@ import {
   type FrontendModuleRegistry,
 } from "./derived-outputs";
 
+import { failureDetails } from "./output";
 import { ResolvedLayer } from "./workspace";
 import {
   applyContent,
@@ -37,6 +39,13 @@ const WATCH_DEBOUNCE_MS = 80;
  */
 const DERIVED_REFRESH_DEBOUNCE_MS = 100;
 
+/** Reports a failure the watcher survives, with the error that caused it. */
+type WarnFunction = (message: string, error?: unknown) => void;
+
+function capitalize(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
 /**
  * Per-layer event batcher. Watcher events are coalesced over
  * `WATCH_DEBOUNCE_MS` and applied as one ordered pass: create dirs, upsert
@@ -50,6 +59,7 @@ function createLayerSync(
   src: string,
   dest: string,
   onFlushed: (paths: string[]) => void,
+  warn: WarnFunction,
 ) {
   const fileUpserts = new Set<string>();
   const fileDeletes = new Set<string>();
@@ -68,7 +78,7 @@ function createLayerSync(
   // exception out of the setTimeout(flush) callback, which would crash the dev
   // process (there is no global uncaughtException handler). Log and continue.
   const warnFailure = (rel: string, err: unknown): void => {
-    console.warn(`[ajs-dms] layer sync skipped ${rel}:`, err);
+    warn(`Layer sync skipped ${rel}`, err);
   };
 
   const flush = (): void => {
@@ -186,6 +196,7 @@ function createLayerSync(
 function createDerivedOutputRefresher(
   workspaceDir: string,
   layers: ResolvedLayer[],
+  warn: WarnFunction,
 ) {
   const pending = new Set<DerivedOutput>();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -196,12 +207,12 @@ function createDerivedOutputRefresher(
   ): void => {
     try {
       if (output.write(workspaceDir, registry) && output.restartNotice)
-        console.warn(`[ajs-dms] ${output.restartNotice}`);
+        warn(output.restartNotice);
     } catch (err) {
       // Same reason as `warnFailure`: a file saved half-written, a catalog
       // for instance, must not take the dev process down. The previous
       // output stays in place.
-      console.warn(`[ajs-dms] ${output.name} not regenerated:`, err);
+      warn(`${capitalize(output.name)} not regenerated`, err);
     }
   };
 
@@ -214,7 +225,7 @@ function createDerivedOutputRefresher(
       // Built again: a module may have added or removed its entry since.
       registry = createFrontendModuleRegistry(workspaceDir, layers);
     } catch (err) {
-      console.warn("[ajs-dms] derived files not regenerated:", err);
+      warn("Derived files not regenerated", err);
       return;
     }
     for (const output of outputs) regenerate(output, registry);
@@ -265,17 +276,25 @@ function createDerivedOutputRefresher(
 export function startLayerWatchers(
   workspaceDir: string,
   layers: ResolvedLayer[],
+  ui: Ui = getProcessUi(),
 ): () => Promise<void> {
+  const warn: WarnFunction = (message, error) =>
+    ui.message("warn", message, {
+      details: error === undefined ? [] : failureDetails(error, ui),
+    });
   const watchers: FSWatcher[] = [];
   const syncs: Array<ReturnType<typeof createLayerSync>> = [];
-  const refresher = createDerivedOutputRefresher(workspaceDir, layers);
+  const refresher = createDerivedOutputRefresher(workspaceDir, layers, warn);
 
   for (const layer of layers) {
     if (!layer.packageName) continue;
     const dest = getLayerWorkspacePath(workspaceDir, layer);
     const src = layer.path;
-    const sync = createLayerSync(src, dest, (paths) =>
-      refresher.schedule(paths),
+    const sync = createLayerSync(
+      src,
+      dest,
+      (paths) => refresher.schedule(paths),
+      warn,
     );
     syncs.push(sync);
 

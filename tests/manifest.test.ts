@@ -4,6 +4,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { CliError } from "@antelopejs/core/cli";
 import {
   BackendUnreachableError,
   fetchManifest,
@@ -12,6 +13,7 @@ import {
   ManifestUnauthorizedError,
   resolveManifest,
 } from "../src/common";
+import { problemText } from "./fixtures/memory-ui";
 
 const manifest: Manifest = { pack: "/dms/frontend/modules", modules: [] };
 
@@ -197,7 +199,7 @@ describe("fetchManifest", () => {
         () => fetchManifest(baseUrl, undefined, "wrong"),
         (err: Error) => {
           assert.ok(err instanceof ManifestUnauthorizedError);
-          assert.match(err.message, /DMS_BOOTSTRAP_SECRET/);
+          assert.match(problemText(err), /→ .*DMS_BOOTSTRAP_SECRET/);
           return true;
         },
       );
@@ -239,7 +241,10 @@ describe("fetchManifest", () => {
           () => fetchManifest(baseUrl, "http://localhost:3001"),
           (err: Error) => {
             assert.ok(err.message.includes(`${baseUrl}/dms/frontend`));
-            assert.doesNotMatch(err.message, /\?|renderer=|clientUrl/);
+            assert.doesNotMatch(
+              err instanceof CliError ? problemText(err) : err.message,
+              /\?|renderer=|clientUrl/,
+            );
             return true;
           },
         );
@@ -257,12 +262,13 @@ describe("fetchManifest", () => {
         assert.ok(err instanceof BackendUnreachableError);
         assert.equal(err.code, "ECONNREFUSED");
         assert.equal(
-          err.message.split("\n")[0],
+          err.message,
           `Cannot reach the DMS backend at ${backendUrl}`,
         );
-        assert.match(err.message, /Connection refused \(ECONNREFUSED\)/);
-        assert.match(err.message, /→ Start the backend/);
-        assert.doesNotMatch(err.message, /fetch failed/);
+        const text = problemText(err);
+        assert.match(text, /Connection refused \(ECONNREFUSED\)/);
+        assert.match(text, /→ Start the backend/);
+        assert.doesNotMatch(text, /fetch failed/);
         return true;
       },
     );
@@ -274,11 +280,11 @@ describe("fetchManifest", () => {
       (err: Error) => {
         assert.ok(err instanceof BackendUnreachableError);
         assert.match(err.code ?? "", /^(ENOTFOUND|EAI_AGAIN)$/);
-        assert.match(
+        assert.equal(
           err.message,
-          /^Cannot reach the DMS backend at http:\/\/dms-backend\.invalid:5010\n/,
+          "Cannot reach the DMS backend at http://dms-backend.invalid:5010",
         );
-        assert.match(err.message, /'dms-backend\.invalid'/);
+        assert.match(problemText(err), /'dms-backend\.invalid'/);
         return true;
       },
     );
@@ -290,9 +296,11 @@ describe("fetchManifest", () => {
         () => fetchManifest(backendUrl),
         (err: Error) => {
           assert.ok(!(err instanceof BackendUnreachableError));
+          assert.ok(err instanceof CliError);
+          assert.equal(err.exitCode, 1);
           assert.match(
-            err.message,
-            new RegExp(`^Invalid backend URL '${backendUrl}'\n  → `),
+            problemText(err),
+            new RegExp(`^✖ Invalid backend URL '${backendUrl}'\n  → `),
           );
           return true;
         },

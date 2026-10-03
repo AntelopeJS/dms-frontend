@@ -19,6 +19,14 @@ import {
   startLayerWatchers,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { memoryUi } from "./fixtures/memory-ui";
+
+const output = memoryUi();
+
+/** Each warning the watchers printed, with its detail lines. */
+function warnings(): string[] {
+  return output.stderr().split(/\n(?=\S)/);
+}
 
 const RETRY_WRITE_MS = 1_000;
 const TIMEOUT_MS = 15_000;
@@ -96,7 +104,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     mkdirSync(workspace, { recursive: true });
     materializeLayers(workspace, layers);
     writeFrontendModuleRegistry(workspace, layers);
-    stopWatchers = startLayerWatchers(workspace, layers);
+    stopWatchers = startLayerWatchers(workspace, layers, output.ui);
   });
 
   after(async () => {
@@ -219,24 +227,26 @@ describe("locale catalogs in the dev layer watcher", () => {
   });
 
   it("keeps the previous catalogs while a locale file does not parse", async () => {
-    const warn = mock.method(console, "warn", () => {});
+    output.clear();
     try {
       await eventually(
         () => writeFileSync(join(baseLocales, "ui-en-GB.json"), '{ "form": {'),
         () =>
-          warn.mock.calls.some((call) =>
-            String(call.arguments[0]).includes(
-              "locale catalogs not regenerated",
-            ),
+          warnings().some((warning) =>
+            warning.includes("Locale catalogs not regenerated"),
           ),
       );
-      const failure = warn.mock.calls.find((call) =>
-        String(call.arguments[0]).includes("locale catalogs not regenerated"),
+      const failure = warnings().find((warning) =>
+        warning.includes("Locale catalogs not regenerated"),
       );
-      assert.match(String(failure?.arguments[1]), /ui-en-GB\.json/);
+      assert.match(
+        failure ?? "",
+        /^▲ Locale catalogs not regenerated\n {2}.*ui-en-GB\.json/,
+      );
+      assert.doesNotMatch(failure ?? "", /^\s+at /m, "no stack trace");
       assert.equal(catalog("en").form.demo_key, "Hello");
     } finally {
-      warn.mock.restore();
+      output.clear();
     }
     await eventually(
       () =>
@@ -328,8 +338,8 @@ describe("derived outputs in the dev layer watcher", () => {
     JSON.parse(workspaceFile("generated-frontend-modules.json")).modules.map(
       (module: { id: string; entry?: string }) => [module.id, module.entry],
     );
-  const isRestartNotice = (call: { arguments: unknown[] }): boolean =>
-    String(call.arguments[0]).includes("restart 'ajs dms dev'");
+  const isRestartNotice = (warning: string): boolean =>
+    warning.includes("restart 'ajs dms dev'");
 
   before(() => {
     writeFile(
@@ -360,7 +370,7 @@ describe("derived outputs in the dev layer watcher", () => {
     mkdirSync(workspace, { recursive: true });
     materializeLayers(workspace, layers);
     writeFrontendModuleRegistry(workspace, layers);
-    stopWatchers = startLayerWatchers(workspace, layers);
+    stopWatchers = startLayerWatchers(workspace, layers, output.ui);
   });
 
   after(async () => {
@@ -454,7 +464,7 @@ describe("derived outputs in the dev layer watcher", () => {
 
   it("declares a layer directory added or removed, and says a restart is needed", async () => {
     const extra = join(base, "layers", "extra");
-    const warn = mock.method(console, "warn", () => {});
+    output.clear();
     try {
       await eventually(
         () =>
@@ -465,7 +475,7 @@ describe("derived outputs in the dev layer watcher", () => {
         () => typePaths().includes("#extra/*"),
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
-      assert.equal(warn.mock.calls.filter(isRestartNotice).length, 1);
+      assert.equal(warnings().filter(isRestartNotice).length, 1);
 
       // A change that leaves the layer directories alone says nothing.
       await eventually(
@@ -489,7 +499,7 @@ describe("derived outputs in the dev layer watcher", () => {
           ).includes("= 2"),
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
-      assert.equal(warn.mock.calls.filter(isRestartNotice).length, 1);
+      assert.equal(warnings().filter(isRestartNotice).length, 1);
 
       // Nor does a file next to the layers: the type paths are rewritten
       // with the same content, which is what the notice waits for.
@@ -508,7 +518,7 @@ describe("derived outputs in the dev layer watcher", () => {
           ),
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
-      assert.equal(warn.mock.calls.filter(isRestartNotice).length, 1);
+      assert.equal(warnings().filter(isRestartNotice).length, 1);
       rmSync(readme, { force: true });
 
       await eventually(
@@ -516,9 +526,9 @@ describe("derived outputs in the dev layer watcher", () => {
         () => !typePaths().includes("#extra/*"),
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
-      assert.equal(warn.mock.calls.filter(isRestartNotice).length, 2);
+      assert.equal(warnings().filter(isRestartNotice).length, 2);
     } finally {
-      warn.mock.restore();
+      output.clear();
     }
     assert.ok(typePaths().includes("#ui/*"));
   });
@@ -553,7 +563,7 @@ describe("derived outputs in the dev layer watcher", () => {
 
   it("regenerates the other outputs when one of them fails", async () => {
     const locale = join(baseUi, "i18n", "locales", "ui-en-GB.json");
-    const warn = mock.method(console, "warn", () => {});
+    output.clear();
     try {
       await eventually(
         () => {
@@ -562,14 +572,12 @@ describe("derived outputs in the dev layer watcher", () => {
         },
         () =>
           existsSync(join(publicDir, "after-failure.txt")) &&
-          warn.mock.calls.some((call) =>
-            String(call.arguments[0]).includes(
-              "locale catalogs not regenerated",
-            ),
+          warnings().some((warning) =>
+            warning.includes("Locale catalogs not regenerated"),
           ),
       );
     } finally {
-      warn.mock.restore();
+      output.clear();
     }
     rmSync(join(baseUi, "i18n"), { recursive: true, force: true });
   });

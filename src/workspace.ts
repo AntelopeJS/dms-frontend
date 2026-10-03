@@ -12,12 +12,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { getProcessUi } from "@antelopejs/core/cli";
 import {
   DMS_FRONTEND_HOME,
   WORKSPACE_DIR_MODE,
   canonicalizeBackendUrl,
   sha256Hex,
 } from "./config";
+import { showPath } from "./output";
 
 // ============================================================================
 // Constants
@@ -182,7 +184,7 @@ export interface WorkspaceEntry {
 export function describeWorkspace(entry: WorkspaceEntry): string {
   const projectDir = projectDirFromWorkspaceKey(entry.workspaceKey);
   return projectDir
-    ? `${entry.backendUrl}, keyed on project ${projectDir}`
+    ? `${entry.backendUrl} · project ${showPath(projectDir)}`
     : entry.backendUrl;
 }
 
@@ -194,7 +196,10 @@ export function describeWorkspace(entry: WorkspaceEntry): string {
  * is foreign (or a half-created directory from an interrupted run) and is
  * skipped with a warning rather than reported as a nameless workspace.
  */
-export function listWorkspaces(): WorkspaceEntry[] {
+export function listWorkspaces(
+  warn: (message: string) => void = (message) =>
+    getProcessUi().message("warn", message),
+): WorkspaceEntry[] {
   if (!existsSync(DMS_FRONTEND_HOME)) return [];
   const workspaces: WorkspaceEntry[] = [];
   for (const entry of readdirSync(DMS_FRONTEND_HOME, { withFileTypes: true })) {
@@ -202,7 +207,7 @@ export function listWorkspaces(): WorkspaceEntry[] {
     const dir = join(DMS_FRONTEND_HOME, entry.name);
     const meta = readWorkspaceMeta(dir);
     if (meta?.backendUrl === undefined) {
-      console.warn(`⚠ Skipping ${dir}: no readable ${WORKSPACE_META_FILE}.`);
+      warn(`Skipped ${showPath(dir)}: no readable ${WORKSPACE_META_FILE}`);
       continue;
     }
     workspaces.push({

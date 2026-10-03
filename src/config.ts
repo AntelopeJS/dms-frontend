@@ -7,6 +7,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  CliError,
+  type CliProblem,
+  USAGE_EXIT_CODE,
+} from "@antelopejs/core/cli";
 import { Option } from "commander";
 import ignore from "ignore";
 import {
@@ -162,17 +167,12 @@ export const TAILWIND_SOURCE_GLOB = "**/*.{vue,ts,tsx,js,jsx,mjs,cjs}";
 
 /**
  * Input the user must correct before the command does any work: a malformed
- * option, or configuration only they can supply. The entry point reports it
- * as one error with its details and exits 2, without a stack.
+ * option, or configuration only they can supply. Reported like any other
+ * failure, with the usage exit code.
  */
-export class UsageError extends Error {
-  readonly exitCode = 2;
-
-  constructor(
-    message: string,
-    readonly details: readonly string[] = [],
-  ) {
-    super(message);
+export class UsageError extends CliError {
+  constructor(problem: Omit<CliProblem, "exitCode">) {
+    super({ ...problem, exitCode: USAGE_EXIT_CODE });
     this.name = "UsageError";
   }
 }
@@ -192,11 +192,26 @@ export function parseBackendUrl(value: string): string {
     protocol = undefined;
   }
   if (protocol && BACKEND_URL_PROTOCOLS.includes(protocol)) return value;
-  throw new UsageError(`Invalid backend URL '${value}'`, [
-    value.includes("://")
-      ? "→ Use an http:// or https:// URL: -b http://localhost:5010"
-      : `→ Include the scheme: -b http://${value.trim()}`,
-  ]);
+  throw new UsageError({
+    title: `Invalid backend URL '${value}'`,
+    fixes: [
+      value.includes("://")
+        ? "Use an http:// or https:// URL: -b http://localhost:5010"
+        : `Include the scheme: -b http://${value.trim()}`,
+    ],
+  });
+}
+
+/**
+ * The backend URL of a command that cannot discover one, as given by `-b` or
+ * `DMS_API_BASE_URL`.
+ */
+export function requireBackendUrl(value: string | undefined): string {
+  if (value) return parseBackendUrl(value);
+  throw new UsageError({
+    title: "Backend URL is required",
+    fixes: ["Pass -b <url> or set DMS_API_BASE_URL"],
+  });
 }
 
 /**
@@ -207,9 +222,12 @@ export function parseBackendUrl(value: string): string {
 export function parsePort(value: string): number {
   const port = /^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN;
   if (port >= 0 && port <= MAX_TCP_PORT) return port;
-  throw new UsageError(`Invalid port '${value}'`, [
-    `→ Pass a number between 1 and ${MAX_TCP_PORT}, or 0 for any free port: -p 3001`,
-  ]);
+  throw new UsageError({
+    title: `Invalid port '${value}'`,
+    fixes: [
+      `Pass a number between 1 and ${MAX_TCP_PORT}, or 0 for any free port: -p 3001`,
+    ],
+  });
 }
 
 /**
@@ -310,13 +328,13 @@ export function normalizeBootstrapSecret(
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   if (!HEADER_SAFE_CREDENTIAL.test(trimmed)) {
-    throw new UsageError(
-      "The bootstrap credential cannot travel in an HTTP header",
-      [
-        `${source} contains ${describeUnsafeCharacter(trimmed)}.`,
-        "→ Use printable ASCII characters only, without spaces or line breaks",
+    throw new UsageError({
+      title: "The bootstrap credential cannot travel in an HTTP header",
+      reason: `${source} contains ${describeUnsafeCharacter(trimmed)}.`,
+      fixes: [
+        "Use printable ASCII characters only, without spaces or line breaks",
       ],
-    );
+    });
   }
   return trimmed;
 }
@@ -340,12 +358,16 @@ export function resolveSessionSecret(
   if (value !== undefined && value.length >= SESSION_SECRET_MIN_LENGTH) {
     return value;
   }
-  throw new UsageError(`DMS_SESSION_SECRET ${describeSessionSecret(value)}`, [
-    mode === "dev"
-      ? "dev generates an ephemeral secret only when the variable is not set at all."
-      : "build and start sign sessions with it, so it must stay the same across restarts.",
-    "→ Create one: openssl rand -hex 32, then set it in the environment or ./.env",
-  ]);
+  throw new UsageError({
+    title: `DMS_SESSION_SECRET ${describeSessionSecret(value)}`,
+    reason:
+      mode === "dev"
+        ? "dev generates an ephemeral secret only when the variable is not set at all."
+        : "build and start sign sessions with it, so it must stay the same across restarts.",
+    fixes: [
+      "Create one: openssl rand -hex 32, then set it in the environment or ./.env",
+    ],
+  });
 }
 
 function describeSessionSecret(value: string | undefined): string {

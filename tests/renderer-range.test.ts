@@ -19,6 +19,7 @@ import {
   type RendererRelease,
   type ResolvedLayer,
 } from "../src/common";
+import { problemText } from "./fixtures/memory-ui";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OWN_PACKAGE: RendererRelease = JSON.parse(
@@ -77,7 +78,7 @@ describe("renderer range", () => {
           /do not run on @antelopejs\/dms-frontend 0\.4\.0/,
         );
         assert.match(
-          err.message,
+          problemText(err),
           /@acme\/dms-billing \(.+\) supports >=0\.2\.8 <0\.4\.0/,
         );
         return true;
@@ -94,9 +95,10 @@ describe("renderer range", () => {
           declaring("too-new", ">=0.5.0"),
         ]),
       (err: Error) => {
-        assert.match(err.message, /too-old \(.+\) supports <0\.4\.0/);
-        assert.match(err.message, /too-new \(.+\) supports >=0\.5\.0/);
-        assert.doesNotMatch(err.message, /fine/);
+        const text = problemText(err);
+        assert.match(text, /too-old \(.+\) supports <0\.4\.0/);
+        assert.match(text, /too-new \(.+\) supports >=0\.5\.0/);
+        assert.doesNotMatch(text, /fine/);
         return true;
       },
     );
@@ -106,7 +108,7 @@ describe("renderer range", () => {
     for (const range of ["latest", 3, null]) {
       assert.throws(
         () => check([declaring(`unreadable-${String(range)}`, range)]),
-        /declares an unreadable range/,
+        (err) => /declares an unreadable range/.test(problemText(err)),
       );
     }
   });
@@ -123,8 +125,8 @@ describe("renderer range", () => {
     assert.throws(
       () => check([first, second]),
       (err: Error) =>
-        err.message.includes(`playground-frontend-vue (${first.path})`) &&
-        err.message.includes(`playground-frontend-vue (${second.path})`),
+        problemText(err).includes(`playground-frontend-vue (${first.path})`) &&
+        problemText(err).includes(`playground-frontend-vue (${second.path})`),
     );
   });
 
@@ -138,7 +140,7 @@ describe("renderer range", () => {
   it("checks a prerelease as the release it leads to", () => {
     assert.throws(
       () => check([declaring("before-0.4", "<0.4.0")], "0.4.0-next.1"),
-      /before-0\.4 \(.+\) supports <0\.4\.0/,
+      (err) => /before-0\.4 \(.+\) supports <0\.4\.0/.test(problemText(err)),
     );
     assert.deepEqual(
       check([declaring("on-0.3", ">=0.3.2 <0.4.0")], "0.3.3-next.0"),
@@ -151,8 +153,8 @@ describe("renderer range", () => {
     assert.throws(
       () => assertLayersSupportRenderer(layers),
       (err: Error) =>
-        err.message.includes(
-          `do not run on ${OWN_PACKAGE.name} ${OWN_PACKAGE.version}:`,
+        err.message.endsWith(
+          `do not run on ${OWN_PACKAGE.name} ${OWN_PACKAGE.version}`,
         ),
     );
   });
@@ -246,10 +248,8 @@ describe("commands refusing a module that does not support this release", () => 
           home,
         });
         assert.equal(status, 1, output);
-        assert.match(
-          output,
-          /Setup failed: These frontend modules do not run on/,
-        );
+        assert.match(output, /✖ These frontend modules do not run on/);
+        assert.doesNotMatch(output, /Setup failed/);
         assert.match(output, /excluding-module \(.+\) supports >=999\.0\.0/);
       }
       const workspaces = join(home, ".antelopejs", "dms-frontend");
@@ -274,7 +274,7 @@ describe("commands refusing a module that does not support this release", () => 
       { env: { DMS_LAYER_SOURCE: layerPath } },
     );
     assert.equal(status, 1, output);
-    assert.match(output, /Error: These frontend modules do not run on/);
+    assert.match(output, /✖ These frontend modules do not run on/);
     assert.match(output, /excluding-source \(.+\) supports >=999\.0\.0/);
     assert.doesNotMatch(output, /Generated workspace/);
     assert.doesNotMatch(output, /^\s+at /m, "no stack trace");
