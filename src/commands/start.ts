@@ -37,9 +37,9 @@ export function cmdStart(): Command {
       const clientPath = join(workspaceDir, "dist", "client", "index.html");
 
       if (!existsSync(serverPath) || !existsSync(clientPath)) {
-        console.log("");
+        console.error("");
         error("Production build not found!");
-        console.log(
+        console.error(
           chalk.dim(
             "  Run 'ajs dms build -b " +
               options.backendUrl +
@@ -49,9 +49,9 @@ export function cmdStart(): Command {
         process.exit(1);
       }
 
-      console.log("");
+      console.error("");
       info(`Starting production server on port ${chalk.cyan(options.port)}...`);
-      console.log(chalk.dim(`  Workspace: ${workspaceDir}`));
+      console.error(chalk.dim(`  Workspace: ${workspaceDir}`));
 
       // The build cached the manifest it was made from: the backend's
       // secrets come from there unless the environment sets its own.
@@ -61,7 +61,7 @@ export function cmdStart(): Command {
         ),
       );
       reportManifestSecrets(secrets, "build-time manifest");
-      console.log("");
+      console.error("");
 
       const code = await runCommand("node", [serverPath], {
         cwd: workspaceDir,

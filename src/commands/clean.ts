@@ -19,7 +19,7 @@ export function cmdClean(): Command {
     .addOption(Options.backendUrl)
     .option("-a, --all", "Clean all workspaces")
     .action(async (options: CleanOptions) => {
-      console.log("");
+      console.error("");
 
       if (options.all) {
         // Clean all workspaces
@@ -36,7 +36,7 @@ export function cmdClean(): Command {
           success(`Removed ${ws.dir} (${describeWorkspace(ws)})`);
         }
 
-        console.log("");
+        console.error("");
         success(`Cleaned ${workspaces.length} workspace(s).`);
         return;
       }

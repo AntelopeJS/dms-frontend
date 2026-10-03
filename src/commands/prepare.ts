@@ -82,7 +82,7 @@ export function cmdPrepare(): Command {
         }
       }
 
-      console.log("");
+      console.error("");
       success(`Vite workspace prepared ${chalk.dim(`(${workspaceDir})`)}`);
       process.exit(0);
     });
