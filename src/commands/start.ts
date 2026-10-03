@@ -1,10 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CliError, getProcessUi } from "@antelopejs/core/cli";
+import { CliError, formatDuration } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
   getWorkspaceDir,
   collectManifestSecrets,
+  describeSecretSources,
   Options,
   parsePort,
   readCachedManifest,
@@ -12,10 +13,17 @@ import {
   requireBackendUrl,
   resolveManifestSecrets,
   resolveSessionSecret,
-  runCommand,
 } from "../common";
-import { showWorkspace, writeBlankLine, writeHeader } from "../output";
+import {
+  formatAge,
+  showWorkspace,
+  writeHeader,
+  writeReadyBlock,
+} from "../output";
 import { reservePort } from "../ports";
+import { readyLines, runServer } from "../server-process";
+
+const BUILD_TIME_MANIFEST = "the build-time manifest";
 
 interface StartOptions {
   backendUrl?: string;
@@ -28,13 +36,10 @@ export function cmdStart(): Command {
     .addOption(Options.backendUrl)
     .addOption(Options.port)
     .action(async (options: StartOptions) => {
+      const startedAt = Date.now();
       const backendUrl = requireBackendUrl(options.backendUrl);
       const requestedPort = parsePort(options.port);
       const sessionSecret = resolveSessionSecret("start");
-      const ui = getProcessUi();
-
-      writeHeader("start", [backendUrl, "production"]);
-
       const workspaceDir = getWorkspaceDir(backendUrl);
       const serverPath = join(workspaceDir, "server.mjs");
       const clientPath = join(workspaceDir, "dist", "client", "index.html");
@@ -46,6 +51,13 @@ export function cmdStart(): Command {
           fixes: [`Build it first: ajs dms build -b ${backendUrl}`],
         });
       }
+
+      const builtAt = statSync(clientPath).mtime.toISOString();
+      writeHeader("start", [
+        backendUrl,
+        "production",
+        `built ${formatAge(builtAt)}`,
+      ]);
 
       // Held until the server is spawned, as dev does, so a busy port is
       // reported here instead of as the server's unhandled listen error.
@@ -60,10 +72,6 @@ export function cmdStart(): Command {
       }
       const port = reserved.port;
 
-      ui.message("info", `Starting the production server on port ${port}`, {
-        detail: `Workspace  ${showWorkspace(workspaceDir)}`,
-      });
-
       // The build cached the manifest it was made from: the backend's
       // secrets come from there unless the environment sets its own.
       const secrets = resolveManifestSecrets(
@@ -71,11 +79,20 @@ export function cmdStart(): Command {
           readCachedManifest(workspaceDir)?.manifest.modules ?? [],
         ),
       );
-      reportManifestSecrets(secrets, "build-time manifest");
-      writeBlankLine();
+      reportManifestSecrets(
+        secrets,
+        (count) =>
+          `Set ${count === 1 ? "it" : "them"}, or rebuild with DMS_BOOTSTRAP_SECRET so the manifest carries ${count === 1 ? "it" : "them"}`,
+      );
+      const secretSources = describeSecretSources(
+        secrets.sources,
+        BUILD_TIME_MANIFEST,
+      );
 
       await reserved.release();
-      const code = await runCommand("node", [serverPath], {
+      const code = await runServer({
+        name: "production server",
+        script: serverPath,
         cwd: workspaceDir,
         env: {
           ...process.env,
@@ -85,6 +102,18 @@ export function cmdStart(): Command {
           ...secrets.env,
           DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "true",
         },
+        onReady: (address) =>
+          writeReadyBlock({
+            title: `Production server ready in ${formatDuration(Date.now() - startedAt)}`,
+            lines: readyLines(address, [
+              { label: "Backend", value: backendUrl },
+              { label: "Workspace", value: showWorkspace(workspaceDir) },
+              ...(secretSources
+                ? [{ label: "Secrets", value: secretSources }]
+                : []),
+            ]),
+            footer: "Ctrl+C to stop",
+          }),
       });
 
       process.exitCode = code;

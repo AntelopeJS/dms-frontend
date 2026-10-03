@@ -55,11 +55,16 @@ function declaring(name: string, range: unknown): ResolvedLayer {
   return layer(name, { [RENDERER]: range });
 }
 
-function check(layers: ResolvedLayer[], version = "0.4.0"): string[] {
+function check(
+  layers: ResolvedLayer[],
+  version = "0.4.0",
+  workspaceDir?: string,
+): string[] {
   const warnings: string[] = [];
   assertLayersSupportRenderer(layers, {
     renderer: { name: RENDERER, version },
     warn: (message) => warnings.push(message),
+    workspaceDir,
   });
   return warnings;
 }
@@ -117,6 +122,21 @@ describe("renderer range", () => {
     const undeclared = layer("undeclared-module");
     assert.equal(check([undeclared]).length, 1);
     assert.deepEqual(check([undeclared]), []);
+  });
+
+  it("names a module once per workspace, across runs", () => {
+    const workspace = temporaryDir("dms-renderer-range-workspace-");
+    const noticed = join(workspace, ".renderer-range-noticed");
+    const earlier = layer("noticed-by-an-earlier-run");
+    writeFileSync(noticed, `noticed-by-an-earlier-run (${earlier.path})\n`);
+    assert.deepEqual(check([earlier], "0.4.0", workspace), []);
+
+    const added = layer("added-since");
+    assert.equal(check([earlier, added], "0.4.0", workspace).length, 1);
+    assert.deepEqual(readFileSync(noticed, "utf8").trim().split("\n").sort(), [
+      `added-since (${added.path})`,
+      `noticed-by-an-earlier-run (${earlier.path})`,
+    ]);
   });
 
   it("tells apart two modules that share a package name", () => {

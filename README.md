@@ -411,7 +411,7 @@ needs no exception for the Iconify API. Icons reach the page two ways:
 
 All of these can be set in the project's `.env` instead of the environment; see [Configuration](#configuration).
 
-`ajs dms dev` takes the two manifest secrets from the manifest it fetches, and `ajs dms start` from the manifest cached by `ajs dms build`. An explicitly set variable always wins over the manifest value. Before the server starts, both commands log where each secret comes from (`env`, `manifest`, `build-time manifest` or `not set`), never its value. When several modules publish the same secret, the first one in manifest-priority order wins, and a module publishing a different value is named in a warning.
+`ajs dms dev` takes the two manifest secrets from the manifest it fetches, and `ajs dms start` from the manifest cached by `ajs dms build`. An explicitly set variable always wins over the manifest value. Before the server starts, both commands warn about each secret that is not set and what stops working without it; once the server is ready, they list where the others come from (the environment, the manifest or the build-time manifest), never their values. When several modules publish the same secret, the first one in manifest-priority order wins, and a module publishing a different value is named in a warning.
 
 Use pnpm for all repository and workspace operations.
 

@@ -145,37 +145,54 @@ export function formatSecretConflicts(
   );
 }
 
+const SOURCE_LABELS: Record<
+  Exclude<ManifestSecretSource, "not set">,
+  string
+> = {
+  env: "the environment",
+  manifest: "the manifest",
+};
+
 /**
- * The block logged before the server starts: each secret of the table with
- * where its value comes from, never the value itself. `manifestLabel` names
- * the manifest the command read (`start` reads the one cached at build time).
+ * Where the secrets the server receives come from, never their values:
+ * `DMS_HTML_RENDER_SECRET, DMS_OAUTH_RELAY_SECRET from the manifest`.
+ * `manifestLabel` names the manifest the command read (`start` reads the one
+ * cached at build time). Undefined when none is set.
  */
-export function formatSecretSources(
+export function describeSecretSources(
   sources: ResolvedManifestSecrets["sources"],
-  manifestLabel = "manifest",
-): string[] {
-  const width = Math.max(...SECRET_NAMES.map((name) => name.length));
-  return SECRET_NAMES.map((name) => {
-    const source = sources[name];
-    const label =
-      source === "manifest"
-        ? manifestLabel
-        : source === "not set"
-          ? `not set (${UNSET_CONSEQUENCE[name]})`
-          : source;
-    return `${name.padEnd(width)}  ${label}`;
-  });
+  manifestLabel = SOURCE_LABELS.manifest,
+): string | undefined {
+  const labels = { ...SOURCE_LABELS, manifest: manifestLabel };
+  const groups = (["env", "manifest"] as const)
+    .map((source) => ({
+      names: SECRET_NAMES.filter((name) => sources[name] === source),
+      label: labels[source],
+    }))
+    .filter(({ names }) => names.length > 0)
+    .map(({ names, label }) => `${names.join(", ")} from ${label}`);
+  return groups.length > 0 ? groups.join("; ") : undefined;
 }
 
-/** Warns about the conflicts, then lists where each secret comes from. */
+/**
+ * Warns about the conflicts, and about each secret the server runs without,
+ * with what stops working: the server starts, degraded. `fix` says how to
+ * provide them.
+ */
 export function reportManifestSecrets(
   resolved: ResolvedManifestSecrets,
-  manifestLabel = "manifest",
+  fix: (count: number) => string,
   ui: Ui = getProcessUi(),
 ): void {
   for (const line of formatSecretConflicts(resolved.conflicts))
     ui.message("warn", line);
-  ui.message("info", "Server secrets", {
-    details: formatSecretSources(resolved.sources, manifestLabel),
+  const unset = SECRET_NAMES.filter(
+    (name) => resolved.sources[name] === "not set",
+  );
+  unset.forEach((name, index) => {
+    const isLast = index === unset.length - 1;
+    ui.message("warn", `${name} is not set: ${UNSET_CONSEQUENCE[name]}`, {
+      details: isLast ? [`${ui.symbols.levels.hint} ${fix(unset.length)}`] : [],
+    });
   });
 }
