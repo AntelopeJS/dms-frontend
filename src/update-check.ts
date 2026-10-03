@@ -21,13 +21,12 @@ export const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
  * Retry delay after a lookup that came back empty.
  *
  * A failure is not the same event as a success and must not buy the same
- * silence. Most failures here are self-inflicted rather than network-wide:
- * the check is fired and forgotten while the command it rides along with
- * blocks the event loop — `installDeps` shells out through a synchronous
- * `execSync("pnpm install")` — so the deadline below, which is wall-clock,
- * expires on a response that already arrived but could not be read yet.
- * Charging a full day of silence for that means the first `dev` of a fresh
- * workspace reliably suppresses the notice for the rest of the day.
+ * silence. A flaky network or a registry hiccup says nothing about the next
+ * attempt, and charging a full day of silence for one would hide the notice
+ * for the rest of the day. The command the check rides along with no longer
+ * blocks the event loop while it works — `pnpm install` and the production
+ * build run as asynchronous children — so the deadline below measures the
+ * registry, not the command.
  */
 export const UPDATE_CHECK_RETRY_INTERVAL_MS = 60 * 60 * 1000;
 
