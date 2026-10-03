@@ -1,7 +1,13 @@
 import { join } from "node:path";
-import { CliError, getProcessUi, pluralize } from "@antelopejs/core/cli";
+import {
+  CliError,
+  formatDuration,
+  getProcessUi,
+  pluralize,
+} from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
+  describeSecretSources,
   Options,
   parseBackendUrl,
   parsePort,
@@ -10,7 +16,6 @@ import {
   reportManifestSecrets,
   resolveManifestSecrets,
   resolveSessionSecret,
-  runCommand,
   startLayerWatchers,
 } from "../common";
 import { describeDiscoveryFailure, discoverBackend } from "../discovery";
@@ -18,10 +23,11 @@ import {
   cachedAge,
   showPath,
   showWorkspace,
-  writeBlankLine,
   writeHeader,
+  writeReadyBlock,
 } from "../output";
 import { reserveFreePort } from "../ports";
+import { readyLines, runServer } from "../server-process";
 import { setUpWorkspace } from "./workspace-task";
 
 interface DevOptions {
@@ -90,6 +96,7 @@ export function cmdDev(): Command {
     .addOption(Options.offline)
     .addOption(Options.bootstrapSecret)
     .action(async (options: DevOptions) => {
+      const startedAt = Date.now();
       const requestedPort = parsePort(options.port);
       const sessionSecret = resolveSessionSecret("dev");
       const { backendUrl, workspaceKey, projectDir } = resolveBackend(options);
@@ -136,12 +143,21 @@ export function cmdDev(): Command {
         ui.message("warn", `Port ${requestedPort} is busy, using ${port}`);
       }
       if (manifestFromCache) {
-        ui.message(
-          "warn",
-          `Using the layers manifest${cachedAge(manifestFetchedAt)}`,
-          { detail: "API calls fail until the backend is up." },
-        );
+        const manifest = `the layers manifest${cachedAge(manifestFetchedAt)}`;
+        if (options.offline) {
+          ui.message("info", `Offline: using ${manifest}`);
+        } else {
+          ui.message("warn", `Backend unreachable: using ${manifest}`, {
+            detail: "API calls fail until the backend is up.",
+          });
+        }
       }
+      const secrets = resolveManifestSecrets(manifestSecrets);
+      reportManifestSecrets(
+        secrets,
+        (count) =>
+          `Set ${count === 1 ? "it" : "them"} in the environment or the project's .env`,
+      );
 
       // Start a chokidar watcher per layer that mirrors source edits
       // into the materialized workspace copy. Without this, HMR would
@@ -154,21 +170,13 @@ export function cmdDev(): Command {
       process.once("SIGINT", handleShutdown);
       process.once("SIGTERM", handleShutdown);
 
-      ui.message("info", `Starting the dev server on port ${port}`, {
-        details: [
-          `Workspace  ${showWorkspace(workspaceDir)}`,
-          `Backend    ${backendUrl}`,
-          `Watching   ${pluralize(layers.length, "layer source")}`,
-        ],
-      });
-      const secrets = resolveManifestSecrets(manifestSecrets);
-      reportManifestSecrets(secrets);
-      writeBlankLine();
-
       const nodeModulesDir = join(workspaceDir, "node_modules");
       // Hand the reserved port over to the frontend server at the last moment.
       await reserved.release();
-      const code = await runCommand("node", ["server.mjs"], {
+      const secretSources = describeSecretSources(secrets.sources);
+      const code = await runServer({
+        name: "dev server",
+        script: "server.mjs",
         cwd: workspaceDir,
         env: {
           ...process.env,
@@ -182,9 +190,20 @@ export function cmdDev(): Command {
           NODE_OPTIONS: "--max-old-space-size=4096",
           NODE_PATH: nodeModulesDir,
         },
-      });
+        onReady: (address) =>
+          writeReadyBlock({
+            title: `Dev server ready in ${formatDuration(Date.now() - startedAt)}`,
+            lines: readyLines(address, [
+              { label: "Backend", value: backendUrl },
+              { label: "Workspace", value: showWorkspace(workspaceDir) },
+              ...(secretSources
+                ? [{ label: "Secrets", value: secretSources }]
+                : []),
+            ]),
+            footer: `Watching ${pluralize(layers.length, "layer source")} · Ctrl+C to stop`,
+          }),
+      }).finally(stopWatchers);
 
-      await stopWatchers();
       process.exitCode = code;
     });
 }

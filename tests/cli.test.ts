@@ -20,11 +20,13 @@ import {
   UsageError,
 } from "../src/config";
 import {
-  collectManifestSecrets,
-  resolveManifestSecrets,
-  reportManifestSecrets,
-} from "../src/manifest-secrets";
-import { formatAge, showPath, showWorkspace } from "../src/output";
+  formatAge,
+  formatReadyBlock,
+  formatTimedMessage,
+  showPath,
+  showWorkspace,
+} from "../src/output";
+import { describeListenError, readyLines } from "../src/server-process";
 import { memoryUi, problemText } from "./fixtures/memory-ui";
 
 /**
@@ -226,17 +228,145 @@ describe("CLI output", () => {
     assert.ok(!plain.stderr().includes(ESC));
   });
 
-  it("lists where the server secrets come from as one block", () => {
+  it("prints the ready block with the URLs first, labels aligned", () => {
     const output = memoryUi();
-    reportManifestSecrets(
-      resolveManifestSecrets(collectManifestSecrets([]), {}),
-      "manifest",
+    const lines = formatReadyBlock(
+      {
+        title: "Dev server ready in 1.5s",
+        lines: readyLines(
+          { address: "0.0.0.0", port: 3002 },
+          [
+            { label: "Backend", value: "http://127.0.0.1:5010" },
+            {
+              label: "Workspace",
+              value: "~/.antelopejs/dms-frontend/76672b08…",
+            },
+          ],
+          {
+            lo: [
+              {
+                address: "127.0.0.1",
+                family: "IPv4",
+                internal: true,
+              } as never,
+            ],
+            eth0: [
+              {
+                address: "192.168.1.20",
+                family: "IPv4",
+                internal: false,
+              } as never,
+              { address: "fe80::1", family: "IPv6", internal: false } as never,
+            ],
+          },
+        ),
+        footer: "Watching 12 layer sources · Ctrl+C to stop",
+      },
       output.ui,
     );
-    assert.equal(output.stdout(), "");
-    assert.match(
-      output.stderr(),
-      /^ℹ Server secrets\n {2}DMS_HTML_RENDER_SECRET/,
+    assert.deepEqual(lines, [
+      "✔ Dev server ready in 1.5s",
+      "",
+      "  ➜  Local:     http://localhost:3002/",
+      "  ➜  Network:   http://192.168.1.20:3002/",
+      "     Backend:   http://127.0.0.1:5010",
+      "     Workspace: ~/.antelopejs/dms-frontend/76672b08…",
+      "     Watching 12 layer sources · Ctrl+C to stop",
+    ]);
+  });
+
+  it("shows no network URL for a server bound to one address", () => {
+    const lines = readyLines({ address: "127.0.0.1", port: 3321 }, [], {
+      eth0: [
+        { address: "192.168.1.20", family: "IPv4", internal: false } as never,
+      ],
+    });
+    assert.deepEqual(lines, [
+      { label: "Local", value: "http://127.0.0.1:3321/", isLink: true },
+    ]);
+    assert.equal(
+      readyLines({ address: "::1", port: 3321 }, [])[0].value,
+      "http://[::1]:3321/",
+    );
+  });
+
+  it("falls back to ASCII and colors only the arrows and URLs", () => {
+    const ascii = memoryUi({ isUnicode: false });
+    const block = {
+      title: "Production server ready in 0.2s",
+      lines: [
+        { label: "Local", value: "http://localhost:3321/", isLink: true },
+      ],
+      footer: "Ctrl+C to stop",
+    };
+    assert.deepEqual(formatReadyBlock(block, ascii.ui), [
+      "v Production server ready in 0.2s",
+      "",
+      "  >  Local: http://localhost:3321/",
+      "     Ctrl+C to stop",
+    ]);
+    const colored = formatReadyBlock(block, memoryUi({ isColored: true }).ui);
+    assert.ok(colored[2].includes(`${ESC}[36m➜${ESC}[39m`));
+    assert.ok(
+      colored[2].includes(`${ESC}[36mhttp://localhost:3321/${ESC}[39m`),
+    );
+  });
+
+  it("puts the time before a running server's notices", () => {
+    const output = memoryUi();
+    const at = new Date(2026, 9, 3, 14, 3, 22);
+    assert.equal(
+      formatTimedMessage(
+        "warn",
+        "frontend-vue/i18n/locales/demo-en-GB.json is not a valid locale file",
+        {
+          details: ["Unexpected end of JSON input"],
+          fixes: ["Restart ajs dms dev to apply it"],
+        },
+        output.ui,
+        at,
+      ),
+      "14:03:22 ▲ frontend-vue/i18n/locales/demo-en-GB.json is not a valid locale file\n" +
+        "           Unexpected end of JSON input\n" +
+        "           → Restart ajs dms dev to apply it",
+    );
+    assert.equal(
+      formatTimedMessage("success", "Fixed", {}, output.ui, at),
+      "14:03:22 ✔ Fixed",
+    );
+  });
+
+  it("explains why the server could not listen", () => {
+    assert.deepEqual(
+      describeListenError({
+        code: "EADDRINUSE",
+        message: "listen EADDRINUSE: address already in use 0.0.0.0:3331",
+        host: "0.0.0.0",
+        port: 3331,
+      }),
+      {
+        title: "Port 3331 is already in use",
+        reason: "Another process is listening on 0.0.0.0:3331.",
+        fixes: ["Stop it, or pass another port: -p <port>"],
+      },
+    );
+    assert.equal(
+      describeListenError({
+        code: "EADDRNOTAVAIL",
+        message: "listen EADDRNOTAVAIL",
+        host: "10.9.9.9",
+        port: 3001,
+      }).reason,
+      "10.9.9.9 is not an address of this machine.",
+    );
+    assert.equal(
+      describeListenError({
+        code: "EOTHER",
+        message: "listen EOTHER",
+        host: "0.0.0.0",
+        port: 3001,
+      }).reason,
+      "listen EOTHER",
     );
   });
 

@@ -1,5 +1,6 @@
 // What the CLI says around the core output module: the line a command opens
-// with, paths and dates as the user reads them, and the line a stopped run
+// with, paths and dates as the user reads them, the block a ready server
+// prints, the time-stamped lines of a running one, and the line a stopped run
 // ends on.
 
 import { homedir } from "node:os";
@@ -15,6 +16,7 @@ import {
 import {
   CliError,
   type CliProblem,
+  type ColorName,
   detectCapabilities,
   displayPath,
   getProcessTasks,
@@ -32,6 +34,11 @@ const ELLIPSIS = "…";
 const CONTEXT_SEPARATOR = " · ";
 const LINE_BREAK = /\r?\n/;
 const STOPPED_SYMBOLS = { unicode: "■", ascii: "x" };
+const LINK_SYMBOLS = { unicode: "➜", ascii: ">" };
+const BLOCK_INDENT = "  ";
+const LINK_GAP = "  ";
+const LABEL_SUFFIX = ":";
+const TIME_LENGTH = 8;
 
 const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_HOUR = 60;
@@ -43,7 +50,7 @@ export function isTerminalFeedback(): boolean {
 }
 
 /** Writes a raw line of feedback above the running tasks. */
-function writeFeedback(line: string): void {
+export function writeFeedback(line: string): void {
   getProcessTasks().write(process.stderr, `${line}\n`);
 }
 
@@ -159,4 +166,106 @@ export function reportStopped(
   const symbol = isUnicode ? STOPPED_SYMBOLS.unicode : STOPPED_SYMBOLS.ascii;
   const newline = signal === "SIGINT" && process.stderr.isTTY ? "\n" : "";
   writeFeedback(`${newline}${ui.palette().red(symbol)} ${message}`);
+}
+
+/** A line of the ready block: a URL to open, or a setting of the run. */
+export interface ReadyLine {
+  label: string;
+  value: string;
+  /** Shown behind an arrow and in color: a URL the user opens. */
+  isLink?: boolean;
+}
+
+export interface ReadyBlock {
+  /** `Dev server ready in 1.5s` */
+  title: string;
+  lines: ReadyLine[];
+  /** The closing line, without a label: `Watching 12 layer sources · Ctrl+C to stop` */
+  footer: string;
+}
+
+/**
+ * The block a server prints once it answers, as Vite does: the URLs to open
+ * behind an arrow, then the settings of the run, labels aligned.
+ *
+ *   ✔ Dev server ready in 1.5s
+ *
+ *     ➜  Local:     http://localhost:3002/
+ *        Backend:   http://127.0.0.1:5010
+ */
+export function formatReadyBlock(
+  block: ReadyBlock,
+  ui: Ui = getProcessUi(),
+): string[] {
+  const palette = ui.palette();
+  const isUnicode = ui.symbols === SYMBOL_SETS.unicode;
+  const arrow = isUnicode ? LINK_SYMBOLS.unicode : LINK_SYMBOLS.ascii;
+  const width = Math.max(
+    ...block.lines.map(({ label }) => label.length + LABEL_SUFFIX.length),
+  );
+  const lead = (isLink?: boolean) =>
+    `${BLOCK_INDENT}${isLink ? palette.cyan(arrow) : " ".repeat(arrow.length)}${LINK_GAP}`;
+  const lines = block.lines.map(({ label, value, isLink }) => {
+    const shownLabel = `${label}${LABEL_SUFFIX}`.padEnd(width);
+    const shownValue = isLink ? palette.cyan(value) : value;
+    return `${lead(isLink)}${palette.dim(shownLabel)} ${shownValue}`;
+  });
+  return [
+    `${palette.green(ui.symbols.levels.success)} ${block.title}`,
+    "",
+    ...lines,
+    `${lead()}${palette.dim(block.footer)}`,
+  ];
+}
+
+/** Prints the ready block, set apart from the server output that follows. */
+export function writeReadyBlock(
+  block: ReadyBlock,
+  ui: Ui = getProcessUi(),
+): void {
+  for (const line of [...formatReadyBlock(block, ui), ""]) writeFeedback(line);
+}
+
+/** The levels a running server's notices use, with the color of their symbol. */
+const TIMED_LEVEL_COLORS = {
+  success: "green",
+  info: "blue",
+  warn: "yellow",
+} as const satisfies Record<string, ColorName>;
+
+type TimedLevel = keyof typeof TIMED_LEVEL_COLORS;
+
+/** `14:03:22`, in local time. */
+function clockTime(date: Date): string {
+  return date.toTimeString().slice(0, TIME_LENGTH);
+}
+
+export interface TimedMessageOptions {
+  details?: readonly string[];
+  /** What the user does about it, behind the hint arrow. */
+  fixes?: readonly string[];
+}
+
+/**
+ * A notice printed while a server runs, after its ready block, behind the
+ * time it happened at, as Vite prints its own: `14:03:22 ▲ <text>`. Details
+ * and fixes are indented under the text.
+ */
+export function formatTimedMessage(
+  level: TimedLevel,
+  text: string,
+  options: TimedMessageOptions = {},
+  ui: Ui = getProcessUi(),
+  now: Date = new Date(),
+): string {
+  const { details = [], fixes = [] } = options;
+  const palette = ui.palette();
+  const paint = palette[TIMED_LEVEL_COLORS[level]];
+  const hint = palette.cyan(ui.symbols.levels.hint);
+  const indent = " ".repeat(TIME_LENGTH + 1) + BLOCK_INDENT;
+  return [
+    `${palette.dim(clockTime(now))} ${paint(ui.symbols.levels[level])} ${text}`,
+    ...details.map((detail) => `${indent}${palette.dim(detail)}`),
+    ...fixes.map((fix) => `${indent}${hint} ${fix}`),
+  ].join("\n");
 }
