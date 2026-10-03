@@ -7,6 +7,7 @@ import {
   runWithErrorBoundary,
 } from "@antelopejs/core/cli";
 import { Command } from "commander";
+import { CancelledError } from "./cancellation";
 import { cmdBuild } from "./commands/build";
 import { cmdClean } from "./commands/clean";
 import { cmdDev } from "./commands/dev";
@@ -23,8 +24,11 @@ import {
   type HelpExample,
 } from "./help";
 import { reportStopped } from "./output";
-import { checkForUpdate, stripUpdateCheckFlag } from "./update-check";
-import { CancelledError } from "./workspace-setup";
+import {
+  reportAvailableUpdate,
+  startProcessUpdateCheck,
+  stripUpdateCheckFlag,
+} from "./update-check";
 
 const { version } = require("../package.json");
 
@@ -61,10 +65,35 @@ function describeHelpFooter(): string {
   );
 }
 
+/** The arguments, global flags aside. */
+function ownArguments(args: string[]): string[] {
+  return args.filter((arg) => !GLOBAL_FLAGS.includes(arg));
+}
+
 /** Whether the arguments, global flags aside, are exactly `rest`. */
 function isInvocation(args: string[], rest: string[]): boolean {
-  const own = args.filter((arg) => !GLOBAL_FLAGS.includes(arg));
+  const own = ownArguments(args);
   return own.length === rest.length && own.every((arg, i) => arg === rest[i]);
+}
+
+/**
+ * The name in `help <name>` when it is neither a command nor a topic.
+ * Commander would answer it with the whole root help, as an error.
+ */
+function unknownHelpSubject(
+  program: Command,
+  args: string[],
+): string | undefined {
+  const [first, subject, ...rest] = ownArguments(args);
+  if (first !== "help" || subject === undefined || rest.length > 0) {
+    return undefined;
+  }
+  const known = [
+    ...program.commands.map((command) => command.name()),
+    "help",
+    ENVIRONMENT_TOPIC,
+  ];
+  return known.includes(subject) ? undefined : subject;
 }
 
 const runCLI = async () => {
@@ -76,10 +105,9 @@ const runCLI = async () => {
 
   const argv = process.argv.slice(2);
 
-  // Fire and forget: the registry socket is unref'd, so a short command
-  // never waits for the answer and a long one prints the notice when it
-  // arrives.
-  void checkForUpdate({ currentVersion: version, argv });
+  // Before the command, so the lookup has all of it to answer in; the
+  // registry socket is unref'd, so a short command never waits for it.
+  startProcessUpdateCheck({ currentVersion: version, argv });
 
   const program = new Command()
     .name("ajs dms")
@@ -119,17 +147,26 @@ const runCLI = async () => {
     getProcessUi().value(formatEnvironmentHelp());
     return;
   }
+  const helpSubject = unknownHelpSubject(program, args);
+  if (helpSubject !== undefined) {
+    program.error(`error: unknown command '${helpSubject}'`, {
+      code: "commander.unknownCommand",
+    });
+  }
   try {
     await program.parseAsync(args, { from: "user" });
   } catch (err) {
     if (!(err instanceof CancelledError)) throw err;
     reportStopped(err.message, err.signal);
     process.exitCode = err.exitCode;
+    return;
   }
+  // Last, and only after a success: a failure ends on its own problem.
+  if (!process.exitCode) await reportAvailableUpdate();
 };
 
 // The commands leave their exit code in process.exitCode. Exiting here stops
-// what a finished command may leave behind, such as the update check.
+// what a finished command may leave behind, such as the update lookup.
 void runWithErrorBoundary(runCLI, { verbose: isVerboseRun() }).then(() =>
   process.exit(),
 );

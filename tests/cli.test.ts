@@ -3,20 +3,19 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import {
-  cmdVerifySource,
-  parseLocalPackages,
-} from "../src/commands/verify-source";
+import { cmdVerifySource } from "../src/commands/verify-source";
+import { parseLocalPackages } from "../src/commands/verify-source-action";
 import { cmdBuild } from "../src/commands/build";
-import { cmdClean, describeWorkspaces } from "../src/commands/clean";
+import { cmdClean } from "../src/commands/clean";
+import { describeWorkspaces } from "../src/commands/clean-action";
 import { cmdDev } from "../src/commands/dev";
 import { cmdPrepare } from "../src/commands/prepare";
 import { cmdStart } from "../src/commands/start";
+import { cmdWorkspaces } from "../src/commands/workspaces";
 import {
-  cmdWorkspaces,
   renderWorkspaces,
   type WorkspaceRecord,
-} from "../src/commands/workspaces";
+} from "../src/commands/workspaces-action";
 import {
   flagOrEnv,
   parseBackendUrl,

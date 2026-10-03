@@ -42,7 +42,11 @@ interface RunCliOptions {
   files?: Record<string, string>;
   /** Variables layered onto the child environment; undefined removes one. */
   env?: Record<string, string | undefined>;
+  /** Whether stderr reads as a terminal, as in an interactive run. */
+  isTerminal?: boolean;
 }
+
+const TERMINAL_STDERR = import.meta.resolve("./fixtures/terminal-stderr.mjs");
 
 /**
  * Run the CLI the way a user outside any DMS project would: an empty cwd and
@@ -79,7 +83,13 @@ async function runCli(
   try {
     const { stdout, stderr } = await promisify(execFile)(
       process.execPath,
-      ["--import", import.meta.resolve("tsx"), cliEntry, ...args],
+      [
+        "--import",
+        import.meta.resolve("tsx"),
+        ...(options.isTerminal ? ["--import", TERMINAL_STDERR] : []),
+        cliEntry,
+        ...args,
+      ],
       { cwd: sandbox, env: env as NodeJS.ProcessEnv },
     );
     return { code: 0, stdout, stderr, sandbox };
@@ -217,6 +227,16 @@ describe("following the ajs output contract", () => {
     assert.equal(command.code, 2);
     assert.match(command.stderr, /^✖ Unknown command 'biuld'\n/);
     assert.match(command.stderr, /→ Did you mean build\?/);
+
+    const help = await runCli(["help", "biuld"]);
+    assert.equal(help.code, 2);
+    assert.equal(help.stdout, "");
+    assert.equal(
+      help.stderr,
+      "✖ Unknown command 'biuld'\n" +
+        "  Usage: ajs dms [options] [command]\n" +
+        "  → Run ajs dms --help for usage\n",
+    );
 
     const required = await runCli(["verify-source"]);
     assert.equal(required.code, 2);
@@ -959,8 +979,9 @@ describe("listing and removing workspaces", () => {
       env: { NO_UPDATE_NOTIFIER: undefined, CI: undefined },
     });
     assert.equal(result.code, 0);
-    // An update is due and a directory is skipped: both stay on stderr.
-    assert.match(result.stderr, /999\.0\.0/);
+    // An update is due, but the notice is for a person at a terminal; the
+    // skipped directory is reported on stderr.
+    assert.doesNotMatch(result.stderr, /999\.0\.0/);
     assert.match(result.stderr, /– Skipped .*stray-dir \(not a workspace\)/);
     const listed = JSON.parse(result.stdout);
     const home = join(result.sandbox, ".antelopejs", "dms-frontend");
@@ -1040,5 +1061,57 @@ describe("listing and removing workspaces", () => {
     assert.match(lines[3], /^– Skipped .*stray-dir \(not a workspace\)$/);
     const home = join(result.sandbox, ".antelopejs", "dms-frontend");
     assert.deepEqual(readdirSync(home), ["stray-dir"]);
+  });
+});
+
+const UPDATE_DUE = {
+  [join(".antelopejs", "dms-frontend", "update-check.json")]: JSON.stringify({
+    checkedAt: Date.now(),
+    latestVersion: "999.0.0",
+    succeeded: true,
+  }),
+};
+const UPDATE_ENV = {
+  NO_UPDATE_NOTIFIER: undefined,
+  CI: undefined,
+  NO_COLOR: "1",
+};
+const UPDATE_NOTICE = `ℹ ajs dms 999.0.0 is available (you have ${packageJson.version}) → ajs update dms\n`;
+
+describe("update notice", () => {
+  it("ends a successful command on a terminal, after its own output", async () => {
+    const result = await runCli(["clean", "--all"], {
+      files: UPDATE_DUE,
+      env: UPDATE_ENV,
+      isTerminal: true,
+    });
+    assert.equal(result.code, 0);
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, `ℹ No workspaces found\n\n${UPDATE_NOTICE}`);
+  });
+
+  it("stays out of pipes, failed commands and --json", async () => {
+    const piped = await runCli(["clean", "--all"], {
+      files: UPDATE_DUE,
+      env: UPDATE_ENV,
+    });
+    assert.equal(piped.stderr, "ℹ No workspaces found\n");
+
+    const failed = await runCli(["clean"], {
+      files: UPDATE_DUE,
+      env: UPDATE_ENV,
+      isTerminal: true,
+    });
+    assert.equal(failed.code, 2);
+    assert.match(failed.stderr, /^✖ Nothing to clean/);
+    assert.doesNotMatch(failed.stderr, /999\.0\.0/);
+
+    const json = await runCli(["workspaces", "--json"], {
+      files: UPDATE_DUE,
+      env: UPDATE_ENV,
+      isTerminal: true,
+    });
+    assert.equal(json.code, 0);
+    assert.doesNotMatch(json.stderr, /999\.0\.0/);
   });
 });

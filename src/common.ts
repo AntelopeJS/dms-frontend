@@ -1,6 +1,7 @@
 // The barrel the commands import from. The implementation lives in the modules
 // re-exported below; this file keeps the import path every command already
 // uses, so the split is invisible to them.
+export * from "./cancellation";
 export * from "./config";
 export * from "./layers";
 export * from "./layer-aliases";
