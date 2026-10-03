@@ -329,3 +329,57 @@ describePosix("framing pnpm install and the production build", () => {
     assert.doesNotMatch(run.stderr, /e-mail bundle/);
   });
 });
+
+describePosix("framing verify-source", () => {
+  before(() => {
+    assert.ok(existsSync(CLI), `${CLI} is missing: run pnpm build first`);
+    scratch = mkdtempSync(join(tmpdir(), "dms-frontend-verify-"));
+    bin = join(scratch, "bin");
+    mkdirSync(bin);
+    const pnpm = join(bin, "pnpm");
+    writeFileSync(
+      pnpm,
+      `#!/bin/sh\nexec "${process.execPath}" "${FAKE_PNPM}" "$@"\n`,
+    );
+    chmodSync(pnpm, 0o755);
+  });
+  after(() => rmSync(scratch, { recursive: true, force: true }));
+
+  function sourceLayer(sandbox: string): void {
+    writeLayer(join(sandbox, "frontend-vue"));
+    writeFileSync(
+      join(sandbox, "frontend-vue/dms.frontend.ts"),
+      "export default {};\n",
+    );
+  }
+
+  it("reports a failed check once, at the layer source, without a stack", async () => {
+    const run = await runCli(["verify-source", "-l", "frontend-vue"], {
+      setUp: sourceLayer,
+      scenario: "ssr-fails",
+    });
+
+    assert.equal(run.code, 1);
+    assert.equal(run.stdout, "");
+    assert.match(run.stderr, /^ajs dms verify-source {2}1 module\n/);
+    assert.match(
+      run.stderr,
+      new RegExp(
+        `✔ Materialized 1 module${DONE}✔ Installed 3 packages${DONE}` +
+          "✖ SSR bundle failed(?: \\S+)?\n" +
+          "✖ Vite could not compile \\./frontend-vue/app/components/Callout\\.vue:10:50\n" +
+          " {2}\\[vue/compiler-sfc\\] Unexpected token\n" +
+          " {2}→ Fix the file and run ajs dms verify-source again\n",
+      ),
+    );
+    assert.doesNotMatch(
+      run.stderr,
+      /^\s+at |frontend-modules|Source verification failed|Generated workspace/m,
+    );
+    assert.deepEqual(run.calls[0].args, [
+      "install",
+      "--reporter=append-only",
+      "--ignore-scripts",
+    ]);
+  });
+});

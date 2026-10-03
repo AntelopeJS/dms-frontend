@@ -144,8 +144,11 @@ interface PathRule {
 
 /** Not followed by more of the same file name. */
 const PATH_END = "(?![\\w.@-])";
-/** Not preceded by more of a path, for workspace-relative paths. */
-const RELATIVE_START = "(?<![\\w.@/\\\\-])";
+/**
+ * Not preceded by more of a path, for workspace-relative paths. A color
+ * sequence may come right before one, as in `vue-tsc --pretty` output.
+ */
+const RELATIVE_START = `(?:(?<=${ESC}\\[[0-9;]*m)|(?<![\\w.@/\\\\-]))`;
 const LAYERS_SUBDIR = "frontend-modules";
 
 function escapeRegExp(text: string): string {

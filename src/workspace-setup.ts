@@ -140,26 +140,32 @@ const PNPM_INSTALL_ARGS = ["install", "--reporter=append-only"];
 /**
  * Run pnpm install in the workspace directory, as one task whose label follows
  * pnpm's progress. Its output is kept and replayed on failure, or streamed
- * behind a gutter in a verbose run.
+ * behind a gutter in a verbose run. `extraArgs` follow pnpm's own, e.g.
+ * `--ignore-scripts`.
  */
 export async function installDeps(
   workspaceDir: string,
   mapLine?: PathMapper,
+  extraArgs: string[] = [],
 ): Promise<void> {
   const progress = new InstallProgress();
   const task = getProcessTasks().start(progress.label);
   try {
-    const { code, lines } = await runFramedCommand("pnpm", PNPM_INSTALL_ARGS, {
-      name: "pnpm",
-      cwd: workspaceDir,
-      // The workspace pins its own pnpm, which a DMS user has no reason to
-      // upgrade.
-      env: { ...process.env, npm_config_update_notifier: "false" },
-      mapLine,
-      onLine: (line) => {
-        if (progress.read(line)) task.update(progress.label);
+    const { code, lines } = await runFramedCommand(
+      "pnpm",
+      [...PNPM_INSTALL_ARGS, ...extraArgs],
+      {
+        name: "pnpm",
+        cwd: workspaceDir,
+        // The workspace pins its own pnpm, which a DMS user has no reason to
+        // upgrade.
+        env: { ...process.env, npm_config_update_notifier: "false" },
+        mapLine,
+        onLine: (line) => {
+          if (progress.read(line)) task.update(progress.label);
+        },
       },
-    });
+    );
     if (code !== 0) {
       throw new CliError(
         describeChildFailure({
