@@ -5,6 +5,7 @@ import {
   CancelledError,
   normalizeBootstrapSecret,
   Options,
+  parseBackendUrl,
   resolveSessionSecret,
   runCommand,
   setupWorkspace,
@@ -31,7 +32,9 @@ export function cmdBuild(): Command {
         process.exit(1);
       }
 
+      const backendUrl = parseBackendUrl(options.backendUrl);
       const sessionSecret = resolveSessionSecret("build");
+      const bootstrapSecret = normalizeBootstrapSecret(options.bootstrapSecret);
 
       const spinner = new Spinner("Setting up workspace...");
       await spinner.start();
@@ -39,11 +42,11 @@ export function cmdBuild(): Command {
       try {
         const { workspaceDir, manifestFromCache, manifestFetchedAt } =
           await setupWorkspace({
-            backendUrl: options.backendUrl,
+            backendUrl,
             force: !!options.force,
             mode: "build",
             offline: options.offline,
-            bootstrapSecret: normalizeBootstrapSecret(options.bootstrapSecret),
+            bootstrapSecret,
             beforeInstall: () => spinner.pause(),
           });
 

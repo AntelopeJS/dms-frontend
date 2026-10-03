@@ -326,7 +326,9 @@ does. The consequence is that `ajs dms dev` followed by `ajs dms build -b <url>`
 against the same backend creates two workspaces of their own — several hundred
 megabytes each. Pass `-b` to `dev` to share a single one. `clean --all` lists
 both and names the project a workspace is keyed on; `clean -b <url>` only
-reaches the URL-keyed one.
+reaches the URL-keyed one. `clean` takes its target from `-b` or `--all` only:
+it never reads `DMS_API_BASE_URL` from the environment or `.env`, so running it
+without either is an error rather than a deletion.
 
 A `DMS_API_BASE_URL` line in `.env` counts as an explicit backend, so a project
 that configures one gets the single shared workspace and gives up autodiscovery
@@ -378,8 +380,8 @@ needs no exception for the Iconify API. Icons reach the page two ways:
 
 | Option | Environment | Purpose |
 | --- | --- | --- |
-| `-b, --backend-url` | `DMS_API_BASE_URL` | DMS backend URL |
-| `-p, --port` | `PORT` | Frontend port, default `3001` |
+| `-b, --backend-url` | `DMS_API_BASE_URL` (except `clean`) | DMS backend URL, `http://` or `https://` |
+| `-p, --port` | `PORT` | Frontend port from 1 to 65535, default `3001`; `dev` moves to the next free port, `start` stops when it is in use |
 | `-f, --force` | | Reinstall workspace dependencies |
 | `--offline` | `DMS_OFFLINE` | Reuse cached manifest and archives |
 | `--bootstrap-secret` | `DMS_BOOTSTRAP_SECRET` | Backend bootstrap credential |
