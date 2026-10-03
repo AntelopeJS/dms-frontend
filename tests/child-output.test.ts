@@ -192,6 +192,15 @@ describe("workspace paths in child output", () => {
     );
   });
 
+  it("maps a relative path right behind a color sequence", () => {
+    assert.equal(
+      mapper()(
+        "\u001b[96mfrontend-modules/template-dms-demo-frontend-vue/app/a.vue\u001b[0m:\u001b[93m17\u001b[0m",
+      ),
+      "\u001b[96mfrontend-vue/app/a.vue\u001b[0m:\u001b[93m17\u001b[0m",
+    );
+  });
+
   it("shortens any other path into the workspace", () => {
     assert.equal(
       mapper()(`> vite build ${WORKSPACE}/node_modules/.pnpm/vite/index.js`),

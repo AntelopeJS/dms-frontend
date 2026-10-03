@@ -4,8 +4,6 @@ import {
   getProcessTasks,
   getProcessUi,
   isVerboseRun,
-  pluralize,
-  type Ui,
 } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
@@ -23,13 +21,13 @@ import {
 } from "../common";
 import {
   cachedAge,
-  isTerminalFeedback,
   showWorkspace,
   writeBlankLine,
   writeHeader,
 } from "../output";
 import {
   describeViteFailure,
+  reportViteWarnings,
   VITE_LOG_LEVEL_VARIABLE,
   viteLogLevel,
   ViteWarnings,
@@ -99,13 +97,18 @@ interface BuildContext {
   isVerbose: boolean;
 }
 
-function stepFailure(
+/**
+ * A build step that exited non-zero: the error Vite reported, or the end of
+ * the step's output. `rerun` is the command the user runs once it is fixed.
+ */
+export function buildStepFailure(
   step: BuildStep,
   result: FramedCommandResult,
   isVerbose: boolean,
+  rerun?: string,
 ): CliError {
   const problem =
-    describeViteFailure(result.lines, step.subject, isVerbose) ??
+    describeViteFailure(result.lines, step.subject, isVerbose, rerun) ??
     describeChildFailure({
       title: "The production build failed",
       command: `pnpm run ${step.script}`,
@@ -138,23 +141,9 @@ async function runBuildStep(
   }
   if (result.code !== 0) {
     task.fail(step.failed);
-    throw stepFailure(step, result, context.isVerbose);
+    throw buildStepFailure(step, result, context.isVerbose);
   }
   task.succeed(step.done);
-}
-
-/**
- * Counts Vite's warnings on a terminal, where the steps are read now, and
- * lists them in full elsewhere, since CI logs are read later. A verbose run
- * has already streamed them.
- */
-function reportWarnings(warnings: ViteWarnings, isVerbose: boolean, ui: Ui) {
-  if (isVerbose || warnings.count === 0) return;
-  const title = pluralize(warnings.count, "Vite warning");
-  const details = isTerminalFeedback()
-    ? [`${ui.symbols.levels.hint} Run with --verbose to list them`]
-    : warnings.lines();
-  ui.message("warn", title, { details });
 }
 
 export function cmdBuild(): Command {
@@ -208,7 +197,7 @@ export function cmdBuild(): Command {
         },
       };
       for (const step of BUILD_STEPS) await runBuildStep(step, context);
-      reportWarnings(context.warnings, isVerbose, ui);
+      reportViteWarnings(context.warnings, isVerbose, ui);
 
       writeBlankLine();
       ui.summary({
