@@ -15,6 +15,7 @@ import {
   discoverBackend,
   readDevBootstrapCredential,
 } from "./discovery";
+import { MAX_TCP_PORT } from "./ports";
 
 // ============================================================================
 // Constants
@@ -160,6 +161,58 @@ export const TAILWIND_SOURCE_GLOB = "**/*.{vue,ts,tsx,js,jsx,mjs,cjs}";
 // ============================================================================
 
 /**
+ * Input the user must correct before the command does any work: a malformed
+ * option, or configuration only they can supply. The entry point reports it
+ * as one error with its details and exits 2, without a stack.
+ */
+export class UsageError extends Error {
+  readonly exitCode = 2;
+
+  constructor(
+    message: string,
+    readonly details: readonly string[] = [],
+  ) {
+    super(message);
+    this.name = "UsageError";
+  }
+}
+
+const BACKEND_URL_PROTOCOLS = ["http:", "https:"];
+
+/**
+ * Reject a backend URL `fetch` could never reach, before any work starts.
+ * `localhost:5010` parses as a URL with the scheme `localhost:`, so checking
+ * that it parses is not enough.
+ */
+export function parseBackendUrl(value: string): string {
+  let protocol: string | undefined;
+  try {
+    protocol = new URL(value.trim()).protocol;
+  } catch {
+    protocol = undefined;
+  }
+  if (protocol && BACKEND_URL_PROTOCOLS.includes(protocol)) return value;
+  throw new UsageError(`Invalid backend URL '${value}'`, [
+    value.includes("://")
+      ? "→ Use an http:// or https:// URL: -b http://localhost:5010"
+      : `→ Include the scheme: -b http://${value.trim()}`,
+  ]);
+}
+
+/**
+ * Parse a port option strictly: `parseInt` would read `3001abc` as 3001, and
+ * a number out of the TCP range only fails later, inside the server. 0 asks
+ * for any free port.
+ */
+export function parsePort(value: string): number {
+  const port = /^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN;
+  if (port >= 0 && port <= MAX_TCP_PORT) return port;
+  throw new UsageError(`Invalid port '${value}'`, [
+    `→ Pass a number between 1 and ${MAX_TCP_PORT}, or 0 for any free port: -p 3001`,
+  ]);
+}
+
+/**
  * Resolve a boolean from an env var ourselves instead of Commander's
  * `.env()`: for argument-less flags Commander treats any non-empty value
  * as true, so `DMS_OFFLINE=false` or `DMS_OFFLINE=0` in a CI script would
@@ -211,6 +264,26 @@ export const Options = {
  * nothing the caller can act on.
  */
 const HEADER_SAFE_CREDENTIAL = /^[\x21-\x7e]+$/;
+const HEADER_UNSAFE_CHARACTER = /[^\x21-\x7e]/u;
+
+const UNSAFE_CHARACTER_NAMES: Record<string, string> = {
+  " ": "a space",
+  "\t": "a tab",
+  "\r": "a line break",
+  "\n": "a line break",
+};
+
+const LAST_ASCII_CODE_POINT = 0x7f;
+
+/** Name the first character that keeps a credential out of a header. */
+function describeUnsafeCharacter(value: string): string {
+  const char = HEADER_UNSAFE_CHARACTER.exec(value)?.[0] ?? "";
+  const named = UNSAFE_CHARACTER_NAMES[char];
+  if (named) return named;
+  return (char.codePointAt(0) ?? 0) > LAST_ASCII_CODE_POINT
+    ? "a non-ASCII character"
+    : "a control character";
+}
 
 export interface BootstrapDiscoveryOptions extends DiscoveryOptions {
   /** Directory the project walk starts from; defaults to the process cwd */
@@ -237,16 +310,20 @@ export function normalizeBootstrapSecret(
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   if (!HEADER_SAFE_CREDENTIAL.test(trimmed)) {
-    throw new Error(
-      "The bootstrap credential contains characters that cannot travel in an HTTP header.\n" +
-        `  Check ${source} for a line break or a non-ASCII byte — a secret read from\n` +
-        "  a file commonly keeps its trailing newline.",
+    throw new UsageError(
+      "The bootstrap credential cannot travel in an HTTP header",
+      [
+        `${source} contains ${describeUnsafeCharacter(trimmed)}.`,
+        "→ Use printable ASCII characters only, without spaces or line breaks",
+      ],
     );
   }
   return trimmed;
 }
 
 export type SessionSecretMode = "dev" | "build" | "start";
+
+const SESSION_SECRET_MIN_LENGTH = 32;
 
 /**
  * Resolve the secret used by the generated server. Development gets a fresh
@@ -260,15 +337,21 @@ export function resolveSessionSecret(
   if (value === undefined && mode === "dev") {
     return randomBytes(32).toString("hex");
   }
-  if (value === undefined || value.length < 32) {
-    throw new Error(
-      "DMS_SESSION_SECRET must contain at least 32 characters; " +
-        (mode === "dev"
-          ? "set it explicitly or omit it to generate an ephemeral dev secret"
-          : "set it explicitly for build and start"),
-    );
+  if (value !== undefined && value.length >= SESSION_SECRET_MIN_LENGTH) {
+    return value;
   }
-  return value;
+  throw new UsageError(`DMS_SESSION_SECRET ${describeSessionSecret(value)}`, [
+    mode === "dev"
+      ? "dev generates an ephemeral secret only when the variable is not set at all."
+      : "build and start sign sessions with it, so it must stay the same across restarts.",
+    "→ Create one: openssl rand -hex 32, then set it in the environment or ./.env",
+  ]);
+}
+
+function describeSessionSecret(value: string | undefined): string {
+  if (value === undefined) return "is not set";
+  if (value === "") return "is empty";
+  return `is too short: ${value.length} characters, at least ${SESSION_SECRET_MIN_LENGTH} needed`;
 }
 
 /**

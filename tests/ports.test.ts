@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import { connect, createServer, type Server } from "node:net";
 import { describe, it } from "node:test";
-import { reserveFreePort } from "../src/ports";
+import { reserveFreePort, reservePort } from "../src/ports";
 
 function occupyPort(port = 0): Promise<{ server: Server; port: number }> {
   return new Promise((resolve, reject) => {
@@ -139,6 +139,31 @@ describe("reserveFreePort", () => {
       }
     } catch (err: any) {
       assert.match(err.message, /between 65530 and 65535/);
+    }
+  });
+});
+
+describe("reservePort", () => {
+  it("holds the requested port until release() is called", async () => {
+    const { server, port } = await occupyPort();
+    await closeServer(server);
+
+    const held = await reservePort(port);
+    assert.equal(held?.port, port);
+    assert.equal(await reservePort(port), undefined);
+
+    await held?.release();
+    const again = await reservePort(port);
+    assert.equal(again?.port, port);
+    await again?.release();
+  });
+
+  it("does not move to another port when the requested one is busy", async () => {
+    const { server, port } = await occupyPort();
+    try {
+      assert.equal(await reservePort(port), undefined);
+    } finally {
+      await closeServer(server);
     }
   });
 });
