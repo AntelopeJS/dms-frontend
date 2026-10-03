@@ -337,7 +337,11 @@ export interface FramedCommandOptions {
 
 export interface FramedCommandResult {
   code: number;
-  /** The last lines of stdout and stderr, interleaved, without colors. */
+  /**
+   * The last lines of stdout, then those of stderr, without colors. How the
+   * child interleaved its two pipes is lost once both are read at once, so
+   * each keeps its own order and errors stay at the end.
+   */
   lines: string[];
 }
 
@@ -368,8 +372,8 @@ export async function runFramedCommand(
 ): Promise<FramedCommandResult> {
   const { name, cwd, env, mapLine = (line) => line, onLine } = options;
   const isVerbose = isVerboseRun();
-  const tail = new OutputTail();
-  const readLine = (line: string) => {
+  const tails = [new OutputTail(), new OutputTail()];
+  const readLine = (tail: OutputTail, line: string) => {
     const mapped = mapLine(line);
     if (isVerbose) writeChildLine(name, mapped);
     const plain = stripAnsi(mapped);
@@ -383,8 +387,10 @@ export async function runFramedCommand(
     { cwd, env, stdio: ["ignore", "pipe", "pipe"] },
     (child) => {
       const streams = [child.stdout, child.stderr];
-      for (const stream of streams) {
-        const splitter = new LineSplitter(readLine);
+      for (const [index, stream] of streams.entries()) {
+        const splitter = new LineSplitter((line) =>
+          readLine(tails[index], line),
+        );
         stream?.setEncoding("utf8");
         stream?.on("data", (chunk: string) => splitter.push(chunk));
         stream?.once("end", () => splitter.flush());
@@ -393,7 +399,7 @@ export async function runFramedCommand(
     },
   );
   await Promise.race([ended, drainTimeout()]);
-  return { code, lines: tail.lines() };
+  return { code, lines: tails.flatMap((tail) => tail.lines()) };
 }
 
 // ============================================================================
