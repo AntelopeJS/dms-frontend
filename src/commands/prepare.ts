@@ -3,6 +3,7 @@ import { Command } from "commander";
 import {
   BackendUnreachableError,
   CancelledError,
+  flagOrEnv,
   NoCachedManifestError,
   Options,
   parseBackendUrl,
@@ -10,6 +11,7 @@ import {
   resolveBootstrapSecret,
   type SetupWorkspaceResult,
 } from "../common";
+import { type HelpExample, withExamples } from "../help";
 import {
   cachedAge,
   failureDetails,
@@ -43,18 +45,42 @@ function isSkip(error: unknown): boolean {
   );
 }
 
+const PREPARE_EXAMPLES: HelpExample[] = [
+  {
+    description: "From a frontend module's postinstall hook",
+    command: "ajs dms prepare",
+  },
+  {
+    description: "Before a CI type check, which needs the types",
+    command: "ajs dms prepare -b http://localhost:5010 --strict",
+  },
+];
+
 export function cmdPrepare(): Command {
-  return new Command("prepare")
+  const command = new Command("prepare")
+    .summary("Generate the workspace and module types (postinstall-safe)")
     .description(
-      "Prepare the generated Vite workspace and frontend-module registry",
+      "Generate the workspace, the frontend-module registry and the module types. Without --strict, prepare never fails: when it cannot prepare the workspace it warns and exits 0, so a postinstall hook never breaks an install.",
     )
-    .addOption(Options.backendUrl)
-    .addOption(Options.force)
-    .addOption(Options.offline)
+    .addOption(
+      Options.backendUrl(
+        "Backend URL; without one, prepare is skipped with a warning",
+      ),
+    )
+    .addOption(Options.force("Reinstall the workspace dependencies"))
+    .addOption(
+      Options.offline("Reuse the last cached manifest instead of fetching it"),
+    )
     .addOption(Options.strict)
-    .addOption(Options.bootstrapSecret)
+    .addOption(
+      Options.bootstrapSecret(
+        "Discovered from .antelope/dms-dev.json for the enclosing project's backend",
+      ),
+    )
     .action(async (options: PrepareOptions) => {
       const startedAt = Date.now();
+      const offline = flagOrEnv(options.offline, "DMS_OFFLINE");
+      const strict = flagOrEnv(options.strict, "DMS_PREPARE_STRICT");
       const ui = getProcessUi();
       const hint = ui.symbols.levels.hint;
       // The prepare command is often run from CI (e.g. as a `postinstall`
@@ -65,7 +91,7 @@ export function cmdPrepare(): Command {
       // without leaving a partially generated workspace. --strict turns the
       // warning back into the error.
       if (!options.backendUrl) {
-        if (options.strict) requireBackendUrl(options.backendUrl);
+        if (strict) requireBackendUrl(options.backendUrl);
         ui.message("warn", "Skipped prepare: no backend URL", {
           details: [
             `${hint} Pass -b <url> or set DMS_API_BASE_URL to generate the types`,
@@ -87,11 +113,11 @@ export function cmdPrepare(): Command {
           backendUrl,
           force: !!options.force,
           mode: "dev",
-          offline: options.offline,
+          offline,
           bootstrapSecret,
         });
       } catch (err) {
-        if (err instanceof CancelledError || options.strict) throw err;
+        if (err instanceof CancelledError || strict) throw err;
         const [title, ...details] = failureDetails(err, ui);
         const outcome = isSkip(err) ? "Skipped prepare" : "Prepare failed";
         ui.message("warn", `${outcome}: ${title}`, {
@@ -104,7 +130,7 @@ export function cmdPrepare(): Command {
         result;
       if (manifestFromCache) {
         const manifest = `the frontend-module manifest${cachedAge(manifestFetchedAt)}`;
-        if (options.offline) {
+        if (offline) {
           ui.message("info", `Offline: using ${manifest}`);
         } else {
           ui.message("warn", `Backend unreachable: using ${manifest}`);
@@ -121,4 +147,5 @@ export function cmdPrepare(): Command {
         detail: showWorkspace(workspaceDir),
       });
     });
+  return withExamples(command, PREPARE_EXAMPLES);
 }

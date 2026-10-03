@@ -242,45 +242,55 @@ function booleanFromEnv(name: string): boolean {
   return !["", "0", "false", "no", "off"].includes(value.trim().toLowerCase());
 }
 
-export const Options = {
-  backendUrl: new Option(
-    "-b, --backend-url <url>",
-    "Backend DMS URL (when omitted, dev mode discovers it from the enclosing antelope project's .antelope/dev.json)",
-  ).env("DMS_API_BASE_URL"),
+/**
+ * A flag given on the command line, or else its environment variable. Read
+ * when the command runs rather than as the flag's default: Commander would
+ * print a boolean default in the help, and the project's `.env` is only
+ * loaded into the environment at startup.
+ */
+export function flagOrEnv(flag: boolean | undefined, name: string): boolean {
+  return flag ?? booleanFromEnv(name);
+}
 
-  port: new Option("-p, --port <port>", "Port to run on")
+const BOOTSTRAP_SECRET_DESCRIPTION =
+  "Credential for the backend's layer endpoints; prefer the variable, a command line is visible to other processes";
+
+/**
+ * Options several commands share. Those whose meaning depends on the command
+ * take the description that command gives them.
+ */
+export const Options = {
+  backendUrl(description: string): Option {
+    return new Option("-b, --backend-url <url>", description).env(
+      "DMS_API_BASE_URL",
+    );
+  },
+
+  port: new Option("-p, --port <port>", "Port to serve on")
     .default("3001")
     .env("PORT"),
 
-  force: new Option("-f, --force", "Force reinstall dependencies"),
-
-  /**
-   * Built on access rather than when this module is evaluated: its default
-   * reads the environment eagerly, and the CLI loads the project's `.env`
-   * into that environment at startup — long after the import graph settles.
-   * Reading it at module scope would miss a `DMS_OFFLINE` line in the file.
-   */
-  get offline(): Option {
-    return new Option(
-      "--offline",
-      "Skip the backend manifest fetch and reuse the last cached manifest (env: DMS_OFFLINE)",
-    ).default(booleanFromEnv("DMS_OFFLINE"));
+  force(description: string): Option {
+    return new Option("-f, --force", description);
   },
 
-  /** Built on access, like `offline`, to read `DMS_PREPARE_STRICT` from the `.env`. */
-  get strict(): Option {
-    return new Option(
-      "--strict",
-      "Exit 1 when the workspace cannot be prepared, and 2 when the backend URL is missing or invalid, instead of warning and exiting 0 (env: DMS_PREPARE_STRICT)",
-    ).default(booleanFromEnv("DMS_PREPARE_STRICT"));
+  offline(description: string): Option {
+    return new Option("--offline", `${description} (env: DMS_OFFLINE)`);
   },
 
-  bootstrapSecret: new Option(
-    "--bootstrap-secret <secret>",
-    "Credential presented to the backend's layer endpoints (env: DMS_BOOTSTRAP_SECRET, preferred — " +
-      "a secret passed on the command line is visible to every process on the machine). In dev it is " +
-      "discovered from the antelope project's .antelope/dms-dev.json.",
-  ).env("DMS_BOOTSTRAP_SECRET"),
+  strict: new Option(
+    "--strict",
+    "Exit 1 when the workspace cannot be prepared, and 2 when the backend URL is missing or invalid, instead of warning and exiting 0 (env: DMS_PREPARE_STRICT)",
+  ),
+
+  bootstrapSecret(discovery?: string): Option {
+    return new Option(
+      "--bootstrap-secret <secret>",
+      discovery
+        ? `${BOOTSTRAP_SECRET_DESCRIPTION}. ${discovery}`
+        : BOOTSTRAP_SECRET_DESCRIPTION,
+    ).env("DMS_BOOTSTRAP_SECRET");
+  },
 };
 
 /**
