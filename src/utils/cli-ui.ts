@@ -211,6 +211,15 @@ export function info(message: string): void {
 }
 
 /**
+ * Reports a run stopped by a signal, on stderr. A terminal echoes Ctrl+C as
+ * "^C" without a newline, so the line starts on a fresh one there.
+ */
+export function stopped(message: string, signal: NodeJS.Signals): void {
+  const newline = signal === "SIGINT" && process.stderr.isTTY ? "\n" : "";
+  console.error(`${newline}${chalk.red.bold("■")} ${message}`);
+}
+
+/**
  * Display a section header with a colored underline
  */
 export function header(text: string): void {

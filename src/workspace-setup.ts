@@ -3,7 +3,7 @@
 //
 // Split out of common.ts, which stays the barrel every command imports from.
 
-import { type SpawnOptions, spawn } from "node:child_process";
+import { type SpawnOptions, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { constants as osConstants } from "node:os";
@@ -117,12 +117,9 @@ export function saveDepsHash(workspaceDir: string, layerPaths: string[]): void {
 /**
  * Run pnpm install in the workspace directory
  */
-export function installDeps(workspaceDir: string): void {
-  const { execSync } = require("node:child_process");
-  execSync("pnpm install", {
-    cwd: workspaceDir,
-    stdio: "inherit",
-  });
+export async function installDeps(workspaceDir: string): Promise<void> {
+  const code = await runCommand("pnpm", ["install"], { cwd: workspaceDir });
+  if (code !== 0) throw new Error("Command failed: pnpm install");
 }
 
 // ============================================================================
@@ -142,15 +139,33 @@ function exitCodeForSignal(signal: NodeJS.Signals): number {
 }
 
 /**
+ * The CLI received `signal` while a child was running: the child's process
+ * tree has been stopped and the run is cancelled, not failed. The exit code
+ * follows the shell convention, 130 for Ctrl+C.
+ */
+export class CancelledError extends Error {
+  readonly exitCode: number;
+
+  constructor(readonly signal: NodeJS.Signals) {
+    super(signal === "SIGINT" ? "Stopped" : `Stopped (${signal})`);
+    this.name = "CancelledError";
+    this.exitCode = exitCodeForSignal(signal);
+  }
+}
+
+/**
  * Spawn a child process and wait for it to complete.
  *
- * The child owns a port (server.mjs, the Vite dev server), so it must never
- * outlive the CLI: leaving an orphan behind keeps the port bound until the
- * user hunts the pid down. Node's default is exactly that — a terminal Ctrl-C
- * reaches the child only because it shares the foreground process group, and
- * `kill` on the CLI reaches it not at all — so the signals are forwarded here
- * explicitly, and the child is killed outright if the CLI goes down for any
- * other reason.
+ * The child owns a port (server.mjs, the Vite dev server) or writes to the
+ * workspace (pnpm install, the production build), so neither it nor anything
+ * it started may outlive the CLI. On POSIX the child leads its own process
+ * group, so a terminal Ctrl-C reaches the CLI alone and the CLI stops the
+ * whole tree at once: pnpm, the shell it runs a script in, and Vite under it.
+ * On Windows the tree is killed with `taskkill /T`. The tree is killed
+ * outright if the CLI goes down for any other reason.
+ *
+ * Resolves with the child's exit code; rejects with a `CancelledError` when
+ * the CLI received SIGINT, SIGTERM or SIGHUP while the child was running.
  */
 export function runCommand(
   command: string,
@@ -167,6 +182,9 @@ export function runCommand(
       // shell's and the signals below would never reach the actual process.
       shell: isWindows,
       ...options,
+      // A new process group on POSIX, whose id is the child's pid. On
+      // Windows it would open a new console window instead.
+      detached: !isWindows,
     });
 
     let escalation: NodeJS.Timeout | undefined;
@@ -174,25 +192,29 @@ export function runCommand(
 
     const alive = () => child.exitCode === null && child.signalCode === null;
 
+    const signalTree = (signal: NodeJS.Signals) => {
+      if (child.pid === undefined) return;
+      try {
+        if (isWindows) {
+          // Windows has no signal delivery: the tree is terminated at once,
+          // so the escalation below is a no-op there.
+          spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+            stdio: "ignore",
+          });
+        } else {
+          process.kill(-child.pid, signal);
+        }
+      } catch {
+        // The whole group already exited.
+      }
+    };
+
     const stopChild = (signal: NodeJS.Signals) => {
       if (!alive()) return;
-      try {
-        // Windows has no signal delivery: any signal terminates the child
-        // immediately, so SIGHUP/SIGINT are normalized to SIGTERM and the
-        // escalation below is a no-op there.
-        child.kill(isWindows ? "SIGTERM" : signal);
-      } catch {
-        // The child raced us to exit; the "exit" handler settles the promise.
-      }
+      signalTree(signal);
       if (escalation || isWindows) return;
       escalation = setTimeout(() => {
-        if (alive()) {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            // Already gone.
-          }
-        }
+        if (alive()) signalTree("SIGKILL");
       }, CHILD_SHUTDOWN_TIMEOUT_MS);
       escalation.unref();
     };
@@ -206,13 +228,7 @@ export function runCommand(
     // this is the last-resort net for an uncaught exception or a
     // process.exit() raised elsewhere in the CLI.
     const onParentExit = () => {
-      if (alive()) {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // Already gone.
-        }
-      }
+      if (alive()) signalTree("SIGKILL");
     };
 
     for (const signal of FORWARDED_SIGNALS) process.on(signal, onSignal);
@@ -230,8 +246,14 @@ export function runCommand(
     });
     child.on("exit", (code, signal) => {
       cleanup();
+      if (forwarded) {
+        // A grandchild that ignored the signal would be reparented to init
+        // and keep running after the CLI exits.
+        if (!isWindows) signalTree("SIGKILL");
+        return reject(new CancelledError(forwarded));
+      }
       if (code !== null) return resolve(code);
-      resolve(exitCodeForSignal(signal ?? forwarded ?? "SIGTERM"));
+      resolve(exitCodeForSignal(signal ?? "SIGTERM"));
     });
   });
 }
@@ -257,6 +279,8 @@ export interface SetupWorkspaceOptions {
   workspaceKey?: string;
   /** Credential presented on the backend's layer endpoints */
   bootstrapSecret?: string;
+  /** Called before `pnpm install` writes to the terminal, e.g. to pause a spinner */
+  beforeInstall?: () => Promise<void>;
 }
 
 export interface SetupWorkspaceResult {
@@ -341,7 +365,8 @@ export async function setupWorkspace(
   // re-creates it from the current manifest. It must run before
   // `pnpm install` so pnpm sees the workspace packages.
   if (shouldInstall) {
-    installDeps(workspaceDir);
+    await opts.beforeInstall?.();
+    await installDeps(workspaceDir);
     saveDepsHash(workspaceDir, layerPaths);
   }
 

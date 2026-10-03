@@ -2,6 +2,7 @@ import { join } from "node:path";
 import chalk from "chalk";
 import { Command } from "commander";
 import {
+  CancelledError,
   Options,
   projectWorkspaceKey,
   resolveBootstrapSecret,
@@ -133,6 +134,7 @@ export function cmdDev(): Command {
           clientUrl,
           workspaceKey,
           bootstrapSecret,
+          beforeInstall: () => spinner.pause(),
         });
 
         await spinner.succeed("Workspace ready");
@@ -187,6 +189,7 @@ export function cmdDev(): Command {
         await stopWatchers();
         process.exit(code);
       } catch (err: any) {
+        if (err instanceof CancelledError) throw err;
         await spinner.fail(`Setup failed: ${err.message}`);
         process.exit(1);
       }
