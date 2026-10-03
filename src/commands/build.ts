@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import {
   CliError,
   getProcessTasks,
@@ -25,6 +25,7 @@ import {
   cachedAge,
   isTerminalFeedback,
   showWorkspace,
+  writeBlankLine,
   writeHeader,
 } from "../output";
 import {
@@ -164,6 +165,7 @@ export function cmdBuild(): Command {
     .addOption(Options.offline)
     .addOption(Options.bootstrapSecret)
     .action(async (options: BuildOptions) => {
+      const startedAt = Date.now();
       const backendUrl = requireBackendUrl(options.backendUrl);
       const sessionSecret = resolveSessionSecret("build");
       const bootstrapSecret = normalizeBootstrapSecret(options.bootstrapSecret);
@@ -208,7 +210,17 @@ export function cmdBuild(): Command {
       for (const step of BUILD_STEPS) await runBuildStep(step, context);
       reportWarnings(context.warnings, isVerbose, ui);
 
-      ui.message("success", "Built the production frontend");
-      ui.message("hint", "Run ajs dms start to start the production server");
+      writeBlankLine();
+      ui.summary({
+        headline: "Built the production frontend",
+        artifact: `${showWorkspace(workspaceDir)}${sep}dist`,
+        durationMs: Date.now() - startedAt,
+        nextSteps: [
+          {
+            command: `ajs dms start -b ${backendUrl}`,
+            description: "with the DMS_SESSION_SECRET this build used",
+          },
+        ],
+      });
     });
 }

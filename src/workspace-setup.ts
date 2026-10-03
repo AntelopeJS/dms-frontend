@@ -31,7 +31,11 @@ import {
   downloadAndExtractLayers,
   assertCachedArchivesExist,
 } from "./layers";
-import { assertCachedLayerPathsExist, resolveManifest } from "./manifest";
+import {
+  assertCachedLayerPathsExist,
+  type ManifestCacheUse,
+  resolveManifest,
+} from "./manifest";
 import {
   collectManifestSecrets,
   type ManifestSecrets,
@@ -337,7 +341,11 @@ export interface FramedCommandOptions {
 
 export interface FramedCommandResult {
   code: number;
-  /** The last lines of stdout and stderr, interleaved, without colors. */
+  /**
+   * The last lines of stdout, then those of stderr, without colors. How the
+   * child interleaved its two pipes is lost once both are read at once, so
+   * each keeps its own order and errors stay at the end.
+   */
   lines: string[];
 }
 
@@ -368,8 +376,8 @@ export async function runFramedCommand(
 ): Promise<FramedCommandResult> {
   const { name, cwd, env, mapLine = (line) => line, onLine } = options;
   const isVerbose = isVerboseRun();
-  const tail = new OutputTail();
-  const readLine = (line: string) => {
+  const tails = [new OutputTail(), new OutputTail()];
+  const readLine = (tail: OutputTail, line: string) => {
     const mapped = mapLine(line);
     if (isVerbose) writeChildLine(name, mapped);
     const plain = stripAnsi(mapped);
@@ -383,8 +391,10 @@ export async function runFramedCommand(
     { cwd, env, stdio: ["ignore", "pipe", "pipe"] },
     (child) => {
       const streams = [child.stdout, child.stderr];
-      for (const stream of streams) {
-        const splitter = new LineSplitter(readLine);
+      for (const [index, stream] of streams.entries()) {
+        const splitter = new LineSplitter((line) =>
+          readLine(tails[index], line),
+        );
         stream?.setEncoding("utf8");
         stream?.on("data", (chunk: string) => splitter.push(chunk));
         stream?.once("end", () => splitter.flush());
@@ -393,7 +403,7 @@ export async function runFramedCommand(
     },
   );
   await Promise.race([ended, drainTimeout()]);
-  return { code, lines: tail.lines() };
+  return { code, lines: tails.flatMap((tail) => tail.lines()) };
 }
 
 // ============================================================================
@@ -432,6 +442,15 @@ export interface SetupWorkspaceResult {
   manifestSecrets: ManifestSecrets;
 }
 
+/** A build is deployed, so only --offline lets it use the cache. */
+function manifestCacheUse(
+  mode: SetupWorkspaceOptions["mode"],
+  offline?: boolean,
+): ManifestCacheUse {
+  if (offline) return "offline";
+  return mode === "build" ? "never" : "fallback";
+}
+
 /**
  * Full workspace setup: fetch the manifest, resolve frontend modules, check
  * that each supports this loader release, copy templates, write the workspace
@@ -451,7 +470,7 @@ export async function setupWorkspace(
   const resolved = await resolveManifest(
     workspaceDir,
     backendUrl,
-    !!offline,
+    manifestCacheUse(mode, offline),
     clientUrl,
     bootstrapSecret,
   );
@@ -467,14 +486,15 @@ export async function setupWorkspace(
   } else {
     const cacheDir = join(workspaceDir, ".layers-cache");
     if (fromCache) {
-      // No backend to download from: reuse the layers extracted by the
-      // last online run, after checking the extraction is complete —
-      // `buildLayersFromCache` silently skips missing archives.
+      // --offline: reuse the layers extracted by the last online run, after
+      // checking the extraction is complete — `buildLayersFromCache`
+      // silently skips missing archives.
       if (!existsSync(cacheDir)) {
         throw new CliError({
-          title:
-            "The backend is unreachable and no layers archive was downloaded before",
-          fixes: ["Run once with the backend reachable first"],
+          title: "No layers archive was downloaded for this workspace",
+          fixes: [
+            "Run once without --offline, with the backend reachable, first",
+          ],
         });
       }
       assertCachedArchivesExist(manifest.modules, cacheDir, fetchedAt);

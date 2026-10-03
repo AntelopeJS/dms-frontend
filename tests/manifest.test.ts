@@ -9,6 +9,7 @@ import {
   BackendUnreachableError,
   fetchManifest,
   type Manifest,
+  type ManifestCacheUse,
   ManifestRefusedError,
   ManifestUnauthorizedError,
   resolveManifest,
@@ -329,7 +330,7 @@ describe("resolveManifest with a cached manifest", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-manifest-cache-"));
     const { server, baseUrl } = await startBackend();
     try {
-      await resolveManifest(workspace, baseUrl, false);
+      await resolveManifest(workspace, baseUrl, "fallback");
       await run(workspace);
     } finally {
       await closeServer(server);
@@ -340,10 +341,11 @@ describe("resolveManifest with a cached manifest", () => {
   async function resolveAgainst(
     workspace: string,
     status = 200,
+    cacheUse: ManifestCacheUse = "fallback",
   ): Promise<ReturnType<typeof resolveManifest>> {
     const { server, baseUrl } = await startBackend(status);
     try {
-      return await resolveManifest(workspace, baseUrl, false);
+      return await resolveManifest(workspace, baseUrl, cacheUse);
     } finally {
       await closeServer(server);
     }
@@ -393,7 +395,7 @@ describe("resolveManifest with a cached manifest", () => {
       const resolved = await resolveManifest(
         workspace,
         await closedBackendUrl(),
-        false,
+        "fallback",
       );
       assert.equal(resolved.fromCache, true);
       assert.deepEqual(resolved.manifest, manifest);
@@ -406,5 +408,72 @@ describe("resolveManifest with a cached manifest", () => {
       assert.equal(resolved.fromCache, true);
       assert.deepEqual(resolved.manifest, manifest);
     });
+  });
+
+  it("replays the cache offline without asking the backend", async () => {
+    await withCachedWorkspace(async (workspace) => {
+      const { server, baseUrl, requests } = await startBackend();
+      try {
+        const resolved = await resolveManifest(workspace, baseUrl, "offline");
+        assert.equal(resolved.fromCache, true);
+        assert.equal(requests.length, 0);
+      } finally {
+        await closeServer(server);
+      }
+    });
+  });
+
+  it("fails an unreachable backend when the cache must not be used, and offers it", async () => {
+    await withCachedWorkspace(async (workspace) => {
+      const backendUrl = await closedBackendUrl();
+      await assert.rejects(
+        () => resolveManifest(workspace, backendUrl, "never"),
+        (err: Error) => {
+          assert.ok(err instanceof CliError);
+          assert.ok(err.cause instanceof BackendUnreachableError);
+          assert.equal(err.exitCode, 1);
+          assert.equal(
+            problemText(err),
+            [
+              `✖ Cannot reach the DMS backend at ${backendUrl}`,
+              "  Connection refused (ECONNREFUSED). A manifest cached just now exists; a build uses it only with --offline.",
+              "  → Start the backend (`ajs project dev` for a local one), or pass its URL with -b <url>",
+              `  → Or build from the cache on purpose: ajs dms build -b ${backendUrl} --offline`,
+              "",
+            ].join("\n"),
+          );
+          return true;
+        },
+      );
+    });
+  });
+
+  it("fails a failing backend when the cache must not be used", async () => {
+    await withCachedWorkspace(async (workspace) => {
+      await assert.rejects(
+        () => resolveAgainst(workspace, 503, "never"),
+        (err: Error) => {
+          assert.ok(err instanceof CliError);
+          assert.match(
+            problemText(err),
+            /^✖ Failed to fetch manifest from \S+ \(503\)\n {2}A manifest cached just now exists; a build uses it only with --offline\.\n {2}→ Or build from the cache on purpose: ajs dms build -b \S+ --offline\n$/,
+          );
+          return true;
+        },
+      );
+    });
+  });
+
+  it("leaves the failure as it is when there is no cache to offer", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "dms-manifest-cache-"));
+    try {
+      await assert.rejects(
+        async () =>
+          resolveManifest(workspace, await closedBackendUrl(), "never"),
+        BackendUnreachableError,
+      );
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 });
