@@ -416,13 +416,45 @@ describe("validating options before any work", () => {
         new RegExp(`✖ Port ${port} is already in use`),
       );
       assert.match(result.stderr, /→ .*another port: -p <port>/);
-      assert.doesNotMatch(
-        result.stderr,
-        /Starting the production server|EADDRINUSE/,
-      );
+      assert.doesNotMatch(result.stderr, /server ready|EADDRINUSE/);
     } finally {
       await closeServer(server);
     }
+  });
+
+  it("reports a server that could not listen as a failure with a fix", async () => {
+    const dir = workspaceDir(BACKEND_URL);
+    const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
+      files: {
+        ...builtWorkspace(BACKEND_URL),
+        [join(dir, "server.mjs")]:
+          'process.send({ type: "dms:listen-error", code: "EADDRINUSE", ' +
+          'message: "listen EADDRINUSE", host: "0.0.0.0", port: 3331 }, ' +
+          "() => process.exit(1));\n",
+      },
+      env: { DMS_SESSION_SECRET: SESSION_SECRET },
+    });
+    assert.equal(result.code, 1);
+    assert.equal(result.stdout, "");
+    assert.match(
+      result.stderr,
+      /✖ Port 3331 is already in use\n {2}Another process is listening on 0\.0\.0\.0:3331\.\n {2}→ Stop it, or pass another port: -p <port>\n/,
+    );
+    assert.doesNotMatch(result.stderr, /server ready|Stopped/);
+  });
+
+  it("opens start with the backend, the mode and the build's age", async () => {
+    const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
+      files: builtWorkspace(BACKEND_URL),
+      env: { DMS_SESSION_SECRET: SESSION_SECRET },
+    });
+    assert.equal(result.code, 0);
+    assert.match(
+      result.stderr,
+      new RegExp(
+        `^ajs dms start {2}${BACKEND_URL.replaceAll(".", "\\.")} · production · built just now\n`,
+      ),
+    );
   });
 
   it("hands a free port over to the production server", async () => {

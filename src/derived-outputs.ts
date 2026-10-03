@@ -246,13 +246,27 @@ function mergeLocaleMessages(
 /** Where each asset root keeps its locale files, one JSON file per locale. */
 const LOCALE_DIRECTORY = "i18n/locales";
 
-/** Names the file: in development an editor can save a catalog half-written. */
+/**
+ * A locale file that does not parse: in development an editor can save a
+ * catalog half-written. Carries the file, which the dev watcher shows as the
+ * source the user edits.
+ */
+export class InvalidLocaleFileError extends Error {
+  constructor(
+    readonly path: string,
+    readonly reason: string,
+  ) {
+    super(`Invalid locale file ${path}: ${reason}`);
+    this.name = "InvalidLocaleFileError";
+  }
+}
+
 function readLocaleFile(path: string): Record<string, unknown> {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Invalid locale file ${path}: ${reason}`);
+    throw new InvalidLocaleFileError(path, reason);
   }
 }
 
@@ -494,9 +508,9 @@ export interface DerivedOutput {
   write(workspaceDir: string, registry: FrontendModuleRegistry): boolean;
   /**
    * For an output the running dev server cannot apply: what the watcher
-   * prints when a change rewrites it.
+   * tells the user to do when a change rewrites it.
    */
-  restartNotice?: string;
+  restartHint?: string;
 }
 
 /**
@@ -518,8 +532,8 @@ export const DERIVED_OUTPUTS: readonly DerivedOutput[] = [
     name: "type paths",
     affects: isLayerDirectory,
     write: writeFrontendTypePaths,
-    restartNotice:
-      "A layer directory was added or removed: restart 'ajs dms dev' to apply it. Vite reads the '#<layer>' aliases and the auto-imported directories at startup only.",
+    restartHint:
+      "Restart ajs dms dev to apply it (Vite reads the '#<layer>' aliases and the auto-imported directories at startup)",
   },
   {
     name: "locale catalogs",

@@ -13,6 +13,8 @@
 // ones included, so a peer on the loader would pull a copy of it into every
 // workspace. Package managers ignore an engine they do not know.
 
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { CliError, getProcessUi } from "@antelopejs/core/cli";
 import semver from "semver";
 import { readLayerPackage } from "./layers";
@@ -29,6 +31,11 @@ export interface RendererRangeCheckOptions {
   renderer?: RendererRelease;
   /** Where the notice about modules declaring no range goes. */
   warn?: (message: string) => void;
+  /**
+   * Workspace that remembers the modules already named in that notice, so it
+   * shows once per workspace rather than on every run.
+   */
+  workspaceDir?: string;
 }
 
 interface DeclaredRange {
@@ -43,6 +50,26 @@ const OWN_RELEASE: RendererRelease = require("../package.json");
  * loads one set of modules, so repeating the notice would add nothing.
  */
 const noticedModules = new Set<string>();
+
+/** Modules a workspace has named in the notice, one label per line. */
+const NOTICED_MODULES_FILE = ".renderer-range-noticed";
+
+function readNoticedModules(workspaceDir: string | undefined): Set<string> {
+  const file = workspaceDir && join(workspaceDir, NOTICED_MODULES_FILE);
+  if (!file || !existsSync(file)) return new Set();
+  return new Set(readFileSync(file, "utf8").split("\n").filter(Boolean));
+}
+
+function saveNoticedModules(
+  workspaceDir: string | undefined,
+  modules: Set<string>,
+): void {
+  if (!workspaceDir) return;
+  writeFileSync(
+    join(workspaceDir, NOTICED_MODULES_FILE),
+    [...modules].map((module) => `${module}\n`).join(""),
+  );
+}
 
 /**
  * A module as the messages name it: its package name and where it was loaded
@@ -88,13 +115,19 @@ function noticeUndeclared(
   declarations: DeclaredRange[],
   renderer: RendererRelease,
   warn: (message: string) => void,
+  workspaceDir: string | undefined,
 ): void {
+  const remembered = readNoticedModules(workspaceDir);
   const modules = declarations
     .filter(({ range }) => range === undefined)
     .map(({ module }) => module)
-    .filter((module) => !noticedModules.has(module));
+    .filter((module) => !noticedModules.has(module) && !remembered.has(module));
   if (modules.length === 0) return;
-  for (const module of modules) noticedModules.add(module);
+  for (const module of modules) {
+    noticedModules.add(module);
+    remembered.add(module);
+  }
+  saveNoticedModules(workspaceDir, remembered);
   warn(
     `No supported ${renderer.name} range declared, so not checked against ` +
       `${renderer.version}: ${modules.join(", ")}. A frontend module declares ` +
@@ -106,7 +139,8 @@ function noticeUndeclared(
  * Fail unless every module supports this loader release.
  *
  * A module that declares no range is still loaded, so a module published before
- * the declaration existed keeps working; it is named once in a notice instead.
+ * the declaration existed keeps working; it is named once in a notice instead,
+ * once per workspace when one is given.
  * One that declares a range this release falls outside of, or a range that
  * cannot be read, stops the command here rather than later, in the middle of
  * a build or a render, on an API this release no longer has or does not have
@@ -127,6 +161,7 @@ export function assertLayersSupportRenderer(
     declarations,
     renderer,
     options.warn ?? ((message) => getProcessUi().message("warn", message)),
+    options.workspaceDir,
   );
   const problems = declarations
     .filter(({ range }) => range !== undefined)

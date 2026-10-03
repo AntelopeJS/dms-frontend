@@ -4,18 +4,26 @@
 // Split out of common.ts, which stays the barrel every command imports from.
 
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { getProcessUi, type Ui } from "@antelopejs/core/cli";
 import chokidar, { type FSWatcher } from "chokidar";
+import { createPathMapper, type PathMapper } from "./child-output";
 import { getLayerWorkspacePath } from "./layers";
 import {
   createFrontendModuleRegistry,
   DERIVED_OUTPUTS,
   type DerivedOutput,
   type FrontendModuleRegistry,
+  InvalidLocaleFileError,
 } from "./derived-outputs";
 
-import { failureDetails } from "./output";
+import {
+  failureDetails,
+  formatTimedMessage,
+  showPath,
+  type TimedMessageOptions,
+  writeFeedback,
+} from "./output";
 import { ResolvedLayer } from "./workspace";
 import {
   applyContent,
@@ -39,11 +47,45 @@ const WATCH_DEBOUNCE_MS = 80;
  */
 const DERIVED_REFRESH_DEBOUNCE_MS = 100;
 
-/** Reports a failure the watcher survives, with the error that caused it. */
-type WarnFunction = (message: string, error?: unknown) => void;
+/**
+ * What the watcher tells the user while dev runs: a failure it survives, the
+ * save that fixed it, a change that needs a restart.
+ */
+interface WatchReporter {
+  warn(text: string, options?: TimedMessageOptions): void;
+  succeed(text: string): void;
+  /** The lines of an error, with workspace paths shown as their sources. */
+  describe(error: unknown): string[];
+  /** A path into the layer sources, as the user reads it. */
+  show(path: string): string;
+}
 
 function capitalize(text: string): string {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
+/**
+ * The entries of a layer a pass failed to apply: each failure is reported,
+ * and confirmed over once a later pass applies the entry.
+ */
+function createSyncFailures(src: string, reporter: WatchReporter) {
+  const failed = new Set<string>();
+  const show = (rel: string) => reporter.show(join(src, rel));
+  return {
+    fail(rel: string, err: unknown): void {
+      failed.add(rel);
+      reporter.warn(`${show(rel)} not copied to the workspace`, {
+        details: [
+          ...reporter.describe(err),
+          "The dev server keeps its previous version until the next save.",
+        ],
+      });
+    },
+    applied(rel: string): void {
+      if (failed.delete(rel))
+        reporter.succeed(`${show(rel)} copied to the workspace`);
+    },
+  };
 }
 
 /**
@@ -59,12 +101,13 @@ function createLayerSync(
   src: string,
   dest: string,
   onFlushed: (paths: string[]) => void,
-  warn: WarnFunction,
+  reporter: WatchReporter,
 ) {
   const fileUpserts = new Set<string>();
   const fileDeletes = new Set<string>();
   const dirCreates = new Set<string>();
   const dirDeletes = new Set<string>();
+  const failures = createSyncFailures(src, reporter);
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const toRel = (p: string): string | null => {
@@ -77,9 +120,6 @@ function createLayerSync(
   // the rest of the batch — and crucially must not escape as an uncaught
   // exception out of the setTimeout(flush) callback, which would crash the dev
   // process (there is no global uncaughtException handler). Log and continue.
-  const warnFailure = (rel: string, err: unknown): void => {
-    warn(`Layer sync skipped ${rel}`, err);
-  };
 
   const flush = (): void => {
     timer = null;
@@ -92,8 +132,9 @@ function createLayerSync(
     for (const rel of [...dirCreates].sort((a, b) => a.length - b.length)) {
       try {
         mkdirSync(join(dest, rel), { recursive: true });
+        failures.applied(rel);
       } catch (err) {
-        warnFailure(rel, err);
+        failures.fail(rel, err);
       }
     }
     dirCreates.clear();
@@ -113,8 +154,9 @@ function createLayerSync(
         } else {
           applyFile(srcPath, destPath);
         }
+        failures.applied(rel);
       } catch (err) {
-        warnFailure(rel, err);
+        failures.fail(rel, err);
       }
     }
     fileUpserts.clear();
@@ -123,8 +165,9 @@ function createLayerSync(
         if (existsSync(join(src, rel))) continue; // re-created; keep
         const destPath = join(dest, rel);
         if (existsSync(destPath)) rmSync(destPath, { force: true });
+        failures.applied(rel);
       } catch (err) {
-        warnFailure(rel, err);
+        failures.fail(rel, err);
       }
     }
     fileDeletes.clear();
@@ -134,8 +177,9 @@ function createLayerSync(
         const destPath = join(dest, rel);
         if (existsSync(destPath))
           rmSync(destPath, { recursive: true, force: true });
+        failures.applied(rel);
       } catch (err) {
-        warnFailure(rel, err);
+        failures.fail(rel, err);
       }
     }
     dirDeletes.clear();
@@ -183,6 +227,54 @@ function createLayerSync(
   };
 }
 
+/** What a regeneration that failed said, and what to say once one succeeds. */
+interface OutputFailure {
+  text: string;
+  options: TimedMessageOptions;
+  fixed: string;
+}
+
+function describeOutputFailure(
+  output: DerivedOutput,
+  err: unknown,
+  reporter: WatchReporter,
+): OutputFailure {
+  const kept = `The dev server keeps the previous ${output.name} until the file is fixed.`;
+  if (err instanceof InvalidLocaleFileError) {
+    const file = reporter.show(err.path);
+    return {
+      text: `${file} is not a valid locale file`,
+      options: { details: [err.reason, kept] },
+      fixed: `${file} fixed · ${output.name} regenerated`,
+    };
+  }
+  return {
+    text: `${capitalize(output.name)} not regenerated`,
+    options: { details: [...reporter.describe(err), kept] },
+    fixed: `${capitalize(output.name)} regenerated`,
+  };
+}
+
+/**
+ * The warning for layer directories added or removed while dev runs, which
+ * only a restart applies.
+ */
+function describeLayerDirectories(
+  paths: string[],
+  reporter: WatchReporter,
+): string {
+  // A new `layers/extra` brings `layers` with it: name the layer only.
+  const layers = [...new Set(paths)].filter(
+    (path) => !paths.some((other) => other.startsWith(`${path}${sep}`)),
+  );
+  const shown = layers.map((path) => reporter.show(path));
+  if (shown.length !== 1)
+    return `Layer directories added or removed: ${shown.join(", ")}`;
+  return existsSync(layers[0])
+    ? `New layer directory ${shown[0]}`
+    : `Layer directory ${shown[0]} removed`;
+}
+
 /**
  * Regenerate the derived outputs whose sources the passes touched, from the
  * workspace copies, once those passes have settled. Each output merges every
@@ -190,54 +282,100 @@ function createLayerSync(
  * saving several files) make one regeneration per output with all of their
  * changes, and an output no pass touched is left alone. Only the files whose
  * content changed are rewritten, and Vite's own watcher takes it from there,
- * except for an output it reads at startup only: that one says a restart is
- * needed.
+ * except for an output it reads at startup only: that one says, once per
+ * run, that a restart is needed.
+ *
+ * A regeneration that fails leaves the previous output in place and says so;
+ * the one that succeeds next says the failure is over.
  */
 function createDerivedOutputRefresher(
   workspaceDir: string,
   layers: ResolvedLayer[],
-  warn: WarnFunction,
+  reporter: WatchReporter,
 ) {
-  const pending = new Set<DerivedOutput>();
+  /** Each pending output, with the touched source paths it depends on. */
+  const pending = new Map<DerivedOutput, string[]>();
+  const failures = new Map<DerivedOutput | "registry", OutputFailure>();
+  let hasRestartNotice = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const fail = (key: DerivedOutput | "registry", failure: OutputFailure) => {
+    failures.set(key, failure);
+    reporter.warn(failure.text, failure.options);
+  };
+  const recover = (key: DerivedOutput | "registry") => {
+    const failure = failures.get(key);
+    if (!failure) return;
+    failures.delete(key);
+    reporter.succeed(failure.fixed);
+  };
+
+  const noticeRestart = (output: DerivedOutput, paths: string[]): void => {
+    if (!output.restartHint || hasRestartNotice) return;
+    hasRestartNotice = true;
+    reporter.warn(describeLayerDirectories(paths, reporter), {
+      fixes: [output.restartHint],
+    });
+  };
 
   const regenerate = (
     output: DerivedOutput,
+    paths: string[],
     registry: FrontendModuleRegistry,
   ): void => {
     try {
-      if (output.write(workspaceDir, registry) && output.restartNotice)
-        warn(output.restartNotice);
+      const isChanged = output.write(workspaceDir, registry);
+      recover(output);
+      if (isChanged) noticeRestart(output, paths);
     } catch (err) {
-      // Same reason as `warnFailure`: a file saved half-written, a catalog
+      // Same reason as the layer sync's: a file saved half-written, a catalog
       // for instance, must not take the dev process down. The previous
       // output stays in place.
-      warn(`${capitalize(output.name)} not regenerated`, err);
+      fail(output, describeOutputFailure(output, err, reporter));
     }
   };
 
   const refresh = (): void => {
     timer = null;
-    const outputs = DERIVED_OUTPUTS.filter((output) => pending.has(output));
+    const outputs = DERIVED_OUTPUTS.filter((output) => pending.has(output)).map(
+      (output) => [output, pending.get(output) ?? []] as const,
+    );
     pending.clear();
     let registry: FrontendModuleRegistry;
     try {
       // Built again: a module may have added or removed its entry since.
       registry = createFrontendModuleRegistry(workspaceDir, layers);
+      recover("registry");
     } catch (err) {
-      warn("Derived files not regenerated", err);
+      fail("registry", {
+        text: "Derived files not regenerated",
+        options: {
+          details: [
+            ...reporter.describe(err),
+            "The dev server keeps the previous ones until the module is fixed.",
+          ],
+        },
+        fixed: "Derived files regenerated",
+      });
       return;
     }
-    for (const output of outputs) regenerate(output, registry);
+    for (const [output, paths] of outputs) regenerate(output, paths, registry);
   };
 
   return {
-    schedule(paths: string[]) {
-      const affected = DERIVED_OUTPUTS.filter((output) =>
-        paths.some((path) => output.affects(path)),
-      );
-      if (affected.length === 0) return;
-      for (const output of affected) pending.add(output);
+    /** `paths` are relative to `src`, the layer source they were touched in. */
+    schedule(src: string, paths: string[]) {
+      let isAffected = false;
+      for (const output of DERIVED_OUTPUTS) {
+        const affected = paths.filter((path) => output.affects(path));
+        if (affected.length === 0) continue;
+        isAffected = true;
+        pending.set(output, [
+          ...(pending.get(output) ?? []),
+          ...affected.map((path) => join(src, path)),
+        ]);
+      }
+      if (!isAffected) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(refresh, DERIVED_REFRESH_DEBOUNCE_MS);
     },
@@ -277,14 +415,31 @@ export function startLayerWatchers(
   workspaceDir: string,
   layers: ResolvedLayer[],
   ui: Ui = getProcessUi(),
+  write: (text: string) => void = writeFeedback,
 ): () => Promise<void> {
-  const warn: WarnFunction = (message, error) =>
-    ui.message("warn", message, {
-      details: error === undefined ? [] : failureDetails(error, ui),
-    });
+  // The watched layers are their own sources: workspace paths in messages
+  // name the files the user edits.
+  const mapPath: PathMapper = createPathMapper(
+    workspaceDir,
+    layers.map((layer) => ({ ...layer, sourcePath: layer.path })),
+  );
+  const reporter: WatchReporter = {
+    warn: (text, options) =>
+      write(formatTimedMessage("warn", text, options, ui)),
+    succeed: (text) => write(formatTimedMessage("success", text, {}, ui)),
+    describe: (error) => failureDetails(error, ui).map((line) => mapPath(line)),
+    show: (path) => {
+      const mapped = mapPath(path);
+      return mapped === path ? showPath(path) : mapped;
+    },
+  };
   const watchers: FSWatcher[] = [];
   const syncs: Array<ReturnType<typeof createLayerSync>> = [];
-  const refresher = createDerivedOutputRefresher(workspaceDir, layers, warn);
+  const refresher = createDerivedOutputRefresher(
+    workspaceDir,
+    layers,
+    reporter,
+  );
 
   for (const layer of layers) {
     if (!layer.packageName) continue;
@@ -293,8 +448,8 @@ export function startLayerWatchers(
     const sync = createLayerSync(
       src,
       dest,
-      (paths) => refresher.schedule(paths),
-      warn,
+      (paths) => refresher.schedule(src, paths),
+      reporter,
     );
     syncs.push(sync);
 

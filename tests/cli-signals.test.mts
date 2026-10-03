@@ -153,12 +153,18 @@ function builtHome(backendUrl: string): string {
   return home;
 }
 
-function startServer(backendUrl: string, ownGroup = false): Run {
-  return startCli({
+/** Starts `start`, resolving once the CLI printed the server's ready block. */
+async function startServer(backendUrl: string, ownGroup = false) {
+  const run = startCli({
     args: ["start", "-b", backendUrl, "-p", "0"],
     env: { HOME: builtHome(backendUrl), DMS_SESSION_SECRET: SESSION_SECRET },
     ownGroup,
   });
+  await waitFor(
+    () => (run.output().includes("Ctrl+C to stop") ? true : undefined),
+    run.output,
+  );
+  return run;
 }
 
 /** A backend serving a one-module manifest, for `dev` to set up from. */
@@ -222,19 +228,24 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
   });
 
   it("exits 130 on Ctrl+C in a terminal while the server runs", async () => {
-    const run = startServer("http://127.0.0.1:9", true);
+    const run = await startServer("http://127.0.0.1:9", true);
     const pids = await run.tree;
 
     // What a terminal does on Ctrl+C: SIGINT to the foreground process group.
     process.kill(-run.pid, "SIGINT");
 
     assert.deepEqual(await run.exited, { code: 130, signal: null });
-    assert.match(run.output(), /■ Stopped\n/);
+    assert.match(run.output(), /✔ Production server ready in \S+\n/);
+    assert.match(run.output(), /Local: +http:\/\/127\.0\.0\.1:1\//);
+    assert.match(
+      run.output(),
+      /■ Stopped the production server · ran \d+(ms|\.\ds)\n/,
+    );
     await assertTreeGone(pids);
   });
 
   it("exits 130 when only the CLI receives SIGINT", async () => {
-    const run = startServer("http://127.0.0.1:9");
+    const run = await startServer("http://127.0.0.1:9");
     const pids = await run.tree;
 
     // kill -INT <pid>, or a CI runner cancelling the step: the child never
@@ -242,18 +253,21 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     process.kill(run.pid, "SIGINT");
 
     assert.deepEqual(await run.exited, { code: 130, signal: null });
-    assert.match(run.output(), /■ Stopped\n/);
+    assert.match(run.output(), /■ Stopped the production server · ran /);
     await assertTreeGone(pids);
   });
 
   it("exits 143 on SIGTERM and says which signal stopped it", async () => {
-    const run = startServer("http://127.0.0.1:9");
+    const run = await startServer("http://127.0.0.1:9");
     const pids = await run.tree;
 
     process.kill(run.pid, "SIGTERM");
 
     assert.deepEqual(await run.exited, { code: 143, signal: null });
-    assert.match(run.output(), /■ Stopped \(SIGTERM\)/);
+    assert.match(
+      run.output(),
+      /■ Stopped the production server \(SIGTERM\) · ran /,
+    );
     await assertTreeGone(pids);
   });
 
