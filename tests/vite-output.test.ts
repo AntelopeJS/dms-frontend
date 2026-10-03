@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { BUILD_STEPS } from "../src/commands/build";
+import { BUILD_STEPS } from "../src/commands/build-action";
 import {
   describeViteFailure,
   VERBOSE_VITE_HINT,

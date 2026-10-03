@@ -138,11 +138,14 @@ the stack trace of the underlying error to a failure. `ajs --no-color dms …` a
 `ajs --verbose dms …` set those variables for the plugin.
 
 The CLI checks npm for a newer release at most once a day and prints a one-line
-notice on stderr. A lookup that comes back empty — offline or throttled — is
-retried after an hour instead of counting as the day's attempt. The throttle
-stamp lives at `~/.antelopejs/dms-frontend/update-check.json`. Set
-`NO_UPDATE_NOTIFIER=1`, pass `--no-update-check`, or run under `CI` to turn the
-check off.
+notice on stderr, only to a terminal: as the last line of a command that
+succeeded, or under the ready block of `dev` and `start`. Help, `--version`,
+`--json`, failed commands, pipes and `TERM=dumb` never show it. The lookup starts
+with the command and never delays its exit; a lookup that comes back empty —
+offline or throttled — is retried after an hour instead of counting as the day's
+attempt. The throttle stamp lives at
+`~/.antelopejs/dms-frontend/update-check.json`. Set `NO_UPDATE_NOTIFIER=1`, pass
+`--no-update-check`, or run under `CI` to turn the check off.
 
 Manifest negotiation and module materialization are the renderer contract described in [Renderers](#renderers).
 
