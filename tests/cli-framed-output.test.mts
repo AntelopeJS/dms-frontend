@@ -204,6 +204,10 @@ describePosix("framing pnpm install and the production build", () => {
       run.stderr,
       new RegExp(`✔ Workspace generated${DONE}✔ Installed 3 packages${DONE}`),
     );
+    assert.match(
+      run.stderr,
+      /✔ Prepared the workspace · 1 module · types and registry written · \S+\n {2}\.\/\.antelopejs\/dms-frontend\/[0-9a-f]{64}\n$/,
+    );
     assert.doesNotMatch(run.stderr, /Progress:|Scope:|DEP0169/);
     const [install] = run.calls;
     assert.deepEqual(install.args, ["install", "--reporter=append-only"]);
