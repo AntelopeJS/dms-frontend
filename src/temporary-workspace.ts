@@ -8,10 +8,10 @@ import { join } from "node:path";
  *
  * Cleanup hangs off "exit" rather than a try/finally so it also covers a
  * failed assertion, an uncaught exception, a rejected promise and an explicit
- * process.exit(). There is deliberately no signal handler: callers block in
- * execFileSync, where Node defers JavaScript signal handlers until the child
- * returns, so a handler would keep the process alive through the whole install
- * or build instead of letting the default action terminate it.
+ * process.exit(). There is deliberately no signal handler: callers that run a
+ * child through runCommand already handle the signal there, and a handler
+ * here would keep any other caller alive instead of letting the default
+ * action terminate it.
  */
 export function createTemporaryWorkspace(prefix: string): string {
   const workspace = mkdtempSync(join(tmpdir(), prefix));

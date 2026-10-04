@@ -1,7 +1,8 @@
 // What the CLI makes of the output of a Vite production build: the warnings
 // it printed and the error that stopped it.
 
-import type { CliProblem } from "@antelopejs/core/cli";
+import { type CliProblem, pluralize, type Ui } from "@antelopejs/core/cli";
+import { isTerminalFeedback } from "./output";
 
 /**
  * The level the build runs Vite at, read by the template's Vite configs:
@@ -52,6 +53,24 @@ export class ViteWarnings {
   }
 }
 
+/**
+ * Counts Vite's warnings on a terminal, where the steps are read now, and
+ * lists them in full elsewhere, since CI logs are read later. A verbose run
+ * has already streamed them.
+ */
+export function reportViteWarnings(
+  warnings: ViteWarnings,
+  isVerbose: boolean,
+  ui: Ui,
+): void {
+  if (isVerbose || warnings.count === 0) return;
+  const title = pluralize(warnings.count, "Vite warning");
+  const details = isTerminalFeedback()
+    ? [`${ui.symbols.levels.hint} Run with --verbose to list them`]
+    : warnings.lines();
+  ui.message("warn", title, { details });
+}
+
 const ERROR_START = "error during build:";
 const FILE_LINE = /^file:\s+(.+)$/;
 const CODE_FRAME_LINE = /^\s*\d*\s*\|/;
@@ -81,12 +100,14 @@ function errorBlock(lines: string[]): string[] | undefined {
  * compiler stays out; a verbose run has already streamed it.
  *
  * `lines` are the build's output with workspace paths already mapped back to
- * their sources. Undefined when Vite did not report the error itself.
+ * their sources, and `rerun` the command the user runs once the file is
+ * fixed. Undefined when Vite did not report the error itself.
  */
 export function describeViteFailure(
   lines: string[],
   subject: string,
   isVerbose: boolean,
+  rerun = "ajs dms build",
 ): CliProblem | undefined {
   const block = errorBlock(lines);
   if (!block) return undefined;
@@ -102,7 +123,7 @@ export function describeViteFailure(
     return {
       title: `Vite could not compile ${file}`,
       reason,
-      fixes: ["Fix the file and run ajs dms build again"],
+      fixes: [`Fix the file and run ${rerun} again`],
       details: [...rest.filter((line) => CODE_FRAME_LINE.test(line)), ...hint],
     };
   }
