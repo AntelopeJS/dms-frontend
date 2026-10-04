@@ -467,7 +467,7 @@ describe("ajs dms start", () => {
       };
       for (const name of Object.keys(MANIFEST_SECRET_ENV))
         if (!(name in env)) delete environment[name];
-      const { stdout } = await promisify(execFile)(
+      const { stdout, stderr } = await promisify(execFile)(
         process.execPath,
         [
           "--import",
@@ -479,13 +479,8 @@ describe("ajs dms start", () => {
         ],
         { cwd: home, env: environment },
       );
-      const lines = stdout.split("\n");
-      const report = lines.find((line) => line.startsWith("{"));
-      assert.ok(report, stdout);
-      return {
-        report: JSON.parse(report),
-        log: lines.filter((line) => line !== report).join("\n"),
-      };
+      // stdout belongs to the server alone: the CLI reports on stderr.
+      return { report: JSON.parse(stdout), log: stderr };
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

@@ -171,7 +171,7 @@ export function formatSecretSources(
 export function reportManifestSecrets(
   resolved: ResolvedManifestSecrets,
   manifestLabel = "manifest",
-  log: (line: string) => void = console.log,
+  log: (line: string) => void = console.error,
 ): void {
   for (const line of formatSecretConflicts(resolved.conflicts))
     log(`${chalk.yellow.bold("⚠")} ${chalk.yellow(line)}`);

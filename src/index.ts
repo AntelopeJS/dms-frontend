@@ -36,6 +36,10 @@ const runCLI = async () => {
     );
   }
 
+  // Everything printed from here on is feedback on stderr: color it when
+  // stderr supports color, whatever stdout is redirected to.
+  chalk.level = chalk.stderr.level;
+
   const program = new Command()
     .name("ajs dms")
     .description(

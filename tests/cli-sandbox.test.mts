@@ -87,24 +87,40 @@ describe("running outside a DMS project", () => {
   it("cleans an empty home without a project", async () => {
     const result = await runCli(["clean", "--all"]);
     assert.equal(result.code, 0);
-    assert.match(result.stdout, /No workspaces found/);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /No workspaces found/);
   });
 
   it("accepts the update-check opt-out anywhere on the command line", async () => {
     const result = await runCli(["clean", "--all", "--no-update-check"]);
     assert.equal(result.code, 0);
-    assert.match(result.stdout, /No workspaces found/);
+    assert.match(result.stderr, /No workspaces found/);
   });
 
   it("names what is missing for a project-bound command", async () => {
     const build = await runCli(["build"]);
     assert.equal(build.code, 1);
-    assert.match(build.stdout, /Backend URL is required.*DMS_API_BASE_URL/);
+    assert.equal(build.stdout, "");
+    assert.match(build.stderr, /Backend URL is required.*DMS_API_BASE_URL/);
 
     const dev = await runCli(["dev"]);
     assert.equal(dev.code, 1);
-    assert.match(dev.stdout, /no running antelope project found/);
-    assert.match(dev.stdout, /-b <url>/);
+    assert.equal(dev.stdout, "");
+    assert.match(dev.stderr, /no running antelope project found/);
+    assert.match(dev.stderr, /-b <url>/);
+  });
+
+  it("writes feedback to stderr and leaves stdout empty", async () => {
+    const noUrl = await runCli(["prepare"]);
+    assert.equal(noUrl.code, 0);
+    assert.equal(noUrl.stdout, "");
+    assert.match(noUrl.stderr, /⚠ Backend URL not set; skipping prepare/);
+
+    const unreachable = await runCli(["prepare", "-b", "http://127.0.0.1:9"]);
+    assert.equal(unreachable.code, 0);
+    assert.equal(unreachable.stdout, "");
+    assert.match(unreachable.stderr, /Setting up workspace/);
+    assert.match(unreachable.stderr, /⚠ Skipping prepare:/);
   });
 
   it("requires a session secret for build and start", async () => {
@@ -142,9 +158,10 @@ describe("loading the project .env", () => {
     });
 
     assert.equal(result.code, 1);
-    assert.doesNotMatch(result.stdout, /Backend URL is required/);
-    assert.match(result.stdout, /Production build not found/);
-    assert.match(result.stdout, /build -b http:\/\/127\.0\.0\.1:5010/);
+    assert.equal(result.stdout, "");
+    assert.doesNotMatch(result.stderr, /Backend URL is required/);
+    assert.match(result.stderr, /Production build not found/);
+    assert.match(result.stderr, /build -b http:\/\/127\.0\.0\.1:5010/);
   });
 
   it("lets a real environment variable win over the .env", async () => {
@@ -157,8 +174,8 @@ describe("loading the project .env", () => {
     });
 
     assert.equal(result.code, 1);
-    assert.match(result.stdout, /build -b http:\/\/127\.0\.0\.1:5999/);
-    assert.doesNotMatch(result.stdout, /5010/);
+    assert.match(result.stderr, /build -b http:\/\/127\.0\.0\.1:5999/);
+    assert.doesNotMatch(result.stderr, /5010/);
   });
 
   it("lets .env.local win over .env", async () => {
@@ -171,14 +188,14 @@ describe("loading the project .env", () => {
     });
 
     assert.equal(result.code, 1);
-    assert.match(result.stdout, /build -b http:\/\/127\.0\.0\.1:5011/);
+    assert.match(result.stderr, /build -b http:\/\/127\.0\.0\.1:5011/);
   });
 
   it("runs normally in a directory with no .env", async () => {
     const result = await runCli(["start"], { env: ENV_ONLY });
 
     assert.equal(result.code, 1);
-    assert.match(result.stdout, /Backend URL is required/);
+    assert.match(result.stderr, /Backend URL is required/);
   });
 
   it("documents the .env contract in the help epilogue", async () => {
