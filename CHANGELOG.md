@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.10
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.9...v0.3.10)
+
+### 🩹 Fixes
+
+- **cli:** Honor --quiet everywhere and accept -q and --verbose=<channels> after the command ([#98](https://github.com/AntelopeJS/dms-frontend/pull/98))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.9
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.8...v0.3.9)
