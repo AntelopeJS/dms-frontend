@@ -15,9 +15,6 @@ export interface VerifySourceOptions {
   module?: string[];
 }
 
-const COMMAND_PATH = "ajs dms verify-source";
-const LAYER_OPTION = "-l, --layer <path>";
-
 /** Where `=` splits a `name=path` value, or -1 when it is malformed. */
 function localPackageSeparator(value: string): number {
   const separator = value.indexOf("=");
@@ -53,18 +50,11 @@ function directoryProblem(path: string, label: string): CliProblem | undefined {
   return { title: `${label} not found: ${path}`, fixes: [LAYER_PATH_FIX] };
 }
 
-/** -l is required; Commander would word its absence the same way. */
-const MISSING_LAYER: CliProblem = {
-  title: `Required option '${LAYER_OPTION}' not specified`,
-  reason: `Usage: ${COMMAND_PATH} [options]`,
-  fixes: [`Run ${COMMAND_PATH} --help for usage`],
-};
-
 /** Every problem with the options of a run, in the order they were given. */
 export function usageProblems(options: VerifySourceOptions): CliProblem[] {
   const problems = [
     options.layer === undefined
-      ? MISSING_LAYER
+      ? undefined
       : directoryProblem(options.layer, "Layer path"),
     ...(options.module ?? []).map((path) =>
       directoryProblem(path, "Module path"),
@@ -111,7 +101,6 @@ export async function runVerifySource(
 ): Promise<void> {
   const startedAt = Date.now();
   assertValidUsage(usageProblems(options));
-  const layer = options.layer ?? "";
   const modules = options.module ?? [];
   const localPackages = parseLocalPackages(options.localPackage ?? []);
   // Next to this module: the compiled runner, or its source under tsx.
@@ -131,7 +120,9 @@ export async function runVerifySource(
       stdio: ["inherit", "inherit", "inherit", "ipc"],
       env: {
         ...process.env,
-        DMS_LAYER_SOURCE: resolve(layer),
+        // Without -l, the runner resolves the installed core layer.
+        DMS_LAYER_SOURCE:
+          options.layer === undefined ? undefined : resolve(options.layer),
         DMS_MODULE_SOURCES: JSON.stringify(
           modules.map((path) => resolve(path)),
         ),

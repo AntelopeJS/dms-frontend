@@ -54,7 +54,7 @@ import {
   type VerificationResult,
   VERIFY_SOURCE_COMMAND,
 } from "./verify-source-result";
-import { readLocalPackages, readSources } from "./verify-source-sources";
+import { readSourceOptions, readSources } from "./verify-source-sources";
 import {
   reportViteWarnings,
   VITE_LOG_LEVEL_VARIABLE,
@@ -110,7 +110,11 @@ function removeDevelopmentDependencies(root: string): void {
   writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
 }
 
-function materializeWorkspace(workspace: string, layers: ResolvedLayer[]) {
+function materializeWorkspace(
+  workspace: string,
+  layers: ResolvedLayer[],
+  localPackages: Record<string, string>,
+) {
   const templateRoot = join(getPackageRoot(), "templates", "vue");
   const templateFiles = readdirSync(templateRoot).filter(
     (file) => !file.startsWith("npmrc"),
@@ -132,7 +136,6 @@ function materializeWorkspace(workspace: string, layers: ResolvedLayer[]) {
   writeWorkspacePackageJson(workspace, layers);
   const packagePath = join(workspace, "package.json");
   const workspacePackage = readJson(packagePath) as LayerPackage;
-  const localPackages = readLocalPackages();
   workspacePackage.pnpm = {
     overrides: {
       ...Object.fromEntries(
@@ -437,8 +440,10 @@ function describeError(error: unknown, isVerbose: boolean): CliProblem {
 }
 
 async function verifySources(): Promise<VerificationResult> {
-  const layers = readSources();
+  const options = readSourceOptions();
+  const { layers, coreLayer } = readSources(options);
   writeHeader("verify-source", [pluralize(layers.length, "module")]);
+  getProcessUi().message("info", `Verifying against ${coreLayer}`);
   // Before the first task, so its notice does not land inside one.
   assertLayersSupportRenderer(layers);
   const workspace = createTemporaryWorkspace("dms-frontend-real-source-");
@@ -453,7 +458,7 @@ async function verifySources(): Promise<VerificationResult> {
   const tasks = getProcessTasks();
   await tasks.run(
     `Materializing ${pluralize(layers.length, "module")}`,
-    async () => materializeWorkspace(workspace, layers),
+    async () => materializeWorkspace(workspace, layers, options.localPackages),
     { done: `Materialized ${pluralize(layers.length, "module")}` },
   );
   await installDeps(workspace, context.mapLine, ["--ignore-scripts"]);

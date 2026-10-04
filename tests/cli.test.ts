@@ -351,10 +351,7 @@ describe("verify-source CLI", () => {
     );
     assert.deepEqual(
       usageProblems({ localPackage: ["foo"] }).map((problem) => problem.title),
-      [
-        "Required option '-l, --layer <path>' not specified",
-        "Invalid local package 'foo'",
-      ],
+      ["Invalid local package 'foo'"],
     );
 
     const output = memoryUi();

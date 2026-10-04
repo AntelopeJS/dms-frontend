@@ -445,7 +445,10 @@ describePosix("framing verify-source", () => {
 
     assert.equal(run.code, 1);
     assert.equal(run.stdout, "");
-    assert.match(run.stderr, /^ajs dms verify-source {2}1 module\n/);
+    assert.match(
+      run.stderr,
+      /^ajs dms verify-source {2}1 module\nℹ Verifying against the DMS core layer in \.\/frontend-vue\n/,
+    );
     assert.match(
       run.stderr,
       new RegExp(
@@ -467,6 +470,38 @@ describePosix("framing verify-source", () => {
       "--reporter=append-only",
       "--ignore-scripts",
     ]);
+  });
+
+  /** A project whose frontend-vue module runs on the @antelopejs/dms it installs. */
+  function project(sandbox: string): void {
+    const dms = join(sandbox, "node_modules/@antelopejs/dms");
+    sourceLayer(dms);
+    sourceLayer(sandbox);
+    writeFileSync(
+      join(sandbox, "frontend-vue/package.json"),
+      JSON.stringify({ name: "demo-frontend-vue" }),
+    );
+    writeFileSync(
+      join(dms, "package.json"),
+      JSON.stringify({ name: "@antelopejs/dms", version: "9.9.9" }),
+    );
+  }
+
+  it("verifies the project's module on the installed core layer", async () => {
+    const run = await runCli(["verify-source"], {
+      setUp: project,
+      scenario: "ssr-fails",
+    });
+
+    assert.equal(run.code, 1);
+    assert.match(
+      run.stderr,
+      new RegExp(
+        "^ajs dms verify-source {2}2 modules\n" +
+          "ℹ Verifying against @antelopejs/dms 9\\.9\\.9 \\(installed in this project\\)\n" +
+          `(?:▲.*\n(?: {2}.*\n)*)?✔ Materialized 2 modules${DONE}`,
+      ),
+    );
   });
 
   it("keeps only the failure of a quiet run", async () => {

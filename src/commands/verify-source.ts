@@ -9,13 +9,17 @@ function collectOption(value: string, values: string[] = []): string[] {
 
 const VERIFY_SOURCE_EXAMPLES: HelpExample[] = [
   {
-    description: "A frontend module, on the installed DMS core layer",
-    command:
-      "ajs dms verify-source -l node_modules/@antelopejs/dms/frontend-vue -m .",
+    description:
+      "The project's frontend module: the current directory or ./frontend-vue",
+    command: "ajs dms verify-source",
+  },
+  {
+    description: "Frontend modules in other directories",
+    command: "ajs dms verify-source -m ./admin-vue -m ./shop-vue",
   },
   {
     description:
-      "The DMS core layer itself, with a local build of @antelopejs/dms",
+      "An unpublished DMS core layer, with a local build of @antelopejs/dms",
     command: "ajs dms verify-source -l . --local-package @antelopejs/dms=..",
   },
 ];
@@ -25,17 +29,17 @@ export function cmdVerifySource(): Command {
   const command = new Command("verify-source")
     .summary("Build and type-check unpublished frontend sources")
     .description(
-      "Build and type-check unpublished DMS frontend sources against this loader version: the DMS core layer (the frontend-vue directory of @antelopejs/dms), and the frontend modules to verify on top of it. Runs in a temporary workspace removed when the run ends, and starts no backend.",
+      "Build and type-check unpublished DMS frontend modules against this loader version, on top of the DMS core layer of the @antelopejs/dms installed in the project. Runs in a temporary workspace removed when the run ends, and starts no backend.",
     )
     // Checked by the action rather than by Commander, which would stop at
     // the first problem: the action reports every one of them at once.
     .option(
       "-l, --layer <path>",
-      "Root of the DMS core layer, the frontend-vue directory of @antelopejs/dms (required)",
+      "Root of an unpublished DMS core layer to verify instead of the installed one",
     )
     .option(
       "-m, --module <path>",
-      "Root of a frontend module to verify on top of it (repeatable)",
+      "Root of a frontend module to verify (repeatable); without -l or -m, the current directory or ./frontend-vue",
       collectOption,
     )
     .option(
