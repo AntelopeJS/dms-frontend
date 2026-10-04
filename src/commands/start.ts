@@ -16,6 +16,7 @@ import {
   resolveSessionSecret,
   writeWorkspaceMeta,
 } from "../common";
+import { type HelpExample, withExamples } from "../help";
 import {
   formatAge,
   showWorkspace,
@@ -32,10 +33,24 @@ interface StartOptions {
   port: string;
 }
 
+const START_EXAMPLES: HelpExample[] = [
+  {
+    description: "After ajs dms build -b https://dms.example.com",
+    command: "ajs dms start -b https://dms.example.com -p 3001",
+  },
+];
+
 export function cmdStart(): Command {
-  return new Command("start")
-    .description("Start the production server from a built workspace")
-    .addOption(Options.backendUrl)
+  const command = new Command("start")
+    .summary("Serve the production build")
+    .description(
+      "Serve the production frontend ajs dms build made for the same backend URL. Needs the DMS_SESSION_SECRET the build used.",
+    )
+    .addOption(
+      Options.backendUrl(
+        "Backend URL the build was made for; required, as -b or the variable",
+      ),
+    )
     .addOption(Options.port)
     .action(async (options: StartOptions) => {
       const startedAt = Date.now();
@@ -126,4 +141,5 @@ export function cmdStart(): Command {
 
       process.exitCode = code;
     });
+  return withExamples(command, START_EXAMPLES);
 }

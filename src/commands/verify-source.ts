@@ -3,6 +3,7 @@ import { statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { Command } from "commander";
 import { runCommand, UsageError } from "../common";
+import { type HelpExample, withExamples } from "../help";
 import {
   LAYER_PATH_FIX,
   reportVerification,
@@ -11,11 +12,12 @@ import {
 
 interface VerifySourceOptions {
   layer: string;
-  localPackage: string[];
-  module: string[];
+  localPackage?: string[];
+  module?: string[];
 }
 
-function collectOption(value: string, values: string[]): string[] {
+/** Collects a repeatable option; no default, so the help shows none. */
+function collectOption(value: string, values: string[] = []): string[] {
   return [...values, value];
 }
 
@@ -68,8 +70,9 @@ function channelClosed(child: ChildProcess): Promise<void> {
 async function verifySource(options: VerifySourceOptions): Promise<void> {
   const startedAt = Date.now();
   assertDirectory(options.layer, "Layer path");
-  for (const path of options.module) assertDirectory(path, "Module path");
-  const localPackages = parseLocalPackages(options.localPackage);
+  const modules = options.module ?? [];
+  for (const path of modules) assertDirectory(path, "Module path");
+  const localPackages = parseLocalPackages(options.localPackage ?? []);
   // Next to this module: the compiled runner, or its source under tsx.
   const runner = join(
     __dirname,
@@ -89,7 +92,7 @@ async function verifySource(options: VerifySourceOptions): Promise<void> {
         ...process.env,
         DMS_LAYER_SOURCE: resolve(options.layer),
         DMS_MODULE_SOURCES: JSON.stringify(
-          options.module.map((path) => resolve(path)),
+          modules.map((path) => resolve(path)),
         ),
         DMS_LOCAL_PACKAGES: JSON.stringify(localPackages),
       },
@@ -114,22 +117,39 @@ async function verifySource(options: VerifySourceOptions): Promise<void> {
   );
 }
 
+const VERIFY_SOURCE_EXAMPLES: HelpExample[] = [
+  {
+    description: "A frontend package and a module that uses it",
+    command: "ajs dms verify-source -l ../dms/frontend-vue -m ./frontend-vue",
+  },
+  {
+    description: "With a local build of a package it depends on",
+    command:
+      "ajs dms verify-source -l . --local-package @antelopejs/dms=../dms",
+  },
+];
+
 /** Creates the command that verifies unpublished frontend source packages. */
 export function cmdVerifySource(): Command {
-  return new Command("verify-source")
-    .description("Build and typecheck unpublished DMS frontend sources")
-    .requiredOption("-l, --layer <path>", "DMS frontend package root")
+  const command = new Command("verify-source")
+    .summary("Build and type-check unpublished frontend sources")
+    .description(
+      "Build and type-check unpublished DMS frontend sources against this loader version, in a temporary workspace removed when the run ends. Starts no backend.",
+    )
+    .requiredOption(
+      "-l, --layer <path>",
+      "Root of the DMS frontend package to verify (required)",
+    )
     .option(
       "-m, --module <path>",
-      "Additional frontend package root (repeatable)",
+      "Root of another frontend package to verify with it (repeatable)",
       collectOption,
-      [],
     )
     .option(
       "--local-package <name=path>",
       "Bind a local package into the generated workspace (repeatable)",
       collectOption,
-      [],
     )
     .action(verifySource);
+  return withExamples(command, VERIFY_SOURCE_EXAMPLES);
 }

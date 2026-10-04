@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
@@ -18,6 +18,7 @@ import {
   type WorkspaceRecord,
 } from "../src/commands/workspaces";
 import {
+  flagOrEnv,
   parseBackendUrl,
   parsePort,
   requireBackendUrl,
@@ -33,6 +34,7 @@ import {
   showWorkspace,
   workspaceId,
 } from "../src/output";
+import { ENVIRONMENT_VARIABLES } from "../src/help";
 import { describeListenError, readyLines } from "../src/server-process";
 import { memoryUi, problemText } from "./fixtures/memory-ui";
 
@@ -161,6 +163,76 @@ describe("DMS CLI plugin", () => {
       commands.map((command) => command.name()),
       ["dev", "build", "start", "prepare", "workspaces", "clean"],
     );
+  });
+});
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * Set by the CLI for the processes it spawns, never by a user: dev mode for
+ * the generated server, the verify-source runner's inputs, and the Vite and
+ * Node settings of a build.
+ */
+const INTERNAL_VARIABLES = new Set([
+  "DMS_DEV",
+  "DMS_LAYER_SOURCE",
+  "DMS_MODULE_SOURCES",
+  "DMS_LOCAL_PACKAGES",
+  "DMS_VITE_LOG_LEVEL",
+  "NODE_OPTIONS",
+]);
+
+const ENV_READ =
+  /process\.env\.([A-Z][A-Z0-9_]*)|\.env\("([A-Z][A-Z0-9_]*)"\)|flagOrEnv\([^,]+, "([A-Z][A-Z0-9_]*)"\)/g;
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.(ts|mts|mjs|js)$/.test(entry.name) ? [path] : [];
+  });
+}
+
+describe("help environment", () => {
+  it("lists every variable the CLI and the generated server read", () => {
+    const documented = new Set(
+      ENVIRONMENT_VARIABLES.flatMap(([names]) => names.split(", ")),
+    );
+    const read = new Set(
+      [join(ROOT, "src"), join(ROOT, "templates")]
+        .flatMap(sourceFiles)
+        .flatMap((file) =>
+          [...readFileSync(file, "utf8").matchAll(ENV_READ)].map(
+            (match) => match[1] ?? match[2] ?? match[3],
+          ),
+        ),
+    );
+    assert.ok(read.has("DMS_PREPARE_STRICT"));
+    const missing = [...read].filter(
+      (name) => !documented.has(name) && !INTERNAL_VARIABLES.has(name),
+    );
+    assert.deepEqual(missing, []);
+  });
+
+  it("reads a flag's variable as a boolean, the flag first", () => {
+    const name = "DMS_TEST_FLAG";
+    const saved = process.env[name];
+    try {
+      delete process.env[name];
+      assert.equal(flagOrEnv(undefined, name), false);
+      for (const value of ["1", "true", "yes", "on"]) {
+        process.env[name] = value;
+        assert.equal(flagOrEnv(undefined, name), true, value);
+      }
+      for (const value of ["", "0", "false", "No", " off "]) {
+        process.env[name] = value;
+        assert.equal(flagOrEnv(undefined, name), false, value);
+      }
+      assert.equal(flagOrEnv(true, name), true);
+    } finally {
+      if (saved === undefined) delete process.env[name];
+      else process.env[name] = saved;
+    }
   });
 });
 
