@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.11
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.10...v0.3.11)
+
+### 🩹 Fixes
+
+- **cli:** Wrap the dev banner and the clean list to the terminal width ([#99](https://github.com/AntelopeJS/dms-frontend/pull/99))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.10
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.9...v0.3.10)
