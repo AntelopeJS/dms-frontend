@@ -14,6 +14,7 @@ import {
   VERBOSE_OUTPUT_HINT,
 } from "../src/child-output";
 import type { ResolvedLayer } from "../src/workspace";
+import { runFramedCommand } from "../src/workspace-setup";
 
 const WORKSPACE = "/home/user/.antelopejs/dms-frontend/f6af15c7221e3402";
 
@@ -38,6 +39,23 @@ describe("child output lines", () => {
 
   it("removes colors", () => {
     assert.equal(stripAnsi("\u001b[33m(!) chunk\u001b[39m"), "(!) chunk");
+  });
+});
+
+describe("the output a framed child leaves", () => {
+  it("keeps stdout, then stderr, whichever pipe was read first", async () => {
+    // stderr is written, and read, long before stdout.
+    const script = [
+      'process.stderr.write("ERR_PNPM_FETCH_404\\n");',
+      'setTimeout(() => { process.stdout.write("line 1\\nline 2\\n"); process.exitCode = 1; }, 100);',
+    ].join("");
+    const result = await runFramedCommand(process.execPath, ["-e", script], {
+      name: "node",
+      cwd: process.cwd(),
+    });
+
+    assert.equal(result.code, 1);
+    assert.deepEqual(result.lines, ["line 1", "line 2", "ERR_PNPM_FETCH_404"]);
   });
 });
 
