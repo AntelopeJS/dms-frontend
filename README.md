@@ -99,20 +99,23 @@ there is none to discover. `verify-source` needs `--layer` instead.
 
 The commands follow the output contract of `ajs`: what the CLI itself prints
 on stdout is only the help and the version, and everything else (progress,
-warnings, errors) goes to stderr; `pnpm`, Vite and the server it runs keep their
-own output. A command exits 0 on success, 1 on a failure, 2 on a usage error (an
-unknown command or option, a missing or invalid argument, a missing
-configuration value) and 130 when stopped with Ctrl+C. `--no-color` or
+warnings, errors) goes to stderr. The dependency install and each step of the
+production build run as one progress line each: their output is kept and its
+last lines are shown when they fail, with paths into the generated workspace
+pointing at the frontend-module sources instead. The server `dev` and `start`
+run keeps its own output. A command exits 0 on success, 1 on a failure, 2 on a
+usage error (an unknown command or option, a missing or invalid argument, a
+missing configuration value) and 130 when stopped with Ctrl+C. `--no-color` or
 `NO_COLOR=1` turns colors off, and terminals that cannot draw Unicode, such as
-`TERM=dumb`, get ASCII symbols. `--verbose` or `ANTELOPEJS_VERBOSE` adds the
-stack trace of the underlying error to a failure. `ajs --no-color dms …` and
+`TERM=dumb`, get ASCII symbols. `--verbose` or `ANTELOPEJS_VERBOSE` streams
+the full `pnpm` and Vite output, each line behind the name of the step, and adds
+the stack trace of the underlying error to a failure. `ajs --no-color dms …` and
 `ajs --verbose dms …` set those variables for the plugin.
 
 The CLI checks npm for a newer release at most once a day and prints a one-line
-notice on stderr. A lookup that comes back empty — offline, throttled, or simply
-raced by a command that blocked the event loop past the deadline — is retried
-after an hour instead of counting as the day's attempt. The throttle stamp lives
-at `~/.antelopejs/dms-frontend/update-check.json`. Set
+notice on stderr. A lookup that comes back empty — offline or throttled — is
+retried after an hour instead of counting as the day's attempt. The throttle
+stamp lives at `~/.antelopejs/dms-frontend/update-check.json`. Set
 `NO_UPDATE_NOTIFIER=1`, pass `--no-update-check`, or run under `CI` to turn the
 check off.
 

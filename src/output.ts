@@ -37,7 +37,8 @@ const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
 
-function isTerminalFeedback(): boolean {
+/** Whether feedback goes to a terminal, read as it is written. */
+export function isTerminalFeedback(): boolean {
   return detectCapabilities(processCapabilityContext()).terminals.feedback;
 }
 
@@ -123,14 +124,14 @@ function describeProblem(error: unknown): CliProblem {
 }
 
 /**
- * The detail lines of a failure that does not stop the command: its reason
- * and fixes, and its stack trace in a verbose run.
+ * The detail lines of a failure that does not stop the command: its reason,
+ * fixes and details, and its stack trace in a verbose run.
  */
 export function failureDetails(
   error: unknown,
   ui: Ui = getProcessUi(),
 ): string[] {
-  const { title, reason, fixes = [] } = describeProblem(error);
+  const { title, reason, fixes = [], details = [] } = describeProblem(error);
   const hint = ui.symbols.levels.hint;
   const stack =
     isVerboseRun() && error instanceof Error && !(error instanceof CliError)
@@ -140,6 +141,7 @@ export function failureDetails(
     title,
     ...(reason ? [reason] : []),
     ...fixes.map((fix) => `${hint} ${fix}`),
+    ...details,
     ...stack.map((line) => line.trim()),
   ];
 }

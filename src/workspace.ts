@@ -48,7 +48,7 @@ export interface ManifestModule {
    * Absolute source directory on the backend machine. Only served by a
    * development backend to an authenticated caller, since it is meaningless
    * — and a disclosure — anywhere the sources are not on the same disk.
-   * Build mode never reads it.
+   * Build mode only reads it to point errors at the source.
    */
   path?: string;
   priority: number;
@@ -93,6 +93,12 @@ export interface FrontendManifest {
  */
 export interface ResolvedLayer {
   path: string;
+  /**
+   * The layer's source directory on the backend machine, when the manifest
+   * served it. Equal to `path` in dev mode; in build mode `path` is the
+   * extracted archive, and this only names the files errors point at.
+   */
+  sourcePath?: string;
   packageName?: string;
   priority?: number;
   configKey?: string;

@@ -3,12 +3,27 @@
 //
 // Split out of common.ts, which stays the barrel every command imports from.
 
-import { type SpawnOptions, spawn, spawnSync } from "node:child_process";
+import {
+  type ChildProcess,
+  type SpawnOptions,
+  spawn,
+  spawnSync,
+} from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { constants as osConstants } from "node:os";
 import { join } from "node:path";
-import { CliError } from "@antelopejs/core/cli";
+import { CliError, getProcessTasks, isVerboseRun } from "@antelopejs/core/cli";
+import {
+  createPathMapper,
+  describeChildFailure,
+  InstallProgress,
+  LineSplitter,
+  OutputTail,
+  type PathMapper,
+  stripAnsi,
+  writeChildLine,
+} from "./child-output";
 import {
   assertLayerPathsServed,
   buildLayersFromCache,
@@ -115,12 +130,48 @@ export function saveDepsHash(workspaceDir: string, layerPaths: string[]): void {
   writeFileSync(join(workspaceDir, DEPS_HASH_FILE), hash);
 }
 
+/** Append-only: the CLI reads pnpm's output line by line. */
+const PNPM_INSTALL_ARGS = ["install", "--reporter=append-only"];
+
 /**
- * Run pnpm install in the workspace directory
+ * Run pnpm install in the workspace directory, as one task whose label follows
+ * pnpm's progress. Its output is kept and replayed on failure, or streamed
+ * behind a gutter in a verbose run.
  */
-export async function installDeps(workspaceDir: string): Promise<void> {
-  const code = await runCommand("pnpm", ["install"], { cwd: workspaceDir });
-  if (code !== 0) throw new Error("Command failed: pnpm install");
+export async function installDeps(
+  workspaceDir: string,
+  mapLine?: PathMapper,
+): Promise<void> {
+  const progress = new InstallProgress();
+  const task = getProcessTasks().start(progress.label);
+  try {
+    const { code, lines } = await runFramedCommand("pnpm", PNPM_INSTALL_ARGS, {
+      name: "pnpm",
+      cwd: workspaceDir,
+      // The workspace pins its own pnpm, which a DMS user has no reason to
+      // upgrade.
+      env: { ...process.env, npm_config_update_notifier: "false" },
+      mapLine,
+      onLine: (line) => {
+        if (progress.read(line)) task.update(progress.label);
+      },
+    });
+    if (code !== 0) {
+      throw new CliError(
+        describeChildFailure({
+          title: "Dependency install failed",
+          command: "pnpm install",
+          code,
+          lines,
+          isVerbose: isVerboseRun(),
+        }),
+      );
+    }
+    task.succeed(progress.doneLabel);
+  } catch (error) {
+    task.dismiss();
+    throw error;
+  }
 }
 
 // ============================================================================
@@ -167,11 +218,13 @@ export class CancelledError extends Error {
  *
  * Resolves with the child's exit code; rejects with a `CancelledError` when
  * the CLI received SIGINT, SIGTERM or SIGHUP while the child was running.
+ * `onSpawn` receives the child as soon as it exists, to read its piped output.
  */
 export function runCommand(
   command: string,
   args: string[],
   options?: SpawnOptions,
+  onSpawn?: (child: ChildProcess) => void,
 ): Promise<number> {
   const isWindows = process.platform === "win32";
   return new Promise((resolve, reject) => {
@@ -187,6 +240,7 @@ export function runCommand(
       // Windows it would open a new console window instead.
       detached: !isWindows,
     });
+    onSpawn?.(child);
 
     let escalation: NodeJS.Timeout | undefined;
     let forwarded: NodeJS.Signals | undefined;
@@ -259,6 +313,81 @@ export function runCommand(
   });
 }
 
+/** How long piped output may keep arriving once the child has exited. */
+const OUTPUT_DRAIN_TIMEOUT_MS = 2000;
+
+export interface FramedCommandOptions {
+  /** Names the child in the gutter of a verbose run. */
+  name: string;
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+  /** Rewrites each line before anything reads it, e.g. workspace paths. */
+  mapLine?: PathMapper;
+  /** Receives each line, mapped and without colors. */
+  onLine?: (line: string) => void;
+}
+
+export interface FramedCommandResult {
+  code: number;
+  /** The last lines of stdout and stderr, interleaved, without colors. */
+  lines: string[];
+}
+
+/** Resolves once the stream ended or failed. */
+function drained(stream: NodeJS.ReadableStream | null): Promise<void> {
+  if (!stream) return Promise.resolve();
+  return new Promise((settle) => {
+    stream.once("end", settle);
+    stream.once("error", settle);
+  });
+}
+
+function drainTimeout(): Promise<void> {
+  return new Promise((settle) => {
+    setTimeout(settle, OUTPUT_DRAIN_TIMEOUT_MS).unref();
+  });
+}
+
+/**
+ * Run a child whose output the CLI frames instead of letting it reach the
+ * terminal: kept for the failure report, or streamed behind a gutter naming
+ * the child in a verbose run. Signals stop it as `runCommand` does.
+ */
+export async function runFramedCommand(
+  command: string,
+  args: string[],
+  options: FramedCommandOptions,
+): Promise<FramedCommandResult> {
+  const { name, cwd, env, mapLine = (line) => line, onLine } = options;
+  const isVerbose = isVerboseRun();
+  const tail = new OutputTail();
+  const readLine = (line: string) => {
+    const mapped = mapLine(line);
+    if (isVerbose) writeChildLine(name, mapped);
+    const plain = stripAnsi(mapped);
+    tail.push(plain);
+    onLine?.(plain);
+  };
+  let ended: Promise<unknown> = Promise.resolve();
+  const code = await runCommand(
+    command,
+    args,
+    { cwd, env, stdio: ["ignore", "pipe", "pipe"] },
+    (child) => {
+      const streams = [child.stdout, child.stderr];
+      for (const stream of streams) {
+        const splitter = new LineSplitter(readLine);
+        stream?.setEncoding("utf8");
+        stream?.on("data", (chunk: string) => splitter.push(chunk));
+        stream?.once("end", () => splitter.flush());
+      }
+      ended = Promise.all(streams.map((stream) => drained(stream)));
+    },
+  );
+  await Promise.race([ended, drainTimeout()]);
+  return { code, lines: tail.lines() };
+}
+
 // ============================================================================
 // Full Workspace Setup (orchestration)
 // ============================================================================
@@ -280,7 +409,7 @@ export interface SetupWorkspaceOptions {
   workspaceKey?: string;
   /** Credential presented on the backend's layer endpoints */
   bootstrapSecret?: string;
-  /** Called before `pnpm install` writes to the terminal, e.g. to pause a spinner */
+  /** Called before `pnpm install` starts, e.g. to end the task that set the workspace up */
   beforeInstall?: () => Promise<void>;
 }
 
@@ -369,7 +498,7 @@ export async function setupWorkspace(
   // `pnpm install` so pnpm sees the workspace packages.
   if (shouldInstall) {
     await opts.beforeInstall?.();
-    await installDeps(workspaceDir);
+    await installDeps(workspaceDir, createPathMapper(workspaceDir, layers));
     saveDepsHash(workspaceDir, layerPaths);
   }
 
