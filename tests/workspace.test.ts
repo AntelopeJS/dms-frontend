@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import {
-  buildLayersFromPaths,
+  assertLayerPathsServed,
   canonicalizeBackendUrl,
   computeDepsHash,
   describeWorkspace,
@@ -188,26 +188,54 @@ describe("manifest cache", () => {
 });
 
 describe("layer paths withheld by the backend", () => {
+  const backendUrl = "http://127.0.0.1:5010";
   const pathless: ManifestModule[] = [
     { name: "@scope/dms-frontend-module", archiveName: "a", priority: 0 },
+    { name: "@scope/other-module", archiveName: "b", priority: 0 },
   ];
 
-  it("explains what dev mode needs instead of failing obscurely", () => {
-    assert.throws(
-      () => buildLayersFromPaths(pathless),
-      (err: Error) => {
-        assert.match(err.message, /without layer source paths/);
-        assert.match(err.message, /ajs project dev/);
-        assert.match(err.message, /DMS_BOOTSTRAP_SECRET/);
-        return true;
-      },
+  function messageFor(bootstrapSecret?: string): string {
+    try {
+      assertLayerPathsServed(pathless, backendUrl, bootstrapSecret);
+    } catch (err) {
+      return (err as Error).message;
+    }
+    assert.fail("expected the pathless manifest to be refused");
+  }
+
+  it("names the backend and counts the modules instead of listing them", () => {
+    const message = messageFor();
+    assert.match(
+      message,
+      /^The backend at http:\/\/127\.0\.0\.1:5010 did not send layer source paths \(2 of 2 modules\)\./,
     );
+    assert.doesNotMatch(message, /@scope\//);
   });
 
-  it("names the layer whose path is missing", () => {
-    assert.throws(
-      () => buildLayersFromPaths(pathless),
-      /@scope\/dms-frontend-module/,
+  it("names the missing credential when the run sent none", () => {
+    const message = messageFor();
+    assert.match(message, /this run sent none/);
+    assert.match(message, /\.antelope\/dms-dev\.json/);
+    assert.match(message, /DMS_BOOTSTRAP_SECRET/);
+    assert.match(message, /ajs dms build/);
+  });
+
+  it("names the refused credential when the run sent one", () => {
+    const message = messageFor("a-credential");
+    assert.match(message, /did not accept the one this run sent/);
+    assert.doesNotMatch(message, /sent none/);
+  });
+
+  it("does not speak for one command, since dev and prepare share it", () => {
+    assert.doesNotMatch(messageFor(), /ajs dms dev/);
+  });
+
+  it("accepts a manifest whose modules all have a path", () => {
+    assert.doesNotThrow(() =>
+      assertLayerPathsServed(
+        [{ ...pathless[0], path: "/layers/a" }],
+        backendUrl,
+      ),
     );
   });
 });

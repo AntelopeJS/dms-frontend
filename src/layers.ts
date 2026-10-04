@@ -10,13 +10,13 @@ import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 import { buffer } from "node:stream/consumers";
 import { Open } from "unzipper";
-import { ManifestUnauthorizedError, ServedWithPath } from "./manifest";
 import {
-  ManifestModule,
-  ResolvedLayer,
-  bootstrapHeaders,
-  isUnauthorized,
-} from "./workspace";
+  backendEndpoint,
+  displayUrl,
+  fetchFromBackend,
+  ServedWithPath,
+} from "./manifest";
+import { ManifestModule, ResolvedLayer } from "./workspace";
 import { syncDirectories } from "./fs-sync";
 import { LAYERS_SUBDIR } from "./config";
 
@@ -24,18 +24,38 @@ import { LAYERS_SUBDIR } from "./config";
 // Constants
 // ============================================================================
 
+/**
+ * Dev mode extends each layer from its source directory on this machine, so
+ * a manifest without those paths cannot drive it. A development backend
+ * sends them only to callers presenting its credential, so the likely cause
+ * depends on whether this run sent one.
+ */
 export function assertLayerPathsServed(
   modules: ManifestModule[],
+  backendUrl: string,
+  bootstrapSecret?: string,
 ): asserts modules is ServedWithPath[] {
   const pathless = modules.filter((mod) => !mod.path);
   if (pathless.length === 0) return;
+  const count = `${pathless.length} of ${modules.length} module${modules.length === 1 ? "" : "s"}`;
+  const cause = bootstrapSecret
+    ? [
+        "It sends them only to callers presenting its development credential, and did not accept the one this run sent.",
+        "→ Run the command from the antelope project started with `ajs project dev`, without DMS_BOOTSTRAP_SECRET or --bootstrap-secret,",
+        "  so the credential is read from .antelope/dms-dev.json",
+      ]
+    : [
+        "It sends them only to callers presenting its development credential, and this run sent none:",
+        "no DMS_BOOTSTRAP_SECRET or --bootstrap-secret, and no project started with `ajs project dev`",
+        "serving this backend was found from the current directory, so no .antelope/dms-dev.json was read.",
+        "→ Run the command from that project, or set DMS_BOOTSTRAP_SECRET to the backend's credential",
+      ];
   throw new Error(
-    "The backend served a manifest without layer source paths:\n" +
-      pathless.map((mod) => `  - ${mod.name}`).join("\n") +
-      "\n`ajs dms dev` needs a development backend running on this machine (started with " +
-      "`ajs project dev`); use `ajs dms build` against a remote or production one.\n" +
-      "If the backend is local and in development mode, it did not recognize the bootstrap " +
-      "credential — see DMS_BOOTSTRAP_SECRET.",
+    [
+      `The backend at ${displayUrl(backendUrl)} did not send layer source paths (${count}).`,
+      ...cause,
+      "→ A remote or production backend never sends them: use `ajs dms build` against it",
+    ].join("\n  "),
   );
 }
 
@@ -115,9 +135,8 @@ function resolveLayer(layerPath: string, mod: ManifestModule): ResolvedLayer {
  * points directly at a local layer directory (dev mode).
  */
 export function buildLayersFromPaths(
-  modules: ManifestModule[],
+  modules: ServedWithPath[],
 ): ResolvedLayer[] {
-  assertLayerPathsServed(modules);
   return sortModulesByPriority(modules).map((mod) =>
     resolveLayer(mod.path, mod),
   );
@@ -133,16 +152,12 @@ export async function downloadAndExtractLayers(
   force: boolean,
   bootstrapSecret?: string,
 ): Promise<void> {
-  const url = `${backendUrl}${packUrl}`;
-  const response = await fetch(url, {
-    headers: bootstrapHeaders(bootstrapSecret),
-  });
-
-  if (isUnauthorized(response.status)) {
-    throw new ManifestUnauthorizedError(url, response.status);
-  }
+  const url = backendEndpoint(backendUrl, packUrl);
+  const response = await fetchFromBackend(backendUrl, url, bootstrapSecret);
   if (!response.ok || !response.body) {
-    throw new Error("Failed to download layers archive");
+    throw new Error(
+      `Failed to download the layers archive from ${displayUrl(url)} (${response.status})`,
+    );
   }
 
   const modulesBlob = await buffer(Readable.fromWeb(response.body as any));
