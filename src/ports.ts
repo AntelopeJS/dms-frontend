@@ -10,7 +10,7 @@ import { type AddressInfo, createServer, type Server } from "node:net";
  */
 export const PORT_FALLBACK_RANGE = 20;
 
-const MAX_TCP_PORT = 65535;
+export const MAX_TCP_PORT = 65535;
 
 /**
  * A port we are actively holding with a bound socket. Keeping the socket
@@ -57,16 +57,28 @@ export async function reserveFreePort(
 ): Promise<ReservedPort> {
   const end = Math.min(preferred + range, MAX_TCP_PORT);
   for (let port = preferred; port <= end; port++) {
-    const server = await tryListen(port);
-    if (server) {
-      return {
-        port: (server.address() as AddressInfo).port,
-        release: () =>
-          new Promise((resolve) => {
-            server.close(() => resolve());
-          }),
-      };
-    }
+    const reserved = await reservePort(port);
+    if (reserved) return reserved;
   }
   throw new Error(`No free port found between ${preferred} and ${end}.`);
+}
+
+/**
+ * Reserve exactly `port`, for a server that must not move elsewhere: the
+ * production server's port is the one the deployment routes traffic to.
+ *
+ * @returns The reservation, or undefined when the port is in use
+ */
+export async function reservePort(
+  port: number,
+): Promise<ReservedPort | undefined> {
+  const server = await tryListen(port);
+  if (!server) return undefined;
+  return {
+    port: (server.address() as AddressInfo).port,
+    release: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
+  };
 }

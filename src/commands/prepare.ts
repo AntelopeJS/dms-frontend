@@ -3,6 +3,7 @@ import { Command } from "commander";
 import {
   CancelledError,
   Options,
+  parseBackendUrl,
   resolveBootstrapSecret,
   setupWorkspace,
 } from "../common";
@@ -46,7 +47,7 @@ export function cmdPrepare(): Command {
       let manifestFetchedAt: string | undefined;
       try {
         const result = await setupWorkspace({
-          backendUrl: options.backendUrl,
+          backendUrl: parseBackendUrl(options.backendUrl),
           force: !!options.force,
           mode: "dev",
           offline: options.offline,

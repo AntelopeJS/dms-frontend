@@ -7,9 +7,10 @@ import { cmdDev } from "./commands/dev";
 import { cmdPrepare } from "./commands/prepare";
 import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
+import { UsageError } from "./config";
 import { ENV_FILE_NAMES, loadProjectEnv } from "./env-file";
 import { checkForUpdate, stripUpdateCheckFlag } from "./update-check";
-import { displayBanner, stopped } from "./utils/cli-ui";
+import { displayBanner, error, stopped } from "./utils/cli-ui";
 import { CancelledError } from "./workspace-setup";
 
 const { version } = require("../package.json");
@@ -89,6 +90,11 @@ Workspaces:
 runCLI().catch((err) => {
   if (err instanceof CancelledError) {
     stopped(err.message, err.signal);
+    process.exit(err.exitCode);
+  }
+  if (err instanceof UsageError) {
+    error(err.message);
+    for (const line of err.details) console.error(chalk.dim(`  ${line}`));
     process.exit(err.exitCode);
   }
   console.error(chalk.red("Error:"), err.message || err);

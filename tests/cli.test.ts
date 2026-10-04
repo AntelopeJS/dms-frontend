@@ -12,8 +12,25 @@ import { cmdClean } from "../src/commands/clean";
 import { cmdDev } from "../src/commands/dev";
 import { cmdPrepare } from "../src/commands/prepare";
 import { cmdStart } from "../src/commands/start";
-import { resolveSessionSecret } from "../src/config";
+import {
+  parseBackendUrl,
+  parsePort,
+  resolveSessionSecret,
+  UsageError,
+} from "../src/config";
 import { error, info, Spinner, success, warning } from "../src/utils/cli-ui";
+
+/**
+ * Match a UsageError on its message and, in order, on its detail lines.
+ */
+function usageError(message: RegExp, ...details: RegExp[]) {
+  return (err: unknown) => {
+    assert.ok(err instanceof UsageError);
+    assert.match(err.message, message);
+    for (const detail of details) assert.match(err.details.join("\n"), detail);
+    return true;
+  };
+}
 
 const packageJson = JSON.parse(
   readFileSync(
@@ -32,16 +49,54 @@ describe("DMS CLI plugin", () => {
     );
 
     for (const mode of ["dev", "build", "start"] as const) {
-      assert.throws(() => resolveSessionSecret(mode, ""), /at least 32/);
+      assert.throws(
+        () => resolveSessionSecret(mode, ""),
+        usageError(/DMS_SESSION_SECRET is empty/),
+      );
       assert.throws(
         () => resolveSessionSecret(mode, "too-short"),
-        /at least 32/,
+        usageError(/is too short: 9 characters, at least 32 needed/),
       );
     }
     for (const mode of ["build", "start"] as const) {
       assert.throws(
         () => resolveSessionSecret(mode, undefined),
-        /set it explicitly/,
+        usageError(/DMS_SESSION_SECRET is not set/, /openssl rand -hex 32/),
+      );
+    }
+  });
+
+  it("accepts only http and https backend URLs", () => {
+    assert.equal(
+      parseBackendUrl("http://127.0.0.1:5010"),
+      "http://127.0.0.1:5010",
+    );
+    assert.equal(
+      parseBackendUrl("https://dms.example.com"),
+      "https://dms.example.com",
+    );
+    assert.throws(
+      () => parseBackendUrl("localhost:5010"),
+      usageError(
+        /Invalid backend URL 'localhost:5010'/,
+        /-b http:\/\/localhost:5010/,
+      ),
+    );
+    assert.throws(
+      () => parseBackendUrl("ftp://dms.example.com"),
+      usageError(/Invalid backend URL/, /http:\/\/ or https:\/\//),
+    );
+    assert.throws(() => parseBackendUrl("not a url"), UsageError);
+  });
+
+  it("accepts only ports from 0 to 65535", () => {
+    assert.equal(parsePort("3001"), 3001);
+    assert.equal(parsePort("0"), 0);
+    assert.equal(parsePort("65535"), 65535);
+    for (const value of ["abc", "65536", "70000", "3001abc", "-1", "1.5", ""]) {
+      assert.throws(
+        () => parsePort(value),
+        usageError(/Invalid port/, /between 1 and 65535/),
       );
     }
   });
@@ -91,7 +146,10 @@ describe("verify-source CLI", () => {
     assert.deepEqual(parseLocalPackages(["@scope/package=../package"]), {
       "@scope/package": resolve("../package"),
     });
-    assert.throws(() => parseLocalPackages(["@scope/package"]), /name=path/);
+    assert.throws(
+      () => parseLocalPackages(["@scope/package"]),
+      usageError(/Invalid local package '@scope\/package'/, /name=path/),
+    );
   });
 });
 
