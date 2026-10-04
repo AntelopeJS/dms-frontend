@@ -1,6 +1,7 @@
 // The error a run stopped by a signal ends with, kept apart from the code
 // that spawns children so the entry point can catch it without loading them.
 import { constants as osConstants } from "node:os";
+import { getProcessUi } from "@antelopejs/core/cli";
 
 /** Shell convention for "died from signal N", used when the child never exited on its own. */
 export function exitCodeForSignal(signal: NodeJS.Signals): number {
@@ -30,7 +31,7 @@ export class CancelledError extends Error {
   ) {
     const cause = signal === "SIGINT" ? "" : ` (${signal})`;
     const parts = [`${stopped}${cause}`, ...(context ? [context] : [])];
-    super(parts.join(" · "));
+    super(parts.join(getProcessUi().symbols.separator));
     this.name = "CancelledError";
     this.exitCode = exitCodeForSignal(signal);
     this.stopped = parts[0];

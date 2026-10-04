@@ -347,6 +347,7 @@ describe("following the ajs output contract", () => {
     for (const verbose of [
       { args: ["--verbose"], env: {} },
       { args: [], env: { ANTELOPEJS_VERBOSE: "*" } },
+      { args: [], env: { ANTELOPEJS_VERBOSE: "cli" } },
     ]) {
       const result = await runCli(["build", "-b", backend, ...verbose.args], {
         env: { DMS_SESSION_SECRET: SESSION_SECRET, ...verbose.env },

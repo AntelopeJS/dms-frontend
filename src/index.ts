@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 import {
+  formatExamples,
   formatUsageErrors,
   getProcessPalette,
   getProcessUi,
+  type HelpExample,
+  helpTextWidth,
   isVerboseRun,
   runWithErrorBoundary,
+  unbreakable,
+  wrapText,
 } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import { CancelledError } from "./cancellation";
@@ -16,17 +21,8 @@ import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
 import { cmdWorkspaces } from "./commands/workspaces";
 import { loadProjectEnv } from "./env-file";
-import {
-  applyHelpConventions,
-  ENVIRONMENT_TOPIC,
-  formatEnvironmentHelp,
-  formatExamples,
-  type HelpExample,
-  helpWidth,
-  unbreakable,
-  wrapText,
-} from "./help";
-import { exitOnBrokenPipe, joinParts, reportStopped } from "./output";
+import { applyDmsHelp, ENVIRONMENT_TOPIC, formatEnvironmentHelp } from "./help";
+import { exitOnBrokenPipe, reportStopped } from "./output";
 import {
   reportAvailableUpdate,
   startProcessUpdateCheck,
@@ -56,19 +52,18 @@ const ROOT_EXAMPLES: HelpExample[] = [
   },
 ];
 
-function describeVersion(version: string): string {
+function describeVersion(version: string, width: number): string {
   const name = `ajs dms ${version}`;
-  const line = joinParts([
+  const line = [
     unbreakable(name),
     "DMS frontend for AntelopeJS (Vue 3, Vite, Inertia)",
-  ]);
-  const [first, ...rest] = wrapText(line, helpWidth());
+  ].join(getProcessUi().symbols.separator);
+  const [first, ...rest] = wrapText(line, width);
   const title = first.replace(name, getProcessPalette("result").bold(name));
   return `${[title, ...rest].join("\n")}\n`;
 }
 
-function describeHelpFooter(): string {
-  const width = helpWidth();
+function describeHelpFooter(width: number): string {
   const pointer =
     `Run ${unbreakable("ajs dms <command> --help")} for its options and examples, and ` +
     `${unbreakable(`ajs dms help ${ENVIRONMENT_TOPIC}`)} for the variables read from the environment.`;
@@ -141,8 +136,12 @@ const runCLI = async () => {
       "--no-update-check",
       "Skip the daily update check (also NO_UPDATE_NOTIFIER=1)",
     )
-    .addHelpText("before", () => describeVersion(version))
-    .addHelpText("after", describeHelpFooter);
+    .addHelpText("before", (context) =>
+      describeVersion(version, helpTextWidth(context)),
+    )
+    .addHelpText("after", (context) =>
+      describeHelpFooter(helpTextWidth(context)),
+    );
 
   program.addCommand(cmdDev());
   program.addCommand(cmdBuild());
@@ -151,7 +150,7 @@ const runCLI = async () => {
   program.addCommand(cmdWorkspaces());
   program.addCommand(cmdClean());
   program.addCommand(cmdVerifySource());
-  applyHelpConventions(program);
+  applyDmsHelp(program);
   formatUsageErrors(program);
 
   const args = stripUpdateCheckFlag(argv);

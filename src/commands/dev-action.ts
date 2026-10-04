@@ -21,7 +21,6 @@ import { createPathMapper } from "../child-output";
 import { describeDiscoveryFailure, discoverBackend } from "../discovery";
 import {
   cachedAge,
-  joinParts,
   showPath,
   showWorkspace,
   writeHeader,
@@ -194,10 +193,10 @@ export async function runDev(options: DevOptions): Promise<void> {
             ? [{ label: "Secrets", value: secretSources }]
             : []),
         ]),
-        footer: joinParts([
+        footer: [
           `Watching ${pluralize(layers.length, "layer source")}`,
           "Ctrl+C to stop",
-        ]),
+        ].join(ui.symbols.separator),
       });
       void reportAvailableUpdate({ isFollowed: true });
     },
