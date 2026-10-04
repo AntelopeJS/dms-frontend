@@ -53,9 +53,6 @@ interface DeclaredRange {
 
 const OWN_RELEASE: RendererRelease = require("../package.json");
 
-/** The core's indent under a problem's title, continued by a reason of several lines. */
-const DETAIL_INDENT = "  ";
-
 /**
  * Modules already named in an undeclared-range notice. A process only ever
  * loads one set of modules, so repeating the notice would add nothing.
@@ -196,7 +193,7 @@ export function assertLayersSupportRenderer(
   if (problems.length === 0) return;
   throw new CliError({
     title: `These frontend modules do not run on ${renderer.name} ${renderer.version}`,
-    reason: problems.join(`\n${DETAIL_INDENT}`),
+    details: problems,
     fixes: [
       `Install a ${renderer.name} release in their ranges, or upgrade the modules`,
     ],

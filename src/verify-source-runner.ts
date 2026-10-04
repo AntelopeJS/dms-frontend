@@ -43,7 +43,6 @@ import {
 import {
   exitOnBrokenPipe,
   formatSize,
-  joinParts,
   reportStopped,
   showPath,
   writeHeader,
@@ -306,7 +305,9 @@ async function typeCheck(context: VerificationContext): Promise<void> {
       if (result.code === 0) return;
       const report = parseTypeCheckOutput(result.lines);
       const count = report.count > 0 ? [pluralize(report.count, "error")] : [];
-      task.fail(joinParts(["Type check failed", ...count]));
+      task.fail(
+        ["Type check failed", ...count].join(getProcessUi().symbols.separator),
+      );
       throw new CliError(
         describeTypeCheckErrors(report, VERIFY_SOURCE_COMMAND) ??
           describeChildFailure({
@@ -461,12 +462,12 @@ async function checkEmailContracts(workspace: string): Promise<string> {
       `Its HTML lacks ${emailCase.marker}.`,
     );
   }
-  return joinParts([
+  return [
     "E-mail contracts hold",
     pluralize(EMAIL_CASES.length, "template"),
     `${formatSize(emailBuildSize)} JS (limit ${limit})`,
     `${formatSize(emailLocaleBytes)} locale data`,
-  ]);
+  ].join(getProcessUi().symbols.separator);
 }
 
 // ============================================================================

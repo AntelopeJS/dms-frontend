@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { Options } from "../config";
-import { type HelpExample, withExamples } from "../help";
+import { type HelpExample, withExamples } from "@antelopejs/core/cli";
 import type { BuildOptions } from "./build-action";
 
 const BUILD_EXAMPLES: HelpExample[] = [

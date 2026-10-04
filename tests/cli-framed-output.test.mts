@@ -44,6 +44,7 @@ interface RunOptions {
   scenario?: string;
   /** Prepares the sandbox, which is both the cwd and HOME, before the run. */
   setUp?: (sandbox: string) => void;
+  env?: NodeJS.ProcessEnv;
 }
 
 function runCli(args: string[], options: RunOptions = {}): Promise<Run> {
@@ -60,6 +61,7 @@ function runCli(args: string[], options: RunOptions = {}): Promise<Run> {
     DMS_SESSION_SECRET: SESSION_SECRET,
     FAKE_PNPM_SCENARIO: options.scenario ?? "success",
     FAKE_PNPM_LOG: log,
+    ...options.env,
   };
   delete env.ANTELOPEJS_VERBOSE;
   delete env.FORCE_COLOR;
@@ -291,6 +293,20 @@ describePosix("framing pnpm install and the production build", () => {
     assert.ok(steps.every((call) => call.env.viteLogLevel === "warn"));
   });
 
+  it("ends a build in ASCII on a dumb terminal", async () => {
+    const run = await runCli(offlineBuild, {
+      setUp: offlineBuildHome,
+      env: { TERM: "dumb" },
+    });
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(
+      run.stderr,
+      /\nBuilt the production frontend > \.\/\.antelopejs\/dms-frontend\/[0-9a-f]{64}\/dist - \d+(?:ms|\.\ds)\n/,
+    );
+    assert.doesNotMatch(run.stderr, /[^\n -~]/);
+  });
+
   it("fails when the backend is down instead of building from the cache", async () => {
     const backendUrl = await closedBackendUrl();
     const run = await runCli(["build", "-b", backendUrl], {
@@ -305,6 +321,7 @@ describePosix("framing pnpm install and the production build", () => {
         [
           `✖ Cannot reach the DMS backend at ${backendUrl.replaceAll(".", "\\.")}`,
           "  Connection refused \\(ECONNREFUSED\\)\\. A manifest cached just now exists; a build uses it only with --offline\\.",
+          "  Run with --verbose for the full trace\\.",
           "  → Start the backend .*",
           `  → Or build from the cache on purpose: ajs dms build -b ${backendUrl.replaceAll(".", "\\.")} --offline`,
         ].join("\n"),
@@ -323,11 +340,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.equal(run.code, 1);
     assert.match(
       run.stderr,
-      /✖ SSR bundle failed(?: \S+)?\n✖ Vite could not compile \.\/frontend-vue\/app\/components\/Callout\.vue:10:50\n {2}\[vue\/compiler-sfc\] Unexpected token\n {2}→ Fix the file and run ajs dms build again\n/,
-    );
-    assert.match(
-      run.stderr,
-      /Run with --verbose for the full Vite output\.\n$/,
+      /✖ SSR bundle failed(?: \S+)?\n✖ Vite could not compile \.\/frontend-vue\/app\/components\/Callout\.vue:10:50\n {2}\[vue\/compiler-sfc\] Unexpected token\n {2}10 \|.*\n {5}\| +\^\n {2}Run with --verbose for the full Vite output\.\n {2}→ Fix the file and run ajs dms build again\n$/,
     );
     assert.doesNotMatch(run.stderr, /at constructor|frontend-modules/);
     assert.doesNotMatch(run.stderr, /e-mail bundle/);
@@ -386,7 +399,9 @@ describePosix("framing verify-source", () => {
           "✖ SSR bundle failed(?: \\S+)?\n" +
           "✖ Vite could not compile \\./frontend-vue/app/components/Callout\\.vue:10:50\n" +
           " {2}\\[vue/compiler-sfc\\] Unexpected token\n" +
-          " {2}→ Fix the file and run ajs dms verify-source again\n",
+          " {2}10 \\|.*\n {5}\\| +\\^\n" +
+          " {2}Run with --verbose for the full Vite output\\.\n" +
+          " {2}→ Fix the file and run ajs dms verify-source again\n$",
       ),
     );
     assert.doesNotMatch(

@@ -20,7 +20,6 @@ import {
 import {
   failureDetails,
   formatTimedMessage,
-  joinParts,
   showPath,
   type TimedMessageOptions,
   writeFeedback,
@@ -246,7 +245,9 @@ function describeOutputFailure(
     return {
       text: `${file} is not a valid locale file`,
       options: { details: [err.reason, kept] },
-      fixed: joinParts([`${file} fixed`, `${output.name} regenerated`]),
+      fixed: [`${file} fixed`, `${output.name} regenerated`].join(
+        getProcessUi().symbols.separator,
+      ),
     };
   }
   return {

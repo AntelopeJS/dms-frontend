@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type HelpExample, withExamples } from "../help";
+import { type HelpExample, withExamples } from "@antelopejs/core/cli";
 import type { CleanOptions } from "./clean-action";
 
 const CLEAN_EXAMPLES: HelpExample[] = [

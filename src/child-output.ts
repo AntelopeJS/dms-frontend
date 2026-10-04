@@ -15,7 +15,7 @@ import {
   type Ui,
 } from "@antelopejs/core/cli";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
-import { joinParts, showPath, showWorkspace } from "./output";
+import { showPath, showWorkspace } from "./output";
 import type { ResolvedLayer } from "./workspace";
 
 const ESC = "\u001b";
@@ -306,10 +306,10 @@ export class InstallProgress {
 
   get label(): string {
     if (this.resolved === undefined) return "Installing dependencies";
-    return joinParts([
+    return [
       "Installing dependencies",
       `${this.resolved} resolved, ${this.added ?? 0} added`,
-    ]);
+    ].join(getProcessUi().symbols.separator);
   }
 
   get doneLabel(): string {

@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type HelpExample, withExamples } from "../help";
+import { type HelpExample, withExamples } from "@antelopejs/core/cli";
 import type { VerifySourceOptions } from "./verify-source-action";
 
 /** Collects a repeatable option; no default, so the help shows none. */

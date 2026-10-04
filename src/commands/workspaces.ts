@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type HelpExample, withExamples } from "../help";
+import { type HelpExample, withExamples } from "@antelopejs/core/cli";
 import type { WorkspacesOptions } from "./workspaces-action";
 
 const WORKSPACES_EXAMPLES: HelpExample[] = [

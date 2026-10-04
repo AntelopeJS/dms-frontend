@@ -39,21 +39,19 @@ import {
   UsageError,
 } from "../src/config";
 import {
-  ellipsis,
   formatAge,
   formatReadyBlock,
   formatSize,
+  failureDetails,
   formatTimedMessage,
-  joinParts,
   showPath,
   showWorkspace,
   workspaceId,
 } from "../src/output";
 import {
-  applyHelpConventions,
+  applyDmsHelp,
   ENVIRONMENT_VARIABLES,
   formatEnvironmentHelp,
-  helpWidth,
 } from "../src/help";
 import {
   describeListenError,
@@ -154,7 +152,7 @@ describe("DMS CLI plugin", () => {
   it("requires the AntelopeJS CLI that publishes its output module", () => {
     assert.equal(
       packageJson.peerDependencies["@antelopejs/core"],
-      ">=1.12.0 <2",
+      ">=1.13.0 <2",
     );
     assert.equal(packageJson.peerDependenciesMeta, undefined);
     for (const dependency of ["figlet", "boxen", "chalk", "@types/figlet"]) {
@@ -252,20 +250,13 @@ describe("help environment", () => {
     );
   });
 
-  it("reads the terminal's width, up to 80 columns", () => {
-    assert.equal(helpWidth({ isTTY: true, columns: 60 }), 60);
-    assert.equal(helpWidth({ isTTY: true, columns: 200 }), 80);
-    assert.equal(helpWidth({ isTTY: false, columns: 60 }), 80);
-    assert.equal(helpWidth({}), 80);
-  });
-
   it("wraps option descriptions, or puts them under the option when narrow", () => {
     const help = (width: number) => {
       const program = new Command("ajs dms").option(
         "--bootstrap-secret <secret>",
         "Credential for the backend's layer endpoints; prefer the variable",
       );
-      applyHelpConventions(program);
+      applyDmsHelp(program);
       program.configureOutput({ getOutHelpWidth: () => width });
       return program.helpInformation();
     };
@@ -283,6 +274,33 @@ describe("help environment", () => {
         .filter((line) => line.length > width);
       assert.deepEqual(over, [], `at ${width} columns`);
     }
+  });
+
+  it("lists commands without [options], and the global options on every page", () => {
+    const program = new Command("ajs dms").option("--verbose", "Show more");
+    program.addCommand(
+      new Command("dev")
+        .summary("Run the dev server")
+        .option("-f, --force", "Reinstall"),
+    );
+    program.addCommand(
+      new Command("verify-source")
+        .summary("Verify sources")
+        .argument("[layer]"),
+    );
+    applyDmsHelp(program);
+    program.configureOutput({ getOutHelpWidth: () => 80 });
+    const root = program.helpInformation();
+    assert.match(root, /\n {2}dev {2,}Run the dev server\n/);
+    assert.match(root, /\n {2}verify-source \[layer\] {2,}Verify sources\n/);
+    assert.match(root, /\n {2}help \[command\] {2,}Show help for a command\n/);
+    assert.doesNotMatch(root, /dev \[options\]/);
+    const dev = program.commands[0];
+    dev.configureOutput({ getOutHelpWidth: () => 80 });
+    assert.match(
+      dev.helpInformation(),
+      /\n {2}-h, --help {2,}Show help for a command\n\nGlobal Options:\n {2}--verbose {2,}Show more\n/,
+    );
   });
 
   it("reads a flag's variable as a boolean, the flag first", () => {
@@ -633,13 +651,23 @@ describe("CLI output", () => {
     );
   });
 
-  it("joins and cuts lines in ASCII where the terminal has no Unicode", () => {
-    const unicode = memoryUi().ui;
+  it("lists a warned failure's details before its fixes, as the core does", () => {
+    const error = new UsageError({
+      title: "Locale catalogs not regenerated",
+      reason: "fr.json is not valid JSON",
+      details: ["Unexpected token } at 4:2"],
+      fixes: ["Fix the file"],
+    });
+    assert.deepEqual(failureDetails(error, memoryUi().ui), [
+      "Locale catalogs not regenerated",
+      "fr.json is not valid JSON",
+      "Unexpected token } at 4:2",
+      "→ Fix the file",
+    ]);
+  });
+
+  it("cuts lines in ASCII where the terminal has no Unicode", () => {
     const ascii = memoryUi({ isUnicode: false }).ui;
-    assert.equal(joinParts(["a", "b"], unicode), "a · b");
-    assert.equal(joinParts(["a", "b"], ascii), "a - b");
-    assert.equal(ellipsis(unicode), "…");
-    assert.equal(ellipsis(ascii), "...");
     const home = "/home/user";
     const dir = `${home}/.antelopejs/dms-frontend/76672b089458f187ebe9586040f9b8ae`;
     assert.equal(
@@ -679,9 +707,9 @@ describe("CLI output", () => {
       [
         "✖ Vite could not start: error in ./frontend-vue/dms.frontend.ts:4:0",
         '  Unexpected "}"',
-        "  → Fix the file and run ajs dms dev again",
         "  4 | };",
         "    | ^",
+        "  → Fix the file and run ajs dms dev again",
         "",
       ].join("\n"),
     );

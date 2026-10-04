@@ -33,8 +33,6 @@ import { CancelledError } from "./cancellation";
 const HOME_PREFIX = "~";
 const CURRENT_DIRECTORY = ".";
 const WORKSPACE_ID_LENGTH = 8;
-const ELLIPSES = { unicode: "…", ascii: "..." };
-const SEPARATORS = { unicode: " · ", ascii: " - " };
 const LINE_BREAK = /\r?\n/;
 const CARRIAGE_RETURN = "\r";
 const STOPPED_SYMBOLS = { unicode: "■", ascii: "x" };
@@ -54,22 +52,6 @@ const HOURS_PER_DAY = 24;
 
 function isUnicode(ui: Ui): boolean {
   return ui.symbols === SYMBOL_SETS.unicode;
-}
-
-/**
- * The parts of one line, joined as the core joins them: `a · b`, or `a - b`
- * where the terminal only shows ASCII.
- */
-export function joinParts(
-  parts: readonly string[],
-  ui: Ui = getProcessUi(),
-): string {
-  return parts.join(isUnicode(ui) ? SEPARATORS.unicode : SEPARATORS.ascii);
-}
-
-/** What stands for cut text: `…`, or `...` where the terminal only shows ASCII. */
-export function ellipsis(ui: Ui = getProcessUi()): string {
-  return isUnicode(ui) ? ELLIPSES.unicode : ELLIPSES.ascii;
 }
 
 /**
@@ -110,7 +92,7 @@ export function writeHeader(
   ui: Ui = getProcessUi(),
 ): void {
   const title = ui.palette().bold(`ajs dms ${command}`);
-  writeFeedback(`${title}  ${joinParts(context, ui)}`);
+  writeFeedback(`${title}  ${context.join(ui.symbols.separator)}`);
 }
 
 /** Separates the CLI's own lines from the output of the child it starts. */
@@ -148,7 +130,7 @@ export function showWorkspace(
   if (!isTerminal || id.length <= WORKSPACE_ID_LENGTH) return shown;
   return join(
     dirname(shown),
-    `${id.slice(0, WORKSPACE_ID_LENGTH)}${ellipsis(ui)}`,
+    `${id.slice(0, WORKSPACE_ID_LENGTH)}${ui.symbols.ellipsis}`,
   );
 }
 
@@ -205,8 +187,9 @@ function describeProblem(error: unknown): CliProblem {
 }
 
 /**
- * The detail lines of a failure that does not stop the command: its reason,
- * fixes and details, and its stack trace in a verbose run.
+ * The detail lines of a failure that does not stop the command, in the order
+ * the core reports a problem: its reason, details and stack trace in a
+ * verbose run, then its fixes.
  */
 export function failureDetails(
   error: unknown,
@@ -221,9 +204,9 @@ export function failureDetails(
   return [
     title,
     ...(reason ? [reason] : []),
-    ...fixes.map((fix) => `${hint} ${fix}`),
     ...details,
     ...stack.map((line) => line.trim()),
+    ...fixes.map((fix) => `${hint} ${fix}`),
   ];
 }
 
@@ -258,7 +241,7 @@ export function reportStopped(
   const symbol = isUnicode(ui)
     ? STOPPED_SYMBOLS.unicode
     : STOPPED_SYMBOLS.ascii;
-  const text = joinParts([stop.stopped, ...stop.context], ui);
+  const text = [stop.stopped, ...stop.context].join(ui.symbols.separator);
   writeFeedback(
     `${lineStartAfter(stop.signal)}${ui.palette().red(symbol)} ${text}`,
   );

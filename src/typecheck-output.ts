@@ -1,9 +1,8 @@
 // What the CLI makes of the output of `vue-tsc --pretty`: the type errors it
 // reported, each with its message and code frame, as one problem.
 
-import { type CliProblem, pluralize } from "@antelopejs/core/cli";
+import { type CliProblem, getProcessUi, pluralize } from "@antelopejs/core/cli";
 import { VERBOSE_OUTPUT_HINT } from "./child-output";
-import { ellipsis } from "./output";
 
 /** `app/Callout.vue:17:7 - error TS2322: Type 'string' is not …` */
 const ERROR_LINE = /^(.+?):(\d+):(\d+) - error (TS\d+): (.*)$/;
@@ -111,7 +110,7 @@ export function describeTypeCheckErrors(
       ]),
       ...(hidden > 0
         ? [
-            `${ellipsis()} and ${pluralize(hidden, "more error")}`,
+            `${getProcessUi().symbols.ellipsis} and ${pluralize(hidden, "more error")}`,
             VERBOSE_OUTPUT_HINT,
           ]
         : []),
