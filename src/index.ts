@@ -9,7 +9,8 @@ import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
 import { ENV_FILE_NAMES, loadProjectEnv } from "./env-file";
 import { checkForUpdate, stripUpdateCheckFlag } from "./update-check";
-import { displayBanner } from "./utils/cli-ui";
+import { displayBanner, stopped } from "./utils/cli-ui";
+import { CancelledError } from "./workspace-setup";
 
 const { version } = require("../package.json");
 
@@ -80,11 +81,12 @@ Workspaces:
   await program.parseAsync(stripUpdateCheckFlag(argv), { from: "user" });
 };
 
-// Handle SIGINT gracefully
-process.on("SIGINT", () => process.exit(0));
-
 // Run CLI
 runCLI().catch((err) => {
+  if (err instanceof CancelledError) {
+    stopped(err.message, err.signal);
+    process.exit(err.exitCode);
+  }
   console.error(chalk.red("Error:"), err.message || err);
   process.exit(1);
 });

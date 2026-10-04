@@ -1,6 +1,11 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { Options, resolveBootstrapSecret, setupWorkspace } from "../common";
+import {
+  CancelledError,
+  Options,
+  resolveBootstrapSecret,
+  setupWorkspace,
+} from "../common";
 import { info, Spinner, success, warning } from "../utils/cli-ui";
 
 interface PrepareOptions {
@@ -49,11 +54,13 @@ export function cmdPrepare(): Command {
             options.bootstrapSecret,
             options.backendUrl,
           ),
+          beforeInstall: () => spinner.pause(),
         });
         workspaceDir = result.workspaceDir;
         manifestFromCache = result.manifestFromCache;
         manifestFetchedAt = result.manifestFetchedAt;
       } catch (err: any) {
+        if (err instanceof CancelledError) throw err;
         await spinner.warn(`Skipping prepare: ${err.message}`);
         process.exit(0);
       }
