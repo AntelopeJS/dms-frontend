@@ -388,6 +388,16 @@ describe("update check timing and placement", () => {
     assert.deepEqual(test.written, [...notice("0.1.0").reverse()]);
   });
 
+  it("wraps the notice to the terminal, under its text", async () => {
+    const test = harness("0.1.0");
+    await test.run({ columns: 40 });
+    assert.deepEqual(test.written, [
+      "",
+      "ℹ ajs dms 0.1.0 is available (you have",
+      "  0.0.1) → ajs update dms",
+    ]);
+  });
+
   it("falls back to ASCII and colors only the symbol and the command", async () => {
     const ascii = harness("0.1.0");
     await ascii.run({ ui: memoryUi({ isUnicode: false }).ui });

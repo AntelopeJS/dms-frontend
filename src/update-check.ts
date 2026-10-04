@@ -9,7 +9,12 @@ import { get as httpsGet } from "node:https";
 import { dirname, join } from "node:path";
 import { getProcessUi, isQuietRun, type Ui } from "@antelopejs/core/cli";
 import { DMS_FRONTEND_HOME } from "./config";
-import { isTerminalFeedback, writeFeedback } from "./output";
+import {
+  feedbackColumns,
+  isTerminalFeedback,
+  wrapAfter,
+  writeFeedback,
+} from "./output";
 
 export const UPDATE_CHECK_PACKAGE = "@antelopejs/dms-frontend";
 
@@ -101,6 +106,8 @@ export interface UpdateCheckOptions {
   ui?: Ui;
   /** Sink for each line of the notice; stderr, above any running task, in production. */
   write?: (line: string) => void;
+  /** The width the notice wraps to; the terminal's in production. */
+  columns?: number;
 }
 
 export interface UpdateNoticeOptions {
@@ -300,12 +307,15 @@ function formatNotice(
   currentVersion: string,
   latestVersion: string,
   ui: Ui,
-): string {
+  columns: number | undefined,
+): string[] {
   const palette = ui.palette("feedback");
   const { info, hint } = ui.symbols.levels;
-  return (
-    `${palette.blue(info)} ajs dms ${latestVersion} is available ` +
-    `(you have ${currentVersion}) ${palette.cyan(`${hint} ${UPDATE_COMMAND}`)}`
+  return wrapAfter(
+    `${palette.blue(info)} `,
+    `ajs dms ${latestVersion} is available (you have ${currentVersion}) ` +
+      palette.cyan(`${hint} ${UPDATE_COMMAND}`),
+    columns,
   );
 }
 
@@ -353,6 +363,7 @@ export function startUpdateCheck(
       fetchLatestVersion = fetchLatestVersionFromRegistry,
       ui = getProcessUi(),
       write = writeFeedback,
+      columns = feedbackColumns(),
     } = options;
 
     if (!isTerminal || !isUpdateCheckEnabled(argv, env)) return undefined;
@@ -390,8 +401,10 @@ export function startUpdateCheck(
       isReported = true;
       const known = latestVersion;
       if (!known || !(await isNewer(currentVersion, known))) return;
-      const line = formatNotice(currentVersion, known, ui);
-      for (const text of placement.isFollowed ? [line, ""] : ["", line]) {
+      const lines = formatNotice(currentVersion, known, ui, columns);
+      for (const text of placement.isFollowed
+        ? [...lines, ""]
+        : ["", ...lines]) {
         write(text);
       }
     };

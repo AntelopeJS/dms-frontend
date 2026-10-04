@@ -2,7 +2,8 @@
 // with, paths and dates as the user reads them, the block a ready server
 // prints, the time-stamped lines of a running one, and the line a stopped run
 // ends on. A quiet run leaves out what the core leaves out of its own output:
-// everything but results, warnings and errors.
+// everything but results, warnings and errors. On a terminal, these lines wrap
+// to its width between words, as the core wraps its own.
 
 import { homedir } from "node:os";
 import {
@@ -14,6 +15,7 @@ import {
   resolve,
   sep,
 } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import {
   CliError,
   type CliProblem,
@@ -29,6 +31,7 @@ import {
   SYMBOL_SETS,
   type TaskHandle,
   type Ui,
+  wrapText,
 } from "@antelopejs/core/cli";
 import { CancelledError } from "./cancellation";
 
@@ -43,6 +46,8 @@ const BLOCK_INDENT = "  ";
 const LINK_GAP = "  ";
 const LABEL_SUFFIX = ":";
 const TIME_LENGTH = 8;
+const MIN_WRAP_WIDTH = 20;
+const LEADING_SPACES = /^ */;
 
 const BYTES_PER_UNIT = 1024;
 const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"];
@@ -79,6 +84,37 @@ export function isTerminalResult(): boolean {
   return detectCapabilities(processCapabilityContext()).terminals.result;
 }
 
+/** The width feedback wraps to: the terminal's, none when it is piped or unknown. */
+export function feedbackColumns(): number | undefined {
+  return isTerminalFeedback() ? process.stderr.columns || undefined : undefined;
+}
+
+/**
+ * `text` after `prefix`, wrapped between words to `columns` as the core Ui
+ * wraps its own lines: each line after the first is indented under the text,
+ * its own leading spaces included, and painted on its own. One line when
+ * `columns` is unknown.
+ */
+export function wrapAfter(
+  prefix: string,
+  text: string,
+  columns: number | undefined,
+  paint: (line: string) => string = (line) => line,
+): string[] {
+  const indent = " ".repeat(stripVTControlCharacters(prefix).length);
+  const leading = LEADING_SPACES.exec(text)?.[0] ?? "";
+  const lines =
+    columns === undefined
+      ? [text]
+      : wrapText(
+          text.slice(leading.length),
+          Math.max(MIN_WRAP_WIDTH, columns - indent.length - leading.length),
+        ).map((line) => `${leading}${line}`);
+  return lines.map(
+    (line, index) => `${index === 0 ? prefix : indent}${paint(line)}`,
+  );
+}
+
 /** Writes a raw line of feedback above the running tasks. */
 export function writeFeedback(line: string): void {
   getProcessTasks().write(process.stderr, `${line}\n`);
@@ -102,7 +138,10 @@ export function writeHeader(
   ui: Ui = getProcessUi(),
 ): void {
   const title = ui.palette().bold(`ajs dms ${command}`);
-  writeInfo(`${title}  ${context.join(ui.symbols.separator)}`);
+  const text = context.join(ui.symbols.separator);
+  for (const line of wrapAfter(`${title}  `, text, feedbackColumns())) {
+    writeInfo(line);
+  }
 }
 
 /** Separates the CLI's own lines from the output of the child it starts. */
@@ -260,7 +299,9 @@ export function reportStopped(
     ? STOPPED_SYMBOLS.unicode
     : STOPPED_SYMBOLS.ascii;
   const text = [stop.stopped, ...stop.context].join(ui.symbols.separator);
-  writeFeedback(`${lineStart}${ui.palette().red(symbol)} ${text}`);
+  const symbolPrefix = `${ui.palette().red(symbol)} `;
+  const lines = wrapAfter(symbolPrefix, text, feedbackColumns());
+  writeFeedback(`${lineStart}${lines.join("\n")}`);
 }
 
 /** A line of the ready block: a URL to open, or a setting of the run. */
@@ -290,12 +331,14 @@ export interface ReadyBlock {
  *     ➜  Local:     http://localhost:3002/
  *        Backend:   http://127.0.0.1:5010
  *
- * A quiet run shows its essential lines only.
+ * A quiet run shows its essential lines only. On a terminal, a value too
+ * long for it continues under itself.
  */
 export function formatReadyBlock(
   block: ReadyBlock,
   ui: Ui = getProcessUi(),
   isQuiet: boolean = isQuietRun(),
+  columns: number | undefined = feedbackColumns(),
 ): string[] {
   const palette = ui.palette();
   const arrow = isUnicode(ui) ? LINK_SYMBOLS.unicode : LINK_SYMBOLS.ascii;
@@ -307,17 +350,25 @@ export function formatReadyBlock(
   );
   const lead = (isLink?: boolean) =>
     `${BLOCK_INDENT}${isLink ? palette.cyan(arrow) : " ".repeat(arrow.length)}${LINK_GAP}`;
-  const lines = shown.map(({ label, value, isLink }) => {
+  const lines = shown.flatMap(({ label, value, isLink }) => {
     const shownLabel = `${label}${LABEL_SUFFIX}`.padEnd(width);
-    const shownValue = isLink ? palette.cyan(value) : value;
-    return `${lead(isLink)}${palette.dim(shownLabel)} ${shownValue}`;
+    return wrapAfter(
+      `${lead(isLink)}${palette.dim(shownLabel)} `,
+      value,
+      columns,
+      isLink ? palette.cyan : undefined,
+    );
   });
   if (isQuiet) return lines;
   return [
-    `${palette.green(ui.symbols.levels.success)} ${block.title}`,
+    ...wrapAfter(
+      `${palette.green(ui.symbols.levels.success)} `,
+      block.title,
+      columns,
+    ),
     "",
     ...lines,
-    `${lead()}${palette.dim(block.footer)}`,
+    ...wrapAfter(lead(), block.footer, columns, palette.dim),
   ];
 }
 
@@ -348,6 +399,8 @@ export interface TimedMessageOptions {
   details?: readonly string[];
   /** What the user does about it, behind the hint arrow. */
   fixes?: readonly string[];
+  /** The width the notice wraps to; the terminal's by default. */
+  columns?: number;
 }
 
 /**
@@ -362,14 +415,20 @@ export function formatTimedMessage(
   ui: Ui = getProcessUi(),
   now: Date = new Date(),
 ): string {
-  const { details = [], fixes = [] } = options;
+  const { details = [], fixes = [], columns = feedbackColumns() } = options;
   const palette = ui.palette();
   const paint = palette[TIMED_LEVEL_COLORS[level]];
   const hint = palette.cyan(ui.symbols.levels.hint);
   const indent = " ".repeat(TIME_LENGTH + 1) + BLOCK_INDENT;
   return [
-    `${palette.dim(clockTime(now))} ${paint(ui.symbols.levels[level])} ${text}`,
-    ...details.map((detail) => `${indent}${palette.dim(detail)}`),
-    ...fixes.map((fix) => `${indent}${hint} ${fix}`),
+    ...wrapAfter(
+      `${palette.dim(clockTime(now))} ${paint(ui.symbols.levels[level])} `,
+      text,
+      columns,
+    ),
+    ...details.flatMap((detail) =>
+      wrapAfter(indent, detail, columns, palette.dim),
+    ),
+    ...fixes.flatMap((fix) => wrapAfter(`${indent}${hint} `, fix, columns)),
   ].join("\n");
 }

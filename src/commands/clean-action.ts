@@ -7,11 +7,14 @@ import {
   UsageError,
 } from "../common";
 import {
+  feedbackColumns,
   formatSize,
   isTerminalFeedback,
   showWorkspace,
   workspaceId,
+  wrapAfter,
   writeFeedback,
+  writeInfo,
 } from "../output";
 import {
   describeKey,
@@ -33,11 +36,12 @@ const ROW_INDENT = "  ";
 
 /**
  * One line per workspace, columns aligned: its id, its backend and what it
- * is keyed on.
+ * is keyed on. A line too long for `columns` continues under the backend.
  */
 export function describeWorkspaces(
   records: WorkspaceRecord[],
   isTerminal: boolean,
+  columns?: number,
 ): string[] {
   const rows = records.map((record) => [
     workspaceId(record.dir, isTerminal),
@@ -47,12 +51,33 @@ export function describeWorkspaces(
   const widths = rows[0].map((_, column) =>
     Math.max(...rows.map((row) => row[column].length)),
   );
-  return rows.map((row) =>
-    row
-      .map((cell, column) => cell.padEnd(widths[column]))
-      .join(COLUMN_GAP)
-      .trimEnd(),
+  return rows.flatMap(([id, ...rest]) =>
+    wrapAfter(
+      `${id.padEnd(widths[0])}${COLUMN_GAP}`,
+      rest
+        .map((cell, column) => cell.padEnd(widths[column + 1]))
+        .join(COLUMN_GAP)
+        .trimEnd(),
+      columns,
+    ).map((line) => line.trimEnd()),
   );
+}
+
+/**
+ * Writes the lines of {@link describeWorkspaces} indented under the line
+ * that announces them, wrapped to the terminal.
+ */
+function writeWorkspaces(
+  records: WorkspaceRecord[],
+  isTerminal: boolean,
+  write: (line: string) => void,
+  paint: (line: string) => string = (line) => line,
+): void {
+  const columns = feedbackColumns();
+  const width = columns === undefined ? undefined : columns - ROW_INDENT.length;
+  for (const line of describeWorkspaces(records, isTerminal, width)) {
+    write(`${ROW_INDENT}${paint(line)}`);
+  }
 }
 
 /**
@@ -69,9 +94,7 @@ async function confirmCleanAll(
     writeFeedback(
       `Remove ${pluralize(records.length, "workspace")} (${formatSize(totalBytes)})?`,
     );
-    for (const line of describeWorkspaces(records, true)) {
-      writeFeedback(`${ROW_INDENT}${line}`);
-    }
+    writeWorkspaces(records, true, writeFeedback);
   }
   return prompter.confirm({
     message: "Continue?",
@@ -105,12 +128,10 @@ async function cleanAll(options: CleanOptions): Promise<void> {
       `Removed ${pluralize(records.length, "workspace")}`,
       `freed ${formatSize(totalBytes)}`,
     ].join(ui.symbols.separator),
-    {
-      details: options.yes
-        ? describeWorkspaces(records, isTerminalFeedback())
-        : [],
-    },
   );
+  if (options.yes) {
+    writeWorkspaces(records, isTerminalFeedback(), writeInfo, ui.palette().dim);
+  }
   reportSkipped(ui, skipped);
 }
 
