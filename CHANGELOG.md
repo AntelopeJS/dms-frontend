@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.3.9
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.8...v0.3.9)
+
+### 🚀 Enhancements
+
+- **cli:** Frame pnpm install and the production build ([#87](https://github.com/AntelopeJS/dms-frontend/pull/87))
+- **dev:** Ready banner, degraded-state warnings and a clean stop ([#88](https://github.com/AntelopeJS/dms-frontend/pull/88))
+- **build:** Summary, working next step and no silent stale builds ([#89](https://github.com/AntelopeJS/dms-frontend/pull/89))
+- **prepare:** Add --strict and report skipped vs failed on stderr ([#90](https://github.com/AntelopeJS/dms-frontend/pull/90))
+- **cli:** Add ajs dms workspaces [--json] and confirm clean --all ([#91](https://github.com/AntelopeJS/dms-frontend/pull/91))
+
+### 🔥 Performance
+
+- **cli:** Lazy-load commands, unzipper and semver; quieter update notice ([#94](https://github.com/AntelopeJS/dms-frontend/pull/94))
+
+### 🩹 Fixes
+
+- **cli:** Exit 130 on Ctrl+C and stop the whole child process tree ([#82](https://github.com/AntelopeJS/dms-frontend/pull/82))
+- **cli:** Write feedback to stderr ([#83](https://github.com/AntelopeJS/dms-frontend/pull/83))
+- **cli:** Validate options before doing any work ([#84](https://github.com/AntelopeJS/dms-frontend/pull/84))
+- **cli:** Explain unreachable and refused backends ([#85](https://github.com/AntelopeJS/dms-frontend/pull/85))
+- **verify-source:** Report results without stack traces ([#92](https://github.com/AntelopeJS/dms-frontend/pull/92))
+- **cli:** Polish the remaining rough edges from the before/after review ([#95](https://github.com/AntelopeJS/dms-frontend/pull/95))
+- **release:** Build before running the tests ([#97](https://github.com/AntelopeJS/dms-frontend/pull/97))
+
+### 💅 Refactors
+
+- **cli:** Adopt @antelopejs/core/cli and drop figlet, boxen and chalk ([#86](https://github.com/AntelopeJS/dms-frontend/pull/86))
+- **cli:** Rely on @antelopejs/core 1.13 output helpers ([#96](https://github.com/AntelopeJS/dms-frontend/pull/96))
+
+### 📖 Documentation
+
+- **cli:** Rewrite help text and the environment topic ([#93](https://github.com/AntelopeJS/dms-frontend/pull/93))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.8
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.7...v0.3.8)
