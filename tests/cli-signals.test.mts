@@ -22,6 +22,10 @@ const CLI = join(REPOSITORY, "dist/index.js");
 const FIXTURES = join(REPOSITORY, "tests/fixtures");
 const PROCESS_TREE = join(FIXTURES, "process-tree.mjs");
 const SESSION_SECRET = "signals-test-session-secret-0123456789";
+const TERMINAL_STDERR = join(FIXTURES, "terminal-stderr.mjs");
+const { version } = JSON.parse(
+  readFileSync(join(REPOSITORY, "package.json"), "utf8"),
+);
 
 let scratch: string;
 
@@ -254,6 +258,46 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
 
     assert.deepEqual(await run.exited, { code: 130, signal: null });
     assert.match(run.output(), /■ Stopped the production server · ran /);
+    await assertTreeGone(pids);
+  });
+
+  it("prints a due update notice once, under the ready block", async () => {
+    const backendUrl = "http://127.0.0.1:9";
+    const home = builtHome(backendUrl);
+    writeFileSync(
+      join(home, ".antelopejs/dms-frontend/update-check.json"),
+      JSON.stringify({
+        checkedAt: Date.now(),
+        latestVersion: "999.0.0",
+        succeeded: true,
+      }),
+    );
+    const run = startCli({
+      args: ["start", "-b", backendUrl, "-p", "0"],
+      entry: ["--import", TERMINAL_STDERR, CLI],
+      env: {
+        HOME: home,
+        DMS_SESSION_SECRET: SESSION_SECRET,
+        NO_UPDATE_NOTIFIER: "",
+        CI: "",
+        NO_COLOR: "1",
+      },
+    });
+    const notice = `ℹ ajs dms 999.0.0 is available (you have ${version}) → ajs update dms\n`;
+    await waitFor(
+      () => (run.output().includes(notice) ? true : undefined),
+      run.output,
+    );
+    const pids = await run.tree;
+
+    process.kill(run.pid, "SIGINT");
+
+    assert.deepEqual(await run.exited, { code: 130, signal: null });
+    assert.ok(
+      run.output().includes(`Ctrl+C to stop\n\n${notice}\n`),
+      run.output(),
+    );
+    assert.equal(run.output().split(notice).length, 2, "printed once");
     await assertTreeGone(pids);
   });
 

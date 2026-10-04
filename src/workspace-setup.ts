@@ -11,7 +11,6 @@ import {
 } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { constants as osConstants } from "node:os";
 import { join } from "node:path";
 import { CliError, getProcessTasks, isVerboseRun } from "@antelopejs/core/cli";
 import {
@@ -53,6 +52,7 @@ import {
   ResolvedLayer,
   writeWorkspaceMeta,
 } from "./workspace";
+import { CancelledError, exitCodeForSignal } from "./cancellation";
 import { canonicalizeBackendUrl, DEPS_HASH_FILE } from "./config";
 
 // ============================================================================
@@ -193,35 +193,6 @@ const FORWARDED_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 /** How long a child may take to honor a forwarded signal before SIGKILL. */
 const CHILD_SHUTDOWN_TIMEOUT_MS = 5000;
-
-/** Shell convention for "died from signal N", used when the child never exited on its own. */
-function exitCodeForSignal(signal: NodeJS.Signals): number {
-  const number = osConstants.signals[signal];
-  return 128 + (typeof number === "number" ? number : 15);
-}
-
-/**
- * The CLI received `signal` while a child was running: the child's process
- * tree has been stopped and the run is cancelled, not failed. The exit code
- * follows the shell convention, 130 for Ctrl+C.
- *
- * `stopped` says what was stopped (`Stopped the dev server`) and `context`
- * what follows it (`ran 14m 02s`).
- */
-export class CancelledError extends Error {
-  readonly exitCode: number;
-
-  constructor(
-    readonly signal: NodeJS.Signals,
-    stopped = "Stopped",
-    context?: string,
-  ) {
-    const cause = signal === "SIGINT" ? "" : ` (${signal})`;
-    super([`${stopped}${cause}`, ...(context ? [context] : [])].join(" · "));
-    this.name = "CancelledError";
-    this.exitCode = exitCodeForSignal(signal);
-  }
-}
 
 /**
  * Spawn a child process and wait for it to complete.
