@@ -152,7 +152,7 @@ describe("DMS CLI plugin", () => {
   it("requires the AntelopeJS CLI that publishes its output module", () => {
     assert.equal(
       packageJson.peerDependencies["@antelopejs/core"],
-      ">=1.13.1 <2",
+      ">=1.13.2 <2",
     );
     assert.equal(packageJson.peerDependenciesMeta, undefined);
     for (const dependency of ["figlet", "boxen", "chalk", "@types/figlet"]) {
@@ -484,6 +484,66 @@ describe("CLI output", () => {
     ]);
   });
 
+  it("wraps the ready block to a narrow terminal, each value under itself", () => {
+    const output = memoryUi();
+    const block = {
+      title: "Dev server ready in 1.5s",
+      lines: [
+        { label: "Local", value: "http://localhost:3002/", isLink: true },
+        { label: "Workspace", value: "~/.antelopejs/dms-frontend/76672b08…" },
+        {
+          label: "Secrets",
+          value:
+            "DMS_HTML_RENDER_SECRET, DMS_OAUTH_RELAY_SECRET from the environment",
+        },
+      ],
+      footer: "Watching 12 layer sources · Ctrl+C to stop",
+    };
+    assert.deepEqual(formatReadyBlock(block, output.ui, false, 40), [
+      "✔ Dev server ready in 1.5s",
+      "",
+      "  ➜  Local:     http://localhost:3002/",
+      "     Workspace: ~/.antelopejs/dms-frontend/76672b08…",
+      "     Secrets:   DMS_HTML_RENDER_SECRET,",
+      "                DMS_OAUTH_RELAY_SECRET",
+      "                from the environment",
+      "     Watching 12 layer sources · Ctrl+C",
+      "     to stop",
+    ]);
+    assert.deepEqual(formatReadyBlock(block, output.ui, false, 60).slice(4), [
+      "     Secrets:   DMS_HTML_RENDER_SECRET,",
+      "                DMS_OAUTH_RELAY_SECRET from the environment",
+      "     Watching 12 layer sources · Ctrl+C to stop",
+    ]);
+    assert.deepEqual(
+      formatReadyBlock(block, output.ui, false, undefined).slice(4),
+      [
+        "     Secrets:   DMS_HTML_RENDER_SECRET, DMS_OAUTH_RELAY_SECRET from the environment",
+        "     Watching 12 layer sources · Ctrl+C to stop",
+      ],
+      "piped: one line per value",
+    );
+    const colored = formatReadyBlock(
+      {
+        ...block,
+        lines: [
+          {
+            ...block.lines[0],
+            value: "http://a.test/ more-text",
+            isEssential: true,
+          },
+        ],
+      },
+      memoryUi({ isColored: true }).ui,
+      true,
+      20,
+    );
+    assert.deepEqual(colored, [
+      `  ${ESC}[36m➜${ESC}[39m  ${ESC}[2mLocal:${ESC}[22m ${ESC}[36mhttp://a.test/${ESC}[39m`,
+      `            ${ESC}[36mmore-text${ESC}[39m`,
+    ]);
+  });
+
   it("keeps only the local URL of the ready block in a quiet run", () => {
     const output = memoryUi();
     const block = {
@@ -644,6 +704,40 @@ describe("CLI output", () => {
     assert.equal(
       formatTimedMessage("success", "Fixed", {}, output.ui, at),
       "14:03:22 ✔ Fixed",
+    );
+  });
+
+  it("wraps a running server's notices under their text", () => {
+    const output = memoryUi();
+    const at = new Date(2026, 9, 3, 14, 3, 22);
+    const options = {
+      details: ["Unexpected end of JSON input at position 12", "  10 | {"],
+      fixes: ["Restart ajs dms dev to apply it"],
+    };
+    const text = "i18n/locales/demo-en-GB.json is not a valid locale file";
+    assert.equal(
+      formatTimedMessage(
+        "warn",
+        text,
+        { ...options, columns: 40 },
+        output.ui,
+        at,
+      ),
+      "14:03:22 ▲ i18n/locales/demo-en-GB.json\n" +
+        "           is not a valid locale file\n" +
+        "           Unexpected end of JSON input\n" +
+        "           at position 12\n" +
+        "             10 | {\n" +
+        "           → Restart ajs dms dev to\n" +
+        "             apply it",
+    );
+    assert.equal(
+      formatTimedMessage("warn", text, options, output.ui, at),
+      `14:03:22 ▲ ${text}\n` +
+        "           Unexpected end of JSON input at position 12\n" +
+        "             10 | {\n" +
+        "           → Restart ajs dms dev to apply it",
+      "piped: one line each",
     );
   });
 
@@ -932,5 +1026,18 @@ describe("workspace listing", () => {
       "76672b08  http://127.0.0.1:5010  project /srv/demo",
       "f6af15c7  http://127.0.0.1:5011  url",
     ]);
+  });
+
+  it("wraps the clean --all list under the backend on a narrow terminal", () => {
+    assert.deepEqual(describeWorkspaces(records, true, 38), [
+      "76672b08  http://127.0.0.1:5010",
+      "          project /srv/demo",
+      "f6af15c7  http://127.0.0.1:5011  url",
+    ]);
+    assert.deepEqual(
+      describeWorkspaces(records, true, undefined),
+      describeWorkspaces(records, true),
+      "piped: one line per workspace",
+    );
   });
 });

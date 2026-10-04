@@ -72,7 +72,7 @@ pnpm add -g @antelopejs/core @antelopejs/dms-frontend
 ```
 
 The plugin prints through the output module of `@antelopejs/core`
-(`@antelopejs/core/cli`), so it needs `@antelopejs/core` 1.13.1 or later.
+(`@antelopejs/core/cli`), so it needs `@antelopejs/core` 1.13.2 or later.
 `npm install -g` works too; this repository and every generated workspace use
 pnpm. Inside a package script, `ajs` resolves from `node_modules/.bin`, and the
 `dms` command it delegates to resolves the project-local plugin, so a script
