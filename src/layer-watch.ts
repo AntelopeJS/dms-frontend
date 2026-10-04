@@ -5,7 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { getProcessUi, type Ui } from "@antelopejs/core/cli";
+import { getProcessUi, isQuietRun, type Ui } from "@antelopejs/core/cli";
 import chokidar, { type FSWatcher } from "chokidar";
 import { createPathMapper, type PathMapper } from "./child-output";
 import { getLayerWorkspacePath } from "./layers";
@@ -399,6 +399,9 @@ function createDerivedOutputRefresher(
  * every watcher. Callers should invoke it on SIGINT/SIGTERM and before
  * exiting.
  *
+ * A quiet run keeps the warnings and leaves out the notices that say a
+ * failure is over, as the core leaves out its success messages.
+ *
  * Why this exists: we copy layer sources into the workspace instead of
  * symlinking (pnpm follows realpath for workspace packages, so a symlink
  * would make it install transitive deps in the source directory and
@@ -418,6 +421,7 @@ export function startLayerWatchers(
   layers: ResolvedLayer[],
   ui: Ui = getProcessUi(),
   write: (text: string) => void = writeFeedback,
+  isQuiet: boolean = isQuietRun(),
 ): () => Promise<void> {
   // The watched layers are their own sources: workspace paths in messages
   // name the files the user edits.
@@ -428,7 +432,9 @@ export function startLayerWatchers(
   const reporter: WatchReporter = {
     warn: (text, options) =>
       write(formatTimedMessage("warn", text, options, ui)),
-    succeed: (text) => write(formatTimedMessage("success", text, {}, ui)),
+    succeed: (text) => {
+      if (!isQuiet) write(formatTimedMessage("success", text, {}, ui));
+    },
     describe: (error) => failureDetails(error, ui).map((line) => mapPath(line)),
     show: (path) => {
       const mapped = mapPath(path);

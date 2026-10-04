@@ -695,3 +695,62 @@ describe("mirrorFiles", () => {
     assert.equal(readFileSync(join(dest, "entry"), "utf8"), "leaf");
   });
 });
+
+describe("a quiet dev run's layer watcher", () => {
+  const root = mkdtempSync(join(tmpdir(), "dms-layer-watch-quiet-"));
+  const workspace = join(root, "workspace");
+  const base = join(root, "sources", "base");
+  const locale = join(base, "layers", "ui", "i18n", "locales", "ui-en-GB.json");
+  const layers: ResolvedLayer[] = [
+    { path: base, packageName: "@fixture/base", priority: 1 },
+  ];
+  let notices = "";
+  let stopWatchers: () => Promise<void> = async () => {};
+
+  const catalog = (): Record<string, any> =>
+    JSON.parse(
+      readFileSync(join(workspace, "locales.generated", "en.json"), "utf8"),
+    );
+
+  before(() => {
+    writeFile(
+      join(base, "package.json"),
+      JSON.stringify({ name: "@fixture/base" }),
+    );
+    writeFile(locale, JSON.stringify({ form: { title: "Form" } }));
+    mkdirSync(workspace, { recursive: true });
+    materializeLayers(workspace, layers);
+    writeFrontendModuleRegistry(workspace, layers);
+    stopWatchers = startLayerWatchers(
+      workspace,
+      layers,
+      memory.ui,
+      (text) => {
+        notices += `${text}\n`;
+      },
+      true,
+    );
+  });
+
+  after(async () => {
+    await stopWatchers();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("warns about a failure but not that it is over", async () => {
+    await eventually(
+      () => writeFileSync(locale, '{ "form": {'),
+      () => notices.includes("is not a valid locale file"),
+    );
+    await eventually(
+      () =>
+        writeFileSync(
+          locale,
+          JSON.stringify({ form: { title: "Form", demo_key: "Fixed" } }),
+        ),
+      () => catalog().form.demo_key === "Fixed",
+    );
+    assert.match(notices, /^\d\d:\d\d:\d\d ▲ .* is not a valid locale file/);
+    assert.doesNotMatch(notices, / ✔ /);
+  });
+});
