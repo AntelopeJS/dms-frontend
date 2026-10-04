@@ -9,13 +9,14 @@ function collectOption(value: string, values: string[] = []): string[] {
 
 const VERIFY_SOURCE_EXAMPLES: HelpExample[] = [
   {
-    description: "A frontend package and a module that uses it",
-    command: "ajs dms verify-source -l ../dms/frontend-vue -m ./frontend-vue",
+    description: "A frontend module, on the installed DMS core layer",
+    command:
+      "ajs dms verify-source -l node_modules/@antelopejs/dms/frontend-vue -m .",
   },
   {
-    description: "With a local build of a package it depends on",
-    command:
-      "ajs dms verify-source -l . --local-package @antelopejs/dms=../dms",
+    description:
+      "The DMS core layer itself, with a local build of @antelopejs/dms",
+    command: "ajs dms verify-source -l . --local-package @antelopejs/dms=..",
   },
 ];
 
@@ -24,17 +25,17 @@ export function cmdVerifySource(): Command {
   const command = new Command("verify-source")
     .summary("Build and type-check unpublished frontend sources")
     .description(
-      "Build and type-check unpublished DMS frontend sources against this loader version, in a temporary workspace removed when the run ends. Starts no backend.",
+      "Build and type-check unpublished DMS frontend sources against this loader version: the DMS core layer (the frontend-vue directory of @antelopejs/dms), and the frontend modules to verify on top of it. Runs in a temporary workspace removed when the run ends, and starts no backend.",
     )
     // Checked by the action rather than by Commander, which would stop at
     // the first problem: the action reports every one of them at once.
     .option(
       "-l, --layer <path>",
-      "Root of the DMS frontend package to verify (required)",
+      "Root of the DMS core layer, the frontend-vue directory of @antelopejs/dms (required)",
     )
     .option(
       "-m, --module <path>",
-      "Root of another frontend package to verify with it (repeatable)",
+      "Root of a frontend module to verify on top of it (repeatable)",
       collectOption,
     )
     .option(

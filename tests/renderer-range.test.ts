@@ -328,11 +328,17 @@ describe("commands refusing a module that does not support this release", () => 
     const layerPath = layerWith("excluding-source", {
       [RENDERER]: EXCLUDING_EVERY_RELEASE,
     });
-    writeFileSync(join(layerPath, "dms.frontend.ts"), "export default {};\n");
+    const corePath = layerWith("@antelopejs/dms-frontend-vue");
+    writeFileSync(join(corePath, "dms.frontend.ts"), "export default {};\n");
     const { status, output } = await runTypeScript(
       "src/verify-source-runner.ts",
       [],
-      { env: { DMS_LAYER_SOURCE: layerPath } },
+      {
+        env: {
+          DMS_LAYER_SOURCE: corePath,
+          DMS_MODULE_SOURCES: JSON.stringify([layerPath]),
+        },
+      },
     );
     assert.equal(status, 1, output);
     assert.match(output, /✖ These frontend modules do not run on/);

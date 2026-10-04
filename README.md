@@ -463,15 +463,26 @@ Use pnpm for all repository and workspace operations.
 
 ## Verify local frontend modules
 
-Use the packaged source verifier to validate an unpublished DMS frontend package against this exact adapter version. Additional modules and local package bindings are repeatable. All supplied frontend packages are copied into the generated workspace and bound with `workspace:*`.
+Use the packaged source verifier to validate an unpublished DMS frontend package against this exact adapter version. `--layer` takes the DMS core layer, `@antelopejs/dms-frontend-vue`: the `frontend-vue` directory of `@antelopejs/dms`. `--module` takes a frontend module to verify on top of it. Modules and local package bindings are repeatable. All supplied frontend packages are copied into the generated workspace and bound with `workspace:*`.
+
+A frontend module is verified on the core layer of the `@antelopejs/dms` the project installs as a development dependency:
+
+```bash
+ajs dms verify-source \
+  --layer node_modules/@antelopejs/dms/frontend-vue \
+  --module ./frontend-vue
+```
+
+The core layer itself is verified on its own, here against a local build of `@antelopejs/dms`:
 
 ```bash
 ajs dms verify-source \
   --layer /path/to/dms/frontend-vue \
-  --module /path/to/module/frontend-vue \
   --local-package @antelopejs/dms=/path/to/dms
 ```
 
-A supplied package whose declared range excludes this adapter version is refused before anything is installed (see [Declaring the loader releases a module supports](#declaring-the-loader-releases-a-module-supports)). The verifier generates a temporary workspace, installs it, builds client, SSR, and email bundles, checks what the client bundle loads, runs `vue-tsc`, renders eight DMS email templates, and checks that the email bundle excludes browser-only modules. Each check is one line that ends in ✔ or ✖, and the run ends with `Verified <n> modules` and its duration, or with the first failure: a type or Vite error points at the file in the package you passed (`./frontend-vue/app/components/Callout.vue:17:7`), not at its copy in the workspace, and the command exits 1. `--verbose` streams the pnpm, Vite and `vue-tsc` output. The workspace is removed when the run ends. It does not start a backend or publish packages. Repository development can invoke the same runner with `DMS_LAYER_SOURCE` through `pnpm test:real-source`.
+The checks look for what the core layer ships: its lazily loaded chart and rich-text libraries, the pages every DMS serves and its e-mail templates. A `--layer` that holds no core layer, such as a project's own `frontend-vue`, is refused before anything is installed, with exit code 2 and the command that verifies the same packages on top of the core layer.
+
+A supplied package whose declared range excludes this adapter version is refused before anything is installed (see [Declaring the loader releases a module supports](#declaring-the-loader-releases-a-module-supports)). The verifier generates a temporary workspace, installs it, builds client, SSR, and email bundles, checks what the client bundle loads, runs `vue-tsc`, renders eight DMS email templates, and checks that the email bundle excludes browser-only modules. Each check is one line that ends in ✔ or ✖, and the run ends with `Verified <n> modules` and its duration, or with the first failure: a type or Vite error points at the file in the package you passed (`./frontend-vue/app/components/Callout.vue:17:7`), not at its copy in the workspace, and the command exits 1. `--verbose` streams the pnpm, Vite and `vue-tsc` output. The workspace is removed when the run ends. It does not start a backend or publish packages. Repository development can invoke the same runner through `pnpm test:real-source`, with `DMS_LAYER_SOURCE` set to the core layer and `DMS_MODULE_SOURCES` to a JSON array of module roots.
 
 Refresh rotation is single-flight within one frontend process. Horizontally scaled deployments must use sticky routing so a browser reaches the same process, or replace this process-local behavior with an external session adapter. It does not provide a distributed rotation guarantee.

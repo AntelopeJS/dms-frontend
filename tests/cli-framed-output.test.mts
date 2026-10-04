@@ -424,8 +424,13 @@ describePosix("framing verify-source", () => {
   });
   after(() => rmSync(scratch, { recursive: true, force: true }));
 
+  /** The DMS core layer, the only one the checks run against. */
   function sourceLayer(sandbox: string): void {
     writeLayer(join(sandbox, "frontend-vue"));
+    writeFileSync(
+      join(sandbox, "frontend-vue/package.json"),
+      JSON.stringify({ name: "@antelopejs/dms-frontend-vue" }),
+    );
     writeFileSync(
       join(sandbox, "frontend-vue/dms.frontend.ts"),
       "export default {};\n",

@@ -470,7 +470,7 @@ describe("documenting the commands", () => {
     assert.doesNotMatch(clean, /env: DMS_API_BASE_URL/);
     assert.match(
       await help("verify-source"),
-      /-l, --layer <path> Root of the DMS frontend package to verify \(required\)/,
+      /-l, --layer <path> Root of the DMS core layer, the frontend-vue directory of @antelopejs\/dms \(required\)/,
     );
   });
 
@@ -742,6 +742,81 @@ describe("reporting what the verify-source runner found", () => {
     });
     assert.equal(result.code, 2, result.stderr);
     assert.match(result.stderr, /^✖ No frontend package in \.\/empty\n/);
+  });
+
+  describe("a frontend module passed as the layer", () => {
+    const CORE_LAYER = "node_modules/@antelopejs/dms/frontend-vue";
+    const MODULE_FILES = {
+      "frontend-vue/package.json": JSON.stringify({ name: "demo-frontend" }),
+      "frontend-vue/dms.frontend.ts": "export default {};\n",
+    };
+    const CORE_FILES = {
+      [`${CORE_LAYER}/package.json`]: JSON.stringify({
+        name: "@antelopejs/dms-frontend-vue",
+      }),
+      [`${CORE_LAYER}/dms.frontend.ts`]: "export default {};\n",
+    };
+
+    it("stops before installing anything, with the command to run", async () => {
+      const result = await runCli(["verify-source", "-l", "frontend-vue"], {
+        files: MODULE_FILES,
+      });
+      assert.equal(result.code, 2, result.stderr);
+      assert.equal(result.stdout, "");
+      assert.match(
+        result.stderr,
+        /^✖ \.\/frontend-vue is not the DMS core layer\n/,
+      );
+      assert.match(
+        result.stderr.replace(/\s+/g, " "),
+        /--layer takes @antelopejs\/dms-frontend-vue, the frontend-vue directory of @antelopejs\/dms, and -m the frontend modules to verify on top of it; \.\/frontend-vue holds demo-frontend\./,
+      );
+      assert.match(
+        result.stderr,
+        /→ Add @antelopejs\/dms to the project's dev dependencies: pnpm add -D @antelopejs\/dms\n/,
+      );
+      assert.match(
+        result.stderr,
+        /→ Run ajs dms verify-source -l node_modules\/@antelopejs\/dms\/frontend-vue -m \.\/frontend-vue\n$/,
+      );
+      assert.doesNotMatch(result.stderr, /Materializ|ApexCharts|^\s+at /m);
+    });
+
+    it("points at the core layer @antelopejs/dms installed", async () => {
+      const result = await runCli(
+        [
+          "verify-source",
+          "-l",
+          "frontend-vue",
+          "--local-package",
+          "@antelopejs/interface-dms=vendor/interface-dms",
+        ],
+        { files: { ...MODULE_FILES, ...CORE_FILES } },
+      );
+      assert.equal(result.code, 2, result.stderr);
+      assert.doesNotMatch(result.stderr, /pnpm add/);
+      assert.match(
+        result.stderr,
+        new RegExp(
+          `→ Run ajs dms verify-source -l ${CORE_LAYER} -m \\./frontend-vue ` +
+            "--local-package @antelopejs/interface-dms=\\./vendor/interface-dms\n$",
+        ),
+      );
+    });
+
+    it("swaps a core layer passed as a module", async () => {
+      const result = await runCli(
+        ["verify-source", "-l", "frontend-vue", "-m", CORE_LAYER],
+        { files: { ...MODULE_FILES, ...CORE_FILES } },
+      );
+      assert.equal(result.code, 2, result.stderr);
+      assert.match(
+        result.stderr,
+        new RegExp(
+          `\n {2}→ Run ajs dms verify-source -l \\./${CORE_LAYER} -m \\./frontend-vue\n$`,
+        ),
+      );
+    });
   });
 });
 
