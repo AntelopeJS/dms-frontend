@@ -12,8 +12,8 @@ import { promisify } from "node:util";
 import { canonicalizeBackendUrl } from "../src/config";
 import {
   collectManifestSecrets,
+  describeSecretSources,
   formatSecretConflicts,
-  formatSecretSources,
   MANIFEST_SECRET_ENV,
   reportManifestSecrets,
   resolveManifestSecrets,
@@ -187,38 +187,61 @@ describe("manifest secrets resolution", () => {
   });
 });
 
-describe("the server secrets log block", () => {
-  it("names each source and the consequence of a missing secret", () => {
-    assert.deepEqual(
-      formatSecretSources({
+describe("the server secrets report", () => {
+  it("groups the secrets the server receives by where they come from", () => {
+    assert.equal(
+      describeSecretSources({
         DMS_HTML_RENDER_SECRET: "env",
         DMS_OAUTH_RELAY_SECRET: "manifest",
       }),
-      ["DMS_HTML_RENDER_SECRET  env", "DMS_OAUTH_RELAY_SECRET  manifest"],
+      "DMS_HTML_RENDER_SECRET from the environment; DMS_OAUTH_RELAY_SECRET from the manifest",
     );
-    assert.deepEqual(
-      formatSecretSources(
+    assert.equal(
+      describeSecretSources(
         {
           DMS_HTML_RENDER_SECRET: "manifest",
-          DMS_OAUTH_RELAY_SECRET: "not set",
+          DMS_OAUTH_RELAY_SECRET: "manifest",
         },
-        "build-time manifest",
+        "the build-time manifest",
       ),
-      [
-        "DMS_HTML_RENDER_SECRET  build-time manifest",
-        "DMS_OAUTH_RELAY_SECRET  not set (OAuth sign-in will be refused by the backend)",
-      ],
+      "DMS_HTML_RENDER_SECRET, DMS_OAUTH_RELAY_SECRET from the build-time manifest",
     );
-    assert.deepEqual(
-      formatSecretSources({
+    assert.equal(
+      describeSecretSources({
         DMS_HTML_RENDER_SECRET: "not set",
-        DMS_OAUTH_RELAY_SECRET: "env",
+        DMS_OAUTH_RELAY_SECRET: "not set",
       }),
-      [
-        "DMS_HTML_RENDER_SECRET  not set (e-mail renders will be refused)",
-        "DMS_OAUTH_RELAY_SECRET  env",
-      ],
+      undefined,
     );
+  });
+
+  it("warns about each missing secret with what it costs, then how to set them", () => {
+    const memory = memoryUi();
+    reportManifestSecrets(
+      resolveManifestSecrets(collectManifestSecrets([]), {}),
+      (count) => `Set the ${count}`,
+      memory.ui,
+    );
+    assert.equal(memory.stdout(), "");
+    assert.equal(
+      memory.stderr(),
+      "▲ DMS_HTML_RENDER_SECRET is not set: e-mail renders will be refused\n" +
+        "▲ DMS_OAUTH_RELAY_SECRET is not set: OAuth sign-in will be refused by the backend\n" +
+        "  → Set the 2\n",
+    );
+  });
+
+  it("says nothing about the secrets the server receives", () => {
+    const memory = memoryUi();
+    reportManifestSecrets(
+      resolveManifestSecrets(
+        collectManifestSecrets([dmsModule(MANIFEST_SECRET)]),
+        {},
+      ),
+      () => "unused",
+      memory.ui,
+    );
+    assert.equal(memory.stderr(), "");
   });
 
   it("never prints a secret value", () => {
@@ -233,10 +256,10 @@ describe("the server secrets log block", () => {
       { DMS_OAUTH_RELAY_SECRET: "deployment-relay" },
     );
     const memory = memoryUi();
-    reportManifestSecrets(resolved, "manifest", memory.ui);
-    const output = memory.stderr();
-    assert.match(output, /Server secrets/);
+    reportManifestSecrets(resolved, () => "unused", memory.ui);
+    const output = `${memory.stderr()}${describeSecretSources(resolved.sources)}`;
     assert.match(output, /@fixture\/other/);
+    assert.match(output, /DMS_OAUTH_RELAY_SECRET from the environment/);
     for (const value of [
       MANIFEST_SECRET,
       "other-render",
@@ -453,6 +476,7 @@ describe("ajs dms start", () => {
       writeFileSync(
         join(workspace, "server.mjs"),
         `import { validRenderToken } from ${JSON.stringify(renderToken)};\n` +
+          'process.send({ type: "dms:ready", address: "127.0.0.1", port: 3321 });\n' +
           "console.log(JSON.stringify({ secret: process.env.DMS_HTML_RENDER_SECRET, " +
           "relay: process.env.DMS_OAUTH_RELAY_SECRET, " +
           "accepted: validRenderToken(process.env.TEST_RENDER_TOKEN) }));\n",
@@ -497,8 +521,11 @@ describe("ajs dms start", () => {
       relay: RELAY_SECRET,
       accepted: true,
     });
-    assert.match(log, /DMS_HTML_RENDER_SECRET +build-time manifest/);
-    assert.match(log, /DMS_OAUTH_RELAY_SECRET +build-time manifest/);
+    assert.match(
+      log,
+      /Secrets: +DMS_HTML_RENDER_SECRET, DMS_OAUTH_RELAY_SECRET from the build-time manifest\n/,
+    );
+    assert.doesNotMatch(log, /is not set/);
     assert.ok(!log.includes(MANIFEST_SECRET));
     assert.ok(!log.includes(RELAY_SECRET));
   });
@@ -513,8 +540,10 @@ describe("ajs dms start", () => {
       relay: "deployment-relay",
       accepted: false,
     });
-    assert.match(log, /DMS_HTML_RENDER_SECRET +env/);
-    assert.match(log, /DMS_OAUTH_RELAY_SECRET +env/);
+    assert.match(
+      log,
+      /Secrets: +DMS_HTML_RENDER_SECRET, DMS_OAUTH_RELAY_SECRET from the environment\n/,
+    );
     assert.ok(!log.includes("deployment-"));
   });
 
@@ -523,11 +552,12 @@ describe("ajs dms start", () => {
     assert.deepEqual(report, { accepted: false });
     assert.match(
       log,
-      /DMS_HTML_RENDER_SECRET +not set \(e-mail renders will be refused\)/,
+      /▲ DMS_HTML_RENDER_SECRET is not set: e-mail renders will be refused\n/,
     );
     assert.match(
       log,
-      /DMS_OAUTH_RELAY_SECRET +not set \(OAuth sign-in will be refused by the backend\)/,
+      /▲ DMS_OAUTH_RELAY_SECRET is not set: OAuth sign-in will be refused by the backend\n {2}→ Set them, or rebuild with DMS_BOOTSTRAP_SECRET/,
     );
+    assert.doesNotMatch(log, /Secrets:/);
   });
 });

@@ -21,9 +21,22 @@ import {
 } from "../src/common";
 import { memoryUi } from "./fixtures/memory-ui";
 
-const output = memoryUi();
+const memory = memoryUi();
+let written = "";
 
-/** Each warning the watchers printed, with its detail lines. */
+/** What the watchers print while dev runs. */
+const output = {
+  ui: memory.ui,
+  write: (text: string) => {
+    written += `${text}\n`;
+  },
+  stderr: () => written,
+  clear: () => {
+    written = "";
+  },
+};
+
+/** Each notice the watchers printed, with its detail lines. */
 function warnings(): string[] {
   return output.stderr().split(/\n(?=\S)/);
 }
@@ -104,7 +117,12 @@ describe("locale catalogs in the dev layer watcher", () => {
     mkdirSync(workspace, { recursive: true });
     materializeLayers(workspace, layers);
     writeFrontendModuleRegistry(workspace, layers);
-    stopWatchers = startLayerWatchers(workspace, layers, output.ui);
+    stopWatchers = startLayerWatchers(
+      workspace,
+      layers,
+      output.ui,
+      output.write,
+    );
   });
 
   after(async () => {
@@ -227,35 +245,46 @@ describe("locale catalogs in the dev layer watcher", () => {
   });
 
   it("keeps the previous catalogs while a locale file does not parse", async () => {
+    const file = join(baseLocales, "ui-en-GB.json");
+    const isFailure = (warning: string) =>
+      warning.includes("is not a valid locale file");
     output.clear();
     try {
       await eventually(
-        () => writeFileSync(join(baseLocales, "ui-en-GB.json"), '{ "form": {'),
-        () =>
-          warnings().some((warning) =>
-            warning.includes("Locale catalogs not regenerated"),
-          ),
+        () => writeFileSync(file, '{ "form": {'),
+        () => warnings().some(isFailure),
       );
-      const failure = warnings().find((warning) =>
-        warning.includes("Locale catalogs not regenerated"),
+      const failure = warnings().find(isFailure) ?? "";
+      assert.ok(
+        failure.startsWith(`${failure.slice(0, 8)} ▲ ${file} is not a valid`),
+        failure,
       );
+      assert.match(failure, /^\d\d:\d\d:\d\d ▲ /);
+      assert.match(failure, /\n {11}.*JSON/);
       assert.match(
-        failure ?? "",
-        /^▲ Locale catalogs not regenerated\n {2}.*ui-en-GB\.json/,
+        failure,
+        /\n {11}The dev server keeps the previous locale catalogs until the file is fixed\.\n$/,
       );
-      assert.doesNotMatch(failure ?? "", /^\s+at /m, "no stack trace");
+      assert.doesNotMatch(failure, /frontend-modules|\.antelopejs/);
+      assert.doesNotMatch(failure, /^\s+at /m, "no stack trace");
       assert.equal(catalog("en").form.demo_key, "Hello");
+
+      await eventually(
+        () =>
+          writeFileSync(
+            file,
+            JSON.stringify({ form: { title: "Form", demo_key: "Fixed" } }),
+          ),
+        () => catalog("en").form.demo_key === "Fixed",
+      );
+      const fixed = warnings().filter((line) => line.includes(" ✔ "));
+      assert.deepEqual(
+        fixed.map((line) => line.slice(9)),
+        [`✔ ${file} fixed · locale catalogs regenerated\n`],
+      );
     } finally {
       output.clear();
     }
-    await eventually(
-      () =>
-        writeFileSync(
-          join(baseLocales, "ui-en-GB.json"),
-          JSON.stringify({ form: { title: "Form", demo_key: "Fixed" } }),
-        ),
-      () => catalog("en").form.demo_key === "Fixed",
-    );
   });
 
   it("leaves the catalogs alone when a change is not a locale file", async () => {
@@ -339,7 +368,7 @@ describe("derived outputs in the dev layer watcher", () => {
       (module: { id: string; entry?: string }) => [module.id, module.entry],
     );
   const isRestartNotice = (warning: string): boolean =>
-    warning.includes("restart 'ajs dms dev'");
+    warning.includes("Restart ajs dms dev");
 
   before(() => {
     writeFile(
@@ -370,7 +399,12 @@ describe("derived outputs in the dev layer watcher", () => {
     mkdirSync(workspace, { recursive: true });
     materializeLayers(workspace, layers);
     writeFrontendModuleRegistry(workspace, layers);
-    stopWatchers = startLayerWatchers(workspace, layers, output.ui);
+    stopWatchers = startLayerWatchers(
+      workspace,
+      layers,
+      output.ui,
+      output.write,
+    );
   });
 
   after(async () => {
@@ -462,7 +496,7 @@ describe("derived outputs in the dev layer watcher", () => {
     ]);
   });
 
-  it("declares a layer directory added or removed, and says a restart is needed", async () => {
+  it("says once that a layer directory added or removed needs a restart", async () => {
     const extra = join(base, "layers", "extra");
     output.clear();
     try {
@@ -475,7 +509,13 @@ describe("derived outputs in the dev layer watcher", () => {
         () => typePaths().includes("#extra/*"),
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
-      assert.equal(warnings().filter(isRestartNotice).length, 1);
+      const notices = warnings().filter(isRestartNotice);
+      assert.equal(notices.length, 1);
+      assert.match(
+        notices[0],
+        /^\d\d:\d\d:\d\d ▲ New layer directory .+\n {11}→ Restart ajs dms dev to apply it/,
+      );
+      assert.ok(notices[0].includes(extra), notices[0]);
 
       // A change that leaves the layer directories alone says nothing.
       await eventually(
@@ -525,8 +565,9 @@ describe("derived outputs in the dev layer watcher", () => {
         () => rmSync(extra, { recursive: true, force: true }),
         () => !typePaths().includes("#extra/*"),
       );
+      // Nor does removing it: one restart applies both changes.
       await new Promise((resolve) => setTimeout(resolve, 300));
-      assert.equal(warnings().filter(isRestartNotice).length, 2);
+      assert.equal(warnings().filter(isRestartNotice).length, 1);
     } finally {
       output.clear();
     }
@@ -573,7 +614,7 @@ describe("derived outputs in the dev layer watcher", () => {
         () =>
           existsSync(join(publicDir, "after-failure.txt")) &&
           warnings().some((warning) =>
-            warning.includes("Locale catalogs not regenerated"),
+            warning.includes("is not a valid locale file"),
           ),
       );
     } finally {

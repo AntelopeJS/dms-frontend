@@ -20,6 +20,7 @@ import {
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
 import { handleClientError } from "./server/client-error.mjs";
+import { reportListenError, reportReady } from "./server/cli-report.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { writeContent } from "./server/content.mjs";
 import {
@@ -514,17 +515,20 @@ if (
   frontendHttpServer.on("clientError", (error, socket) =>
     handleClientError(error, socket, maxHeaderSize),
   );
-  frontendHttpServer.listen(
-    Number(process.env.PORT ?? 3001),
-    process.env.HOST ?? "0.0.0.0",
-    announceReady,
-  );
+  const port = Number(process.env.PORT ?? 3001);
+  const host = process.env.HOST ?? "0.0.0.0";
+  const onListenError = (error) => void reportListenError(error, host, port);
+  frontendHttpServer.once("error", onListenError);
+  frontendHttpServer.listen(port, host, () => {
+    frontendHttpServer.off("error", onListenError);
+    void announceReady();
+  });
 }
 
 /**
- * Print the line the CLI's "Starting … server" announcement waits for. In
- * development Vite would otherwise start with the first request, so it is
- * started here: "ready" then means the first page is served without that wait.
+ * Report the server ready. In development Vite would otherwise start with the
+ * first request, so it is started here: "ready" then means the first page is
+ * served without that wait.
  */
 async function announceReady() {
   try {
@@ -534,12 +538,7 @@ async function announceReady() {
     return;
   }
   const { address, port } = frontendHttpServer.address();
-  const host = ["0.0.0.0", "::"].includes(address)
-    ? "localhost"
-    : address.includes(":")
-      ? `[${address}]`
-      : address;
-  console.log(`✓ Server ready on http://${host}:${port}`);
+  await reportReady(address, port);
   // Only the production build produces the email bundle otherwise. Started
   // once the server answers, so it never delays the first page.
   if (process.env.DMS_DEV === "true") watchEmailBundle();
