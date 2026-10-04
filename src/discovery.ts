@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import type { CliProblem } from "@antelopejs/core/cli";
+import { showPath } from "./output";
 
 // ============================================================================
 // Backend autodiscovery via .antelope/dev.json
@@ -144,32 +146,40 @@ export function discoverBackend(
  * Human-readable explanation for every non-`found` outcome, shared by the
  * commands so the error reads the same everywhere.
  */
-export function describeDiscoveryFailure(result: DiscoveryResult): string {
+export function describeDiscoveryFailure(result: DiscoveryResult): CliProblem {
   switch (result.status) {
     case "not-found":
-      return (
-        "No backend URL provided and no running antelope project found.\n" +
-        `  Searched for ${DEV_REGISTRY_RELATIVE_PATH} from the current directory upward.\n` +
-        "  Either run this command inside an antelope project started with 'ajs project dev',\n" +
-        "  or pass the backend explicitly with -b <url> (env: DMS_API_BASE_URL)."
-      );
+      return {
+        title: "No backend URL provided and no running antelope project found",
+        reason: `Searched for ${DEV_REGISTRY_RELATIVE_PATH} from the current directory upward.`,
+        fixes: [
+          "Run this command inside an antelope project started with 'ajs project dev'",
+          "Or pass the backend explicitly with -b <url> (env: DMS_API_BASE_URL)",
+        ],
+      };
     case "stale":
-      return (
-        `Found ${join(result.projectDir, DEV_REGISTRY_RELATIVE_PATH)} but its process (pid ${result.pid}) is no longer running.\n` +
-        "  Start the backend with 'ajs project dev', or pass -b <url> explicitly."
-      );
+      return {
+        title: `Found ${showPath(join(result.projectDir, DEV_REGISTRY_RELATIVE_PATH))} but its process (pid ${result.pid}) is no longer running`,
+        fixes: [
+          "Start the backend with 'ajs project dev', or pass -b <url> explicitly",
+        ],
+      };
     case "no-api-endpoint":
-      return (
-        `Found a running antelope project at ${result.projectDir} but it exposes no 'api' server endpoint.\n` +
-        "  Make sure the api module is loaded, or pass -b <url> explicitly."
-      );
+      return {
+        title: `Found a running antelope project at ${showPath(result.projectDir)} but it exposes no 'api' server endpoint`,
+        fixes: [
+          "Make sure the api module is loaded, or pass -b <url> explicitly",
+        ],
+      };
     case "malformed":
-      return (
-        `Found ${join(result.projectDir, DEV_REGISTRY_RELATIVE_PATH)} but could not parse it.\n` +
-        "  Restart the backend with 'ajs project dev' to rewrite it, or pass -b <url> explicitly."
-      );
+      return {
+        title: `Found ${showPath(join(result.projectDir, DEV_REGISTRY_RELATIVE_PATH))} but could not parse it`,
+        fixes: [
+          "Restart the backend with 'ajs project dev' to rewrite it, or pass -b <url> explicitly",
+        ],
+      };
     case "found":
-      return "";
+      return { title: "" };
   }
 }
 

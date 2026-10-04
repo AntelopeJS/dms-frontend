@@ -1,5 +1,6 @@
 import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { CliError } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import { getPackageRoot, runCommand, UsageError } from "../common";
 
@@ -18,9 +19,12 @@ export function parseLocalPackages(values: string[]): Record<string, string> {
     values.map((value) => {
       const separator = value.indexOf("=");
       if (separator <= 0 || separator === value.length - 1)
-        throw new UsageError(`Invalid local package '${value}'`, [
-          "→ Pass it as name=path: --local-package @scope/package=../package",
-        ]);
+        throw new UsageError({
+          title: `Invalid local package '${value}'`,
+          fixes: [
+            "Pass it as name=path: --local-package @scope/package=../package",
+          ],
+        });
       return [value.slice(0, separator), resolve(value.slice(separator + 1))];
     }),
   );
@@ -32,9 +36,12 @@ export function parseLocalPackages(values: string[]): Record<string, string> {
  */
 function assertDirectory(path: string, label: string): void {
   if (statSync(path, { throwIfNoEntry: false })?.isDirectory()) return;
-  throw new UsageError(`${label} not found: ${path}`, [
-    "→ Pass the root of a DMS frontend package (it contains dms.frontend.ts)",
-  ]);
+  throw new UsageError({
+    title: `${label} not found: ${path}`,
+    fixes: [
+      "Pass the root of a DMS frontend package (it contains dms.frontend.ts)",
+    ],
+  });
 }
 
 async function verifySource(options: VerifySourceOptions): Promise<void> {
@@ -52,7 +59,11 @@ async function verifySource(options: VerifySourceOptions): Promise<void> {
       DMS_LOCAL_PACKAGES: JSON.stringify(localPackages),
     },
   });
-  if (code !== 0) throw new Error("Source verification failed");
+  if (code !== 0)
+    throw new CliError({
+      title: "Source verification failed",
+      reason: `The verification exited with code ${code}; its output is above.`,
+    });
 }
 
 /** Creates the command that verifies unpublished frontend source packages. */

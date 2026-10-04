@@ -5,7 +5,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { CliError, FAILURE_EXIT_CODE } from "@antelopejs/core/cli";
 import { parseBackendUrl, UsageError, writeSecretBearingFile } from "./config";
+import { formatAge } from "./output";
 import {
   Manifest,
   bootstrapHeaders,
@@ -19,20 +21,21 @@ import {
 // Constants
 // ============================================================================
 
-export class ManifestUnauthorizedError extends Error {
+export class ManifestUnauthorizedError extends CliError {
   constructor(
     readonly url: string,
     readonly status: number,
     credentialSent: boolean,
   ) {
-    super(
-      (credentialSent
-        ? `The backend refused the bootstrap credential (${status}) at ${url}.\n`
-        : `The backend requires a bootstrap credential (${status}) at ${url}, and none was sent.\n`) +
-        "  → Production/CI: set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret\n" +
-        "  → Local dev: run inside the antelope project started with `ajs project dev`;\n" +
-        "    the credential is read from .antelope/dms-dev.json automatically",
-    );
+    super({
+      title: credentialSent
+        ? `The backend refused the bootstrap credential (${status}) at ${url}`
+        : `The backend requires a bootstrap credential (${status}) at ${url}, and none was sent`,
+      fixes: [
+        "Production/CI: set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret",
+        "Local dev: run inside the antelope project started with `ajs project dev`; the credential is read from .antelope/dms-dev.json automatically",
+      ],
+    });
     this.name = "ManifestUnauthorizedError";
   }
 }
@@ -53,7 +56,7 @@ const UNKNOWN_HOST_CODES = ["ENOTFOUND", "EAI_AGAIN"];
  * the reason in its `cause`. Still a plain failure for `resolveManifest`, so
  * the cache can stand in for a backend that is down.
  */
-export class BackendUnreachableError extends Error {
+export class BackendUnreachableError extends CliError {
   readonly code?: string;
 
   constructor(
@@ -65,14 +68,18 @@ export class BackendUnreachableError extends Error {
     const detail = code
       ? (UNREACHABLE_REASONS[code] ?? errorMessage(cause))
       : `The request failed: ${errorMessage(cause)}`;
-    const reason = code ? `${detail} (${code})` : detail;
     const fix =
       code && UNKNOWN_HOST_CODES.includes(code)
-        ? `→ Check the host name '${new URL(url).hostname}' in -b <url> or DMS_API_BASE_URL`
-        : "→ Start the backend (`ajs project dev` for a local one), or pass its URL with -b <url>";
-    super(`Cannot reach the DMS backend at ${url}\n  ${reason}.\n  ${fix}`, {
-      cause: failure,
-    });
+        ? `Check the host name '${new URL(url).hostname}' in -b <url> or DMS_API_BASE_URL`
+        : "Start the backend (`ajs project dev` for a local one), or pass its URL with -b <url>";
+    super(
+      {
+        title: `Cannot reach the DMS backend at ${url}`,
+        reason: `${code ? `${detail} (${code})` : detail}.`,
+        fixes: [fix],
+      },
+      { cause: failure },
+    );
     this.name = "BackendUnreachableError";
     this.code = code;
   }
@@ -106,9 +113,10 @@ export function backendEndpoint(backendUrl: string, path: string): URL {
     return new URL(`${parseBackendUrl(backendUrl)}${path}`);
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
-    throw new Error([err.message, ...err.details].join("\n  "), {
-      cause: err,
-    });
+    throw new CliError(
+      { ...err.problem, exitCode: FAILURE_EXIT_CODE },
+      { cause: err },
+    );
   }
 }
 
@@ -144,9 +152,9 @@ export async function fetchFromBackend(
  * the cache must not stand in for it, since the backend has just said the
  * cached modules are not what it serves any more.
  */
-export class ManifestRefusedError extends Error {
+export class ManifestRefusedError extends CliError {
   constructor(reason: string) {
-    super(reason);
+    super({ title: reason });
     this.name = "ManifestRefusedError";
   }
 }
@@ -299,9 +307,10 @@ export async function resolveManifest(
 
   const cached = readCachedManifest(workspaceDir);
   if (!cached) {
-    throw new Error(
-      "No cached manifest for this workspace — run once with the backend reachable before using --offline.",
-    );
+    throw new CliError({
+      title: "No cached manifest for this workspace",
+      fixes: ["Run once with the backend reachable before using --offline"],
+    });
   }
   return fromCachedEntry(cached);
 }
@@ -327,11 +336,11 @@ export function assertCachedLayerPathsExist(
 ): void {
   const missing = modules.filter((mod) => !existsSync(mod.path));
   if (missing.length === 0) return;
-  throw new Error(
-    `Cached manifest${fetchedAt ? ` (fetched ${fetchedAt})` : ""} references layer paths that no longer exist:\n` +
-      missing.map((mod) => `  - ${mod.name}: ${mod.path}`).join("\n") +
-      "\nStart the backend and re-run to refresh the cache.",
-  );
+  throw new CliError({
+    title: `The cached manifest${fetchedAt ? ` (fetched ${formatAge(fetchedAt)})` : ""} references layer paths that no longer exist`,
+    fixes: ["Start the backend and run again to refresh the cache"],
+    details: missing.map((mod) => `${mod.name}: ${mod.path}`),
+  });
 }
 
 export type ServedWithPath = ManifestModule & { path: string };

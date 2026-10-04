@@ -9,6 +9,7 @@ import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 import { buffer } from "node:stream/consumers";
+import { CliError } from "@antelopejs/core/cli";
 import { Open } from "unzipper";
 import {
   backendEndpoint,
@@ -19,6 +20,7 @@ import {
 import { ManifestModule, ResolvedLayer } from "./workspace";
 import { syncDirectories } from "./fs-sync";
 import { LAYERS_SUBDIR } from "./config";
+import { formatAge } from "./output";
 
 // ============================================================================
 // Constants
@@ -38,25 +40,27 @@ export function assertLayerPathsServed(
   const pathless = modules.filter((mod) => !mod.path);
   if (pathless.length === 0) return;
   const count = `${pathless.length} of ${modules.length} module${modules.length === 1 ? "" : "s"}`;
-  const cause = bootstrapSecret
-    ? [
-        "It sends them only to callers presenting its development credential, and did not accept the one this run sent.",
-        "→ Run the command from the antelope project started with `ajs project dev`, without DMS_BOOTSTRAP_SECRET or --bootstrap-secret,",
-        "  so the credential is read from .antelope/dms-dev.json",
-      ]
-    : [
-        "It sends them only to callers presenting its development credential, and this run sent none:",
-        "no DMS_BOOTSTRAP_SECRET or --bootstrap-secret, and no project started with `ajs project dev`",
-        "serving this backend was found from the current directory, so no .antelope/dms-dev.json was read.",
-        "→ Run the command from that project, or set DMS_BOOTSTRAP_SECRET to the backend's credential",
-      ];
-  throw new Error(
-    [
-      `The backend at ${displayUrl(backendUrl)} did not send layer source paths (${count}).`,
-      ...cause,
-      "→ A remote or production backend never sends them: use `ajs dms build` against it",
-    ].join("\n  "),
-  );
+  const { reason, fix } = bootstrapSecret
+    ? {
+        reason:
+          "It sends them only to callers presenting its development credential, and did not accept the one this run sent.",
+        fix: "Run the command from the antelope project started with `ajs project dev`, without DMS_BOOTSTRAP_SECRET or --bootstrap-secret, so the credential is read from .antelope/dms-dev.json",
+      }
+    : {
+        reason:
+          "It sends them only to callers presenting its development credential, and this run sent none: " +
+          "no DMS_BOOTSTRAP_SECRET or --bootstrap-secret, and no project started with `ajs project dev` " +
+          "serving this backend was found from the current directory, so no .antelope/dms-dev.json was read.",
+        fix: "Run the command from that project, or set DMS_BOOTSTRAP_SECRET to the backend's credential",
+      };
+  throw new CliError({
+    title: `The backend at ${displayUrl(backendUrl)} did not send layer source paths (${count})`,
+    reason,
+    fixes: [
+      fix,
+      "A remote or production backend never sends them: use `ajs dms build` against it",
+    ],
+  });
 }
 
 /**
@@ -74,11 +78,11 @@ export function assertCachedArchivesExist(
   const present = new Set(readdirSync(cacheDir));
   const missing = modules.filter((mod) => !present.has(mod.archiveName));
   if (missing.length === 0) return;
-  throw new Error(
-    `Cached layers archive is missing entries listed in the manifest${fetchedAt ? ` (fetched ${fetchedAt})` : ""}:\n` +
-      missing.map((mod) => `  - ${mod.name}: ${mod.archiveName}`).join("\n") +
-      "\nRun once with the backend reachable to re-download the layers.",
-  );
+  throw new CliError({
+    title: `The cached layers archive is missing entries listed in the manifest${fetchedAt ? ` (fetched ${formatAge(fetchedAt)})` : ""}`,
+    fixes: ["Run once with the backend reachable to download the layers again"],
+    details: missing.map((mod) => `${mod.name}: ${mod.archiveName}`),
+  });
 }
 
 // ============================================================================

@@ -1,13 +1,19 @@
-import chalk from "chalk";
+import { getProcessUi } from "@antelopejs/core/cli";
 import { Command } from "commander";
 import {
   CancelledError,
   Options,
   parseBackendUrl,
   resolveBootstrapSecret,
-  setupWorkspace,
+  type SetupWorkspaceResult,
 } from "../common";
-import { info, Spinner, success, warning } from "../utils/cli-ui";
+import {
+  cachedAge,
+  failureDetails,
+  showWorkspace,
+  writeHeader,
+} from "../output";
+import { setUpWorkspace } from "./workspace-task";
 
 interface PrepareOptions {
   backendUrl?: string;
@@ -26,6 +32,8 @@ export function cmdPrepare(): Command {
     .addOption(Options.offline)
     .addOption(Options.bootstrapSecret)
     .action(async (options: PrepareOptions) => {
+      const ui = getProcessUi();
+      const hint = ui.symbols.levels.hint;
       // The prepare command is often run from CI (e.g. as a `postinstall`
       // hook on a frontend module) where the backend is unreachable or no URL
       // is configured. We don't want CI installs to fail in that case — types
@@ -33,20 +41,18 @@ export function cmdPrepare(): Command {
       // instead of erroring, after falling back to a workspace-less prepare
       // without leaving a partially generated workspace.
       if (!options.backendUrl) {
-        warning(
-          "Backend URL not set; skipping prepare. Pass -b <url> or set DMS_API_BASE_URL to generate types.",
-        );
-        process.exit(0);
+        ui.message("warn", "Skipped prepare: no backend URL", {
+          details: [
+            `${hint} Pass -b <url> or set DMS_API_BASE_URL to generate the types`,
+          ],
+        });
+        return;
       }
 
-      const spinner = new Spinner("Setting up workspace...");
-      await spinner.start();
-
-      let workspaceDir: string;
-      let manifestFromCache: boolean;
-      let manifestFetchedAt: string | undefined;
+      writeHeader("prepare", [options.backendUrl]);
+      let result: SetupWorkspaceResult;
       try {
-        const result = await setupWorkspace({
+        result = await setUpWorkspace({
           backendUrl: parseBackendUrl(options.backendUrl),
           force: !!options.force,
           mode: "dev",
@@ -55,36 +61,26 @@ export function cmdPrepare(): Command {
             options.bootstrapSecret,
             options.backendUrl,
           ),
-          beforeInstall: () => spinner.pause(),
         });
-        workspaceDir = result.workspaceDir;
-        manifestFromCache = result.manifestFromCache;
-        manifestFetchedAt = result.manifestFetchedAt;
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof CancelledError) throw err;
-        await spinner.warn(`Skipping prepare: ${err.message}`);
-        process.exit(0);
+        const [title, ...details] = failureDetails(err, ui);
+        ui.message("warn", `Skipped prepare: ${title}`, { details });
+        return;
       }
 
-      await spinner.succeed("Workspace ready");
-
+      const { workspaceDir, manifestFromCache, manifestFetchedAt } = result;
       if (manifestFromCache) {
-        const cachedOn = manifestFetchedAt
-          ? ` (cached on ${manifestFetchedAt})`
-          : "";
+        const manifest = `the frontend-module manifest${cachedAge(manifestFetchedAt)}`;
         if (options.offline) {
-          info(
-            `Offline mode — using cached frontend-module manifest${cachedOn}`,
-          );
+          ui.message("info", `Offline: using ${manifest}`);
         } else {
-          warning(
-            `Backend unreachable — using cached frontend-module manifest${cachedOn}`,
-          );
+          ui.message("warn", `Backend unreachable: using ${manifest}`);
         }
       }
 
-      console.error("");
-      success(`Vite workspace prepared ${chalk.dim(`(${workspaceDir})`)}`);
-      process.exit(0);
+      ui.message("success", "Prepared the Vite workspace", {
+        detail: showWorkspace(workspaceDir),
+      });
     });
 }

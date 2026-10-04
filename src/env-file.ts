@@ -10,6 +10,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
+import { getProcessUi } from "@antelopejs/core/cli";
+import { showPath } from "./output";
 
 /**
  * Files read at startup, in decreasing precedence.
@@ -56,7 +58,8 @@ export function loadProjectEnv(options: LoadProjectEnvOptions = {}): string[] {
   const cwd = options.cwd ?? process.cwd();
   const env = options.env ?? process.env;
   const onWarning =
-    options.onWarning ?? ((message: string) => console.warn(message));
+    options.onWarning ??
+    ((message: string) => getProcessUi().message("warn", message));
 
   const loaded: string[] = [];
   for (const name of ENV_FILE_NAMES) {
@@ -67,7 +70,7 @@ export function loadProjectEnv(options: LoadProjectEnvOptions = {}): string[] {
     try {
       parsed = parseEnv(readFileSync(file, "utf-8"));
     } catch (err: any) {
-      onWarning(`⚠ Ignoring ${file}: ${err?.message ?? err}`);
+      onWarning(`Ignoring ${showPath(file)}: ${err?.message ?? err}`);
       continue;
     }
 

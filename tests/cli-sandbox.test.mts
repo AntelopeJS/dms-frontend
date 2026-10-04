@@ -60,6 +60,15 @@ async function runCli(
     HOME: sandbox,
     NO_UPDATE_NOTIFIER: "1",
     DMS_API_BASE_URL: "",
+    // What the output looks like depends on these: pin them to a plain
+    // UTF-8 terminal, whatever runs the suite.
+    TERM: "xterm-256color",
+    LANG: "en_US.UTF-8",
+    LC_ALL: undefined,
+    LC_CTYPE: undefined,
+    NO_COLOR: undefined,
+    FORCE_COLOR: undefined,
+    ANTELOPEJS_VERBOSE: undefined,
     ...options.env,
   };
   for (const [name, value] of Object.entries(env)) {
@@ -111,28 +120,37 @@ describe("running outside a DMS project", () => {
 
   it("names what is missing for a project-bound command", async () => {
     const build = await runCli(["build"]);
-    assert.equal(build.code, 1);
+    assert.equal(build.code, 2);
     assert.equal(build.stdout, "");
-    assert.match(build.stderr, /Backend URL is required.*DMS_API_BASE_URL/);
+    assert.equal(
+      build.stderr,
+      "✖ Backend URL is required\n  → Pass -b <url> or set DMS_API_BASE_URL\n",
+    );
 
     const dev = await runCli(["dev"]);
     assert.equal(dev.code, 1);
     assert.equal(dev.stdout, "");
-    assert.match(dev.stderr, /no running antelope project found/);
-    assert.match(dev.stderr, /-b <url>/);
+    assert.match(
+      dev.stderr,
+      /^✖ No backend URL provided and no running antelope project found\n/,
+    );
+    assert.match(dev.stderr, /→ Or pass the backend explicitly with -b <url>/);
   });
 
   it("writes feedback to stderr and leaves stdout empty", async () => {
     const noUrl = await runCli(["prepare"]);
     assert.equal(noUrl.code, 0);
     assert.equal(noUrl.stdout, "");
-    assert.match(noUrl.stderr, /⚠ Backend URL not set; skipping prepare/);
+    assert.match(noUrl.stderr, /^▲ Skipped prepare: no backend URL\n/);
 
     const unreachable = await runCli(["prepare", "-b", "http://127.0.0.1:9"]);
     assert.equal(unreachable.code, 0);
     assert.equal(unreachable.stdout, "");
-    assert.match(unreachable.stderr, /Setting up workspace/);
-    assert.match(unreachable.stderr, /⚠ Skipping prepare:/);
+    assert.match(
+      unreachable.stderr,
+      /^ajs dms prepare {2}http:\/\/127\.0\.0\.1:9\n/,
+    );
+    assert.match(unreachable.stderr, /▲ Skipped prepare:/);
   });
 
   it("requires a session secret for build and start", async () => {
@@ -140,13 +158,13 @@ describe("running outside a DMS project", () => {
     const build = await runCli(["build", "-b", BACKEND_URL], noSecret);
     assert.equal(build.code, 2);
     assert.equal(build.stdout, "");
-    assert.match(build.stderr, /^✗ DMS_SESSION_SECRET is not set\n/);
+    assert.match(build.stderr, /^✖ DMS_SESSION_SECRET is not set\n/);
     assert.match(build.stderr, /→ Create one: openssl rand -hex 32/);
     assert.doesNotMatch(build.stderr, /Error:|at least 32/);
 
     const start = await runCli(["start", "-b", BACKEND_URL], noSecret);
     assert.equal(start.code, 2);
-    assert.match(start.stderr, /✗ DMS_SESSION_SECRET is not set/);
+    assert.match(start.stderr, /✖ DMS_SESSION_SECRET is not set/);
 
     const short = await runCli(["start", "-b", BACKEND_URL], {
       env: { DMS_SESSION_SECRET: "short" },
@@ -154,7 +172,7 @@ describe("running outside a DMS project", () => {
     assert.equal(short.code, 2);
     assert.match(
       short.stderr,
-      /✗ DMS_SESSION_SECRET is too short: 5 characters, at least 32 needed/,
+      /✖ DMS_SESSION_SECRET is too short: 5 characters, at least 32 needed/,
     );
     assert.match(short.stderr, /openssl rand -hex 32/);
 
@@ -162,12 +180,105 @@ describe("running outside a DMS project", () => {
       env: { DMS_SESSION_SECRET: "short" },
     });
     assert.equal(dev.code, 2);
-    assert.match(dev.stderr, /✗ DMS_SESSION_SECRET is too short/);
-    assert.doesNotMatch(dev.stderr, /Setting up workspace/);
+    assert.match(dev.stderr, /✖ DMS_SESSION_SECRET is too short/);
+    assert.doesNotMatch(dev.stderr, /ajs dms dev|workspace/i);
+  });
+});
+
+describe("following the ajs output contract", () => {
+  it("prints the help on stdout and exits 0 when given no command", async () => {
+    for (const args of [[], ["--no-color"], ["--no-update-check"]]) {
+      const result = await runCli(args);
+      assert.equal(result.code, 0, args.join(" "));
+      assert.match(result.stdout, /^Usage: ajs dms \[options\] \[command\]\n/);
+      assert.equal(result.stderr, "");
+    }
+  });
+
+  it("reports usage errors with the core template and exit code 2", async () => {
+    const option = await runCli(["build", "--prod"]);
+    assert.equal(option.code, 2);
+    assert.equal(option.stdout, "");
+    assert.equal(
+      option.stderr,
+      "✖ Unknown option '--prod'\n" +
+        "  Usage: ajs dms build [options]\n" +
+        "  → Run ajs dms build --help for usage\n",
+    );
+
+    const command = await runCli(["biuld"]);
+    assert.equal(command.code, 2);
+    assert.match(command.stderr, /^✖ Unknown command 'biuld'\n/);
+    assert.match(command.stderr, /→ Did you mean build\?/);
+
+    const required = await runCli(["verify-source"]);
+    assert.equal(required.code, 2);
+    assert.match(
+      required.stderr,
+      /^✖ Required option '-l, --layer <path>' not specified\n/,
+    );
+  });
+
+  it("accepts the global options of ajs after a command", async () => {
+    for (const flag of ["--no-color", "--verbose"]) {
+      const result = await runCli(["clean", "--all", flag]);
+      assert.equal(result.code, 0, flag);
+      assert.match(result.stderr, /No workspaces found/, flag);
+    }
+  });
+
+  it("colors feedback only when allowed, and --no-color and NO_COLOR win", async () => {
+    const forced = await runCli(["clean"], { env: { FORCE_COLOR: "1" } });
+    assert.ok(
+      forced.stderr.startsWith(`${ESC}[31m✖${ESC}[39m Nothing to clean`),
+      forced.stderr,
+    );
+
+    const runs = [
+      await runCli(["clean"]),
+      await runCli(["clean", "--no-color"], { env: { FORCE_COLOR: "1" } }),
+      await runCli(["clean"], { env: { FORCE_COLOR: "1", NO_COLOR: "1" } }),
+    ];
+    for (const result of runs) {
+      assert.equal(result.code, 2);
+      assert.ok(!result.stderr.includes(ESC), result.stderr);
+    }
+  });
+
+  it("falls back to ASCII symbols on a dumb terminal", async () => {
+    const result = await runCli(["clean"], { env: { TERM: "dumb" } });
+    assert.equal(result.code, 2);
+    assert.match(result.stderr, /^x Nothing to clean/);
+    assert.match(result.stderr, /\n {2}> Remove every workspace/);
+    assert.doesNotMatch(result.stderr, /[✖→▲✔ℹ]/);
+  });
+
+  it("shows the cause's stack trace only in a verbose run", async () => {
+    const backend = "http://127.0.0.1:9";
+    const quiet = await runCli(["build", "-b", backend], {
+      env: { DMS_SESSION_SECRET: SESSION_SECRET },
+    });
+    assert.equal(quiet.code, 1);
+    assert.doesNotMatch(quiet.stderr, /^\s+at /m);
+    assert.match(quiet.stderr, /Run with --verbose for the full trace/);
+
+    for (const verbose of [
+      { args: ["--verbose"], env: {} },
+      { args: [], env: { ANTELOPEJS_VERBOSE: "*" } },
+    ]) {
+      const result = await runCli(["build", "-b", backend, ...verbose.args], {
+        env: { DMS_SESSION_SECRET: SESSION_SECRET, ...verbose.env },
+      });
+      assert.equal(result.code, 1);
+      assert.match(result.stderr, /^\s+at /m);
+    }
   });
 });
 
 const BACKEND_URL = "http://127.0.0.1:5010";
+
+/** Starts every ANSI color sequence. */
+const ESC = "\x1b";
 const SESSION_SECRET = "configured-session-secret-at-least-32-characters";
 
 /** Sandbox-relative directory of the workspace build and start use. */
@@ -213,7 +324,7 @@ describe("validating options before any work", () => {
       const dev = await runCli(["dev", "-b", BACKEND_URL, "-p", port]);
       assert.equal(dev.code, 2, `dev -p ${port}`);
       assert.equal(dev.stdout, "");
-      assert.match(dev.stderr, new RegExp(`^✗ Invalid port '${port}'\n`));
+      assert.match(dev.stderr, new RegExp(`^✖ Invalid port '${port}'\n`));
       assert.match(dev.stderr, /→ Pass a number between 1 and 65535, or 0 for/);
       assert.doesNotMatch(dev.stderr, /No free port|Setting up workspace/);
 
@@ -221,7 +332,7 @@ describe("validating options before any work", () => {
         env: { DMS_SESSION_SECRET: SESSION_SECRET },
       });
       assert.equal(start.code, 2, `start -p ${port}`);
-      assert.match(start.stderr, new RegExp(`^✗ Invalid port '${port}'\n`));
+      assert.match(start.stderr, new RegExp(`^✖ Invalid port '${port}'\n`));
       assert.doesNotMatch(start.stderr, /Starting production server/);
     }
   });
@@ -237,8 +348,8 @@ describe("validating options before any work", () => {
         `${port}`,
       ]);
       assert.equal(result.code, 1);
-      assert.match(result.stderr, /Setup failed/);
-      assert.doesNotMatch(result.stderr, /in use, using/);
+      assert.match(result.stderr, /✖ Cannot reach the DMS backend/);
+      assert.doesNotMatch(result.stderr, /Setup failed|is busy, using/);
     } finally {
       await closeServer(server);
     }
@@ -250,19 +361,19 @@ describe("validating options before any work", () => {
         env: { DMS_SESSION_SECRET: SESSION_SECRET },
       });
       assert.equal(result.code, 2, command);
-      assert.match(result.stderr, /^✗ Invalid backend URL 'localhost:5010'\n/);
+      assert.match(result.stderr, /^✖ Invalid backend URL 'localhost:5010'\n/);
       assert.match(
         result.stderr,
         /→ Include the scheme: -b http:\/\/localhost:5010/,
       );
-      assert.doesNotMatch(result.stderr, /fetch failed|Setting up workspace/);
+      assert.doesNotMatch(result.stderr, /fetch failed|ajs dms /);
     }
   });
 
   it("skips prepare for an invalid backend URL without failing the install", async () => {
     const result = await runCli(["prepare", "-b", "localhost:5010"]);
     assert.equal(result.code, 0);
-    assert.match(result.stderr, /Skipping prepare: Invalid backend URL/);
+    assert.match(result.stderr, /▲ Skipped prepare: Invalid backend URL/);
   });
 
   it("names the character that keeps the bootstrap credential out of a header", async () => {
@@ -273,7 +384,7 @@ describe("validating options before any work", () => {
     assert.equal(result.stdout, "");
     assert.match(
       result.stderr,
-      /^✗ The bootstrap credential cannot travel in an HTTP header\n/,
+      /^✖ The bootstrap credential cannot travel in an HTTP header\n/,
     );
     assert.match(result.stderr, /DMS_BOOTSTRAP_SECRET contains a space\./);
     assert.doesNotMatch(result.stderr, /Error:|contains a line break|abc def/);
@@ -285,7 +396,7 @@ describe("validating options before any work", () => {
       },
     });
     assert.equal(build.code, 2);
-    assert.doesNotMatch(build.stderr, /Setup failed|Setting up workspace/);
+    assert.doesNotMatch(build.stderr, /Setup failed|ajs dms build/);
   });
 
   it("stops start on a busy port before spawning the server", async () => {
@@ -302,12 +413,12 @@ describe("validating options before any work", () => {
       assert.equal(result.stdout, "");
       assert.match(
         result.stderr,
-        new RegExp(`✗ Port ${port} is already in use`),
+        new RegExp(`✖ Port ${port} is already in use`),
       );
       assert.match(result.stderr, /→ .*another port: -p <port>/);
       assert.doesNotMatch(
         result.stderr,
-        /Starting production server|EADDRINUSE/,
+        /Starting the production server|EADDRINUSE/,
       );
     } finally {
       await closeServer(server);
@@ -331,9 +442,9 @@ describe("validating options before any work", () => {
     assert.equal(result.stdout, "");
     assert.match(
       result.stderr,
-      /^✗ Nothing to clean: pass -b <url> or --all\n/,
+      /^✖ Nothing to clean: pass -b <url> or --all\n/,
     );
-    assert.doesNotMatch(result.stderr, /⚠/);
+    assert.doesNotMatch(result.stderr, /▲/);
   });
 
   it("never takes the clean target from the project's .env", async () => {
@@ -346,7 +457,7 @@ describe("validating options before any work", () => {
       env: { DMS_API_BASE_URL: undefined },
     });
     assert.equal(result.code, 2);
-    assert.match(result.stderr, /✗ Nothing to clean/);
+    assert.match(result.stderr, /✖ Nothing to clean/);
     assert.match(result.stderr, /never uses DMS_API_BASE_URL/);
     assert.ok(existsSync(join(result.sandbox, workspace)));
 
@@ -354,7 +465,7 @@ describe("validating options before any work", () => {
       files: { [join(workspace, "server.mjs")]: "" },
     });
     assert.equal(explicit.code, 0);
-    assert.match(explicit.stderr, /✓ Removed workspace/);
+    assert.match(explicit.stderr, /✔ Removed workspace/);
     assert.ok(!existsSync(join(explicit.sandbox, workspace)));
   });
 
@@ -362,7 +473,7 @@ describe("validating options before any work", () => {
     const missing = await runCli(["verify-source", "-l", "./nope"]);
     assert.equal(missing.code, 2);
     assert.equal(missing.stdout, "");
-    assert.match(missing.stderr, /^✗ Layer path not found: \.\/nope\n/);
+    assert.match(missing.stderr, /^✖ Layer path not found: \.\/nope\n/);
     assert.match(missing.stderr, /dms\.frontend\.ts/);
     assert.doesNotMatch(missing.stderr, /ENOENT|Error:|at /);
 
@@ -374,7 +485,7 @@ describe("validating options before any work", () => {
       "./missing-module",
     ]);
     assert.equal(module.code, 2);
-    assert.match(module.stderr, /✗ Module path not found: \.\/missing-module/);
+    assert.match(module.stderr, /✖ Module path not found: \.\/missing-module/);
 
     const local = await runCli([
       "verify-source",
@@ -384,7 +495,7 @@ describe("validating options before any work", () => {
       "foo",
     ]);
     assert.equal(local.code, 2);
-    assert.match(local.stderr, /^✗ Invalid local package 'foo'\n/);
+    assert.match(local.stderr, /^✖ Invalid local package 'foo'\n/);
     assert.match(local.stderr, /name=path/);
     assert.doesNotMatch(local.stderr, /Error:/);
   });
@@ -407,10 +518,11 @@ describe("explaining an unreachable backend", () => {
       assert.match(
         result.stderr,
         new RegExp(
-          `(Setup failed|Skipping prepare): Cannot reach the DMS backend at ${backendUrl}\n`,
+          `\n(✖|▲ Skipped prepare:) Cannot reach the DMS backend at ${backendUrl}\n`,
         ),
         command,
       );
+      assert.doesNotMatch(result.stderr, /Setup failed/);
       assert.match(result.stderr, /Connection refused \(ECONNREFUSED\)\./);
       assert.match(result.stderr, /→ Start the backend/);
       assert.doesNotMatch(result.stderr, /fetch failed/);
@@ -438,7 +550,10 @@ describe("loading the project .env", () => {
     assert.equal(result.code, 1);
     assert.equal(result.stdout, "");
     assert.doesNotMatch(result.stderr, /Backend URL is required/);
-    assert.match(result.stderr, /Production build not found/);
+    assert.match(
+      result.stderr,
+      /✖ No production build for http:\/\/127\.0\.0\.1:5010\n/,
+    );
     assert.match(result.stderr, /build -b http:\/\/127\.0\.0\.1:5010/);
   });
 
@@ -472,7 +587,7 @@ describe("loading the project .env", () => {
   it("runs normally in a directory with no .env", async () => {
     const result = await runCli(["start"], { env: ENV_ONLY });
 
-    assert.equal(result.code, 1);
+    assert.equal(result.code, 2);
     assert.match(result.stderr, /Backend URL is required/);
   });
 
