@@ -22,8 +22,11 @@ import {
   formatEnvironmentHelp,
   formatExamples,
   type HelpExample,
+  helpWidth,
+  unbreakable,
+  wrapText,
 } from "./help";
-import { reportStopped } from "./output";
+import { exitOnBrokenPipe, joinParts, reportStopped } from "./output";
 import {
   reportAvailableUpdate,
   startProcessUpdateCheck,
@@ -54,15 +57,27 @@ const ROOT_EXAMPLES: HelpExample[] = [
 ];
 
 function describeVersion(version: string): string {
-  return `${getProcessPalette("result").bold(`ajs dms ${version}`)} · DMS frontend for AntelopeJS (Vue 3, Vite, Inertia)\n`;
+  const name = `ajs dms ${version}`;
+  const line = joinParts([
+    unbreakable(name),
+    "DMS frontend for AntelopeJS (Vue 3, Vite, Inertia)",
+  ]);
+  const [first, ...rest] = wrapText(line, helpWidth());
+  const title = first.replace(name, getProcessPalette("result").bold(name));
+  return `${[title, ...rest].join("\n")}\n`;
 }
 
 function describeHelpFooter(): string {
-  return (
-    `\n${formatExamples(ROOT_EXAMPLES)}\n\n` +
-    `Run ajs dms <command> --help for its options and examples, and\n` +
-    `ajs dms help ${ENVIRONMENT_TOPIC} for the variables read from the environment.`
-  );
+  const width = helpWidth();
+  const pointer =
+    `Run ${unbreakable("ajs dms <command> --help")} for its options and examples, and ` +
+    `${unbreakable(`ajs dms help ${ENVIRONMENT_TOPIC}`)} for the variables read from the environment.`;
+  return [
+    "",
+    formatExamples(ROOT_EXAMPLES, width),
+    "",
+    ...wrapText(pointer, width),
+  ].join("\n");
 }
 
 /** The arguments, global flags aside. */
@@ -97,6 +112,7 @@ function unknownHelpSubject(
 }
 
 const runCLI = async () => {
+  exitOnBrokenPipe();
   // Before anything reads the environment: every command option binds to an
   // environment variable that Commander resolves while parsing, the commands
   // below are only constructed after this point, and each child process the
@@ -125,8 +141,8 @@ const runCLI = async () => {
       "--no-update-check",
       "Skip the daily update check (also NO_UPDATE_NOTIFIER=1)",
     )
-    .addHelpText("before", describeVersion(version))
-    .addHelpText("after", describeHelpFooter());
+    .addHelpText("before", () => describeVersion(version))
+    .addHelpText("after", describeHelpFooter);
 
   program.addCommand(cmdDev());
   program.addCommand(cmdBuild());
@@ -157,7 +173,7 @@ const runCLI = async () => {
     await program.parseAsync(args, { from: "user" });
   } catch (err) {
     if (!(err instanceof CancelledError)) throw err;
-    reportStopped(err.message, err.signal);
+    reportStopped(err);
     process.exitCode = err.exitCode;
     return;
   }

@@ -12,6 +12,7 @@ import { buffer } from "node:stream/consumers";
 import { CliError } from "@antelopejs/core/cli";
 import {
   backendEndpoint,
+  BackendResponseError,
   displayUrl,
   fetchFromBackend,
   ServedWithPath,
@@ -158,9 +159,12 @@ export async function downloadAndExtractLayers(
 ): Promise<void> {
   const url = backendEndpoint(backendUrl, packUrl);
   const response = await fetchFromBackend(backendUrl, url, bootstrapSecret);
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
+    throw new BackendResponseError("the layers archive", url, response);
+  }
+  if (!response.body) {
     throw new Error(
-      `Failed to download the layers archive from ${displayUrl(url)} (${response.status})`,
+      `The layers archive from ${displayUrl(url)} came without a body`,
     );
   }
 

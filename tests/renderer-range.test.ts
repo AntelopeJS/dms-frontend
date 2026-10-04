@@ -63,7 +63,8 @@ function check(
   const warnings: string[] = [];
   assertLayersSupportRenderer(layers, {
     renderer: { name: RENDERER, version },
-    warn: (message) => warnings.push(message),
+    warn: (text, { details = [] }) =>
+      warnings.push([text, ...details].join("\n")),
     workspaceDir,
   });
   return warnings;
@@ -85,6 +86,27 @@ describe("renderer range", () => {
         assert.match(
           problemText(err),
           /@acme\/dms-billing \(.+\) supports >=0\.2\.8 <0\.4\.0/,
+        );
+        return true;
+      },
+    );
+  });
+
+  it("names the modules before saying how to fix them", () => {
+    const first = declaring("too-old", "<0.4.0");
+    const second = declaring("too-new", ">=0.5.0");
+    assert.throws(
+      () => check([first, second]),
+      (err: Error) => {
+        assert.equal(
+          problemText(err),
+          [
+            `✖ These frontend modules do not run on ${RENDERER} 0.4.0`,
+            `  too-old (${first.path}) supports <0.4.0`,
+            `  too-new (${second.path}) supports >=0.5.0`,
+            `  → Install a ${RENDERER} release in their ranges, or upgrade the modules`,
+            "",
+          ].join("\n"),
         );
         return true;
       },
@@ -151,10 +173,29 @@ describe("renderer range", () => {
   });
 
   it("says where the missing range belongs", () => {
-    const [warning] = check([layer("undeclared-hint", { node: ">=20" })]);
-    assert.match(warning, /undeclared-hint/);
-    assert.match(warning, /engines\["@antelopejs\/dms-frontend"\]/);
-    assert.match(warning, /0\.4\.0/);
+    const undeclared = layer("undeclared-hint", { node: ">=20" });
+    const [warning] = check([undeclared]);
+    assert.equal(
+      warning,
+      [
+        `No supported ${RENDERER} range declared, so not checked against 0.4.0`,
+        `undeclared-hint (${undeclared.path})`,
+        `→ Declare one in its package.json, under engines["${RENDERER}"]`,
+      ].join("\n"),
+    );
+  });
+
+  it("names a module from its source, not from the archive it came in", () => {
+    const source = temporaryDir("dms-renderer-range-source-");
+    const archived = {
+      ...declaring("archived", "<0.4.0"),
+      sourcePath: source,
+    };
+    assert.throws(
+      () => check([archived]),
+      (err) =>
+        problemText(err).includes(`archived (${source}) supports <0.4.0`),
+    );
   });
 
   it("checks a prerelease as the release it leads to", () => {

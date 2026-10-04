@@ -4,6 +4,7 @@ import {
   type SetupWorkspaceResult,
   setupWorkspace,
 } from "../common";
+import { endInterruptedTask } from "../output";
 
 /**
  * Set the workspace up as one task. When dependencies have to be installed,
@@ -11,7 +12,7 @@ import {
  * ends the setup.
  *
  * A failure removes the task without a line: whoever catches the error
- * reports it once.
+ * reports it once. A stop leaves it on screen as stopped.
  */
 export async function setUpWorkspace(
   options: Omit<SetupWorkspaceOptions, "beforeInstall">,
@@ -29,7 +30,7 @@ export async function setUpWorkspace(
     if (!isInstalling) task.succeed("Workspace ready");
     return result;
   } catch (error) {
-    task.dismiss();
+    endInterruptedTask(task, error, "Workspace setup stopped");
     throw error;
   }
 }

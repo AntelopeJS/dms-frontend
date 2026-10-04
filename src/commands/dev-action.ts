@@ -17,9 +17,11 @@ import {
   resolveSessionSecret,
   startLayerWatchers,
 } from "../common";
+import { createPathMapper } from "../child-output";
 import { describeDiscoveryFailure, discoverBackend } from "../discovery";
 import {
   cachedAge,
+  joinParts,
   showPath,
   showWorkspace,
   writeHeader,
@@ -169,6 +171,7 @@ export async function runDev(options: DevOptions): Promise<void> {
     name: "dev server",
     script: "server.mjs",
     cwd: workspaceDir,
+    mapPath: createPathMapper(workspaceDir, layers),
     env: {
       ...process.env,
       PORT: String(port),
@@ -191,7 +194,10 @@ export async function runDev(options: DevOptions): Promise<void> {
             ? [{ label: "Secrets", value: secretSources }]
             : []),
         ]),
-        footer: `Watching ${pluralize(layers.length, "layer source")} · Ctrl+C to stop`,
+        footer: joinParts([
+          `Watching ${pluralize(layers.length, "layer source")}`,
+          "Ctrl+C to stop",
+        ]),
       });
       void reportAvailableUpdate({ isFollowed: true });
     },

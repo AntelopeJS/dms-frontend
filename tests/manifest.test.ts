@@ -1,12 +1,15 @@
 import * as assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { CliError } from "@antelopejs/core/cli";
 import {
+  BackendResponseError,
   BackendUnreachableError,
+  describeManifestVersion,
   fetchManifest,
   type Manifest,
   type ManifestCacheUse,
@@ -127,7 +130,22 @@ describe("fetchManifest", () => {
   it("does not fall back when the frontend endpoint is missing", async () => {
     const { server, baseUrl, requests } = await startBackend(404);
     try {
-      await assert.rejects(() => fetchManifest(baseUrl), /dms\/frontend.*404/);
+      await assert.rejects(
+        () => fetchManifest(baseUrl),
+        (err: Error) => {
+          assert.ok(err instanceof BackendResponseError);
+          assert.equal(
+            problemText(err),
+            [
+              "✖ The DMS backend did not serve the frontend manifest (HTTP 404 Not Found)",
+              `  ${baseUrl}/dms/frontend answered 404.`,
+              "  → Check that -b <url> points at a DMS backend running @antelopejs/dms",
+              "",
+            ].join("\n"),
+          );
+          return true;
+        },
+      );
       assert.deepEqual(requests, [
         "/dms/frontend?renderer=vue&rendererVersion=3",
       ]);
@@ -143,10 +161,60 @@ describe("fetchManifest", () => {
     try {
       await assert.rejects(
         () => fetchManifest(baseUrl),
-        /Unsupported frontend manifest version: 2/,
+        /serves frontend manifest version 2, which @antelopejs\/dms-frontend \S+ cannot read/,
       );
     } finally {
       frontendManifest.version = previousVersion;
+      await closeServer(server);
+    }
+  });
+
+  it("says which side to upgrade for a manifest of another version", () => {
+    const { version } = JSON.parse(
+      readFileSync(
+        join(dirname(fileURLToPath(import.meta.url)), "../package.json"),
+        "utf8",
+      ),
+    );
+    assert.equal(
+      problemText(new ManifestRefusedError(describeManifestVersion(2))),
+      [
+        `✖ The backend serves frontend manifest version 2, which @antelopejs/dms-frontend ${version} cannot read`,
+        "  This loader reads version 1; the backend's @antelopejs/dms is newer than this loader.",
+        "  → Upgrade the loader (ajs update dms) to a release that reads version 2",
+        "",
+      ].join("\n"),
+    );
+    assert.match(
+      problemText(new ManifestRefusedError(describeManifestVersion(0))),
+      /older than this loader\.\n {2}→ Upgrade @antelopejs\/dms on the backend, or use a @antelopejs\/dms-frontend release that reads version 0\n$/,
+    );
+    assert.match(
+      problemText(new ManifestRefusedError(describeManifestVersion(undefined))),
+      /^✖ The backend served a frontend manifest without a protocol version\n/,
+    );
+  });
+
+  it("says the backend failed on a 5xx, and where to look", async () => {
+    const { server, baseUrl } = await startBackend(500);
+    try {
+      await assert.rejects(
+        () => fetchManifest(baseUrl),
+        (err: Error) => {
+          assert.ok(err instanceof BackendResponseError);
+          assert.equal(
+            problemText(err),
+            [
+              "✖ The DMS backend failed to serve the frontend manifest (HTTP 500 Internal Server Error)",
+              `  ${baseUrl}/dms/frontend answered 500: the backend failed on the request.`,
+              "  → Check the backend logs (the `ajs project dev` output for a local backend), then run again",
+              "",
+            ].join("\n"),
+          );
+          return true;
+        },
+      );
+    } finally {
       await closeServer(server);
     }
   });
@@ -241,11 +309,8 @@ describe("fetchManifest", () => {
         await assert.rejects(
           () => fetchManifest(baseUrl, "http://localhost:3001"),
           (err: Error) => {
-            assert.ok(err.message.includes(`${baseUrl}/dms/frontend`));
-            assert.doesNotMatch(
-              err instanceof CliError ? problemText(err) : err.message,
-              /\?|renderer=|clientUrl/,
-            );
+            assert.ok(problemText(err).includes(`${baseUrl}/dms/frontend`));
+            assert.doesNotMatch(problemText(err), /\?|renderer=|clientUrl/);
             return true;
           },
         );
@@ -360,7 +425,7 @@ describe("resolveManifest with a cached manifest", () => {
           () => resolveAgainst(workspace),
           (err: Error) =>
             err instanceof ManifestRefusedError &&
-            /Unsupported frontend manifest version: 2/.test(err.message),
+            /serves frontend manifest version 2/.test(err.message),
         );
       } finally {
         frontendManifest.version = previousVersion;
@@ -456,7 +521,7 @@ describe("resolveManifest with a cached manifest", () => {
           assert.ok(err instanceof CliError);
           assert.match(
             problemText(err),
-            /^✖ Failed to fetch manifest from \S+ \(503\)\n {2}A manifest cached just now exists; a build uses it only with --offline\.\n {2}→ Or build from the cache on purpose: ajs dms build -b \S+ --offline\n$/,
+            /^✖ The DMS backend failed to serve the frontend manifest \(HTTP 503 Service Unavailable\)\n {2}\S+ answered 503: the backend failed on the request\. A manifest cached just now exists; a build uses it only with --offline\.\n {2}→ Check the backend logs .*\n {2}→ Or build from the cache on purpose: ajs dms build -b \S+ --offline\n$/,
           );
           return true;
         },

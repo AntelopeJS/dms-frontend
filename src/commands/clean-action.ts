@@ -9,6 +9,7 @@ import {
 import {
   formatSize,
   isTerminalFeedback,
+  joinParts,
   showWorkspace,
   workspaceId,
   writeFeedback,
@@ -101,7 +102,10 @@ async function cleanAll(options: CleanOptions): Promise<void> {
   }
   ui.message(
     "success",
-    `Removed ${pluralize(records.length, "workspace")} · freed ${formatSize(totalBytes)}`,
+    joinParts([
+      `Removed ${pluralize(records.length, "workspace")}`,
+      `freed ${formatSize(totalBytes)}`,
+    ]),
     {
       details: options.yes
         ? describeWorkspaces(records, isTerminalFeedback())
@@ -142,6 +146,10 @@ export async function runClean(options: CleanOptions): Promise<void> {
   rmSync(workspaceDir, { recursive: true, force: true });
   ui.message(
     "success",
-    `Removed workspace ${showWorkspace(workspaceDir)} · ${backendUrl} · freed ${formatSize(freedBytes)}`,
+    joinParts([
+      `Removed workspace ${showWorkspace(workspaceDir)}`,
+      backendUrl,
+      `freed ${formatSize(freedBytes)}`,
+    ]),
   );
 }

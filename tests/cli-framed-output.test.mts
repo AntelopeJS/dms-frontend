@@ -141,7 +141,11 @@ function closedBackendUrl(): Promise<string> {
  * downloaded from `backendUrl`, so `build --offline` runs without a backend.
  * The manifest names `<sandbox>/frontend-vue` as the layer's source.
  */
-function cachedBuildHome(sandbox: string, backendUrl: string): void {
+function cachedBuildHome(
+  sandbox: string,
+  backendUrl: string,
+  hasSourcePath = true,
+): void {
   const workspace = join(
     sandbox,
     ".antelopejs/dms-frontend",
@@ -155,7 +159,7 @@ function cachedBuildHome(sandbox: string, backendUrl: string): void {
     JSON.stringify({
       manifest: {
         pack: "/dms/frontend/modules",
-        modules: [{ ...MODULE, path: source }],
+        modules: [hasSourcePath ? { ...MODULE, path: source } : MODULE],
       },
       fetchedAt: new Date().toISOString(),
     }),
@@ -327,6 +331,19 @@ describePosix("framing pnpm install and the production build", () => {
     );
     assert.doesNotMatch(run.stderr, /at constructor|frontend-modules/);
     assert.doesNotMatch(run.stderr, /e-mail bundle/);
+  });
+
+  it("names the file inside its package when the backend served no source path", async () => {
+    const run = await runCli(offlineBuild, {
+      setUp: (sandbox) => cachedBuildHome(sandbox, OFFLINE_BACKEND, false),
+      scenario: "ssr-fails",
+    });
+
+    assert.equal(run.code, 1);
+    assert.match(
+      run.stderr,
+      /✖ Vite could not compile app\/components\/Callout\.vue:10:50 in framed-layer\n {2}\[vue\/compiler-sfc\] Unexpected token\n/,
+    );
   });
 });
 

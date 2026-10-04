@@ -26,7 +26,9 @@ export function cmdVerifySource(): Command {
     .description(
       "Build and type-check unpublished DMS frontend sources against this loader version, in a temporary workspace removed when the run ends. Starts no backend.",
     )
-    .requiredOption(
+    // Checked by the action rather than by Commander, which would stop at
+    // the first problem: the action reports every one of them at once.
+    .option(
       "-l, --layer <path>",
       "Root of the DMS frontend package to verify (required)",
     )

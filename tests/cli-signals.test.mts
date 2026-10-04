@@ -205,16 +205,57 @@ function serveManifest(): Promise<{ server: Server; url: string }> {
   });
 }
 
-/** A `pnpm` on PATH whose install never finishes and runs a process tree. */
-function hangingPnpm(): string {
+/**
+ * A `pnpm` on PATH that runs a process tree and never finishes: on every
+ * command, or past the install when `installs` is set.
+ */
+function hangingPnpm(installs = false): string {
   const bin = mkdtempSync(join(scratch, "bin-"));
   const pnpm = join(bin, "pnpm");
+  const install = installs ? `[ "$1" = install ] && exit 0\n` : "";
   writeFileSync(
     pnpm,
-    `#!/bin/sh\nexec "${process.execPath}" "${PROCESS_TREE}"\n`,
+    `#!/bin/sh\n${install}exec "${process.execPath}" "${PROCESS_TREE}"\n`,
   );
   chmodSync(pnpm, 0o755);
   return `${bin}:${process.env.PATH}`;
+}
+
+/**
+ * A home holding the manifest and the layers archive an earlier build
+ * downloaded from `backendUrl`, so `build --offline` needs no backend.
+ */
+function offlineBuildHome(backendUrl: string): string {
+  const home = mkdtempSync(join(scratch, "home-"));
+  const workspace = join(
+    home,
+    ".antelopejs/dms-frontend",
+    createHash("sha256").update(backendUrl).digest("hex"),
+  );
+  const layer = join(workspace, ".layers-cache/signals-layer");
+  mkdirSync(layer, { recursive: true });
+  writeFileSync(
+    join(layer, "package.json"),
+    JSON.stringify({ name: "signals-layer" }),
+  );
+  writeFileSync(
+    join(workspace, ".manifest-cache.json"),
+    JSON.stringify({
+      manifest: {
+        pack: "/dms/frontend/modules",
+        modules: [
+          {
+            name: "signals-layer",
+            archiveName: "signals-layer",
+            priority: 0,
+            renderer: { name: "vue", version: "3" },
+          },
+        ],
+      },
+      fetchedAt: new Date().toISOString(),
+    }),
+  );
+  return home;
 }
 
 // Process groups are a POSIX notion; on Windows runCommand kills the tree
@@ -328,12 +369,40 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
       process.kill(-run.pid, "SIGINT");
 
       assert.deepEqual(await run.exited, { code: 130, signal: null });
-      assert.match(run.output(), /■ Stopped\n/);
+      assert.match(
+        run.output(),
+        /– Dependency install stopped(?: \S+)?\n■ Stopped\n/,
+      );
       assert.doesNotMatch(run.output(), /Setup failed/);
       await assertTreeGone(pids);
     } finally {
       await new Promise((settle) => backend.server.close(settle));
     }
+  });
+
+  it("keeps the interrupted build step and names the stopped build on Ctrl+C", async () => {
+    const backendUrl = "http://127.0.0.1:9";
+    const run = startCli({
+      args: ["build", "-b", backendUrl, "--offline"],
+      env: {
+        HOME: offlineBuildHome(backendUrl),
+        PATH: hangingPnpm(true),
+        DMS_SESSION_SECRET: SESSION_SECRET,
+        NO_COLOR: "1",
+      },
+      ownGroup: true,
+    });
+    const pids = await run.tree;
+
+    process.kill(-run.pid, "SIGINT");
+
+    assert.deepEqual(await run.exited, { code: 130, signal: null });
+    assert.match(
+      run.output(),
+      /\n– Client bundle stopped(?: \S+)?\n■ Stopped the production build · ran \d+(ms|\.\ds)\n$/,
+    );
+    assert.doesNotMatch(run.output(), /failed/);
+    await assertTreeGone(pids);
   });
 
   it("kills the tree when the CLI exits for any other reason", async () => {

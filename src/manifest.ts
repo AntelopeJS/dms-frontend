@@ -5,7 +5,11 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CliError, FAILURE_EXIT_CODE } from "@antelopejs/core/cli";
+import {
+  CliError,
+  type CliProblem,
+  FAILURE_EXIT_CODE,
+} from "@antelopejs/core/cli";
 import { parseBackendUrl, UsageError, writeSecretBearingFile } from "./config";
 import { cachedAge, formatAge } from "./output";
 import {
@@ -153,9 +157,87 @@ export async function fetchFromBackend(
  * cached modules are not what it serves any more.
  */
 export class ManifestRefusedError extends CliError {
-  constructor(reason: string) {
-    super({ title: reason });
+  constructor(problem: string | CliProblem) {
+    super(typeof problem === "string" ? { title: problem } : problem);
     this.name = "ManifestRefusedError";
+  }
+}
+
+const OWN_RELEASE: {
+  name: string;
+  version: string;
+} = require("../package.json");
+const BACKEND_PACKAGE = "@antelopejs/dms";
+const LOADER_UPDATE_COMMAND = "ajs update dms";
+
+/**
+ * A manifest of another protocol version: which side is behind, the versions
+ * on both, and the side to upgrade.
+ */
+export function describeManifestVersion(version: unknown): CliProblem {
+  const loader = `${OWN_RELEASE.name} ${OWN_RELEASE.version}`;
+  const supported = `This loader reads version ${FRONTEND_MANIFEST_VERSION}`;
+  if (typeof version !== "number") {
+    return {
+      title:
+        "The backend served a frontend manifest without a protocol version",
+      reason: `${supported}; the answer does not look like one from ${BACKEND_PACKAGE}.`,
+      fixes: [
+        `Check that -b <url> points at a DMS backend running ${BACKEND_PACKAGE}`,
+      ],
+    };
+  }
+  const title = `The backend serves frontend manifest version ${version}, which ${loader} cannot read`;
+  if (version > FRONTEND_MANIFEST_VERSION) {
+    return {
+      title,
+      reason: `${supported}; the backend's ${BACKEND_PACKAGE} is newer than this loader.`,
+      fixes: [
+        `Upgrade the loader (${LOADER_UPDATE_COMMAND}) to a release that reads version ${version}`,
+      ],
+    };
+  }
+  return {
+    title,
+    reason: `${supported}; the backend's ${BACKEND_PACKAGE} is older than this loader.`,
+    fixes: [
+      `Upgrade ${BACKEND_PACKAGE} on the backend, or use a ${OWN_RELEASE.name} release that reads version ${version}`,
+    ],
+  };
+}
+
+/**
+ * The backend answered a request for `subject` with an error status. A 5xx is
+ * the backend failing, and only its own logs say why; any other status means
+ * the URL does not lead to a DMS backend's endpoint.
+ */
+export class BackendResponseError extends CliError {
+  constructor(
+    subject: string,
+    url: string | URL,
+    response: Pick<Response, "status" | "statusText">,
+  ) {
+    const { status, statusText } = response;
+    const answer = `HTTP ${status}${statusText ? ` ${statusText}` : ""}`;
+    const shown = displayUrl(url);
+    const problem: CliProblem =
+      status >= 500
+        ? {
+            title: `The DMS backend failed to serve ${subject} (${answer})`,
+            reason: `${shown} answered ${status}: the backend failed on the request.`,
+            fixes: [
+              "Check the backend logs (the `ajs project dev` output for a local backend), then run again",
+            ],
+          }
+        : {
+            title: `The DMS backend did not serve ${subject} (${answer})`,
+            reason: `${shown} answered ${status}.`,
+            fixes: [
+              `Check that -b <url> points at a DMS backend running ${BACKEND_PACKAGE}`,
+            ],
+          };
+    super(problem);
+    this.name = "BackendResponseError";
   }
 }
 
@@ -196,16 +278,16 @@ export async function fetchManifest(
     bootstrapSecret,
   );
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch manifest from ${displayUrl(frontendUrl)} (${response.status})`,
+    throw new BackendResponseError(
+      "the frontend manifest",
+      frontendUrl,
+      response,
     );
   }
 
   const manifest = (await response.json()) as FrontendManifest;
   if (manifest.version !== FRONTEND_MANIFEST_VERSION) {
-    throw new ManifestRefusedError(
-      `Unsupported frontend manifest version: ${String(manifest.version)}`,
-    );
+    throw new ManifestRefusedError(describeManifestVersion(manifest.version));
   }
   const incompatible = manifest.modules.filter(
     (module) =>

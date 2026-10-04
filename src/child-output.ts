@@ -15,7 +15,7 @@ import {
   type Ui,
 } from "@antelopejs/core/cli";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
-import { showPath, showWorkspace } from "./output";
+import { joinParts, showPath, showWorkspace } from "./output";
 import type { ResolvedLayer } from "./workspace";
 
 const ESC = "\u001b";
@@ -163,6 +163,11 @@ function pathPattern(path: string): string {
     .join("[\\\\/]");
 }
 
+/** Whether a layer's source directory is on this disk, so paths can name it. */
+function hasLocalSource(layer: ResolvedLayer): boolean {
+  return !!layer.sourcePath && existsSync(layer.sourcePath);
+}
+
 /**
  * Where a materialized layer came from, as the user reads it: its source
  * directory when it is on this disk, its package name otherwise (a build from
@@ -172,9 +177,30 @@ function shownSource(
   layer: ResolvedLayer,
   showSource: (path: string) => string,
 ): string {
-  const source = layer.sourcePath;
-  if (source && existsSync(source)) return showSource(source);
+  if (hasLocalSource(layer)) return showSource(layer.sourcePath ?? "");
   return layer.packageName ?? getLayerSafeName(layer);
+}
+
+/**
+ * Names a file the path mapper showed under a layer's package name, its
+ * source not on this disk (a build whose backend served no source paths):
+ * inside the package rather than as a path, which it is not.
+ * `template-dms-demo-frontend-vue/app/Callout.vue:10:50` becomes
+ * `app/Callout.vue:10:50 in template-dms-demo-frontend-vue`.
+ */
+export function createFileNamer(
+  layers: ResolvedLayer[],
+): (file: string) => string {
+  const packages = layers
+    .filter((layer) => layer.packageName && !hasLocalSource(layer))
+    .map((layer) => shownSource(layer, showPath));
+  return (file) => {
+    const owner = packages.find((name) =>
+      ["/", "\\"].some((separator) => file.startsWith(`${name}${separator}`)),
+    );
+    if (!owner) return file;
+    return `${file.slice(owner.length + 1)} in ${owner}`;
+  };
 }
 
 /**
@@ -280,7 +306,10 @@ export class InstallProgress {
 
   get label(): string {
     if (this.resolved === undefined) return "Installing dependencies";
-    return `Installing dependencies · ${this.resolved} resolved, ${this.added ?? 0} added`;
+    return joinParts([
+      "Installing dependencies",
+      `${this.resolved} resolved, ${this.added ?? 0} added`,
+    ]);
   }
 
   get doneLabel(): string {
