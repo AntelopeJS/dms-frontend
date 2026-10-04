@@ -40,6 +40,10 @@ const LINK_GAP = "  ";
 const LABEL_SUFFIX = ":";
 const TIME_LENGTH = 8;
 
+const BYTES_PER_UNIT = 1024;
+const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"];
+const DECIMAL_SIZE_LIMIT = 10;
+
 const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
@@ -47,6 +51,11 @@ const HOURS_PER_DAY = 24;
 /** Whether feedback goes to a terminal, read as it is written. */
 export function isTerminalFeedback(): boolean {
   return detectCapabilities(processCapabilityContext()).terminals.feedback;
+}
+
+/** Whether results go to a terminal rather than to a pipe or a file. */
+export function isTerminalResult(): boolean {
+  return detectCapabilities(processCapabilityContext()).terminals.result;
 }
 
 /** Writes a raw line of feedback above the running tasks. */
@@ -100,6 +109,30 @@ export function showWorkspace(
   const id = basename(dir);
   if (!isTerminal || id.length <= WORKSPACE_ID_LENGTH) return shown;
   return join(dirname(shown), `${id.slice(0, WORKSPACE_ID_LENGTH)}${ELLIPSIS}`);
+}
+
+/**
+ * The id of a workspace: its hashed directory name, cut to its first
+ * characters on a terminal and whole in piped output.
+ */
+export function workspaceId(dir: string, isTerminal: boolean): string {
+  const id = basename(dir);
+  return isTerminal ? id.slice(0, WORKSPACE_ID_LENGTH) : id;
+}
+
+/** A size in bytes as the user reads it: `512 B`, `1.5 GB`, `498 MB`. */
+export function formatSize(bytes: number): string {
+  let value = bytes;
+  let unit = 0;
+  while (value >= BYTES_PER_UNIT && unit < SIZE_UNITS.length - 1) {
+    value /= BYTES_PER_UNIT;
+    unit += 1;
+  }
+  const shown =
+    unit > 0 && value < DECIMAL_SIZE_LIMIT
+      ? String(Math.round(value * 10) / 10)
+      : String(Math.round(value));
+  return `${shown} ${SIZE_UNITS[unit]}`;
 }
 
 /** How long ago an ISO date was: `just now`, `5 min ago`, `2 h ago`, `3 days ago`. */
