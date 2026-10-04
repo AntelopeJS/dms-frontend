@@ -75,6 +75,7 @@ async function runCli(
     NO_COLOR: undefined,
     FORCE_COLOR: undefined,
     ANTELOPEJS_VERBOSE: undefined,
+    ANTELOPEJS_QUIET: undefined,
     ...options.env,
   };
   for (const [name, value] of Object.entries(env)) {
@@ -345,15 +346,18 @@ describe("following the ajs output contract", () => {
     assert.match(quiet.stderr, /Run with --verbose for the full trace/);
 
     for (const verbose of [
-      { args: ["--verbose"], env: {} },
-      { args: [], env: { ANTELOPEJS_VERBOSE: "*" } },
-      { args: [], env: { ANTELOPEJS_VERBOSE: "cli" } },
+      { args: ["build", "-b", backend, "--verbose"], env: {} },
+      { args: ["build", "-b", backend, "--verbose=cli"], env: {} },
+      { args: ["--verbose=cli,fetch", "build", "-b", backend], env: {} },
+      { args: ["--verbose", "build", "-b", backend], env: {} },
+      { args: ["build", "-b", backend], env: { ANTELOPEJS_VERBOSE: "*" } },
+      { args: ["build", "-b", backend], env: { ANTELOPEJS_VERBOSE: "cli" } },
     ]) {
-      const result = await runCli(["build", "-b", backend, ...verbose.args], {
+      const result = await runCli(verbose.args, {
         env: { DMS_SESSION_SECRET: SESSION_SECRET, ...verbose.env },
       });
-      assert.equal(result.code, 1);
-      assert.match(result.stderr, /^\s+at /m);
+      assert.equal(result.code, 1, verbose.args.join(" "));
+      assert.match(result.stderr, /^\s+at /m, verbose.args.join(" "));
     }
   });
 });
@@ -418,7 +422,7 @@ describe("documenting the commands", () => {
     assert.equal(result.code, 0);
     assert.match(
       result.stdout,
-      /\n {2}build {14}Build the production frontend\n/,
+      /\n {2}build {18}Build the production frontend\n/,
     );
     assert.doesNotMatch(result.stdout, /\[options\]\s{2,}/);
     assert.doesNotMatch(result.stdout, /React|Environment:|Workspaces:/);
@@ -1169,5 +1173,171 @@ describe("update notice", () => {
     });
     assert.equal(json.code, 0);
     assert.doesNotMatch(json.stderr, /999\.0\.0/);
+  });
+});
+
+/** A built workspace whose server prints the output settings it inherited. */
+function settingsWorkspace(backendUrl: string): Record<string, string> {
+  return {
+    ...builtWorkspace(backendUrl),
+    [join(workspaceDir(backendUrl), "server.mjs")]:
+      "const { ANTELOPEJS_QUIET, ANTELOPEJS_VERBOSE } = process.env;\n" +
+      "console.log(JSON.stringify({ ANTELOPEJS_QUIET, ANTELOPEJS_VERBOSE }));\n",
+  };
+}
+
+describe("global options after the command", () => {
+  it("accepts -q and --verbose=<channels> before and after it", async () => {
+    const listing = (result: { stdout: string; sandbox: string }) =>
+      result.stdout.replaceAll(result.sandbox, "<home>");
+    const plain = await runCli(["workspaces"], { files: URL_WORKSPACE });
+    assert.equal(plain.code, 0);
+    for (const args of [
+      ["-q", "workspaces"],
+      ["workspaces", "-q"],
+      ["workspaces", "--quiet"],
+      ["--verbose=vite", "workspaces"],
+      ["workspaces", "--verbose=vite"],
+      ["workspaces", "--verbose=vite,cli", "-q"],
+      ["--verbose", "workspaces"],
+    ]) {
+      const result = await runCli(args, { files: URL_WORKSPACE });
+      assert.equal(result.code, 0, args.join(" "));
+      assert.equal(listing(result), listing(plain), args.join(" "));
+      assert.equal(result.stderr, "", args.join(" "));
+    }
+  });
+
+  it("prints the help for global options alone", async () => {
+    for (const args of [["-q"], ["--verbose=vite"], ["-q", "--no-color"]]) {
+      const result = await runCli(args);
+      assert.equal(result.code, 0, args.join(" "));
+      assert.match(result.stdout, /^Usage: ajs dms /m, args.join(" "));
+    }
+  });
+
+  it("documents -q and --verbose=<channels> in the help and the environment topic", async () => {
+    const help = await runCli(["--help"]);
+    assert.match(
+      help.stdout,
+      /\n {2}--verbose \[=channels\] {2,}Show full output/,
+    );
+    assert.match(
+      help.stdout,
+      /\n {2}-q, --quiet {2,}Print only results, warnings and errors/,
+    );
+    const topic = await runCli(["help", "environment"]);
+    assert.match(topic.stdout, /\n {2}ANTELOPEJS_QUIET {2,}Same as -q/);
+  });
+
+  it("hands them on to the server as ajs does when given before dms", async () => {
+    const settings = async (args: string[]) => {
+      const result = await runCli(
+        [...args.slice(0, 1), "-b", BACKEND_URL, "-p", "0", ...args.slice(1)],
+        {
+          files: settingsWorkspace(BACKEND_URL),
+          env: { DMS_SESSION_SECRET: SESSION_SECRET },
+        },
+      );
+      assert.equal(result.code, 0, result.stderr);
+      return JSON.parse(result.stdout);
+    };
+    assert.deepEqual(await settings(["start", "-q", "--verbose=vite"]), {
+      ANTELOPEJS_QUIET: "1",
+      ANTELOPEJS_VERBOSE: "vite",
+    });
+    assert.deepEqual(await settings(["start", "--verbose"]), {
+      ANTELOPEJS_VERBOSE: "*",
+    });
+    assert.deepEqual(await settings(["start"]), {});
+  });
+});
+
+describe("quiet runs", () => {
+  it("print the results of workspaces and nothing else", async () => {
+    const listing = (result: { stdout: string; sandbox: string }) =>
+      result.stdout.replaceAll(result.sandbox, "<home>");
+    const files = { ...URL_WORKSPACE, [STRAY_DIR]: "" };
+    const plain = await runCli(["workspaces"], { files });
+    assert.match(plain.stderr, /Skipped/);
+    for (const options of [
+      { args: ["workspaces", "-q"], env: {} },
+      { args: ["workspaces"], env: { ANTELOPEJS_QUIET: "1" } },
+    ]) {
+      const quiet = await runCli(options.args, { files, env: options.env });
+      assert.equal(quiet.code, 0);
+      assert.equal(listing(quiet), listing(plain));
+      assert.equal(quiet.stderr, "");
+    }
+  });
+
+  it("clean silently, and still report a usage error", async () => {
+    const cleaned = await runCli(["clean", "--all", "--yes", "-q"], {
+      files: { ...URL_WORKSPACE, ...PROJECT_WORKSPACE },
+    });
+    assert.equal(cleaned.code, 0);
+    assert.equal(cleaned.stdout, "");
+    assert.equal(cleaned.stderr, "");
+    assert.deepEqual(
+      readdirSync(join(cleaned.sandbox, ".antelopejs", "dms-frontend")),
+      [],
+    );
+
+    const usage = await runCli(["clean", "-q"]);
+    assert.equal(usage.code, 2);
+    assert.match(usage.stderr, /^✖ Nothing to clean: pass -b <url> or --all\n/);
+  });
+
+  it("open start, build and dev without their header, and keep their errors", async () => {
+    const started = await runCli(
+      ["start", "-b", BACKEND_URL, "-p", "0", "-q"],
+      {
+        files: builtWorkspace(BACKEND_URL),
+        env: { DMS_SESSION_SECRET: SESSION_SECRET },
+      },
+    );
+    assert.equal(started.code, 0);
+    assert.match(started.stdout, /^server port \d+\n$/);
+    assert.match(started.stderr, /^▲ DMS_HTML_RENDER_SECRET is not set/);
+    assert.doesNotMatch(started.stderr, /ajs dms start/);
+
+    for (const command of ["build", "dev"]) {
+      const result = await runCli([command, "-b", "http://127.0.0.1:9"], {
+        env: { DMS_SESSION_SECRET: SESSION_SECRET, ANTELOPEJS_QUIET: "1" },
+      });
+      assert.equal(result.code, 1, command);
+      assert.match(result.stderr, /^✖ Cannot reach the DMS backend/, command);
+      assert.doesNotMatch(result.stderr, /ajs dms (build|dev) {2}/, command);
+    }
+  });
+
+  it("keep the warning of a skipped prepare", async () => {
+    const result = await runCli(["prepare", "--quiet"]);
+    assert.equal(result.code, 0);
+    assert.match(result.stderr, /^▲ Skipped prepare: no backend URL\n/);
+  });
+
+  it("are quiet only when ANTELOPEJS_QUIET is on", async () => {
+    for (const value of ["0", "false"]) {
+      const result = await runCli(["clean", "--all"], {
+        env: { ANTELOPEJS_QUIET: value },
+      });
+      assert.match(result.stderr, /No workspaces found/, value);
+    }
+  });
+
+  it("leave out the update notice", async () => {
+    for (const env of [{}, { ANTELOPEJS_QUIET: "1" }]) {
+      const result = await runCli(
+        ["clean", "--all", ...("ANTELOPEJS_QUIET" in env ? [] : ["-q"])],
+        {
+          files: UPDATE_DUE,
+          env: { ...UPDATE_ENV, ...env },
+          isTerminal: true,
+        },
+      );
+      assert.equal(result.code, 0);
+      assert.equal(result.stderr, "");
+    }
   });
 });

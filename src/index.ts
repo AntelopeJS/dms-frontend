@@ -31,11 +31,17 @@ import {
 
 const { version } = require("../package.json");
 
+const QUIET_FLAGS = ["-q", "--quiet"];
 /**
- * Options shared with `ajs` itself. A run given nothing else prints the help,
- * like a bare `ajs dms`.
+ * Options shared with `ajs` itself, `--verbose` aside. A run given nothing
+ * else prints the help, like a bare `ajs dms`.
  */
-const GLOBAL_FLAGS = ["--no-color", "--verbose"];
+const GLOBAL_FLAGS = ["--no-color", ...QUIET_FLAGS];
+const VERBOSE_FLAG = "--verbose";
+/** Only this spelling takes channels, as in `ajs`: `--verbose=vite`. */
+const VERBOSE_ASSIGNMENT = `${VERBOSE_FLAG}=`;
+const ALL_CHANNELS = "*";
+const END_OF_OPTIONS = "--";
 
 const ROOT_EXAMPLES: HelpExample[] = [
   {
@@ -75,9 +81,52 @@ function describeHelpFooter(width: number): string {
   ].join("\n");
 }
 
+/** Whether `arg` is a global flag, once `--verbose` is spelled `--verbose=*`. */
+function isGlobalFlag(arg: string): boolean {
+  return GLOBAL_FLAGS.includes(arg) || arg.startsWith(VERBOSE_ASSIGNMENT);
+}
+
 /** The arguments, global flags aside. */
 function ownArguments(args: string[]): string[] {
-  return args.filter((arg) => !GLOBAL_FLAGS.includes(arg));
+  return args.filter((arg) => !isGlobalFlag(arg));
+}
+
+/** The options of the command line, without the operands after `--`. */
+function optionArguments(args: string[]): string[] {
+  const end = args.indexOf(END_OF_OPTIONS);
+  return end === -1 ? args : args.slice(0, end);
+}
+
+/**
+ * Spells a bare `--verbose` as `--verbose=*`, so that it never takes the
+ * next argument as its channels: `ajs dms --verbose build` runs `build`.
+ */
+function normalizeVerboseArguments(args: string[]): string[] {
+  const optionCount = optionArguments(args).length;
+  return args.map((arg, index) =>
+    index < optionCount && arg === VERBOSE_FLAG
+      ? `${VERBOSE_ASSIGNMENT}${ALL_CHANNELS}`
+      : arg,
+  );
+}
+
+/**
+ * Hands `-q` and `--verbose=<channels>` given to dms on to the processes it
+ * starts, through the variables `ajs` sets for the same flags given before
+ * the plugin name: `ANTELOPEJS_QUIET=1` and `ANTELOPEJS_VERBOSE=<channels>`.
+ */
+function exportOutputFlags(args: string[]): void {
+  const options = optionArguments(args);
+  if (options.some((arg) => QUIET_FLAGS.includes(arg))) {
+    process.env.ANTELOPEJS_QUIET = "1";
+  }
+  const verbose = options.filter((arg) => arg.startsWith(VERBOSE_ASSIGNMENT));
+  if (verbose.length > 0) {
+    const channels = verbose[verbose.length - 1].slice(
+      VERBOSE_ASSIGNMENT.length,
+    );
+    process.env.ANTELOPEJS_VERBOSE = channels || ALL_CHANNELS;
+  }
 }
 
 /** Whether the arguments, global flags aside, are exactly `rest`. */
@@ -127,8 +176,12 @@ const runCLI = async () => {
     // environment; declared so Commander accepts them after a command name.
     .option("--no-color", "Disable colors (also NO_COLOR=1)")
     .option(
-      "--verbose",
-      "Show full output and stack traces (also ANTELOPEJS_VERBOSE)",
+      `${VERBOSE_FLAG} [=channels]`,
+      "Show full output and stack traces (also ANTELOPEJS_VERBOSE); any channels turn all of it on",
+    )
+    .option(
+      "-q, --quiet",
+      "Print only results, warnings and errors (also ANTELOPEJS_QUIET=1)",
     )
     // Registered for `--help` only: `stripUpdateCheckFlag` removes the flag
     // before Commander parses, so it is accepted after a subcommand name too.
@@ -153,7 +206,8 @@ const runCLI = async () => {
   applyDmsHelp(program);
   formatUsageErrors(program);
 
-  const args = stripUpdateCheckFlag(argv);
+  const args = normalizeVerboseArguments(stripUpdateCheckFlag(argv));
+  exportOutputFlags(args);
   if (isInvocation(args, [])) {
     program.outputHelp();
     return;

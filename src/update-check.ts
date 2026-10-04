@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { type ClientRequest, get as httpGet } from "node:http";
 import { get as httpsGet } from "node:https";
 import { dirname, join } from "node:path";
-import { getProcessUi, type Ui } from "@antelopejs/core/cli";
+import { getProcessUi, isQuietRun, type Ui } from "@antelopejs/core/cli";
 import { DMS_FRONTEND_HOME } from "./config";
 import { isTerminalFeedback, writeFeedback } from "./output";
 
@@ -164,13 +164,15 @@ export function stripUpdateCheckFlag(argv: readonly string[]): string[] {
  * `--help` and `--version` answer from the binary itself, and they and
  * `--json` are what a script is most likely to parse, so they stay silent.
  * `CI` and `NO_UPDATE_NOTIFIER` are the two conventional environment
- * opt-outs, and a dumb terminal is one nobody reads a notice on.
+ * opt-outs, a dumb terminal is one nobody reads a notice on, and a quiet run
+ * asked for nothing but results, warnings and errors.
  */
 export function isUpdateCheckEnabled(
   argv: readonly string[],
   env: NodeJS.ProcessEnv,
 ): boolean {
   if (env.CI) return false;
+  if (isQuietRun({ argv: [...argv], env })) return false;
   if (env.NO_UPDATE_NOTIFIER) return false;
   if (env.TERM === DUMB_TERMINAL) return false;
   if (argv[0] === "help") return false;

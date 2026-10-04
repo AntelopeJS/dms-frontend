@@ -195,9 +195,12 @@ describe("layer paths withheld by the backend", () => {
     { name: "@scope/other-module", archiveName: "b", priority: 0 },
   ];
 
-  function messageFor(bootstrapSecret?: string): string {
+  function messageFor(
+    bootstrapSecret?: string,
+    cache?: { fetchedAt?: string },
+  ): string {
     try {
-      assertLayerPathsServed(pathless, backendUrl, bootstrapSecret);
+      assertLayerPathsServed(pathless, backendUrl, { bootstrapSecret, cache });
     } catch (err) {
       return problemText(err);
     }
@@ -229,6 +232,24 @@ describe("layer paths withheld by the backend", () => {
 
   it("does not speak for one command, since dev and prepare share it", () => {
     assert.doesNotMatch(messageFor(), /ajs dms dev/);
+  });
+
+  it("blames the run that cached the manifest when this run sent nothing", () => {
+    const fetchedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+    for (const bootstrapSecret of [undefined, "a-credential"]) {
+      const message = messageFor(bootstrapSecret, { fetchedAt });
+      assert.match(
+        message,
+        /^✖ The cached manifest of http:\/\/127\.0\.0\.1:5010 \(fetched 5 min ago\) has no layer source paths \(2 of 2 modules\)\n {2}This run did not fetch it\./,
+      );
+      assert.doesNotMatch(message, /this run sent|did not accept/);
+      assert.match(message, /→ Run once without --offline/);
+      assert.match(message, /ajs dms build/);
+    }
+    assert.match(
+      messageFor(undefined, {}),
+      /^✖ The cached manifest of http:\/\/127\.0\.0\.1:5010 has no layer/,
+    );
   });
 
   it("accepts a manifest whose modules all have a path", () => {

@@ -26,20 +26,47 @@ import { formatAge } from "./output";
 // Constants
 // ============================================================================
 
+/** What the user does when a backend never sends layer source paths. */
+const BUILD_FIX =
+  "A remote or production backend never sends them: use `ajs dms build` against it";
+
+/** Where a manifest without layer source paths came from. */
+interface PathlessManifestSource {
+  /** The credential this run sent the backend, when it sent one. */
+  bootstrapSecret?: string;
+  /** Set when the manifest was read from the cache rather than fetched. */
+  cache?: { fetchedAt?: string };
+}
+
 /**
  * Dev mode extends each layer from its source directory on this machine, so
  * a manifest without those paths cannot drive it. A development backend
  * sends them only to callers presenting its credential, so the likely cause
- * depends on whether this run sent one.
+ * depends on whether this run sent one, or sent nothing at all because the
+ * manifest came from the cache.
  */
 export function assertLayerPathsServed(
   modules: ManifestModule[],
   backendUrl: string,
-  bootstrapSecret?: string,
+  { bootstrapSecret, cache }: PathlessManifestSource = {},
 ): asserts modules is ServedWithPath[] {
   const pathless = modules.filter((mod) => !mod.path);
   if (pathless.length === 0) return;
   const count = `${pathless.length} of ${modules.length} module${modules.length === 1 ? "" : "s"}`;
+  if (cache) {
+    const fetched = cache.fetchedAt
+      ? ` (fetched ${formatAge(cache.fetchedAt)})`
+      : "";
+    throw new CliError({
+      title: `The cached manifest of ${displayUrl(backendUrl)}${fetched} has no layer source paths (${count})`,
+      reason:
+        "This run did not fetch it. The backend sends the paths only to callers presenting its development credential, and did not send them to the run that cached this manifest.",
+      fixes: [
+        "Run once without --offline, with the backend reachable, from the project started with `ajs project dev` or with DMS_BOOTSTRAP_SECRET set",
+        BUILD_FIX,
+      ],
+    });
+  }
   const { reason, fix } = bootstrapSecret
     ? {
         reason:
@@ -56,10 +83,7 @@ export function assertLayerPathsServed(
   throw new CliError({
     title: `The backend at ${displayUrl(backendUrl)} did not send layer source paths (${count})`,
     reason,
-    fixes: [
-      fix,
-      "A remote or production backend never sends them: use `ajs dms build` against it",
-    ],
+    fixes: [fix, BUILD_FIX],
   });
 }
 
