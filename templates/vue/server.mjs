@@ -20,7 +20,11 @@ import {
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
 import { handleClientError } from "./server/client-error.mjs";
-import { reportListenError, reportReady } from "./server/cli-report.mjs";
+import {
+  reportListenError,
+  reportReady,
+  reportStartError,
+} from "./server/cli-report.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { writeContent } from "./server/content.mjs";
 import {
@@ -534,7 +538,7 @@ async function announceReady() {
   try {
     await developmentServer();
   } catch (error) {
-    console.error("DMS development server failed to start", error);
+    await reportStartError(error);
     return;
   }
   const { address, port } = frontendHttpServer.address();

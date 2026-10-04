@@ -40,7 +40,14 @@ import {
   writeFrontendModuleRegistry,
   writeWorkspacePackageJson,
 } from "./common";
-import { formatSize, reportStopped, showPath, writeHeader } from "./output";
+import {
+  exitOnBrokenPipe,
+  formatSize,
+  joinParts,
+  reportStopped,
+  showPath,
+  writeHeader,
+} from "./output";
 import { createTemporaryWorkspace } from "./temporary-workspace";
 import {
   describeTypeCheckErrors,
@@ -298,9 +305,8 @@ async function typeCheck(context: VerificationContext): Promise<void> {
       });
       if (result.code === 0) return;
       const report = parseTypeCheckOutput(result.lines);
-      const count =
-        report.count > 0 ? ` · ${pluralize(report.count, "error")}` : "";
-      task.fail(`Type check failed${count}`);
+      const count = report.count > 0 ? [pluralize(report.count, "error")] : [];
+      task.fail(joinParts(["Type check failed", ...count]));
       throw new CliError(
         describeTypeCheckErrors(report, VERIFY_SOURCE_COMMAND) ??
           describeChildFailure({
@@ -455,12 +461,12 @@ async function checkEmailContracts(workspace: string): Promise<string> {
       `Its HTML lacks ${emailCase.marker}.`,
     );
   }
-  return [
+  return joinParts([
     "E-mail contracts hold",
     pluralize(EMAIL_CASES.length, "template"),
     `${formatSize(emailBuildSize)} JS (limit ${limit})`,
     `${formatSize(emailLocaleBytes)} locale data`,
-  ].join(" · ");
+  ]);
 }
 
 // ============================================================================
@@ -528,6 +534,7 @@ function sendResult(result: VerificationResult): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  exitOnBrokenPipe();
   const startedAt = Date.now();
   // The workspace tools run on their own Node options, not on those this
   // runner was started with.
@@ -538,7 +545,7 @@ async function main(): Promise<void> {
   } catch (error) {
     if (error instanceof CancelledError) {
       // Started by the CLI, the CLI reports the stop itself.
-      if (!process.send) reportStopped(error.message, error.signal);
+      if (!process.send) reportStopped(error);
       process.exitCode = error.exitCode;
       return;
     }

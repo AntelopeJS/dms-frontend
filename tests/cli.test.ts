@@ -1,10 +1,24 @@
 import * as assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
+import { Command } from "commander";
+import { CancelledError } from "../src/cancellation";
 import { cmdVerifySource } from "../src/commands/verify-source";
-import { parseLocalPackages } from "../src/commands/verify-source-action";
+import {
+  assertValidUsage,
+  parseLocalPackages,
+  usageProblems,
+} from "../src/commands/verify-source-action";
 import { cmdBuild } from "../src/commands/build";
 import { cmdClean } from "../src/commands/clean";
 import { describeWorkspaces } from "../src/commands/clean-action";
@@ -25,16 +39,29 @@ import {
   UsageError,
 } from "../src/config";
 import {
+  ellipsis,
   formatAge,
   formatReadyBlock,
   formatSize,
   formatTimedMessage,
+  joinParts,
   showPath,
   showWorkspace,
   workspaceId,
 } from "../src/output";
-import { ENVIRONMENT_VARIABLES } from "../src/help";
-import { describeListenError, readyLines } from "../src/server-process";
+import {
+  applyHelpConventions,
+  ENVIRONMENT_VARIABLES,
+  formatEnvironmentHelp,
+  helpWidth,
+} from "../src/help";
+import {
+  describeListenError,
+  describeStartError,
+  isGuestBridge,
+  readyLines,
+  runServer,
+} from "../src/server-process";
 import { memoryUi, problemText } from "./fixtures/memory-ui";
 
 /**
@@ -213,6 +240,51 @@ describe("help environment", () => {
     assert.deepEqual(missing, []);
   });
 
+  it("wraps the topic to the width it is given, between words", () => {
+    for (const width of [80, 60, 40]) {
+      const lines = formatEnvironmentHelp(width).split("\n");
+      const over = lines.filter((line) => line.length > width);
+      assert.deepEqual(over, [], `at ${width} columns`);
+    }
+    assert.match(
+      formatEnvironmentHelp(40),
+      /\n {2}DMS_AUTH_ESTABLISH_ENDPOINTS\n {6}More backend endpoints/,
+    );
+  });
+
+  it("reads the terminal's width, up to 80 columns", () => {
+    assert.equal(helpWidth({ isTTY: true, columns: 60 }), 60);
+    assert.equal(helpWidth({ isTTY: true, columns: 200 }), 80);
+    assert.equal(helpWidth({ isTTY: false, columns: 60 }), 80);
+    assert.equal(helpWidth({}), 80);
+  });
+
+  it("wraps option descriptions, or puts them under the option when narrow", () => {
+    const help = (width: number) => {
+      const program = new Command("ajs dms").option(
+        "--bootstrap-secret <secret>",
+        "Credential for the backend's layer endpoints; prefer the variable",
+      );
+      applyHelpConventions(program);
+      program.configureOutput({ getOutHelpWidth: () => width });
+      return program.helpInformation();
+    };
+    assert.match(
+      help(64),
+      /\n {2}--bootstrap-secret <secret> {2}Credential for the backend's\n {31}layer endpoints; prefer the\n {31}variable\n/,
+    );
+    assert.match(
+      help(60),
+      /\n {2}--bootstrap-secret <secret>\n {6}Credential for the backend's layer endpoints; prefer\n {6}the variable\n/,
+    );
+    for (const width of [64, 60, 40]) {
+      const over = help(width)
+        .split("\n")
+        .filter((line) => line.length > width);
+      assert.deepEqual(over, [], `at ${width} columns`);
+    }
+  });
+
   it("reads a flag's variable as a boolean, the flag first", () => {
     const name = "DMS_TEST_FLAG";
     const saved = process.env[name];
@@ -243,6 +315,46 @@ describe("verify-source CLI", () => {
       command.options.map((option) => option.attributeName()),
       ["layer", "module", "localPackage"],
     );
+  });
+
+  it("reports every usage problem of a run at once", () => {
+    const options = {
+      layer: "./no-such-layer",
+      module: ["./no-such-module"],
+      localPackage: ["foo", "@scope/package=../package"],
+    };
+    assert.deepEqual(
+      usageProblems(options).map((problem) => problem.title),
+      [
+        "Layer path not found: ./no-such-layer",
+        "Module path not found: ./no-such-module",
+        "Invalid local package 'foo'",
+      ],
+    );
+    assert.deepEqual(
+      usageProblems({ localPackage: ["foo"] }).map((problem) => problem.title),
+      [
+        "Required option '-l, --layer <path>' not specified",
+        "Invalid local package 'foo'",
+      ],
+    );
+
+    const output = memoryUi();
+    assert.throws(
+      () => assertValidUsage(usageProblems(options), output.ui),
+      usageError(/^Invalid local package 'foo'$/, /name=path/),
+    );
+    assert.equal(
+      output.stderr(),
+      [
+        "✖ Layer path not found: ./no-such-layer",
+        "  → Pass the root of a DMS frontend package (it contains dms.frontend.ts)",
+        "✖ Module path not found: ./no-such-module",
+        "  → Pass the root of a DMS frontend package (it contains dms.frontend.ts)",
+        "",
+      ].join("\n"),
+    );
+    assert.doesNotThrow(() => assertValidUsage([], output.ui));
   });
 
   it("resolves local package bindings and rejects malformed values", () => {
@@ -354,6 +466,78 @@ describe("CLI output", () => {
     ]);
   });
 
+  it("lists LAN addresses only, a few at most", () => {
+    const ipv4 = (address: string) =>
+      [{ address, family: "IPv4", internal: false }] as never;
+    const network = readyLines(
+      { address: "0.0.0.0", port: 3002 },
+      [],
+      {
+        lo: [{ address: "127.0.0.1", family: "IPv4", internal: true } as never],
+        eth0: ipv4("192.168.1.20"),
+        docker0: ipv4("172.17.0.1"),
+        "br-1cd78ad94b16": ipv4("172.18.0.1"),
+        veth0627d99: ipv4("172.18.0.2"),
+        virbr0: ipv4("192.168.122.1"),
+        "cni-podman0": ipv4("10.88.0.1"),
+        "flannel.1": ipv4("10.244.0.0"),
+        pelican0: ipv4("172.22.0.1"),
+        eth1: ipv4("169.254.10.1"),
+        tailscale0: ipv4("100.86.102.11"),
+        wg0: ipv4("10.200.0.12"),
+      },
+      (name) => name === "pelican0",
+    ).filter(({ label }) => label === "Network");
+    assert.deepEqual(
+      network.map(({ value }) => value),
+      [
+        "http://192.168.1.20:3002/",
+        "http://100.86.102.11:3002/",
+        "http://10.200.0.12:3002/",
+      ],
+    );
+
+    const many = Object.fromEntries(
+      [1, 2, 3, 4, 5].map((n) => [`eth${n}`, ipv4(`192.168.${n}.20`)]),
+    );
+    const capped = readyLines(
+      { address: "0.0.0.0", port: 3002 },
+      [],
+      many,
+      () => false,
+    ).filter(({ label }) => label === "Network");
+    assert.deepEqual(
+      capped.map(({ value, isLink }) => [value, Boolean(isLink)]),
+      [
+        ["http://192.168.1.20:3002/", true],
+        ["http://192.168.2.20:3002/", true],
+        ["http://192.168.3.20:3002/", true],
+        ["2 more addresses", false],
+      ],
+    );
+  });
+
+  it("tells a container bridge from one holding the network card", () => {
+    const net = mkdtempSync(join(tmpdir(), "dms-sys-class-net-"));
+    const link = (name: string, ...entries: string[]) => {
+      for (const entry of entries)
+        mkdirSync(join(net, name, entry), { recursive: true });
+    };
+    link("eth0", "device");
+    link("veth1");
+    link("docker0", "bridge", "brif/veth1");
+    link("br-empty", "bridge", "brif");
+    link("br0", "bridge", "brif/eth0", "brif/veth1");
+    try {
+      assert.equal(isGuestBridge("docker0", net), true);
+      assert.equal(isGuestBridge("br-empty", net), true);
+      assert.equal(isGuestBridge("br0", net), false);
+      assert.equal(isGuestBridge("eth0", net), false);
+    } finally {
+      rmSync(net, { recursive: true, force: true });
+    }
+  });
+
   it("shows no network URL for a server bound to one address", () => {
     const lines = readyLines({ address: "127.0.0.1", port: 3321 }, [], {
       eth0: [
@@ -447,6 +631,131 @@ describe("CLI output", () => {
       }).reason,
       "listen EOTHER",
     );
+  });
+
+  it("joins and cuts lines in ASCII where the terminal has no Unicode", () => {
+    const unicode = memoryUi().ui;
+    const ascii = memoryUi({ isUnicode: false }).ui;
+    assert.equal(joinParts(["a", "b"], unicode), "a · b");
+    assert.equal(joinParts(["a", "b"], ascii), "a - b");
+    assert.equal(ellipsis(unicode), "…");
+    assert.equal(ellipsis(ascii), "...");
+    const home = "/home/user";
+    const dir = `${home}/.antelopejs/dms-frontend/76672b089458f187ebe9586040f9b8ae`;
+    assert.equal(
+      showWorkspace(dir, true, home, ascii),
+      "~/.antelopejs/dms-frontend/76672b08...",
+    );
+    const stop = new CancelledError("SIGINT", "Stopped the build", "ran 2.1s");
+    assert.equal(stop.stopped, "Stopped the build");
+    assert.deepEqual(stop.context, ["ran 2.1s"]);
+    assert.equal(
+      new CancelledError("SIGTERM", "Stopped the build").stopped,
+      "Stopped the build (SIGTERM)",
+    );
+  });
+
+  it("explains a Vite that could not start, at the source the user edits", () => {
+    const workspace = "/home/user/.antelopejs/dms-frontend/abc";
+    const mapPath = (line: string) =>
+      line.replace(`${workspace}/frontend-modules/demo`, "./frontend-vue");
+    assert.equal(
+      problemText(
+        new UsageError(
+          describeStartError(
+            {
+              message: 'Unexpected "}"',
+              location: {
+                file: `${workspace}/frontend-modules/demo/dms.frontend.ts`,
+                line: 4,
+                column: 0,
+                lineText: "};",
+              },
+            },
+            mapPath,
+          ),
+        ),
+      ),
+      [
+        "✖ Vite could not start: error in ./frontend-vue/dms.frontend.ts:4:0",
+        '  Unexpected "}"',
+        "  → Fix the file and run ajs dms dev again",
+        "  4 | };",
+        "    | ^",
+        "",
+      ].join("\n"),
+    );
+    assert.equal(
+      problemText(
+        new UsageError(
+          describeStartError(
+            {
+              message: `Cannot find package '@vitejs/plugin-vue' imported from ${workspace}/vite.config.ts`,
+              code: "ERR_MODULE_NOT_FOUND",
+            },
+            (line) =>
+              line.replace(workspace, "~/.antelopejs/dms-frontend/abc…"),
+          ),
+        ),
+      ),
+      [
+        "✖ Vite could not start in the dev server",
+        "  Cannot find package '@vitejs/plugin-vue' imported from ~/.antelopejs/dms-frontend/abc…/vite.config.ts",
+        "  → Reinstall the workspace dependencies: ajs dms dev --force",
+        "",
+      ].join("\n"),
+    );
+    assert.equal(
+      problemText(
+        new UsageError(describeStartError({ message: "config boom" })),
+      ),
+      [
+        "✖ Vite could not start in the dev server",
+        "  config boom",
+        "  → Look for the cause in Vite's output above, then run ajs dms dev again",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("fails the run once when the dev server reports that Vite could not start", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "dms-start-error-"));
+    const file = join(workspace, "frontend-modules/demo/app/plugin.ts");
+    const report = {
+      type: "dms:start-error",
+      message: "Cannot find module 'nope'",
+      location: { file, line: 3, column: 7 },
+    };
+    writeFileSync(
+      join(workspace, "server.mjs"),
+      `process.send(${JSON.stringify(report)}, () => process.exit(1));\n`,
+    );
+    let isReady = false;
+    after(() => rmSync(workspace, { recursive: true, force: true }));
+    await assert.rejects(
+      runServer({
+        name: "dev server",
+        script: "server.mjs",
+        cwd: workspace,
+        env: process.env,
+        mapPath: (line) =>
+          line.replace(join(workspace, "frontend-modules/demo"), "./demo"),
+        onReady: () => (isReady = true),
+      }),
+      (err) => {
+        assert.equal(
+          problemText(err),
+          [
+            "✖ Vite could not start: error in ./demo/app/plugin.ts:3:7",
+            "  Cannot find module 'nope'",
+            "  → Fix the file and run ajs dms dev again",
+            "",
+          ].join("\n"),
+        );
+        return true;
+      },
+    );
+    assert.equal(isReady, false);
   });
 
   it("shows a workspace from ~, cut to its id on a terminal only", () => {

@@ -100,14 +100,16 @@ function errorBlock(lines: string[]): string[] | undefined {
  * compiler stays out; a verbose run has already streamed it.
  *
  * `lines` are the build's output with workspace paths already mapped back to
- * their sources, and `rerun` the command the user runs once the file is
- * fixed. Undefined when Vite did not report the error itself.
+ * their sources, `rerun` the command the user runs once the file is fixed,
+ * and `nameFile` how the title names the file. Undefined when Vite did not
+ * report the error itself.
  */
 export function describeViteFailure(
   lines: string[],
   subject: string,
   isVerbose: boolean,
   rerun = "ajs dms build",
+  nameFile: (file: string) => string = (file) => file,
 ): CliProblem | undefined {
   const block = errorBlock(lines);
   if (!block) return undefined;
@@ -121,7 +123,7 @@ export function describeViteFailure(
     .find((match) => match !== undefined);
   if (file) {
     return {
-      title: `Vite could not compile ${file}`,
+      title: `Vite could not compile ${nameFile(file)}`,
       reason,
       fixes: [`Fix the file and run ${rerun} again`],
       details: [...rest.filter((line) => CODE_FRAME_LINE.test(line)), ...hint],

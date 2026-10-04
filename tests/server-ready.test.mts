@@ -1,7 +1,9 @@
 import * as assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Server } from "node:net";
-import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, type TestContext } from "node:test";
 
@@ -17,18 +19,27 @@ interface Started {
   exited: Promise<number | null>;
 }
 
+interface StartOptions {
+  /** Where the server starts, and Vite finds its config. */
+  cwd?: string;
+  /** Starts Vite with the server, as `ajs dms dev` does. */
+  isDev?: boolean;
+}
+
 /** Starts the server as the CLI does when `ipc` is set, on its own otherwise. */
 function startServer(
   context: TestContext,
   port: number,
   ipc: boolean,
+  { cwd, isDev = false }: StartOptions = {},
 ): Started {
   const server = spawn(process.execPath, [SERVER], {
+    cwd,
     env: {
       ...process.env,
       PORT: String(port),
       HOST: "127.0.0.1",
-      DMS_DEV: "",
+      DMS_DEV: isDev ? "true" : "",
     },
     stdio: ["ignore", "pipe", "pipe", ...(ipc ? ["ipc" as const] : [])],
   });
@@ -146,6 +157,51 @@ describe("Frontend server startup", () => {
         ),
       );
       assert.doesNotMatch(started.output(), /Unhandled 'error' event|\n\s+at /);
+    },
+  );
+
+  it(
+    "reports a Vite that could not start, where it failed, then exits",
+    { timeout: 30_000 },
+    async (context) => {
+      const root = mkdtempSync(join(tmpdir(), "dms-vite-start-"));
+      context.after(() => rmSync(root, { recursive: true, force: true }));
+      const config = join(root, "vite.config.ts");
+      writeFileSync(config, "export default {\n  plugins: [,\n  broken(\n};\n");
+
+      const started = startServer(context, 0, true, { cwd: root, isDev: true });
+      const message = await firstMessage(started);
+      assert.deepEqual(message, {
+        type: "dms:start-error",
+        message: 'Unexpected "}"',
+        location: { file: config, line: 4, column: 0, lineText: "};" },
+      });
+      assert.equal(await started.exited, 1);
+      assert.doesNotMatch(started.output(), /\n\s+at /);
+    },
+  );
+
+  it(
+    "says why Vite could not start when started on its own",
+    { timeout: 30_000 },
+    async (context) => {
+      const root = mkdtempSync(join(tmpdir(), "dms-vite-start-"));
+      context.after(() => rmSync(root, { recursive: true, force: true }));
+      writeFileSync(
+        join(root, "vite.config.ts"),
+        'throw new Error("config boom");\nexport default {};\n',
+      );
+
+      const started = startServer(context, 0, false, {
+        cwd: root,
+        isDev: true,
+      });
+      assert.equal(await started.exited, 1);
+      assert.match(
+        started.output(),
+        /DMS development server failed to start: config boom\n/,
+      );
+      assert.doesNotMatch(started.output(), /\n\s+at |Server ready/);
     },
   );
 });

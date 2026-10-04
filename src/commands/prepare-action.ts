@@ -12,6 +12,7 @@ import {
 import {
   cachedAge,
   failureDetails,
+  joinParts,
   showWorkspace,
   writeHeader,
 } from "../output";
@@ -107,7 +108,7 @@ export async function runPrepare(options: PrepareOptions): Promise<void> {
     "types and registry written",
     formatDuration(Date.now() - startedAt),
   ];
-  ui.message("success", summary.join(" · "), {
+  ui.message("success", joinParts(summary, ui), {
     detail: showWorkspace(workspaceDir),
   });
 }

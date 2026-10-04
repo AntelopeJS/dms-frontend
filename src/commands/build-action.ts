@@ -1,16 +1,19 @@
 import { join, sep } from "node:path";
 import {
   CliError,
+  formatDuration,
   getProcessTasks,
   getProcessUi,
   isVerboseRun,
 } from "@antelopejs/core/cli";
 import {
+  createFileNamer,
   createPathMapper,
   describeChildFailure,
   type PathMapper,
 } from "../child-output";
 import {
+  CancelledError,
   flagOrEnv,
   type FramedCommandResult,
   normalizeBootstrapSecret,
@@ -20,6 +23,7 @@ import {
 } from "../common";
 import {
   cachedAge,
+  endInterruptedTask,
   showWorkspace,
   writeBlankLine,
   writeHeader,
@@ -50,6 +54,8 @@ interface BuildStep {
   running: string;
   done: string;
   failed: string;
+  /** Left on screen when Ctrl+C stops the step. */
+  stopped: string;
 }
 
 /** The production build, one task per step, in the order `build` runs them. */
@@ -61,6 +67,7 @@ export const BUILD_STEPS: BuildStep[] = [
     running: "Building the client bundle",
     done: "Built the client bundle",
     failed: "Client bundle failed",
+    stopped: "Client bundle stopped",
   },
   {
     script: "build:compress",
@@ -69,6 +76,7 @@ export const BUILD_STEPS: BuildStep[] = [
     running: "Compressing the client assets",
     done: "Compressed the client assets",
     failed: "Asset compression failed",
+    stopped: "Asset compression stopped",
   },
   {
     script: "build:ssr",
@@ -77,6 +85,7 @@ export const BUILD_STEPS: BuildStep[] = [
     running: "Building the SSR bundle",
     done: "Built the SSR bundle",
     failed: "SSR bundle failed",
+    stopped: "SSR bundle stopped",
   },
   {
     script: "build:email",
@@ -85,6 +94,7 @@ export const BUILD_STEPS: BuildStep[] = [
     running: "Building the e-mail bundle",
     done: "Built the e-mail bundle",
     failed: "E-mail bundle failed",
+    stopped: "E-mail bundle stopped",
   },
 ];
 
@@ -92,6 +102,7 @@ interface BuildContext {
   workspaceDir: string;
   env: NodeJS.ProcessEnv;
   mapLine: PathMapper;
+  nameFile: (file: string) => string;
   warnings: ViteWarnings;
   isVerbose: boolean;
 }
@@ -105,9 +116,16 @@ export function buildStepFailure(
   result: FramedCommandResult,
   isVerbose: boolean,
   rerun?: string,
+  nameFile?: (file: string) => string,
 ): CliError {
   const problem =
-    describeViteFailure(result.lines, step.subject, isVerbose, rerun) ??
+    describeViteFailure(
+      result.lines,
+      step.subject,
+      isVerbose,
+      rerun,
+      nameFile,
+    ) ??
     describeChildFailure({
       title: "The production build failed",
       command: `pnpm run ${step.script}`,
@@ -135,18 +153,44 @@ async function runBuildStep(
       onLine: (line) => context.warnings.read(line),
     });
   } catch (error) {
-    task.dismiss();
+    endInterruptedTask(task, error, step.stopped);
     throw error;
   }
   if (result.code !== 0) {
     task.fail(step.failed);
-    throw buildStepFailure(step, result, context.isVerbose);
+    throw buildStepFailure(
+      step,
+      result,
+      context.isVerbose,
+      undefined,
+      context.nameFile,
+    );
   }
   task.succeed(step.done);
 }
 
+/**
+ * Build the production frontend. A stop names the build and how long it ran,
+ * as a stopped dev server does.
+ */
 export async function runBuild(options: BuildOptions): Promise<void> {
   const startedAt = Date.now();
+  try {
+    await buildProduction(options, startedAt);
+  } catch (error) {
+    if (!(error instanceof CancelledError)) throw error;
+    throw new CancelledError(
+      error.signal,
+      "Stopped the production build",
+      `ran ${formatDuration(Date.now() - startedAt)}`,
+    );
+  }
+}
+
+async function buildProduction(
+  options: BuildOptions,
+  startedAt: number,
+): Promise<void> {
   const backendUrl = requireBackendUrl(options.backendUrl);
   const sessionSecret = resolveSessionSecret("build");
   const bootstrapSecret = normalizeBootstrapSecret(options.bootstrapSecret);
@@ -180,6 +224,7 @@ export async function runBuild(options: BuildOptions): Promise<void> {
     isVerbose,
     warnings: new ViteWarnings(),
     mapLine: createPathMapper(workspaceDir, layers),
+    nameFile: createFileNamer(layers),
     env: {
       ...process.env,
       DMS_SESSION_SECRET: sessionSecret,

@@ -23,16 +23,20 @@ import {
   getProcessUi,
   isVerboseRun,
   processCapabilityContext,
+  SUCCESS_EXIT_CODE,
   SYMBOL_SETS,
+  type TaskHandle,
   type Ui,
 } from "@antelopejs/core/cli";
+import { CancelledError } from "./cancellation";
 
 const HOME_PREFIX = "~";
 const CURRENT_DIRECTORY = ".";
 const WORKSPACE_ID_LENGTH = 8;
-const ELLIPSIS = "…";
-const CONTEXT_SEPARATOR = " · ";
+const ELLIPSES = { unicode: "…", ascii: "..." };
+const SEPARATORS = { unicode: " · ", ascii: " - " };
 const LINE_BREAK = /\r?\n/;
+const CARRIAGE_RETURN = "\r";
 const STOPPED_SYMBOLS = { unicode: "■", ascii: "x" };
 const LINK_SYMBOLS = { unicode: "➜", ascii: ">" };
 const BLOCK_INDENT = "  ";
@@ -47,6 +51,39 @@ const DECIMAL_SIZE_LIMIT = 10;
 const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
+
+function isUnicode(ui: Ui): boolean {
+  return ui.symbols === SYMBOL_SETS.unicode;
+}
+
+/**
+ * The parts of one line, joined as the core joins them: `a · b`, or `a - b`
+ * where the terminal only shows ASCII.
+ */
+export function joinParts(
+  parts: readonly string[],
+  ui: Ui = getProcessUi(),
+): string {
+  return parts.join(isUnicode(ui) ? SEPARATORS.unicode : SEPARATORS.ascii);
+}
+
+/** What stands for cut text: `…`, or `...` where the terminal only shows ASCII. */
+export function ellipsis(ui: Ui = getProcessUi()): string {
+  return isUnicode(ui) ? ELLIPSES.unicode : ELLIPSES.ascii;
+}
+
+/**
+ * Ends the run quietly once whoever reads stdout stops reading, as `head`
+ * does in `ajs dms help dev | head`: nothing left to print has a reader.
+ */
+export function exitOnBrokenPipe(
+  stream: NodeJS.WriteStream = process.stdout,
+): void {
+  stream.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code !== "EPIPE") throw error;
+    process.exit(SUCCESS_EXIT_CODE);
+  });
+}
 
 /** Whether feedback goes to a terminal, read as it is written. */
 export function isTerminalFeedback(): boolean {
@@ -73,7 +110,7 @@ export function writeHeader(
   ui: Ui = getProcessUi(),
 ): void {
   const title = ui.palette().bold(`ajs dms ${command}`);
-  writeFeedback(`${title}  ${context.join(CONTEXT_SEPARATOR)}`);
+  writeFeedback(`${title}  ${joinParts(context, ui)}`);
 }
 
 /** Separates the CLI's own lines from the output of the child it starts. */
@@ -104,11 +141,15 @@ export function showWorkspace(
   dir: string,
   isTerminal: boolean = isTerminalFeedback(),
   home: string = homedir(),
+  ui: Ui = getProcessUi(),
 ): string {
   const shown = showPath(dir, home);
   const id = basename(dir);
   if (!isTerminal || id.length <= WORKSPACE_ID_LENGTH) return shown;
-  return join(dirname(shown), `${id.slice(0, WORKSPACE_ID_LENGTH)}${ELLIPSIS}`);
+  return join(
+    dirname(shown),
+    `${id.slice(0, WORKSPACE_ID_LENGTH)}${ellipsis(ui)}`,
+  );
 }
 
 /**
@@ -187,18 +228,40 @@ export function failureDetails(
 }
 
 /**
- * Reports a run stopped by a signal. A terminal echoes Ctrl+C as `^C`
- * without a newline, so the line starts on a fresh one there.
+ * A terminal echoes Ctrl+C as `^C` where the cursor is, at the start of a
+ * line, without a newline: the line written next goes back over it.
  */
+function lineStartAfter(signal: NodeJS.Signals): string {
+  return signal === "SIGINT" && process.stderr.isTTY ? CARRIAGE_RETURN : "";
+}
+
+/**
+ * Ends the task a failure interrupted. One stopped by a signal stays on screen
+ * as `stopped`; any other is removed, for the failure report to explain.
+ */
+export function endInterruptedTask(
+  task: TaskHandle,
+  error: unknown,
+  stopped: string,
+): void {
+  if (!(error instanceof CancelledError)) return task.dismiss();
+  const lineStart = lineStartAfter(error.signal);
+  if (lineStart) getProcessTasks().write(process.stderr, lineStart);
+  task.skip(stopped);
+}
+
+/** Reports a run stopped by a signal: what stopped, then how long it ran. */
 export function reportStopped(
-  message: string,
-  signal: NodeJS.Signals,
+  stop: CancelledError,
   ui: Ui = getProcessUi(),
 ): void {
-  const isUnicode = ui.symbols === SYMBOL_SETS.unicode;
-  const symbol = isUnicode ? STOPPED_SYMBOLS.unicode : STOPPED_SYMBOLS.ascii;
-  const newline = signal === "SIGINT" && process.stderr.isTTY ? "\n" : "";
-  writeFeedback(`${newline}${ui.palette().red(symbol)} ${message}`);
+  const symbol = isUnicode(ui)
+    ? STOPPED_SYMBOLS.unicode
+    : STOPPED_SYMBOLS.ascii;
+  const text = joinParts([stop.stopped, ...stop.context], ui);
+  writeFeedback(
+    `${lineStartAfter(stop.signal)}${ui.palette().red(symbol)} ${text}`,
+  );
 }
 
 /** A line of the ready block: a URL to open, or a setting of the run. */
@@ -231,8 +294,7 @@ export function formatReadyBlock(
   ui: Ui = getProcessUi(),
 ): string[] {
   const palette = ui.palette();
-  const isUnicode = ui.symbols === SYMBOL_SETS.unicode;
-  const arrow = isUnicode ? LINK_SYMBOLS.unicode : LINK_SYMBOLS.ascii;
+  const arrow = isUnicode(ui) ? LINK_SYMBOLS.unicode : LINK_SYMBOLS.ascii;
   const width = Math.max(
     ...block.lines.map(({ label }) => label.length + LABEL_SUFFIX.length),
   );

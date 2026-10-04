@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -246,6 +246,51 @@ describe("following the ajs output contract", () => {
     );
   });
 
+  it("reports every problem with verify-source's options at once", async () => {
+    const result = await runCli([
+      "verify-source",
+      "-l",
+      "./nope",
+      "--local-package",
+      "foo",
+    ]);
+    assert.equal(result.code, 2);
+    assert.equal(result.stdout, "");
+    assert.equal(
+      result.stderr,
+      "✖ Layer path not found: ./nope\n" +
+        "  → Pass the root of a DMS frontend package (it contains dms.frontend.ts)\n" +
+        "✖ Invalid local package 'foo'\n" +
+        "  → Pass it as name=path: --local-package @scope/package=../package\n",
+    );
+
+    const missing = await runCli(["verify-source", "--local-package", "foo"]);
+    assert.equal(missing.code, 2);
+    assert.match(
+      missing.stderr,
+      /^✖ Required option '-l, --layer <path>' not specified\n(?:.*\n)*✖ Invalid local package 'foo'\n/,
+    );
+  });
+
+  it("exits quietly when the reader of its output goes away", async () => {
+    const cli = spawn(
+      process.execPath,
+      ["--import", import.meta.resolve("tsx"), cliEntry, "help", "dev"],
+      {
+        cwd: mkdtempSync(join(tmpdir(), "dms-cli-")),
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
+      },
+    );
+    // What `| head` does once it has read enough: close its end of the pipe.
+    cli.stdout.destroy();
+    let stderr = "";
+    cli.stderr.on("data", (chunk) => (stderr += chunk));
+    const code = await new Promise((settle) => cli.on("close", settle));
+    assert.equal(code, 0);
+    assert.equal(stderr, "");
+  });
+
   it("accepts the global options of ajs after a command", async () => {
     for (const flag of ["--no-color", "--verbose"]) {
       const result = await runCli(["clean", "--all", flag]);
@@ -278,6 +323,16 @@ describe("following the ajs output contract", () => {
     assert.match(result.stderr, /^x Nothing to clean/);
     assert.match(result.stderr, /\n {2}> Remove every workspace/);
     assert.doesNotMatch(result.stderr, /[✖→▲✔ℹ]/);
+
+    const build = await runCli(["build", "-b", "http://127.0.0.1:9"], {
+      env: { TERM: "dumb", DMS_SESSION_SECRET: SESSION_SECRET },
+    });
+    assert.equal(build.code, 1);
+    assert.match(
+      build.stderr,
+      /^ajs dms build {2}http:\/\/127\.0\.0\.1:9 - production\n/,
+    );
+    assert.doesNotMatch(build.stderr, /[^\n -~]/);
   });
 
   it("shows the cause's stack trace only in a verbose run", async () => {
@@ -841,14 +896,14 @@ describe("telling a skipped prepare from a failed one", () => {
       assert.equal(failed.code, 0);
       assert.match(
         failed.stderr,
-        /▲ Prepare failed: Unsupported frontend manifest version: 2\n/,
+        /▲ Prepare failed: The backend serves frontend manifest version 2, which @antelopejs\/dms-frontend \S+ cannot read\n/,
       );
 
       const strict = await runCli(args, { env: { DMS_PREPARE_STRICT: "1" } });
       assert.equal(strict.code, 1);
       assert.match(
         strict.stderr,
-        /\n✖ Unsupported frontend manifest version: 2\n/,
+        /\n✖ The backend serves frontend manifest version 2, which @antelopejs\/dms-frontend \S+ cannot read\n {2}This loader reads version 1; the backend's @antelopejs\/dms is newer than this loader\.\n {2}→ Upgrade the loader \(ajs update dms\) to a release that reads version 2\n/,
       );
 
       const off = await runCli(args, { env: { DMS_PREPARE_STRICT: "0" } });

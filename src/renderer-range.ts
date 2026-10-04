@@ -15,9 +15,14 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CliError, getProcessUi } from "@antelopejs/core/cli";
+import {
+  CliError,
+  getProcessUi,
+  type MessageOptions,
+} from "@antelopejs/core/cli";
 import semver from "semver";
 import { readLayerPackage } from "./layers";
+import { showPath } from "./output";
 import { ResolvedLayer } from "./workspace";
 
 /** The loader a module's range is checked against: a package name and release. */
@@ -30,7 +35,7 @@ export interface RendererRangeCheckOptions {
   /** Release to check against; defaults to this package's own. */
   renderer?: RendererRelease;
   /** Where the notice about modules declaring no range goes. */
-  warn?: (message: string) => void;
+  warn?: (text: string, options: MessageOptions) => void;
   /**
    * Workspace that remembers the modules already named in that notice, so it
    * shows once per workspace rather than on every run.
@@ -39,11 +44,17 @@ export interface RendererRangeCheckOptions {
 }
 
 interface DeclaredRange {
+  /** Names the module in the workspace's record of notices. */
   module: string;
+  /** Names it in messages, its directory as the user reads it. */
+  shown: string;
   range: unknown;
 }
 
 const OWN_RELEASE: RendererRelease = require("../package.json");
+
+/** The core's indent under a problem's title, continued by a reason of several lines. */
+const DETAIL_INDENT = "  ";
 
 /**
  * Modules already named in an undeclared-range notice. A process only ever
@@ -81,12 +92,19 @@ function moduleLabel(layer: ResolvedLayer): string {
   return `${layer.packageName} (${layer.path})`;
 }
 
+/** A module as messages show it: from its source when the manifest named it. */
+function shownModule(layer: ResolvedLayer): string {
+  const where = showPath(layer.sourcePath ?? layer.path);
+  return layer.packageName ? `${layer.packageName} (${where})` : where;
+}
+
 function declaredRange(
   layer: ResolvedLayer,
   rendererName: string,
 ): DeclaredRange {
   return {
     module: moduleLabel(layer),
+    shown: shownModule(layer),
     range: readLayerPackage(layer.path)?.engines?.[rendererName],
   };
 }
@@ -104,34 +122,40 @@ function describeProblem(
   declaration: DeclaredRange,
   version: string,
 ): string | undefined {
-  const { module, range } = declaration;
+  const { shown, range } = declaration;
   if (typeof range !== "string" || semver.validRange(range) === null)
-    return `${module} declares an unreadable range: ${JSON.stringify(range)}`;
+    return `${shown} declares an unreadable range: ${JSON.stringify(range)}`;
   if (semver.satisfies(releaseLine(version), range)) return undefined;
-  return `${module} supports ${range}`;
+  return `${shown} supports ${range}`;
 }
 
 function noticeUndeclared(
   declarations: DeclaredRange[],
   renderer: RendererRelease,
-  warn: (message: string) => void,
+  warn: (text: string, options: MessageOptions) => void,
   workspaceDir: string | undefined,
 ): void {
   const remembered = readNoticedModules(workspaceDir);
-  const modules = declarations
+  const undeclared = declarations
     .filter(({ range }) => range === undefined)
-    .map(({ module }) => module)
-    .filter((module) => !noticedModules.has(module) && !remembered.has(module));
-  if (modules.length === 0) return;
-  for (const module of modules) {
+    .filter(
+      ({ module }) => !noticedModules.has(module) && !remembered.has(module),
+    );
+  if (undeclared.length === 0) return;
+  for (const { module } of undeclared) {
     noticedModules.add(module);
     remembered.add(module);
   }
   saveNoticedModules(workspaceDir, remembered);
+  const hint = getProcessUi().symbols.levels.hint;
   warn(
-    `No supported ${renderer.name} range declared, so not checked against ` +
-      `${renderer.version}: ${modules.join(", ")}. A frontend module declares ` +
-      `one in its package.json, under engines["${renderer.name}"].`,
+    `No supported ${renderer.name} range declared, so not checked against ${renderer.version}`,
+    {
+      details: [
+        ...undeclared.map(({ shown }) => shown),
+        `${hint} Declare one in its package.json, under engines["${renderer.name}"]`,
+      ],
+    },
   );
 }
 
@@ -160,7 +184,9 @@ export function assertLayersSupportRenderer(
   noticeUndeclared(
     declarations,
     renderer,
-    options.warn ?? ((message) => getProcessUi().message("warn", message)),
+    options.warn ??
+      ((text, messageOptions) =>
+        getProcessUi().message("warn", text, messageOptions)),
     options.workspaceDir,
   );
   const problems = declarations
@@ -170,10 +196,9 @@ export function assertLayersSupportRenderer(
   if (problems.length === 0) return;
   throw new CliError({
     title: `These frontend modules do not run on ${renderer.name} ${renderer.version}`,
+    reason: problems.join(`\n${DETAIL_INDENT}`),
     fixes: [
-      `Install a ${renderer.name} release their ranges allow, or upgrade those ` +
-        `modules to releases that support ${renderer.version}`,
+      `Install a ${renderer.name} release in their ranges, or upgrade the modules`,
     ],
-    details: problems,
   });
 }

@@ -53,6 +53,7 @@ import {
   writeWorkspaceMeta,
 } from "./workspace";
 import { CancelledError, exitCodeForSignal } from "./cancellation";
+import { endInterruptedTask } from "./output";
 import { canonicalizeBackendUrl, DEPS_HASH_FILE } from "./config";
 
 // ============================================================================
@@ -179,7 +180,7 @@ export async function installDeps(
     }
     task.succeed(progress.doneLabel);
   } catch (error) {
-    task.dismiss();
+    endInterruptedTask(task, error, "Dependency install stopped");
     throw error;
   }
 }

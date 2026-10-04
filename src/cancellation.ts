@@ -18,6 +18,10 @@ export function exitCodeForSignal(signal: NodeJS.Signals): number {
  */
 export class CancelledError extends Error {
   readonly exitCode: number;
+  /** What was stopped, with the signal unless it was Ctrl+C. */
+  readonly stopped: string;
+  /** What follows it on the line, when anything does. */
+  readonly context: string[];
 
   constructor(
     readonly signal: NodeJS.Signals,
@@ -25,8 +29,11 @@ export class CancelledError extends Error {
     context?: string,
   ) {
     const cause = signal === "SIGINT" ? "" : ` (${signal})`;
-    super([`${stopped}${cause}`, ...(context ? [context] : [])].join(" · "));
+    const parts = [`${stopped}${cause}`, ...(context ? [context] : [])];
+    super(parts.join(" · "));
     this.name = "CancelledError";
     this.exitCode = exitCodeForSignal(signal);
+    this.stopped = parts[0];
+    this.context = parts.slice(1);
   }
 }
