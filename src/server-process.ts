@@ -264,7 +264,12 @@ export function readyLines(
   const network = networkUrls(address, interfaces, isGuestInterface);
   const hidden = network.length - MAX_NETWORK_URLS;
   return [
-    { label: "Local", value: localUrl(address), isLink: true },
+    {
+      label: "Local",
+      value: localUrl(address),
+      isLink: true,
+      isEssential: true,
+    },
     ...network.slice(0, MAX_NETWORK_URLS).map((value) => ({
       label: "Network",
       value,

@@ -152,7 +152,7 @@ describe("DMS CLI plugin", () => {
   it("requires the AntelopeJS CLI that publishes its output module", () => {
     assert.equal(
       packageJson.peerDependencies["@antelopejs/core"],
-      ">=1.13.0 <2",
+      ">=1.13.1 <2",
     );
     assert.equal(packageJson.peerDependenciesMeta, undefined);
     for (const dependency of ["figlet", "boxen", "chalk", "@types/figlet"]) {
@@ -484,6 +484,31 @@ describe("CLI output", () => {
     ]);
   });
 
+  it("keeps only the local URL of the ready block in a quiet run", () => {
+    const output = memoryUi();
+    const block = {
+      title: "Production server ready in 120ms",
+      lines: readyLines(
+        { address: "0.0.0.0", port: 3321 },
+        [{ label: "Workspace", value: "~/.antelopejs/dms-frontend/76672b08…" }],
+        {
+          eth0: [
+            {
+              address: "192.168.1.20",
+              family: "IPv4",
+              internal: false,
+            } as never,
+          ],
+        },
+      ),
+      footer: "Ctrl+C to stop",
+    };
+    assert.deepEqual(formatReadyBlock(block, output.ui, true), [
+      "  ➜  Local: http://localhost:3321/",
+    ]);
+    assert.equal(formatReadyBlock(block, output.ui, false).length, 6);
+  });
+
   it("lists LAN addresses only, a few at most", () => {
     const ipv4 = (address: string) =>
       [{ address, family: "IPv4", internal: false }] as never;
@@ -563,7 +588,12 @@ describe("CLI output", () => {
       ],
     });
     assert.deepEqual(lines, [
-      { label: "Local", value: "http://127.0.0.1:3321/", isLink: true },
+      {
+        label: "Local",
+        value: "http://127.0.0.1:3321/",
+        isLink: true,
+        isEssential: true,
+      },
     ]);
     assert.equal(
       readyLines({ address: "::1", port: 3321 }, [])[0].value,

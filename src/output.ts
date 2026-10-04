@@ -1,7 +1,8 @@
 // What the CLI says around the core output module: the line a command opens
 // with, paths and dates as the user reads them, the block a ready server
 // prints, the time-stamped lines of a running one, and the line a stopped run
-// ends on.
+// ends on. A quiet run leaves out what the core leaves out of its own output:
+// everything but results, warnings and errors.
 
 import { homedir } from "node:os";
 import {
@@ -21,6 +22,7 @@ import {
   displayPath,
   getProcessTasks,
   getProcessUi,
+  isQuietRun,
   isVerboseRun,
   processCapabilityContext,
   SUCCESS_EXIT_CODE,
@@ -83,6 +85,14 @@ export function writeFeedback(line: string): void {
 }
 
 /**
+ * Writes a raw line of information above the running tasks, unless the run
+ * is quiet: the core Ui leaves out its own information the same way.
+ */
+export function writeInfo(line: string): void {
+  if (!isQuietRun()) writeFeedback(line);
+}
+
+/**
  * Opens a task command with one line saying what it runs against:
  * `ajs dms build  http://localhost:5010 · production`.
  */
@@ -92,12 +102,12 @@ export function writeHeader(
   ui: Ui = getProcessUi(),
 ): void {
   const title = ui.palette().bold(`ajs dms ${command}`);
-  writeFeedback(`${title}  ${context.join(ui.symbols.separator)}`);
+  writeInfo(`${title}  ${context.join(ui.symbols.separator)}`);
 }
 
 /** Separates the CLI's own lines from the output of the child it starts. */
 export function writeBlankLine(): void {
-  writeFeedback("");
+  writeInfo("");
 }
 
 /**
@@ -233,18 +243,24 @@ export function endInterruptedTask(
   task.skip(stopped);
 }
 
-/** Reports a run stopped by a signal: what stopped, then how long it ran. */
+/**
+ * Reports a run stopped by a signal: what stopped, then how long it ran. A
+ * quiet run only ends the line a terminal echoed Ctrl+C on.
+ */
 export function reportStopped(
   stop: CancelledError,
   ui: Ui = getProcessUi(),
 ): void {
+  const lineStart = lineStartAfter(stop.signal);
+  if (isQuietRun()) {
+    if (lineStart) writeFeedback("");
+    return;
+  }
   const symbol = isUnicode(ui)
     ? STOPPED_SYMBOLS.unicode
     : STOPPED_SYMBOLS.ascii;
   const text = [stop.stopped, ...stop.context].join(ui.symbols.separator);
-  writeFeedback(
-    `${lineStartAfter(stop.signal)}${ui.palette().red(symbol)} ${text}`,
-  );
+  writeFeedback(`${lineStart}${ui.palette().red(symbol)} ${text}`);
 }
 
 /** A line of the ready block: a URL to open, or a setting of the run. */
@@ -253,6 +269,8 @@ export interface ReadyLine {
   value: string;
   /** Shown behind an arrow and in color: a URL the user opens. */
   isLink?: boolean;
+  /** The only line a quiet run shows: the URL to open on this machine. */
+  isEssential?: boolean;
 }
 
 export interface ReadyBlock {
@@ -271,23 +289,30 @@ export interface ReadyBlock {
  *
  *     ➜  Local:     http://localhost:3002/
  *        Backend:   http://127.0.0.1:5010
+ *
+ * A quiet run shows its essential lines only.
  */
 export function formatReadyBlock(
   block: ReadyBlock,
   ui: Ui = getProcessUi(),
+  isQuiet: boolean = isQuietRun(),
 ): string[] {
   const palette = ui.palette();
   const arrow = isUnicode(ui) ? LINK_SYMBOLS.unicode : LINK_SYMBOLS.ascii;
+  const shown = isQuiet
+    ? block.lines.filter(({ isEssential }) => isEssential)
+    : block.lines;
   const width = Math.max(
-    ...block.lines.map(({ label }) => label.length + LABEL_SUFFIX.length),
+    ...shown.map(({ label }) => label.length + LABEL_SUFFIX.length),
   );
   const lead = (isLink?: boolean) =>
     `${BLOCK_INDENT}${isLink ? palette.cyan(arrow) : " ".repeat(arrow.length)}${LINK_GAP}`;
-  const lines = block.lines.map(({ label, value, isLink }) => {
+  const lines = shown.map(({ label, value, isLink }) => {
     const shownLabel = `${label}${LABEL_SUFFIX}`.padEnd(width);
     const shownValue = isLink ? palette.cyan(value) : value;
     return `${lead(isLink)}${palette.dim(shownLabel)} ${shownValue}`;
   });
+  if (isQuiet) return lines;
   return [
     `${palette.green(ui.symbols.levels.success)} ${block.title}`,
     "",
@@ -301,7 +326,8 @@ export function writeReadyBlock(
   block: ReadyBlock,
   ui: Ui = getProcessUi(),
 ): void {
-  for (const line of [...formatReadyBlock(block, ui), ""]) writeFeedback(line);
+  for (const line of formatReadyBlock(block, ui)) writeFeedback(line);
+  writeInfo("");
 }
 
 /** The levels a running server's notices use, with the color of their symbol. */

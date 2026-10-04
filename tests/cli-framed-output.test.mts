@@ -22,6 +22,16 @@ const FAKE_PNPM = join(REPOSITORY, "tests/fixtures/fake-pnpm.mjs");
 const SESSION_SECRET = "framed-output-test-session-secret-0123";
 const OFFLINE_BACKEND = "http://127.0.0.1:9";
 const GUTTER = /pnpm [│|] /;
+/** The symbols that start the only lines a quiet run prints: warnings and errors. */
+const QUIET_LINE = /^(?:[▲✖] | {2})/;
+
+/** The lines of `output` that start with anything but a warning or an error. */
+function chattyLines(output: string): string[] {
+  return output
+    .split("\n")
+    .filter((line) => line !== "" && !QUIET_LINE.test(line));
+}
+
 /** A finished task, with the duration a slow machine may add. */
 const DONE = "(?: \\S+)?\n";
 
@@ -64,6 +74,7 @@ function runCli(args: string[], options: RunOptions = {}): Promise<Run> {
     ...options.env,
   };
   delete env.ANTELOPEJS_VERBOSE;
+  delete env.ANTELOPEJS_QUIET;
   delete env.FORCE_COLOR;
   const cli = spawn(process.execPath, [CLI, ...args], {
     cwd: sandbox,
@@ -293,6 +304,44 @@ describePosix("framing pnpm install and the production build", () => {
     assert.ok(steps.every((call) => call.env.viteLogLevel === "warn"));
   });
 
+  it("keeps only the warnings of a quiet build", async () => {
+    const run = await runCli([...offlineBuild, "-q"], {
+      setUp: offlineBuildHome,
+    });
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.equal(run.stdout, "");
+    assert.match(
+      run.stderr,
+      /\n▲ 1 Vite warning\n {2}\(!\) Some chunks are larger than 500 kB/,
+    );
+    assert.deepEqual(chattyLines(run.stderr), []);
+    assert.doesNotMatch(run.stderr, /Built the production frontend|\n\n/);
+  });
+
+  it("keeps only the warnings of a quiet prepare", async () => {
+    const run = await runCli(["-q", "prepare", "-b", backend.url]);
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.equal(run.stdout, "");
+    assert.deepEqual(chattyLines(run.stderr), []);
+    assert.doesNotMatch(run.stderr, /Prepared the workspace/);
+  });
+
+  it("says the cached manifest has no layer paths when dev runs offline", async () => {
+    const run = await runCli(
+      ["dev", "-b", OFFLINE_BACKEND, "-p", "0", "--offline"],
+      { setUp: (sandbox) => cachedBuildHome(sandbox, OFFLINE_BACKEND, false) },
+    );
+
+    assert.equal(run.code, 1);
+    assert.match(
+      run.stderr,
+      /✖ The cached manifest of http:\/\/127\.0\.0\.1:9 \(fetched just now\) has no layer source paths \(1 of 1 module\)\n {2}This run did not fetch it\./,
+    );
+    assert.doesNotMatch(run.stderr, /this run sent none/);
+  });
+
   it("ends a build in ASCII on a dumb terminal", async () => {
     const run = await runCli(offlineBuild, {
       setUp: offlineBuildHome,
@@ -413,5 +462,20 @@ describePosix("framing verify-source", () => {
       "--reporter=append-only",
       "--ignore-scripts",
     ]);
+  });
+
+  it("keeps only the failure of a quiet run", async () => {
+    const run = await runCli(["verify-source", "-l", "frontend-vue", "-q"], {
+      setUp: sourceLayer,
+      scenario: "ssr-fails",
+    });
+
+    assert.equal(run.code, 1);
+    assert.equal(run.stdout, "");
+    assert.match(
+      run.stderr,
+      /\n✖ SSR bundle failed(?: \S+)?\n✖ Vite could not compile /,
+    );
+    assert.deepEqual(chattyLines(run.stderr), []);
   });
 });

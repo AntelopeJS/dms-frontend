@@ -108,6 +108,27 @@ describe("update check opt-outs", () => {
     assert.equal(isUpdateCheckEnabled(["dev", "--no-update-check"], {}), false);
   });
 
+  it("stays silent in a quiet run, whatever the position of -q", () => {
+    for (const argv of [
+      ["-q", "dev"],
+      ["dev", "-q"],
+      ["dev", "--quiet"],
+    ]) {
+      assert.equal(isUpdateCheckEnabled(argv, {}), false, argv.join(" "));
+    }
+    assert.equal(
+      isUpdateCheckEnabled(["dev"], { ANTELOPEJS_QUIET: "1" }),
+      false,
+    );
+    for (const value of ["0", "false", ""]) {
+      assert.equal(
+        isUpdateCheckEnabled(["dev"], { ANTELOPEJS_QUIET: value }),
+        true,
+        value,
+      );
+    }
+  });
+
   it("removes the opt-out flag from the arguments Commander parses", () => {
     assert.deepEqual(
       stripUpdateCheckFlag(["dev", "--no-update-check", "-b", "http://x"]),

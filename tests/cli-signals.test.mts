@@ -77,6 +77,7 @@ function startCli({
       NO_UPDATE_NOTIFIER: "1",
       DMS_API_BASE_URL: "",
       DMS_TEST_PID_FILE: pidFile,
+      ANTELOPEJS_QUIET: "",
       ...env,
     },
   });
@@ -342,6 +343,30 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     await assertTreeGone(pids);
   });
 
+  it("shows only the local URL of a quiet run, and no stop line", async () => {
+    const backendUrl = "http://127.0.0.1:9";
+    const run = startCli({
+      args: ["start", "-b", backendUrl, "-p", "0", "-q"],
+      env: { HOME: builtHome(backendUrl), DMS_SESSION_SECRET: SESSION_SECRET },
+      ownGroup: true,
+    });
+    await waitFor(
+      () => (run.output().includes("Local:") ? true : undefined),
+      run.output,
+    );
+    const pids = await run.tree;
+
+    process.kill(-run.pid, "SIGINT");
+
+    assert.deepEqual(await run.exited, { code: 130, signal: null });
+    const lines = run.output().split("\n");
+    assert.deepEqual(
+      lines.filter((line) => !line.startsWith("▲") && !line.startsWith("  →")),
+      ["  ➜  Local: http://127.0.0.1:1/", ""],
+    );
+    await assertTreeGone(pids);
+  });
+
   it("exits 143 on SIGTERM and says which signal stopped it", async () => {
     const run = await startServer("http://127.0.0.1:9");
     const pids = await run.tree;
@@ -374,6 +399,26 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
         /– Dependency install stopped(?: \S+)?\n■ Stopped\n/,
       );
       assert.doesNotMatch(run.output(), /Setup failed/);
+      await assertTreeGone(pids);
+    } finally {
+      await new Promise((settle) => backend.server.close(settle));
+    }
+  });
+
+  it("stops a quiet dev run on Ctrl+C without a word", async () => {
+    const backend = await serveManifest();
+    try {
+      const run = startCli({
+        args: ["dev", "-b", backend.url, "-p", "0"],
+        env: { PATH: hangingPnpm(), ANTELOPEJS_QUIET: "1" },
+        ownGroup: true,
+      });
+      const pids = await run.tree;
+
+      process.kill(-run.pid, "SIGINT");
+
+      assert.deepEqual(await run.exited, { code: 130, signal: null });
+      assert.doesNotMatch(run.output(), /ajs dms dev|stopped|Stopped|[✔■–]/);
       await assertTreeGone(pids);
     } finally {
       await new Promise((settle) => backend.server.close(settle));

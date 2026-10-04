@@ -50,6 +50,7 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ["DMS_CLIENT_BASE_URL", "Public frontend URL used in links and e-mails"],
   ["NO_COLOR", "Same as --no-color"],
   ["ANTELOPEJS_VERBOSE", "Same as --verbose"],
+  ["ANTELOPEJS_QUIET", "Same as -q, unless 0 or false"],
   ["NO_UPDATE_NOTIFIER, CI", "Either one turns the update check off"],
 ];
 

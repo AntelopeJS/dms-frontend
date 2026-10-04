@@ -72,7 +72,7 @@ pnpm add -g @antelopejs/core @antelopejs/dms-frontend
 ```
 
 The plugin prints through the output module of `@antelopejs/core`
-(`@antelopejs/core/cli`), so it needs `@antelopejs/core` 1.13.0 or later.
+(`@antelopejs/core/cli`), so it needs `@antelopejs/core` 1.13.1 or later.
 `npm install -g` works too; this repository and every generated workspace use
 pnpm. Inside a package script, `ajs` resolves from `node_modules/.bin`, and the
 `dms` command it delegates to resolves the project-local plugin, so a script
@@ -134,9 +134,14 @@ missing configuration value) and 130 when stopped with Ctrl+C. `--no-color` or
 `NO_COLOR=1` turns colors off, and terminals that cannot draw Unicode, such as
 `TERM=dumb`, get ASCII symbols. `--verbose` or `ANTELOPEJS_VERBOSE` streams
 the full `pnpm` and Vite output, each line behind the name of the step, and adds
-the stack trace of the underlying error to a failure. `ajs --no-color dms …`,
-`ajs --verbose dms …` and `ajs --verbose=<channels> dms …` set those variables
-for the plugin.
+the stack trace of the underlying error to a failure; `--verbose=<channels>`
+turns all of it on too, whatever the channels. `-q`, `--quiet` or
+`ANTELOPEJS_QUIET=1` prints only results, warnings and errors: no command
+header, progress, summary or update notice, and of the block a ready `dev` or
+`start` server prints, only its Local URL. `ajs --no-color dms …`,
+`ajs --verbose dms …`, `ajs --verbose=<channels> dms …` and `ajs -q dms …` set
+those variables for the plugin; the same flags are also accepted after the
+command, as in `ajs dms build -q`.
 
 The CLI checks npm for a newer release at most once a day and prints a one-line
 notice on stderr, only to a terminal: as the last line of a command that
