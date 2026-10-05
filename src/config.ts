@@ -85,6 +85,8 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["ui-app-config.ts", "ui-app-config.ts"],
   ["ssr-renderer.ts", "ssr-renderer.ts"],
   ["frontend-module.ts", "frontend-module.ts"],
+  ["frontend-build.ts", "frontend-build.ts"],
+  ["frontend-build-loader.ts", "frontend-build-loader.ts"],
   ["icon-hydration.ts", "icon-hydration.ts"],
   ["globals.d.ts", "globals.d.ts"],
   ["compress-assets.mjs", "compress-assets.mjs"],
@@ -108,6 +110,11 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
 
 export const LAYERS_SUBDIR = "frontend-modules";
 export const FRONTEND_MODULE_ENTRY = "dms.frontend.ts";
+/**
+ * A module's optional build-time declarations (its auto-imported directories),
+ * read by the generated Vite config through `frontend-builds.generated.ts`.
+ */
+export const FRONTEND_BUILD_ENTRY = "dms.frontend.build.ts";
 
 /**
  * Generated file naming the backend endpoints `/auth/establish` may open a

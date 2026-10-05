@@ -2,7 +2,15 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import ui from "@nuxt/ui/vite";
 import vue from "@vitejs/plugin-vue";
-import { defineConfig, type LogLevel, normalizePath, type Plugin } from "vite";
+import {
+  createLogger,
+  defineConfig,
+  type LogLevel,
+  normalizePath,
+  type Plugin,
+} from "vite";
+import { autoImportDirectories } from "./frontend-build-loader";
+import { frontendBuilds } from "./frontend-builds.generated";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
 import { iconScanGlobs } from "./icon-scan.mjs";
 
@@ -40,21 +48,19 @@ const stableModuleAliases = Object.fromEntries(
   }),
 );
 /**
- * Globs are POSIX, always.
- *
- * `resolve` returns a native path, so on Windows every pattern below would
- * carry backslashes — which a glob matcher reads as escape characters, not as
- * separators, and which therefore match nothing at all. `normalizePath` is
- * Vite's own answer to this and is the identity function on POSIX.
+ * `ajs dms build` runs Vite at "warn" and reports the steps itself; a verbose
+ * run, `dev` and a hand-run build keep Vite's own output.
  */
-const importDirectories = frontendSourceRoots.flatMap((root) =>
-  [
-    "app/composables/**/*",
-    "app/types/**/*",
-    "app/utils/**/*",
-    "app/build/composables/**/*",
-    "app/build/types/**/*",
-  ].map((glob) => ({ glob: normalizePath(resolve(root, glob)), types: true })),
+const logLevel = (process.env.DMS_VITE_LOG_LEVEL ?? "info") as LogLevel;
+const logger = createLogger(logLevel);
+/**
+ * Only what each module declares in its `dms.frontend.build.ts`: a module
+ * without one has nothing auto-imported.
+ */
+const importDirectories = autoImportDirectories(
+  registry.modules,
+  frontendBuilds,
+  (message) => logger.warn(message),
 );
 const optimizedDependencies = [
   "vue",
@@ -90,8 +96,9 @@ const optimizedDependencies = [
  * startup, pays that cost a single time and in a place where it reads as
  * startup rather than as a crash.
  *
- * Normalized for the same reason as `importDirectories`: Vite hands these
- * patterns straight to its glob matcher without touching the separators.
+ * Globs are POSIX, always: `resolve` returns a native path, whose Windows
+ * backslashes a glob matcher reads as escape characters, not as separators.
+ * `normalizePath` is Vite's own answer to this, the identity on POSIX.
  */
 const optimizerEntries = [
   resolve(__dirname, "main.ts"),
@@ -116,12 +123,6 @@ const uiInertiaLinkImport = resolve(
   __dirname,
   "node_modules/@nuxt/ui/dist/runtime/vue/overrides/inertia/Link.vue",
 );
-
-/**
- * `ajs dms build` runs Vite at "warn" and reports the steps itself; a verbose
- * run, `dev` and a hand-run build keep Vite's own output.
- */
-const logLevel = (process.env.DMS_VITE_LOG_LEVEL ?? "info") as LogLevel;
 
 export default defineConfig({
   logLevel,

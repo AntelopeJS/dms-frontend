@@ -200,6 +200,28 @@ A private component is not registered with `app.component`, so no template or ot
 
 The owner is the page payload's `module` field: the name of the frontend module that owns the page's component tree, as the backend added it (the module's `name` in the frontend manifest, which the generated loader hands each module's setup). A backend that does not send `module` reaches no private component, whatever the tree names.
 
+### Auto-imports (`dms.frontend.build.ts`)
+
+Nothing a module ships is auto-imported unless the module declares it, in an optional `dms.frontend.build.ts` next to its `dms.frontend.ts`:
+
+```ts
+import { defineDmsFrontendBuild } from "#dms/frontend-build";
+
+export default defineDmsFrontendBuild((build) => {
+  build.registerAutoImports([
+    "layers/*/app/composables",
+    "layers/*/app/utils",
+    "layers/*/app/types",
+  ]);
+});
+```
+
+Each entry is a directory relative to the module root, glob patterns allowed; every export of the files under it becomes available to the whole application without an import, in scripts and templates. A module without the file has nothing auto-imported. `app/build/` holds a module's private code and is never auto-imported: it is left out of what a broader entry covers, and an entry naming it, or a directory outside the module, is ignored with a warning when Vite starts.
+
+The file runs in Node.js when Vite starts, under `ajs dms dev` and `ajs dms build`, not in the application: it may import `#dms/frontend-build` and Node.js built-ins, never the application's code. Vite restarts when one changes.
+
+Up to 0.3, every module's `app/composables`, `app/types`, `app/utils`, `app/build/composables` and `app/build/types` were auto-imported. A module that relies on auto-imports declares its public directories in `dms.frontend.build.ts`, and imports its `app/build/` code by path.
+
 ### Page loading state
 
 After a client navigation, the page renders under a `<Suspense>` until its chunk and any async `setup` resolve. `useDmsPageLoading()` (auto-imported) is `true` meanwhile, so a layout can show its own placeholder instead of an empty page body:
@@ -445,7 +467,8 @@ The other files the workspace derives from every module follow their sources
 the same way. A file added to, changed in or removed from a module's `public/`
 is served, or no longer served, at once. Adding or removing an
 `app/config/shortcuts-registry.ts` or a `dms.frontend.ts` regenerates the
-aggregated shortcuts or the module loader, and the page reloads. A layer
+aggregated shortcuts or the module loader, and the page reloads. Adding,
+changing or removing a `dms.frontend.build.ts` restarts Vite. A layer
 directory added to or removed from `layers/` is the exception: Vite reads the
 `#<layer>` aliases and the auto-imported directories at startup only, so the
 dev server says it needs a restart.
