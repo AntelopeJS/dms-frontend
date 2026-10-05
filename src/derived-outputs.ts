@@ -30,6 +30,8 @@ import {
 
 export interface FrontendModuleRegistryEntry {
   id: string;
+  /** The manifest name, or the package name without a manifest. */
+  name?: string;
   packageName?: string;
   root: string;
   priority: number;
@@ -74,6 +76,7 @@ export function createFrontendModuleRegistry(
     const options = layer.options ?? {};
     return {
       id: getLayerSafeName(layer),
+      name: layer.name ?? layer.packageName,
       packageName: layer.packageName,
       root: getLayerWorkspacePath(workspaceDir, layer),
       priority: layer.priority ?? 0,
@@ -132,7 +135,7 @@ function writeFrontendModuleLoader(
   const registrations = modules
     .map(
       (module, index) =>
-        `{ module: module${index}, options: { public: ${JSON.stringify(module.options)} } }`,
+        `{ name: ${JSON.stringify(module.name)}, module: module${index}, options: { public: ${JSON.stringify(module.options)} } }`,
     )
     .join(", ");
   const content = `${imports}\n\nimport type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [${registrations}];\n`;

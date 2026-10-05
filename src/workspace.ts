@@ -94,6 +94,11 @@ export interface FrontendManifest {
 export interface ResolvedLayer {
   path: string;
   /**
+   * The module's name in the manifest, which the backend's pages name as
+   * their owner. Absent for a layer resolved without a manifest.
+   */
+  name?: string;
+  /**
    * The layer's source directory on the backend machine, when the manifest
    * served it. Equal to `path` in dev mode; in build mode `path` is the
    * extracted archive, and this only names the files errors point at.

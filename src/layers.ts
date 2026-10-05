@@ -150,6 +150,7 @@ function readLayerPackageName(layerPath: string): string | undefined {
 function resolveLayer(layerPath: string, mod: ManifestModule): ResolvedLayer {
   return {
     path: layerPath,
+    name: mod.name,
     sourcePath: mod.path,
     packageName: readLayerPackageName(layerPath),
     priority: mod.priority,
