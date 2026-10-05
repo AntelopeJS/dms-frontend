@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.12
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.11...v0.3.12)
+
+### 🩹 Fixes
+
+- **verify-source:** Find the DMS core layer in the project ([#100](https://github.com/AntelopeJS/dms-frontend/pull/100))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.11
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.10...v0.3.11)
