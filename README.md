@@ -100,7 +100,7 @@ generated server read, from the environment or the project's `.env`.
 need a backend URL through `-b` or `DMS_API_BASE_URL`, and exit 2 without one.
 `dev` also discovers it from the enclosing antelope project's
 `.antelope/dev.json`, and exits 1 when there is none to discover.
-`verify-source` needs `--layer` instead.
+`verify-source` needs no backend: it runs in the project that installs `@antelopejs/dms`.
 
 `prepare` runs anywhere: when it cannot prepare the workspace it warns on
 stderr and exits 0, so a frontend module's `postinstall` hook never fails an
@@ -463,15 +463,30 @@ Use pnpm for all repository and workspace operations.
 
 ## Verify local frontend modules
 
-Use the packaged source verifier to validate an unpublished DMS frontend package against this exact adapter version. Additional modules and local package bindings are repeatable. All supplied frontend packages are copied into the generated workspace and bound with `workspace:*`.
+Use the packaged source verifier to validate unpublished DMS frontend modules against this exact adapter version. Run it from the project:
+
+```bash
+ajs dms verify-source
+```
+
+The modules are verified on top of the DMS core layer, the `frontend-vue` directory of `@antelopejs/dms`. The verifier finds the `@antelopejs/dms` the project installs the way Node does, from the current directory, and names it before it starts: `Verifying against @antelopejs/dms 0.5.5 (installed in this project)`. When the project does not install it, the verifier stops with the command that adds it as a development dependency (`pnpm add -D @antelopejs/dms`, or the equivalent for the project's package manager).
+
+Without `--module`, the verifier takes the current directory when it is a frontend module (it contains `dms.frontend.ts`), and its `frontend-vue` directory otherwise. `--module` names other ones and is repeatable, as is `--local-package`, which binds a local build of a package into the generated workspace. All supplied frontend packages are copied into the generated workspace and bound with `workspace:*`.
+
+```bash
+ajs dms verify-source --module ./admin-vue --module ./shop-vue
+```
+
+`--layer` is for the DMS core layer's own development: it verifies an unpublished core layer instead of the installed one, here against a local build of `@antelopejs/dms`:
 
 ```bash
 ajs dms verify-source \
   --layer /path/to/dms/frontend-vue \
-  --module /path/to/module/frontend-vue \
   --local-package @antelopejs/dms=/path/to/dms
 ```
 
-A supplied package whose declared range excludes this adapter version is refused before anything is installed (see [Declaring the loader releases a module supports](#declaring-the-loader-releases-a-module-supports)). The verifier generates a temporary workspace, installs it, builds client, SSR, and email bundles, checks what the client bundle loads, runs `vue-tsc`, renders eight DMS email templates, and checks that the email bundle excludes browser-only modules. Each check is one line that ends in ✔ or ✖, and the run ends with `Verified <n> modules` and its duration, or with the first failure: a type or Vite error points at the file in the package you passed (`./frontend-vue/app/components/Callout.vue:17:7`), not at its copy in the workspace, and the command exits 1. `--verbose` streams the pnpm, Vite and `vue-tsc` output. The workspace is removed when the run ends. It does not start a backend or publish packages. Repository development can invoke the same runner with `DMS_LAYER_SOURCE` through `pnpm test:real-source`.
+The checks look for what the core layer ships: its lazily loaded chart and rich-text libraries, the pages every DMS serves and its e-mail templates. A `--layer` that holds no core layer, such as a project's own `frontend-vue`, is refused before anything is installed, with exit code 2 and the command that verifies the same folder with `--module` instead.
+
+A supplied package whose declared range excludes this adapter version is refused before anything is installed (see [Declaring the loader releases a module supports](#declaring-the-loader-releases-a-module-supports)). The verifier generates a temporary workspace, installs it, builds client, SSR, and email bundles, checks what the client bundle loads, runs `vue-tsc`, renders eight DMS email templates, and checks that the email bundle excludes browser-only modules. Each check is one line that ends in ✔ or ✖, and the run ends with `Verified <n> modules` and its duration, or with the first failure: a type or Vite error points at the file in the package you passed (`./frontend-vue/app/components/Callout.vue:17:7`), not at its copy in the workspace, and the command exits 1. `--verbose` streams the pnpm, Vite and `vue-tsc` output. The workspace is removed when the run ends. It does not start a backend or publish packages. Repository development can invoke the same runner through `pnpm test:real-source`, with `DMS_LAYER_SOURCE` set to a core layer root and `DMS_MODULE_SOURCES` to a JSON array of module roots.
 
 Refresh rotation is single-flight within one frontend process. Horizontally scaled deployments must use sticky routing so a browser reaches the same process, or replace this process-local behavior with an external session adapter. It does not provide a distributed rotation guarantee.

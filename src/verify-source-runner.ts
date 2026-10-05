@@ -8,7 +8,6 @@ import {
   existsSync,
   readdirSync,
   readFileSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
@@ -36,7 +35,6 @@ import {
   materializeLayers,
   type ResolvedLayer,
   runFramedCommand,
-  UsageError,
   writeFrontendModuleRegistry,
   writeWorkspacePackageJson,
 } from "./common";
@@ -44,7 +42,6 @@ import {
   exitOnBrokenPipe,
   formatSize,
   reportStopped,
-  showPath,
   writeHeader,
 } from "./output";
 import { createTemporaryWorkspace } from "./temporary-workspace";
@@ -53,11 +50,11 @@ import {
   parseTypeCheckOutput,
 } from "./typecheck-output";
 import {
-  LAYER_PATH_FIX,
   reportVerification,
   type VerificationResult,
   VERIFY_SOURCE_COMMAND,
 } from "./verify-source-result";
+import { readSourceOptions, readSources } from "./verify-source-sources";
 import {
   reportViteWarnings,
   VITE_LOG_LEVEL_VARIABLE,
@@ -102,58 +99,6 @@ function ensure(
 }
 
 // ============================================================================
-// Sources
-// ============================================================================
-
-function readLayer(root: string): ResolvedLayer {
-  const packagePath = join(root, "package.json");
-  if (!existsSync(packagePath))
-    throw new UsageError({
-      title: `No package.json in ${showPath(root)}`,
-      fixes: [LAYER_PATH_FIX],
-    });
-  const { name } = readJson(packagePath) as LayerPackage;
-  return { path: root, sourcePath: root, packageName: name };
-}
-
-/**
- * The packages to verify: the one at DMS_LAYER_SOURCE, or each directory in
- * it, then those of DMS_MODULE_SOURCES.
- */
-function readSources(): ResolvedLayer[] {
-  const layerSource = process.env.DMS_LAYER_SOURCE;
-  if (!layerSource)
-    throw new UsageError({
-      title: "DMS_LAYER_SOURCE is not set",
-      fixes: [
-        `Set it to the root of a DMS frontend package, or run ${VERIFY_SOURCE_COMMAND} -l <path>`,
-      ],
-    });
-  const sourceRoot = resolve(layerSource);
-  if (!statSync(sourceRoot, { throwIfNoEntry: false })?.isDirectory())
-    throw new UsageError({
-      title: `Layer path not found: ${showPath(sourceRoot)}`,
-      fixes: [LAYER_PATH_FIX],
-    });
-  const extraSources = JSON.parse(
-    process.env.DMS_MODULE_SOURCES ?? "[]",
-  ) as string[];
-  const layerRoots = existsSync(join(sourceRoot, "dms.frontend.ts"))
-    ? [sourceRoot]
-    : readdirSync(sourceRoot, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => join(sourceRoot, entry.name));
-  if (layerRoots.length === 0)
-    throw new UsageError({
-      title: `No frontend package in ${showPath(sourceRoot)}`,
-      fixes: [LAYER_PATH_FIX],
-    });
-  return [...layerRoots, ...extraSources.map((root) => resolve(root))].map(
-    readLayer,
-  );
-}
-
-// ============================================================================
 // Workspace
 // ============================================================================
 
@@ -165,7 +110,11 @@ function removeDevelopmentDependencies(root: string): void {
   writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
 }
 
-function materializeWorkspace(workspace: string, layers: ResolvedLayer[]) {
+function materializeWorkspace(
+  workspace: string,
+  layers: ResolvedLayer[],
+  localPackages: Record<string, string>,
+) {
   const templateRoot = join(getPackageRoot(), "templates", "vue");
   const templateFiles = readdirSync(templateRoot).filter(
     (file) => !file.startsWith("npmrc"),
@@ -187,9 +136,6 @@ function materializeWorkspace(workspace: string, layers: ResolvedLayer[]) {
   writeWorkspacePackageJson(workspace, layers);
   const packagePath = join(workspace, "package.json");
   const workspacePackage = readJson(packagePath) as LayerPackage;
-  const localPackages = JSON.parse(
-    process.env.DMS_LOCAL_PACKAGES ?? "{}",
-  ) as Record<string, string>;
   workspacePackage.pnpm = {
     overrides: {
       ...Object.fromEntries(
@@ -248,7 +194,8 @@ async function buildBundles(context: VerificationContext): Promise<void> {
 
 /**
  * The client bundle keeps the heavy libraries out of the main chunk, and
- * still reaches them and the pages every DMS serves.
+ * still reaches them and the pages every DMS serves: those of the DMS core
+ * layer, which every run includes.
  */
 function checkClientBundle(workspace: string): void {
   const clientRoot = join(workspace, "dist", "client");
@@ -493,8 +440,10 @@ function describeError(error: unknown, isVerbose: boolean): CliProblem {
 }
 
 async function verifySources(): Promise<VerificationResult> {
-  const layers = readSources();
+  const options = readSourceOptions();
+  const { layers, coreLayer } = readSources(options);
   writeHeader("verify-source", [pluralize(layers.length, "module")]);
+  getProcessUi().message("info", `Verifying against ${coreLayer}`);
   // Before the first task, so its notice does not land inside one.
   assertLayersSupportRenderer(layers);
   const workspace = createTemporaryWorkspace("dms-frontend-real-source-");
@@ -509,7 +458,7 @@ async function verifySources(): Promise<VerificationResult> {
   const tasks = getProcessTasks();
   await tasks.run(
     `Materializing ${pluralize(layers.length, "module")}`,
-    async () => materializeWorkspace(workspace, layers),
+    async () => materializeWorkspace(workspace, layers, options.localPackages),
     { done: `Materialized ${pluralize(layers.length, "module")}` },
   );
   await installDeps(workspace, context.mapLine, ["--ignore-scripts"]);
