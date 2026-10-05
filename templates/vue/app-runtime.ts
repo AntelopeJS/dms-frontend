@@ -23,6 +23,7 @@ import DmsDynamicPage from "./DmsDynamicPage.vue";
 import {
   type DmsLocaleLoader,
   type DmsPageProps,
+  type DmsUser,
   createDmsFrontendRuntime,
   dmsPageSuspenseProps,
   getDmsErrorPage,
@@ -40,6 +41,7 @@ import {
   useDmsAppConfig,
   useDmsState,
   useError,
+  useUserSession,
 } from "./frontend-module";
 import {
   loadLocaleMessages,
@@ -95,11 +97,12 @@ function uiLocale(locale: string): UiLocale {
   return UI_LOCALES[locale as keyof typeof UI_LOCALES] ?? UI_LOCALES.en;
 }
 
-function pageLocale(props: DmsPageProps): string {
-  const language = props.user?.language;
-  if (typeof language !== "string") return DEFAULT_LOCALE;
+/** The supported locale of a user's language, if it has one. */
+function userLocale(user: DmsUser | null | undefined): string | undefined {
+  const language = user?.language;
+  if (typeof language !== "string") return undefined;
   const locale = language.slice(0, 2);
-  return supportedLocales.includes(locale) ? locale : DEFAULT_LOCALE;
+  return supportedLocales.includes(locale) ? locale : undefined;
 }
 
 function readDmsAsyncData(): Record<string, unknown> {
@@ -149,17 +152,25 @@ const DmsPersistentLayout = defineComponent({
   setup(_, { attrs, slots }) {
     const props = computed(() => attrs as unknown as DmsPageProps);
     const i18n = useI18n();
+    const { user } = useUserSession();
     let localeVersion = 0;
     useHead({
       htmlAttrs: { lang: computed(() => i18n.locale.value) },
     });
     watch(
       () => [attrs.path, attrs.page, attrs.user, attrs.session, attrs.error],
-      async () => {
+      () => hydrateDmsPageProps(props.value),
+      { immediate: true, flush: "sync" },
+    );
+    // The session, not the page props: a page restored from history or from
+    // the prefetch cache carries the user as it was when it was fetched, and
+    // would switch the interface back to a language the user has left. A
+    // session without a language keeps the one on screen.
+    watch(
+      () => userLocale(user.value),
+      async (locale) => {
         const version = ++localeVersion;
-        hydrateDmsPageProps(props.value);
-        const locale = pageLocale(props.value);
-        if (i18n.locale.value === locale) return;
+        if (!locale || i18n.locale.value === locale) return;
         const messages = await loadLocaleMessages(locale);
         if (version !== localeVersion) return;
         i18n.setLocaleMessage(locale, messages);
@@ -250,7 +261,7 @@ export async function configureDmsApp(
       options.serverFetch as typeof import("ofetch").ofetch,
       readDmsAsyncData(),
     );
-  const locale = pageLocale(options.initialPageProps);
+  const locale = userLocale(options.initialPageProps.user) ?? DEFAULT_LOCALE;
   const messages = await loadLocaleMessages(locale);
   const i18n = createI18n({
     legacy: false,

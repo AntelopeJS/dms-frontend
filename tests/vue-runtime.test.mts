@@ -34,6 +34,7 @@ import {
   useDmsRoute,
   useDmsRouter,
   useDmsPageLoading,
+  useUserSession,
   setupFrontendModules,
   type DmsMiddleware,
 } from "../templates/vue/frontend-module.ts";
@@ -750,5 +751,52 @@ describe("Page loading state", () => {
   it("never turns on for a page that does not suspend", () => {
     const { loading } = mountPage(defineComponent({ render: () => h("p") }));
     assert.equal(loading(), false);
+  });
+});
+
+describe("Session hydration", () => {
+  function hydrate(app, language: string, session: Record<string, unknown>) {
+    app.runWithContext(() =>
+      hydrateDmsPageProps({
+        path: "/page",
+        page: {},
+        user: { language },
+        session: { accountId: "account-a", ...session },
+      }),
+    );
+  }
+
+  function currentLanguage(app): unknown {
+    return app.runWithContext(() => useUserSession().user.value?.language);
+  }
+
+  it("keeps a newer session over the one a restored page carries", () => {
+    const { app } = application("first");
+    hydrate(app, "fr", { updatedAt: 2 });
+    hydrate(app, "en", { updatedAt: 1 });
+    assert.equal(currentLanguage(app), "fr");
+  });
+
+  it("takes the session of a fresh page, or of another account", () => {
+    const { app } = application("first");
+    hydrate(app, "fr", { updatedAt: 2 });
+    hydrate(app, "de", { updatedAt: 3 });
+    assert.equal(currentLanguage(app), "de");
+    hydrate(app, "en", { accountId: "account-b", updatedAt: 1 });
+    assert.equal(currentLanguage(app), "en");
+  });
+
+  it("takes every session a server without stamps sends", () => {
+    const { app } = application("first");
+    hydrate(app, "fr", {});
+    hydrate(app, "en", {});
+    assert.equal(currentLanguage(app), "en");
+  });
+
+  it("clears the session of a signed-out page", () => {
+    const { app } = application("first");
+    hydrate(app, "fr", { updatedAt: 2 });
+    app.runWithContext(() => hydrateDmsPageProps({ path: "/auth", page: {} }));
+    assert.equal(currentLanguage(app), undefined);
   });
 });

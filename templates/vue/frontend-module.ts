@@ -83,6 +83,13 @@ export interface DmsUser extends Record<string, unknown> {}
 export interface DmsSession {
   accountId: string;
   activeTenantId?: string;
+  /**
+   * When the frontend server last wrote this session, in milliseconds since
+   * the epoch. A page restored from history or from the prefetch cache
+   * carries an older session than the one the app already holds, and does not
+   * replace it.
+   */
+  updatedAt?: number;
 }
 export interface DmsRuntimeConfig extends RuntimeConfig {
   public: PublicRuntimeConfig;
@@ -1404,6 +1411,24 @@ export function getDmsLayoutProps(
   };
 }
 
+/**
+ * Whether a page carries an older session of the same account than the one
+ * the app holds: Inertia restores a page from history, or serves it from the
+ * prefetch cache, with the props it was fetched with, and those must not undo
+ * a later `useUserSession().fetch()`.
+ */
+function isStaleSession(
+  incoming: DmsSession | undefined,
+  current: DmsSession | null,
+): boolean {
+  return (
+    !!incoming &&
+    !!current &&
+    incoming.accountId === current.accountId &&
+    (incoming.updatedAt ?? 0) < (current.updatedAt ?? 0)
+  );
+}
+
 export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
   const runtime = useDmsRuntime();
   if (url) updateRoute(runtime, url);
@@ -1417,10 +1442,12 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
   }
   runtime.pageVersion++;
   runtime.currentError.value = null;
-  useDmsState<DmsUser | null>("dms-user", () => null).value =
-    props.user ?? null;
-  useDmsState<DmsSession | null>("dms-session", () => null).value =
-    props.session ?? null;
+  const session = useDmsState<DmsSession | null>("dms-session", () => null);
+  if (!isStaleSession(props.session, session.value)) {
+    useDmsState<DmsUser | null>("dms-user", () => null).value =
+      props.user ?? null;
+    session.value = props.session ?? null;
+  }
   const shared = props.page.shared;
   if (shared) {
     useDmsState<unknown>("dms-siteLayout", () => undefined).value =

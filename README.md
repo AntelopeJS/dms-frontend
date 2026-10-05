@@ -205,6 +205,10 @@ const pageLoading = useDmsPageLoading();
 
 It stays `false` on the server and during hydration, which render the page resolved, for a page that does not suspend, and once a pending page is left.
 
+### Interface language
+
+The interface language follows the session (`useUserSession().user.language`), not the props of the page on screen: the first render takes it from the session the page arrived with, and it changes when the session's language does, after `useUserSession().fetch()` or a visit with a newer session. A page Inertia restores from history or serves from its prefetch cache carries the session it was fetched with: the frontend server stamps every session it writes (`session.updatedAt`), and a page carrying an older stamp of the same account updates neither the session nor the language. A session without a language, such as a signed-out one, keeps the language on screen; `$i18n.setLocale()` still switches it at any time.
+
 ### Declaring the loader releases a module supports
 
 A frontend module names the `@antelopejs/dms-frontend` releases it runs on in its own `package.json`, the way a package names the Node.js versions it supports:

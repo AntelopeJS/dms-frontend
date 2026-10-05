@@ -146,9 +146,15 @@ export function assertAccountInvariant(session, accountId) {
     throw new Error("Account session invariant violated");
 }
 
+/**
+ * Write `session` as the current one, and as one of the stored accounts.
+ * Stamps it with `updatedAt`, which lets the browser tell a page fetched
+ * before this write, and restored from its cache, from a current one.
+ */
 export function persistAccountSession(request, response, session, accountId) {
   const id = accountId ?? session.accountId ?? randomUUID();
   session.accountId = id;
+  session.updatedAt = Date.now();
   const account = storeAccount(request, response, session, id);
   assertAccountInvariant(session, account.accountId);
   writeSession(response, session);
