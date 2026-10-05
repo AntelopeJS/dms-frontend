@@ -175,6 +175,7 @@ export default defineConfig({
               "useI18n",
               "useError",
               "useDmsLazyAsyncData",
+              "useDmsPageLoading",
               "useDmsApp",
               "useDmsRoute",
               "useDmsRouter",

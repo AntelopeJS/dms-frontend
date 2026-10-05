@@ -31,6 +31,7 @@ import {
   type PropType,
   type Ref,
   reactive,
+  readonly,
   ref,
   watch,
 } from "vue";
@@ -333,6 +334,8 @@ export interface DmsFrontendRuntime {
   pendingNavigation?: Promise<void>;
   hasNavigationListener: boolean;
   pageVersion: number;
+  /** Whether the page `<Suspense>` waits on the page being navigated to. */
+  pageLoading: Ref<boolean>;
   /**
    * Identifies the page on screen (its path, or the error page shown at that
    * path), whose meta `route.meta` holds.
@@ -403,6 +406,7 @@ export function createDmsFrontendRuntime(
     }),
     hasNavigationListener: false,
     pageVersion: 0,
+    pageLoading: ref(false),
     scope: effectScope(true),
   };
 }
@@ -1184,6 +1188,35 @@ export function useUserSession<
       user.value = null;
       session.value = null;
     },
+  };
+}
+
+/**
+ * Whether the page loaded by the current navigation is still pending: its
+ * chunk, or an async `setup` it awaits, has not resolved yet. A layout reads
+ * it to show its own placeholder in place of the page. Always `false` on the
+ * server and during hydration, which render the page resolved.
+ */
+export function useDmsPageLoading(): Readonly<Ref<boolean>> {
+  return readonly(useDmsRuntime().pageLoading);
+}
+
+/**
+ * The props of the `<Suspense>` around the page that keep `useDmsPageLoading`
+ * in step with it. Cleared before the boundary unmounts, so a page left while
+ * pending never leaves the state set.
+ */
+export function dmsPageSuspenseProps(): Record<string, () => void> {
+  const loading = useDmsRuntime().pageLoading;
+  const settle = () => {
+    loading.value = false;
+  };
+  return {
+    onPending: () => {
+      loading.value = true;
+    },
+    onResolve: settle,
+    onVnodeBeforeUnmount: settle,
   };
 }
 

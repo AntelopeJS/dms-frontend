@@ -24,6 +24,7 @@ import {
   type DmsLocaleLoader,
   type DmsPageProps,
   createDmsFrontendRuntime,
+  dmsPageSuspenseProps,
   getDmsErrorPage,
   getDmsLayout,
   getDmsLayoutProps,
@@ -205,7 +206,7 @@ function renderDmsPage(
     error,
     key: props.path,
   });
-  return h(Suspense, null, { default: () => pageContent });
+  return h(Suspense, dmsPageSuspenseProps(), { default: () => pageContent });
 }
 
 function renderDmsPersistentLayout(

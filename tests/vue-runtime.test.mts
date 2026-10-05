@@ -11,10 +11,12 @@ import {
   nextTick,
   onScopeDispose,
   ref,
+  Suspense,
 } from "vue";
 import {
   createDmsFrontendRuntime,
   defineDmsPageMeta,
+  dmsPageSuspenseProps,
   hydrateDmsPageProps,
   navigateDms,
   provideDmsFrontendRuntime,
@@ -31,6 +33,7 @@ import {
   useDmsFetch,
   useDmsRoute,
   useDmsRouter,
+  useDmsPageLoading,
   setupFrontendModules,
   type DmsMiddleware,
 } from "../templates/vue/frontend-module.ts";
@@ -686,5 +689,66 @@ describe("Page meta", () => {
       );
     });
     assert.deepEqual(runtime.route.meta, {});
+  });
+});
+
+describe("Page loading state", () => {
+  function settle(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve));
+  }
+
+  function suspendingPage() {
+    let release = () => {};
+    const page = defineComponent({
+      async setup() {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return () => h("p", "page");
+      },
+    });
+    return { page, release: () => release() };
+  }
+
+  function mountPage(page: ReturnType<typeof defineComponent>) {
+    const runtime = createDmsFrontendRuntime();
+    const shown = ref(true);
+    let loading: { readonly value: boolean } = { value: false };
+    mountRuntime(
+      runtime,
+      defineComponent({
+        setup() {
+          loading = useDmsPageLoading();
+          return () =>
+            shown.value
+              ? h(Suspense, dmsPageSuspenseProps(), { default: () => h(page) })
+              : null;
+        },
+      }),
+    );
+    return { loading: () => loading.value, shown };
+  }
+
+  it("is pending while the page suspends and settles once it resolves", async () => {
+    const { page, release } = suspendingPage();
+    const { loading } = mountPage(page);
+    assert.equal(loading(), true);
+    release();
+    await settle();
+    assert.equal(loading(), false);
+  });
+
+  it("settles when a page is left before it resolves", async () => {
+    const { page } = suspendingPage();
+    const { loading, shown } = mountPage(page);
+    assert.equal(loading(), true);
+    shown.value = false;
+    await nextTick();
+    assert.equal(loading(), false);
+  });
+
+  it("never turns on for a page that does not suspend", () => {
+    const { loading } = mountPage(defineComponent({ render: () => h("p") }));
+    assert.equal(loading(), false);
   });
 });

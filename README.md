@@ -188,6 +188,23 @@ The SDK also exposes `use` for Vue plugins. Entries execute by descending manife
 
 Within one setup, the first module to register a name keeps it. `ajs-dms dev` sets every module up again each time a change to a layer reaches the server renderer, into empty registries, so the next server render uses the edited component without a restart. A `setup` may therefore run more than once in a process: it should only register, and keep no state of its own between runs.
 
+### Page loading state
+
+After a client navigation, the page renders under a `<Suspense>` until its chunk and any async `setup` resolve. `useDmsPageLoading()` (auto-imported) is `true` meanwhile, so a layout can show its own placeholder instead of an empty page body:
+
+```vue
+<script setup lang="ts">
+const pageLoading = useDmsPageLoading();
+</script>
+
+<template>
+  <slot />
+  <PageSkeleton v-if="pageLoading" />
+</template>
+```
+
+It stays `false` on the server and during hydration, which render the page resolved, for a page that does not suspend, and once a pending page is left.
+
 ### Declaring the loader releases a module supports
 
 A frontend module names the `@antelopejs/dms-frontend` releases it runs on in its own `package.json`, the way a package names the Node.js versions it supports:
