@@ -24,6 +24,13 @@ import {
   trackDmsServerScopes,
 } from "./frontend-module";
 import { frontendModules } from "./frontend-modules.generated";
+import {
+  SSR_ICONS_ID,
+  serializeDmsIcons,
+  trackDmsIcons,
+} from "./icon-hydration";
+
+export { registerDmsIconCollections } from "./icon-hydration";
 
 export interface DmsSsrPage {
   component: string;
@@ -75,6 +82,14 @@ function asyncComponentsScript(names: Set<string>): string {
   return `<script id="${SSR_ASYNC_COMPONENTS_ID}" type="application/json">${value}</script>`;
 }
 
+function iconsScript(names: Set<string>): string {
+  const value = JSON.stringify(serializeDmsIcons(names)).replaceAll(
+    "<",
+    "\\u003c",
+  );
+  return `<script id="${SSR_ICONS_ID}" type="application/json">${value}</script>`;
+}
+
 await setupFrontendModules(frontendModules);
 
 export function isDmsFrontendPage(path: string): boolean {
@@ -117,6 +132,7 @@ async function renderDmsPageWithRuntime(
     const head = createHead();
     const ssrContext: DmsSsrContext = {};
     let asyncComponents = new Set<string>();
+    let icons = new Set<string>();
     const inertiaResult = await createInertiaApp({
       page,
       render: (app) => renderToString(app, ssrContext),
@@ -124,6 +140,7 @@ async function renderDmsPageWithRuntime(
       async setup({ App, props, plugin }) {
         const app = createSSRApp({ render: () => h(App, props) });
         asyncComponents = trackDmsAsyncComponents(app);
+        icons = trackDmsIcons(app);
         stopScopes = trackDmsServerScopes(app);
         const configured = await configureDmsApp({
           app,
@@ -173,7 +190,7 @@ async function renderDmsPageWithRuntime(
     const renderedHead = await renderSSRHead(head);
     return {
       error: page.props.error,
-      body: `${inertiaResult.body}${asyncDataScript(runtime)}${asyncComponentsScript(asyncComponents)}`,
+      body: `${inertiaResult.body}${asyncDataScript(runtime)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
       head: {
         bodyAttrs: renderedHead.bodyAttrs,
         headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,

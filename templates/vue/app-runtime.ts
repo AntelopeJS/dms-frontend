@@ -6,6 +6,7 @@ import { en as uiEn, fr as uiFr } from "@nuxt/ui/locale";
 import ui from "@nuxt/ui/vue-plugin";
 import { useHead } from "@unhead/vue";
 import type { VueHeadClient } from "@unhead/vue/types";
+import type { IconifyIcon } from "@iconify/vue";
 import type { FetchOptions } from "ofetch";
 import {
   type App,
@@ -43,6 +44,11 @@ import {
   useError,
   useUserSession,
 } from "./frontend-module";
+import {
+  SSR_ICONS_ID,
+  addDmsIcons,
+  drawLoadedIconsAtOnce,
+} from "./icon-hydration";
 import {
   loadLocaleMessages,
   localeMessages,
@@ -105,23 +111,16 @@ function userLocale(user: DmsUser | null | undefined): string | undefined {
   return supportedLocales.includes(locale) ? locale : undefined;
 }
 
-function readDmsAsyncData(): Record<string, unknown> {
-  if (typeof document === "undefined") return {};
-  const element = document.getElementById(SSR_ASYNC_DATA_ID);
-  if (!element?.textContent) return {};
-  const data = JSON.parse(element.textContent) as Record<string, unknown>;
+function readServerRendered<T>(id: string, empty: T): T {
+  if (typeof document === "undefined") return empty;
+  const element = document.getElementById(id);
+  if (!element?.textContent) return empty;
+  const value = JSON.parse(element.textContent) as T;
   element.remove();
-  return data;
+  return value;
 }
 
-function readDmsAsyncComponents(): string[] {
-  if (typeof document === "undefined") return [];
-  const element = document.getElementById(SSR_ASYNC_COMPONENTS_ID);
-  if (!element?.textContent) return [];
-  const names = JSON.parse(element.textContent) as string[];
-  element.remove();
-  return names;
-}
+drawLoadedIconsAtOnce();
 
 const DmsInertiaPage = defineComponent({
   name: "DmsInertiaPage",
@@ -259,7 +258,7 @@ export async function configureDmsApp(
     options.runtime ??
     createDmsFrontendRuntime(
       options.serverFetch as typeof import("ofetch").ofetch,
-      readDmsAsyncData(),
+      readServerRendered<Record<string, unknown>>(SSR_ASYNC_DATA_ID, {}),
     );
   const locale = userLocale(options.initialPageProps.user) ?? DEFAULT_LOCALE;
   const messages = await loadLocaleMessages(locale);
@@ -278,6 +277,9 @@ export async function configureDmsApp(
   options.app.runWithContext(() =>
     hydrateDmsPageProps(options.initialPageProps, options.initialPageUrl),
   );
+  addDmsIcons(
+    readServerRendered<Record<string, IconifyIcon>>(SSR_ICONS_ID, {}),
+  );
   if (typeof window !== "undefined") {
     const toast = options.app.runWithContext(() => useToast());
     showNetworkErrors(toast.add, i18n.global);
@@ -287,7 +289,9 @@ export async function configureDmsApp(
   // Hydration then adopts the server-rendered markup instead of discarding it.
   await Promise.all([
     preloadDmsPage(options.initialPageProps),
-    resolveDmsAsyncComponents(readDmsAsyncComponents()),
+    resolveDmsAsyncComponents(
+      readServerRendered<string[]>(SSR_ASYNC_COMPONENTS_ID, []),
+    ),
   ]);
   const mounted = await installDmsPlugins(
     options.app,

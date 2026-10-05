@@ -457,6 +457,14 @@ needs no exception for the Iconify API. Icons reach the page two ways:
   answers `404`, and a name outside Iconify's naming rule `400`. `ajs dms dev`
   and `ajs dms start` run the same server, so both serve the route.
 
+The server render draws every icon, bundled or not: the frontend server loads
+each installed `@iconify-json/*` collection once and hands it to the renderer,
+and an icon is drawn in its first render as soon as its data is loaded, instead
+of after the component mounts. The data of each icon a render drew travels in
+the page, so the browser draws the same icons as it hydrates; an icon no
+installed collection holds stays empty on the server and is fetched in the
+browser as before.
+
 ## Options
 
 | Option | Environment | Purpose |

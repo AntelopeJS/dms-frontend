@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,12 +14,16 @@ const READ_METHODS = new Set(["GET", "HEAD"]);
 const ICON_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const COLLECTION_FILE = /^([^/]+)\.json$/;
 const ICON_NAME_SEPARATOR = ",";
+const COLLECTION_PACKAGES = join("node_modules", "@iconify-json");
 // An icon's data only changes with the installed collection, which a
 // deployment replaces; a week bounds how long an upgraded icon can lag.
 const ICON_CACHE_CONTROL =
   "public, max-age=604800, stale-while-revalidate=86400";
 const ERROR_CACHE_CONTROL = "no-store";
 const collections = new Map();
+// By renderer module: a development server evaluates a new one after a layer
+// changes, and each must find the collections loaded before it renders.
+const rendererCollections = new WeakMap();
 
 function collectionSpecifiers(prefix) {
   return [
@@ -58,6 +62,44 @@ function collection(root, prefix) {
     collections.set(key, loading);
   }
   return collections.get(key);
+}
+
+/**
+ * Every `@iconify-json/<prefix>` collection installed in the workspace under
+ * `root`, the ones the server render draws from. The workspace hoists every
+ * dependency, a module's collections included.
+ */
+export async function installedCollections(root) {
+  const prefixes = await readdir(join(root, COLLECTION_PACKAGES)).catch(
+    () => [],
+  );
+  const loaded = await Promise.all(
+    prefixes
+      .filter((prefix) => ICON_NAME.test(prefix))
+      .map((prefix) => collection(root, prefix)),
+  );
+  return loaded.filter(Boolean);
+}
+
+/**
+ * Hand a server renderer the installed collections, once per renderer module,
+ * before its first render. A collection that fails to load leaves the render
+ * with the bundled icons only.
+ */
+export function provideIconCollections(renderer, root = WORKSPACE_ROOT) {
+  if (!rendererCollections.has(renderer))
+    rendererCollections.set(
+      renderer,
+      installedCollections(root)
+        .then((loaded) => renderer.registerDmsIconCollections(loaded))
+        .catch((error) =>
+          console.error(
+            "DMS icon collections not loaded; server renders draw bundled icons only",
+            error,
+          ),
+        ),
+    );
+  return rendererCollections.get(renderer);
 }
 
 function jsonResponse(status, cacheControl, payload) {

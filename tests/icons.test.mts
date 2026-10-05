@@ -18,7 +18,11 @@ import {
   sameOriginIconProvider,
 } from "../templates/vue/icon-api.mjs";
 import { iconScanGlobs } from "../templates/vue/icon-scan.mjs";
-import { iconResponse, isIconRequest } from "../templates/vue/server/icons.mjs";
+import {
+  iconResponse,
+  installedCollections,
+  isIconRequest,
+} from "../templates/vue/server/icons.mjs";
 
 const ORIGIN = "http://frontend.local";
 const CHECK_ICON = { body: '<path d="M1 1h2"/>' };
@@ -110,6 +114,16 @@ describe("the same-origin Iconify API", () => {
     ]) {
       const response = await iconResponse(root, "GET", iconUrl(path));
       assert.equal(response.status, 400, path);
+    }
+  });
+
+  it("loads every installed collection for the server render", async () => {
+    assert.deepEqual(await installedCollections(root), [COLLECTION]);
+    const empty = mkdtempSync(join(tmpdir(), "dms-no-icons-"));
+    try {
+      assert.deepEqual(await installedCollections(empty), []);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
     }
   });
 

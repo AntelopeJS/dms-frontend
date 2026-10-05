@@ -85,6 +85,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["ui-app-config.ts", "ui-app-config.ts"],
   ["ssr-renderer.ts", "ssr-renderer.ts"],
   ["frontend-module.ts", "frontend-module.ts"],
+  ["icon-hydration.ts", "icon-hydration.ts"],
   ["globals.d.ts", "globals.d.ts"],
   ["compress-assets.mjs", "compress-assets.mjs"],
   ["head-order.mjs", "head-order.mjs"],
