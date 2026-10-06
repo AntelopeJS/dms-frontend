@@ -1,4 +1,4 @@
-import { clientIp } from "./client-ip.mjs";
+import { clientCountryHeader, clientIp } from "./client-ip.mjs";
 
 const FORWARDED_HEADERS = [
   "user-agent",
@@ -26,12 +26,26 @@ export function publicBackendMessage(data) {
     : undefined;
 }
 
-export async function backend(path, request, options = {}) {
-  const headers = Object.fromEntries(
-    FORWARDED_HEADERS.flatMap((name) =>
-      request.headers[name] ? [[name, request.headers[name]]] : [],
+/**
+ * The headers of a client request the server relays to the backend.
+ *
+ * @param request The client request
+ * @param names Lowercase names of the request headers to copy when present
+ * @returns The client country header, then the copied headers
+ */
+export function relayedHeaders(request, names) {
+  return {
+    ...clientCountryHeader(request),
+    ...Object.fromEntries(
+      names.flatMap((name) =>
+        request.headers[name] ? [[name, request.headers[name]]] : [],
+      ),
     ),
-  );
+  };
+}
+
+export async function backend(path, request, options = {}) {
+  const headers = relayedHeaders(request, FORWARDED_HEADERS);
   headers["x-forwarded-for"] = clientIp(request);
   if (options.token) headers.authorization = `Bearer ${options.token}`;
   if (options.relay)

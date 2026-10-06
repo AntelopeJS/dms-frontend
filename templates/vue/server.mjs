@@ -5,7 +5,11 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { ofetch } from "ofetch";
-import { RequestBodyError, UpstreamError } from "./server/auth/backend.mjs";
+import {
+  relayedHeaders,
+  RequestBodyError,
+  UpstreamError,
+} from "./server/auth/backend.mjs";
 import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./server/auth/client-ip.mjs";
 import {
   handleAuth,
@@ -117,18 +121,13 @@ async function developmentServer() {
 }
 
 function backendHeaders(request) {
-  const names = [
+  const headers = relayedHeaders(request, [
     "accept",
     "content-type",
     "user-agent",
     "x-content-language",
     "x-realtime-session",
-  ];
-  const headers = Object.fromEntries(
-    names.flatMap((name) =>
-      request.headers[name] ? [[name, request.headers[name]]] : [],
-    ),
-  );
+  ]);
   const session = readSession(request);
   if (session?.accessToken)
     headers.authorization = `Bearer ${session.accessToken}`;

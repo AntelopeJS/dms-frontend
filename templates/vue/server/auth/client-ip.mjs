@@ -51,6 +51,34 @@ export function clientIp(request) {
   return chain[Math.max(0, chain.length - hops - 1)] ?? socketIp;
 }
 
+const DEFAULT_COUNTRY_HEADER = "CF-IPCountry";
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
+
+function countryHeader() {
+  const name = (process.env.DMS_COUNTRY_HEADER ?? DEFAULT_COUNTRY_HEADER)
+    .trim()
+    .toLowerCase();
+  return HEADER_NAME.test(name) ? name : undefined;
+}
+
+/**
+ * The client's country header, as the backend request headers to add.
+ *
+ * The header is the one `DMS_COUNTRY_HEADER` names (`CF-IPCountry` by
+ * default, empty to relay none), the name the DMS reads from
+ * `auth.signInCountry.header`. Like `X-Forwarded-For`, it is only believed
+ * from a trusted reverse proxy: with `DMS_TRUSTED_PROXY_HOPS` at `0`, any
+ * caller could have set it, so nothing is relayed.
+ */
+export function clientCountryHeader(request) {
+  const name = countryHeader();
+  if (!name || !trustedHops()) return {};
+  const value = request.headers?.[name];
+  return typeof value === "string" && value.trim()
+    ? { [name]: value.trim() }
+    : {};
+}
+
 /**
  * Body answered with the 403 of the CSRF origin check.
  *
