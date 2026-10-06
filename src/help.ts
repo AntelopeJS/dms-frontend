@@ -36,6 +36,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "Trusted reverse-proxy hops, counted from the right (default: 0)",
   ],
   [
+    "DMS_COUNTRY_HEADER",
+    "Proxy country header relayed to the backend when a proxy is trusted (default: CF-IPCountry; empty: none)",
+  ],
+  [
     "DMS_HTML_RENDER_SECRET",
     "Overrides the e-mail render secret the backend publishes",
   ],
