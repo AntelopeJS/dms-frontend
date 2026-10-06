@@ -444,13 +444,18 @@ describe("Vite frontend generation", () => {
     }
   });
 
-  it("auto-imports native DMS composables", () => {
+  it("auto-imports native DMS composables and only the declared directories", () => {
     const config = readFileSync(
       join("templates", "vue", "vite.config.ts"),
       "utf8",
     );
     assert.match(config, /autoImport:/);
-    assert.match(config, /"app\/composables\/\*\*\/\*"/);
+    assert.match(config, /dirs: importDirectories/);
+    assert.match(
+      config,
+      /autoImportDirectories\(\s*registry\.modules,\s*frontendBuilds,/,
+    );
+    assert.doesNotMatch(config, /app\/composables|app\/build/);
     assert.match(config, /dirsScanOptions: \{ types: true \}/);
     assert.match(config, /"useDmsRoute"/);
     assert.match(config, /"defineDmsPlugin"/);

@@ -20,11 +20,13 @@ import {
   allowedEstablishEndpoints,
   handleAuth,
   isAllowedEstablishEndpoint,
+  publicSession,
   readDeclaredEstablishEndpoints,
   refreshSession,
 } from "../templates/vue/server/auth/routes.mjs";
 import {
   assertAccountInvariant,
+  persistAccountSession,
   writeSession,
 } from "../templates/vue/server/auth/session.mjs";
 
@@ -317,6 +319,33 @@ function accessToken(tenantId: string): string {
 }
 
 const ESTABLISH_URL = new URL("http://frontend.local/auth/establish");
+
+describe("session freshness", () => {
+  it("stamps every session it writes and hands the stamp to the browser", () => {
+    const session: Record<string, unknown> = {
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      user: { _id: "user-1", language: "fr" },
+    };
+    const before = Date.now();
+    process.env.DMS_SESSION_SECRET = "dms-frontend-test-session-secret-value";
+    try {
+      persistAccountSession({ headers: {} }, cookieResponse(), session);
+    } finally {
+      delete process.env.DMS_SESSION_SECRET;
+    }
+    const stamp = session.updatedAt as number;
+    assert.ok(stamp >= before && stamp <= Date.now());
+    assert.deepEqual(publicSession(session), {
+      user: { _id: "user-1", language: "fr" },
+      session: {
+        accountId: session.accountId,
+        activeTenantId: undefined,
+        updatedAt: stamp,
+      },
+    });
+  });
+});
 
 describe("session establishment from a module endpoint", () => {
   it("keeps the allowlist empty when nothing is declared", () => {

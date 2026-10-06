@@ -36,7 +36,7 @@ import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
-import { handleIcons, isIconRequest } from "./server/icons.mjs";
+import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
 import { handleTester } from "./server/tester.mjs";
 import {
@@ -75,7 +75,7 @@ const HTML_RENDER_ROUTE = "/api/html/render";
 const TESTER_ROUTE = /^\/api\/_dms\/tester\/?$/;
 const LOCAL_ROUTES = [
   [(pathname) => TESTER_ROUTE.test(pathname), handleTester],
-  [isIconRequest, handleIcons],
+  [icons.isIconRequest, icons.handleIcons],
 ];
 const AUTH_PAGE = "/auth";
 const ONBOARDING_PAGE = "/onboarding";
@@ -297,9 +297,11 @@ function serveAsset(pathname, request, response) {
 }
 
 async function ssrRenderer(devServer) {
-  if (devServer) return devServer.ssrLoadModule("/ssr-renderer.ts");
-  productionSsrRenderer ??= import(BUILT_SSR_RENDERER_PATH);
-  return productionSsrRenderer;
+  const renderer = devServer
+    ? await devServer.ssrLoadModule("/ssr-renderer.ts")
+    : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_PATH));
+  await icons.provideIconCollections(renderer);
+  return renderer;
 }
 
 export async function renderHtml(

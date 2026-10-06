@@ -122,6 +122,9 @@ describe("generated workspace type paths", () => {
       "#dms/frontend-module": [
         "./frontend-module.ts"
       ],
+      "#dms/frontend-build": [
+        "./frontend-build.ts"
+      ],
       "@frontend/*": [
         "./frontend-modules/*"
       ],

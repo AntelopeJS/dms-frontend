@@ -6,6 +6,7 @@ import { en as uiEn, fr as uiFr } from "@nuxt/ui/locale";
 import ui from "@nuxt/ui/vue-plugin";
 import { useHead } from "@unhead/vue";
 import type { VueHeadClient } from "@unhead/vue/types";
+import type { IconifyIcon } from "@iconify/vue";
 import type { FetchOptions } from "ofetch";
 import {
   type App,
@@ -23,7 +24,9 @@ import DmsDynamicPage from "./DmsDynamicPage.vue";
 import {
   type DmsLocaleLoader,
   type DmsPageProps,
+  type DmsUser,
   createDmsFrontendRuntime,
+  dmsPageSuspenseProps,
   getDmsErrorPage,
   getDmsLayout,
   getDmsLayoutProps,
@@ -39,7 +42,13 @@ import {
   useDmsAppConfig,
   useDmsState,
   useError,
+  useUserSession,
 } from "./frontend-module";
+import {
+  SSR_ICONS_ID,
+  addDmsIcons,
+  drawLoadedIconsAtOnce,
+} from "./icon-hydration";
 import {
   loadLocaleMessages,
   localeMessages,
@@ -94,30 +103,24 @@ function uiLocale(locale: string): UiLocale {
   return UI_LOCALES[locale as keyof typeof UI_LOCALES] ?? UI_LOCALES.en;
 }
 
-function pageLocale(props: DmsPageProps): string {
-  const language = props.user?.language;
-  if (typeof language !== "string") return DEFAULT_LOCALE;
+/** The supported locale of a user's language, if it has one. */
+function userLocale(user: DmsUser | null | undefined): string | undefined {
+  const language = user?.language;
+  if (typeof language !== "string") return undefined;
   const locale = language.slice(0, 2);
-  return supportedLocales.includes(locale) ? locale : DEFAULT_LOCALE;
+  return supportedLocales.includes(locale) ? locale : undefined;
 }
 
-function readDmsAsyncData(): Record<string, unknown> {
-  if (typeof document === "undefined") return {};
-  const element = document.getElementById(SSR_ASYNC_DATA_ID);
-  if (!element?.textContent) return {};
-  const data = JSON.parse(element.textContent) as Record<string, unknown>;
+function readServerRendered<T>(id: string, empty: T): T {
+  if (typeof document === "undefined") return empty;
+  const element = document.getElementById(id);
+  if (!element?.textContent) return empty;
+  const value = JSON.parse(element.textContent) as T;
   element.remove();
-  return data;
+  return value;
 }
 
-function readDmsAsyncComponents(): string[] {
-  if (typeof document === "undefined") return [];
-  const element = document.getElementById(SSR_ASYNC_COMPONENTS_ID);
-  if (!element?.textContent) return [];
-  const names = JSON.parse(element.textContent) as string[];
-  element.remove();
-  return names;
-}
+drawLoadedIconsAtOnce();
 
 const DmsInertiaPage = defineComponent({
   name: "DmsInertiaPage",
@@ -148,17 +151,25 @@ const DmsPersistentLayout = defineComponent({
   setup(_, { attrs, slots }) {
     const props = computed(() => attrs as unknown as DmsPageProps);
     const i18n = useI18n();
+    const { user } = useUserSession();
     let localeVersion = 0;
     useHead({
       htmlAttrs: { lang: computed(() => i18n.locale.value) },
     });
     watch(
       () => [attrs.path, attrs.page, attrs.user, attrs.session, attrs.error],
-      async () => {
+      () => hydrateDmsPageProps(props.value),
+      { immediate: true, flush: "sync" },
+    );
+    // The session, not the page props: a page restored from history or from
+    // the prefetch cache carries the user as it was when it was fetched, and
+    // would switch the interface back to a language the user has left. A
+    // session without a language keeps the one on screen.
+    watch(
+      () => userLocale(user.value),
+      async (locale) => {
         const version = ++localeVersion;
-        hydrateDmsPageProps(props.value);
-        const locale = pageLocale(props.value);
-        if (i18n.locale.value === locale) return;
+        if (!locale || i18n.locale.value === locale) return;
         const messages = await loadLocaleMessages(locale);
         if (version !== localeVersion) return;
         i18n.setLocaleMessage(locale, messages);
@@ -205,7 +216,7 @@ function renderDmsPage(
     error,
     key: props.path,
   });
-  return h(Suspense, null, { default: () => pageContent });
+  return h(Suspense, dmsPageSuspenseProps(), { default: () => pageContent });
 }
 
 function renderDmsPersistentLayout(
@@ -247,9 +258,9 @@ export async function configureDmsApp(
     options.runtime ??
     createDmsFrontendRuntime(
       options.serverFetch as typeof import("ofetch").ofetch,
-      readDmsAsyncData(),
+      readServerRendered<Record<string, unknown>>(SSR_ASYNC_DATA_ID, {}),
     );
-  const locale = pageLocale(options.initialPageProps);
+  const locale = userLocale(options.initialPageProps.user) ?? DEFAULT_LOCALE;
   const messages = await loadLocaleMessages(locale);
   const i18n = createI18n({
     legacy: false,
@@ -266,6 +277,9 @@ export async function configureDmsApp(
   options.app.runWithContext(() =>
     hydrateDmsPageProps(options.initialPageProps, options.initialPageUrl),
   );
+  addDmsIcons(
+    readServerRendered<Record<string, IconifyIcon>>(SSR_ICONS_ID, {}),
+  );
   if (typeof window !== "undefined") {
     const toast = options.app.runWithContext(() => useToast());
     showNetworkErrors(toast.add, i18n.global);
@@ -275,7 +289,9 @@ export async function configureDmsApp(
   // Hydration then adopts the server-rendered markup instead of discarding it.
   await Promise.all([
     preloadDmsPage(options.initialPageProps),
-    resolveDmsAsyncComponents(readDmsAsyncComponents()),
+    resolveDmsAsyncComponents(
+      readServerRendered<string[]>(SSR_ASYNC_COMPONENTS_ID, []),
+    ),
   ]);
   const mounted = await installDmsPlugins(
     options.app,

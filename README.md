@@ -188,6 +188,61 @@ The SDK also exposes `use` for Vue plugins. Entries execute by descending manife
 
 Within one setup, the first module to register a name keeps it. `ajs-dms dev` sets every module up again each time a change to a layer reaches the server renderer, into empty registries, so the next server render uses the edited component without a restart. A `setup` may therefore run more than once in a process: it should only register, and keep no state of its own between runs.
 
+### Private components
+
+A component registers as public by default: it joins the application's global components and resolves by name anywhere. A component that only exists to render the module's own backend pages registers as private instead:
+
+```ts
+sdk.registerComponent("BillingTotals", BillingTotals, { private: true });
+```
+
+A private component is not registered with `app.component`, so no template or other module reaches it by name. `resolveDmsComponent(name, owner)` returns it only when `owner` is the registering module, and then ahead of a public component of the same name; without an owner, only public components resolve. The generic page renderer passes the page's owner, so a backend page tree naming the component renders it, and the page preloader and the server render's hydration handover cover it too.
+
+The owner is the page payload's `module` field: the name of the frontend module that owns the page's component tree, as the backend added it (the module's `name` in the frontend manifest, which the generated loader hands each module's setup). A backend that does not send `module` reaches no private component, whatever the tree names.
+
+### Auto-imports (`dms.frontend.build.ts`)
+
+Nothing a module ships is auto-imported unless the module declares it, in an optional `dms.frontend.build.ts` next to its `dms.frontend.ts`:
+
+```ts
+import { defineDmsFrontendBuild } from "#dms/frontend-build";
+
+export default defineDmsFrontendBuild((build) => {
+  build.registerAutoImports([
+    "layers/*/app/composables",
+    "layers/*/app/utils",
+    "layers/*/app/types",
+  ]);
+});
+```
+
+Each entry is a directory relative to the module root, glob patterns allowed; every export of the files under it becomes available to the whole application without an import, in scripts and templates. A module without the file has nothing auto-imported. `app/build/` holds a module's private code and is never auto-imported: it is left out of what a broader entry covers, and an entry naming it, or a directory outside the module, is ignored with a warning when Vite starts.
+
+The file runs in Node.js when Vite starts, under `ajs dms dev` and `ajs dms build`, not in the application: it may import `#dms/frontend-build` and Node.js built-ins, never the application's code. Vite restarts when one changes.
+
+Up to 0.3, every module's `app/composables`, `app/types`, `app/utils`, `app/build/composables` and `app/build/types` were auto-imported. A module that relies on auto-imports declares its public directories in `dms.frontend.build.ts`, and imports its `app/build/` code by path.
+
+### Page loading state
+
+After a client navigation, the page renders under a `<Suspense>` until its chunk and any async `setup` resolve. `useDmsPageLoading()` (auto-imported) is `true` meanwhile, so a layout can show its own placeholder instead of an empty page body:
+
+```vue
+<script setup lang="ts">
+const pageLoading = useDmsPageLoading();
+</script>
+
+<template>
+  <slot />
+  <PageSkeleton v-if="pageLoading" />
+</template>
+```
+
+It stays `false` on the server and during hydration, which render the page resolved, for a page that does not suspend, and once a pending page is left.
+
+### Interface language
+
+The interface language follows the session (`useUserSession().user.language`), not the props of the page on screen: the first render takes it from the session the page arrived with, and it changes when the session's language does, after `useUserSession().fetch()` or a visit with a newer session. A page Inertia restores from history or serves from its prefetch cache carries the session it was fetched with: the frontend server stamps every session it writes (`session.updatedAt`), and a page carrying an older stamp of the same account updates neither the session nor the language. A session without a language, such as a signed-out one, keeps the language on screen; `$i18n.setLocale()` still switches it at any time.
+
 ### Declaring the loader releases a module supports
 
 A frontend module names the `@antelopejs/dms-frontend` releases it runs on in its own `package.json`, the way a package names the Node.js versions it supports:
@@ -412,7 +467,8 @@ The other files the workspace derives from every module follow their sources
 the same way. A file added to, changed in or removed from a module's `public/`
 is served, or no longer served, at once. Adding or removing an
 `app/config/shortcuts-registry.ts` or a `dms.frontend.ts` regenerates the
-aggregated shortcuts or the module loader, and the page reloads. A layer
+aggregated shortcuts or the module loader, and the page reloads. Adding,
+changing or removing a `dms.frontend.build.ts` restarts Vite. A layer
 directory added to or removed from `layers/` is the exception: Vite reads the
 `#<layer>` aliases and the auto-imported directories at startup only, so the
 dev server says it needs a restart.
@@ -435,6 +491,14 @@ needs no exception for the Iconify API. Icons reach the page two ways:
   collection depends on its `@iconify-json/*` package. An unknown collection
   answers `404`, and a name outside Iconify's naming rule `400`. `ajs dms dev`
   and `ajs dms start` run the same server, so both serve the route.
+
+The server render draws every icon, bundled or not: the frontend server loads
+each installed `@iconify-json/*` collection once and hands it to the renderer,
+and an icon is drawn in its first render as soon as its data is loaded, instead
+of after the component mounts. The data of each icon a render drew travels in
+the page, so the browser draws the same icons as it hydrates; an icon no
+installed collection holds stays empty on the server and is fetched in the
+browser as before.
 
 ## Options
 

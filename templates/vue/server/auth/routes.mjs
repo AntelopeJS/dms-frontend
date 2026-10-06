@@ -66,6 +66,7 @@ export function publicSession(session) {
     session: {
       accountId: session.accountId,
       activeTenantId: session.activeTenantId,
+      updatedAt: session.updatedAt,
     },
   };
 }

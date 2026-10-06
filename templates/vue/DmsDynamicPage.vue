@@ -37,6 +37,7 @@ interface PageRoute {
 interface PagePayload {
   layout?: PageLayout;
   route?: PageRoute;
+  module?: string;
 }
 
 interface DynamicPageProps {
@@ -55,7 +56,8 @@ function resolveDefinition(
   return {
     id,
     component: definition.componentName
-      ? resolveDmsComponent(definition.componentName) || "div"
+      ? resolveDmsComponent(definition.componentName, props.page.module) ||
+        "div"
       : "div",
     componentName: definition.componentName,
     options: definition.options,

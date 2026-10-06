@@ -16,7 +16,11 @@ import {
   rmSync,
 } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { FRONTEND_MODULE_ENTRY, LAYERS_SUBDIR } from "./config";
+import {
+  FRONTEND_BUILD_ENTRY,
+  FRONTEND_MODULE_ENTRY,
+  LAYERS_SUBDIR,
+} from "./config";
 import { frontendLayerTypePaths, MODULE_LAYERS_DIRNAME } from "./layer-aliases";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
 import { FrontendModuleOptions, ResolvedLayer } from "./workspace";
@@ -30,10 +34,13 @@ import {
 
 export interface FrontendModuleRegistryEntry {
   id: string;
+  /** The manifest name, or the package name without a manifest. */
+  name?: string;
   packageName?: string;
   root: string;
   priority: number;
   entry?: string;
+  build?: string;
   options: FrontendModuleOptions;
 }
 
@@ -56,6 +63,8 @@ function validateFrontendModuleRegistry(
       throw new Error(`Invalid frontend module priority: ${module.id}`);
     if (module.entry !== undefined && module.entry !== FRONTEND_MODULE_ENTRY)
       throw new Error(`Invalid frontend module entry: ${module.id}`);
+    if (module.build !== undefined && module.build !== FRONTEND_BUILD_ENTRY)
+      throw new Error(`Invalid frontend module build entry: ${module.id}`);
     if (!resolve(module.root).startsWith(moduleRoot))
       throw new Error(
         `Frontend module root escapes the workspace: ${module.id}`,
@@ -71,13 +80,16 @@ export function createFrontendModuleRegistry(
 ): FrontendModuleRegistry {
   const modules = layers.map((layer) => {
     const sourceEntry = join(layer.path, FRONTEND_MODULE_ENTRY);
+    const buildEntry = join(layer.path, FRONTEND_BUILD_ENTRY);
     const options = layer.options ?? {};
     return {
       id: getLayerSafeName(layer),
+      name: layer.name ?? layer.packageName,
       packageName: layer.packageName,
       root: getLayerWorkspacePath(workspaceDir, layer),
       priority: layer.priority ?? 0,
       entry: existsSync(sourceEntry) ? FRONTEND_MODULE_ENTRY : undefined,
+      build: existsSync(buildEntry) ? FRONTEND_BUILD_ENTRY : undefined,
       options: layer.configKey ? { [layer.configKey]: options } : options,
     };
   });
@@ -105,6 +117,7 @@ function writeFrontendTypePaths(
 ): boolean {
   const paths: Record<string, string[]> = {
     "#dms/frontend-module": ["./frontend-module.ts"],
+    "#dms/frontend-build": ["./frontend-build.ts"],
     "@frontend/*": ["./frontend-modules/*"],
     ...frontendLayerTypePaths(
       [...registry.modules].reverse().map((module) => module.root),
@@ -132,7 +145,7 @@ function writeFrontendModuleLoader(
   const registrations = modules
     .map(
       (module, index) =>
-        `{ module: module${index}, options: { public: ${JSON.stringify(module.options)} } }`,
+        `{ name: ${JSON.stringify(module.name)}, module: module${index}, options: { public: ${JSON.stringify(module.options)} } }`,
     )
     .join(", ");
   const content = `${imports}\n\nimport type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [${registrations}];\n`;
@@ -143,8 +156,39 @@ function writeFrontendModuleLoader(
 }
 
 /**
+ * The module through which the generated Vite config imports each module's
+ * `dms.frontend.build.ts`. Vite bundles the config with what it imports, so a
+ * declaration is resolved through the workspace's type paths, and Vite
+ * restarts when one changes.
+ */
+function writeFrontendBuildLoader(
+  workspaceDir: string,
+  registry: FrontendModuleRegistry,
+): boolean {
+  const modules = registry.modules.filter((module) => module.build);
+  const imports = modules
+    .map(
+      (module, index) =>
+        `import build${index} from "./${LAYERS_SUBDIR}/${module.id}/${module.build}";`,
+    )
+    .join("\n");
+  const declarations = modules
+    .map(
+      (module, index) =>
+        `{ id: ${JSON.stringify(module.id)}, setup: build${index} }`,
+    )
+    .join(", ");
+  const content = `${imports}\n\nimport type { FrontendBuildDeclaration } from "./frontend-build-loader";\n\nexport const frontendBuilds: FrontendBuildDeclaration[] = [${declarations}];\n`;
+  return applyContent(
+    content,
+    join(workspaceDir, "frontend-builds.generated.ts"),
+  );
+}
+
+/**
  * The registry itself, which the generated configs and server read, and the
- * loader through which the application imports each module's entry.
+ * loaders through which the application imports each module's entry and the
+ * Vite config each module's build declarations.
  */
 function writeModuleRegistry(
   workspaceDir: string,
@@ -154,7 +198,9 @@ function writeModuleRegistry(
     `${JSON.stringify(registry, null, 2)}\n`,
     join(workspaceDir, "generated-frontend-modules.json"),
   );
-  return writeFrontendModuleLoader(workspaceDir, registry) || wroteRegistry;
+  const wroteModules = writeFrontendModuleLoader(workspaceDir, registry);
+  const wroteBuilds = writeFrontendBuildLoader(workspaceDir, registry);
+  return wroteRegistry || wroteModules || wroteBuilds;
 }
 
 interface DiscoveredAsset {
@@ -525,7 +571,8 @@ export interface DerivedOutput {
 export const DERIVED_OUTPUTS: readonly DerivedOutput[] = [
   {
     name: "module registry",
-    affects: (path) => toPosixPath(path) === FRONTEND_MODULE_ENTRY,
+    affects: (path) =>
+      [FRONTEND_MODULE_ENTRY, FRONTEND_BUILD_ENTRY].includes(toPosixPath(path)),
     write: writeModuleRegistry,
   },
   {

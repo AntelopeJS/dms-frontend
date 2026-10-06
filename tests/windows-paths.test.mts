@@ -78,8 +78,14 @@ describe("Windows paths inlined into generated code", () => {
       join("templates", "vue", "vite.config.ts"),
       "utf8",
     );
-    assert.match(config, /glob: normalizePath\(resolve\(root, glob\)\)/);
     assert.match(config, /\]\.map\(normalizePath\);/);
+    assert.match(
+      readFileSync(
+        join("templates", "vue", "frontend-build-loader.ts"),
+        "utf8",
+      ),
+      /normalizePath\(resolve\(root, pattern\)\)/,
+    );
   });
 
   it("leaves POSIX paths and globs untouched", () => {
