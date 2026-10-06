@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.4.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.12...v0.4.0)
+
+### 🚀 Enhancements
+
+- ⚠️  Module-declared auto-imports, private components, page loading state, session language and SSR icons ([#101](https://github.com/AntelopeJS/dms-frontend/pull/101))
+
+### 🩹 Fixes
+
+- **server:** Forward the client country header to the backend ([#102](https://github.com/AntelopeJS/dms-frontend/pull/102))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Module-declared auto-imports, private components, page loading state, session language and SSR icons ([#101](https://github.com/AntelopeJS/dms-frontend/pull/101))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.3.12
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.11...v0.3.12)
