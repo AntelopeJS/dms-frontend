@@ -513,6 +513,7 @@ browser as before.
 | | `HOST` | Address the frontend server binds to (default `0.0.0.0`) |
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
+| | `DMS_COUNTRY_HEADER` | Client country header the server relays to the backend, set by a trusted reverse proxy (default `CF-IPCountry`; empty relays none). Name the same header in the backend's `auth.signInCountry.header`. Relayed only when `DMS_TRUSTED_PROXY_HOPS` is above `0`, like the client address |
 | | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
 | | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests; without it, e-mail renders are refused. Defaults to the `htmlRender.serviceSecret` the backend publishes in the frontend manifest |
 | | `DMS_OAUTH_RELAY_SECRET` | Secret the server presents to the backend's OAuth endpoints; without it, the backend refuses OAuth sign-in. Defaults to the `oauth.relaySecret` the backend publishes in the frontend manifest |
