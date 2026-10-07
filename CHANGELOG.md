@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.4.0...v0.5.0)
+
+### 🚀 Enhancements
+
+- **sdk:** ⚠️  Prefix registered components and drop private components ([#103](https://github.com/AntelopeJS/dms-frontend/pull/103))
+
+#### ⚠️ Breaking Changes
+
+- **sdk:** ⚠️  Prefix registered components and drop private components ([#103](https://github.com/AntelopeJS/dms-frontend/pull/103))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.4.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.3.12...v0.4.0)
