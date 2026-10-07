@@ -94,8 +94,8 @@ export interface FrontendManifest {
 export interface ResolvedLayer {
   path: string;
   /**
-   * The module's name in the manifest, which the backend's pages name as
-   * their owner. Absent for a layer resolved without a manifest.
+   * The module's name in the manifest, which component collision warnings
+   * name it by. Absent for a layer resolved without a manifest.
    */
   name?: string;
   /**
