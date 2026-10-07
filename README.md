@@ -188,17 +188,28 @@ The SDK also exposes `use` for Vue plugins. Entries execute by descending manife
 
 Within one setup, the first module to register a name keeps it. `ajs-dms dev` sets every module up again each time a change to a layer reaches the server renderer, into empty registries, so the next server render uses the edited component without a restart. A `setup` may therefore run more than once in a process: it should only register, and keep no state of its own between runs.
 
-### Private components
+### Component prefix
 
-A component registers as public by default: it joins the application's global components and resolves by name anywhere. A component that only exists to render the module's own backend pages registers as private instead:
+Every registered component joins the application's global components and resolves by name anywhere, in templates and in backend page trees. To keep the components of two modules from colliding, a module declares a `componentPrefix`, put in front of the name of every component it registers:
 
 ```ts
-sdk.registerComponent("BillingTotals", BillingTotals, { private: true });
+const frontendModule: DmsFrontendModule = {
+  componentPrefix: "Acme",
+  setup(sdk) {
+    sdk.registerComponent("Banner", Banner); // registered as AcmeBanner
+  },
+};
 ```
 
-A private component is not registered with `app.component`, so no template or other module reaches it by name. `resolveDmsComponent(name, owner)` returns it only when `owner` is the registering module, and then ahead of a public component of the same name; without an owner, only public components resolve. The generic page renderer passes the page's owner, so a backend page tree naming the component renders it, and the page preloader and the server render's hydration handover cover it too.
+The full name, prefix included, is the one a template uses (`<AcmeBanner>`) and a backend sends (`CustomComponent("AcmeBanner")`, or `acme-banner`). Names are compared ignoring case, a leading `lazy` and non-alphanumeric characters; a leading `Dms` is no longer dropped, since it is the DMS module's own prefix.
 
-The owner is the page payload's `module` field: the name of the frontend module that owns the page's component tree, as the backend added it (the module's `name` in the frontend manifest, which the generated loader hands each module's setup). A backend that does not send `module` reaches no private component, whatever the tree names.
+When two modules register the same name, the module of higher priority keeps it and a warning names both. A module that means to replace another's component registers its full name without its own prefix, which is not reported:
+
+```ts
+sdk.registerComponent("AcmeBanner", MyBanner, { prefix: false });
+```
+
+A module's `app/build/` directory is never auto-imported (see below): its components are registered so backend pages can name them, but they are the module's internals, not a surface other modules should build on.
 
 ### Auto-imports (`dms.frontend.build.ts`)
 

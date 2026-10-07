@@ -15,6 +15,8 @@ import {
   type Component,
   type ComponentPublicInstance,
   type ComputedRef,
+  camelize,
+  capitalize,
   computed,
   defineComponent,
   type EffectScope,
@@ -51,12 +53,6 @@ export interface DmsPagePayload {
   layoutUrl?: string;
   layout?: DmsPageLayout;
   shared?: DmsSharedPagePayload;
-  /**
-   * The frontend module that owns the page's component tree, by the name the
-   * backend added it under (its manifest name). Components that module
-   * registered with `{ private: true }` resolve in this page's tree only.
-   */
-  module?: string;
   [key: string]: unknown;
 }
 export interface DmsSharedPagePayload {
@@ -236,12 +232,11 @@ export interface DmsPluginRegistrationOptions {
 export type DmsComponentPreloader = () => Promise<unknown>;
 export interface DmsComponentRegistrationOptions {
   /**
-   * Keeps the component out of the application's global components: it
-   * resolves by name only in the component trees of the backend pages the
-   * registering module owns (see `DmsPagePayload.module`), where it takes
-   * precedence over a public component of the same name. Defaults to `false`.
+   * Registers the component under `name` as given, without the module's
+   * `componentPrefix`: the way to replace a component another module
+   * registers, from a module of higher priority. Defaults to `true`.
    */
-  private?: boolean;
+  prefix?: boolean;
 }
 export interface DmsFrontendSdk {
   options: DmsModuleOptions;
@@ -288,13 +283,17 @@ export interface DmsFrontendSdk {
   use(plugin: Plugin): void;
 }
 export interface DmsFrontendModule {
+  /**
+   * Put in front of the name of every component the module registers, so
+   * the components of two modules never collide: with `"Acme"`,
+   * `registerComponent("Banner", ...)` registers `AcmeBanner`, the name the
+   * backend sends and templates use.
+   */
+  componentPrefix?: string;
   setup(sdk: DmsFrontendSdk): void | Promise<void>;
 }
 export interface DmsFrontendModuleRegistration {
-  /**
-   * The module's manifest name, which its backend pages carry as their
-   * `module`. Without it, the module's private components never resolve.
-   */
+  /** The module's manifest name, which collision warnings name it by. */
   name?: string;
   module: DmsFrontendModule;
   options: DmsModuleOptions;
@@ -315,8 +314,10 @@ export interface DmsRuntimeHooks {
 interface DmsComponentRegistration {
   name: string;
   component: Component;
-  /** The registering module, for a private component. */
+  /** The registering module, for a collision warning. */
   module?: string;
+  /** Registered without the module's prefix, to replace another module's. */
+  unprefixed?: boolean;
 }
 
 interface DmsFrontendEntry {
@@ -339,8 +340,6 @@ interface DmsPluginRegistration {
  */
 interface DmsFrontendRegistry {
   components: Map<string, DmsComponentRegistration>;
-  /** Private components, by registering module, then by normalized name. */
-  privateComponents: Map<string, Map<string, DmsComponentRegistration>>;
   pages: Map<string, DmsFrontendEntry>;
   dynamicPages: Map<string, DmsFrontendEntry>;
   layouts: Map<string, DmsFrontendEntry>;
@@ -389,7 +388,6 @@ export interface DmsFrontendRuntime {
 function createDmsFrontendRegistry(): DmsFrontendRegistry {
   return {
     components: new Map(),
-    privateComponents: new Map(),
     pages: new Map(),
     dynamicPages: new Map(),
     layouts: new Map(),
@@ -1256,52 +1254,59 @@ export function dmsPageSuspenseProps(): Record<string, () => void> {
   };
 }
 
+/**
+ * The key a component name is registered and resolved under: case, a leading
+ * `lazy` and every non-alphanumeric character ignored, so PascalCase,
+ * kebab-case and lowercase spellings match. Unlike `normalizeDmsName`, a
+ * leading `Dms` is kept: it is the DMS module's prefix, and dropping it would
+ * make `DmsBanner` and another module's `Banner` the same component.
+ */
+function normalizeDmsComponentName(name: string): string {
+  return name
+    .replace(/^lazy/i, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase();
+}
+
+function moduleLabel(module: string | undefined): string {
+  return module ? `module "${module}"` : "an unnamed module";
+}
+
+/**
+ * A component registered under a name already taken is ignored: the first
+ * registration, from the module of higher priority, keeps the name. That is
+ * how a module replaces another's component, by registering its full name
+ * without a prefix, and only a collision neither side asked for is reported.
+ */
 function registerDmsComponentEntry(
   entries: Map<string, DmsComponentRegistration>,
   registration: DmsComponentRegistration,
 ): void {
-  const key = normalizeDmsName(registration.name);
-  if (!entries.has(key)) entries.set(key, registration);
+  const key = normalizeDmsComponentName(registration.name);
+  const existing = entries.get(key);
+  if (!existing) {
+    entries.set(key, registration);
+    return;
+  }
+  if (existing.unprefixed || registration.unprefixed) return;
+  console.warn(
+    `[dms] Component "${registration.name}" from ${moduleLabel(registration.module)} is ignored: ` +
+      `${moduleLabel(existing.module)} already registers "${existing.name}". ` +
+      "Give the modules different component prefixes.",
+  );
 }
 /** Registers a component unless a higher-priority module already owns its name. */
 export function registerDmsComponent(name: string, component: Component): void {
   registerDmsComponentEntry(registry.components, { name, component });
 }
 /**
- * Resolves a registered component by name. `owner` is the `module` of the
- * backend page whose component tree is rendered: the private components that
- * module registered resolve there, ahead of a public one of the same name.
- * Without it, only public components resolve.
+ * Resolves a registered component by its full name, prefix included. Case,
+ * a leading `lazy` and non-alphanumeric characters are ignored.
  */
-export function resolveDmsComponent(
-  name: string,
-  owner?: string,
-): Component | undefined {
-  const key = normalizeDmsName(name);
-  const own = owner
-    ? registry.privateComponents.get(owner)?.get(key)
-    : undefined;
-  return (own ?? registry.components.get(key))?.component;
+export function resolveDmsComponent(name: string): Component | undefined {
+  return registry.components.get(normalizeDmsComponentName(name))?.component;
 }
 export const getDmsComponent = resolveDmsComponent;
-
-const PRIVATE_COMPONENT_SEPARATOR = "::";
-
-function registeredComponents(): DmsComponentRegistration[] {
-  return [
-    ...registry.components.values(),
-    ...[...registry.privateComponents.values()].flatMap((entries) => [
-      ...entries.values(),
-    ]),
-  ];
-}
-
-/** Names a registered component across the server render and hydration. */
-function componentReference({ name, module }: DmsComponentRegistration) {
-  return module === undefined
-    ? name
-    : `${module}${PRIVATE_COMPONENT_SEPARATOR}${name}`;
-}
 
 /**
  * Records, by registered name, every registered async component a server
@@ -1312,9 +1317,9 @@ function componentReference({ name, module }: DmsComponentRegistration) {
  */
 export function trackDmsAsyncComponents(app: App): Set<string> {
   const names = new Map<Component, string>();
-  registeredComponents().forEach((registration) => {
-    if ((registration.component as DmsAsyncComponent).__asyncLoader)
-      names.set(registration.component, componentReference(registration));
+  registry.components.forEach(({ component, name }) => {
+    if ((component as DmsAsyncComponent).__asyncLoader)
+      names.set(component, name);
   });
   const rendered = new Set<string>();
   app.mixin({
@@ -1357,18 +1362,10 @@ export function trackDmsServerScopes(app: App): () => void {
 export async function resolveDmsAsyncComponents(
   names: readonly string[],
 ): Promise<void> {
-  const components = new Map(
-    registeredComponents().map((registration) => [
-      componentReference(registration),
-      registration.component,
-    ]),
-  );
   await Promise.all(
     names.map((name) =>
       (
-        (components.get(name) ?? resolveDmsComponent(name)) as
-          | DmsAsyncComponent
-          | undefined
+        resolveDmsComponent(name) as DmsAsyncComponent | undefined
       )?.__asyncLoader?.(),
     ),
   );
@@ -1410,7 +1407,6 @@ function collectRenderedComponentNames(
 
 async function preloadDmsLayoutComponents(
   layout: DmsPageLayout | undefined,
-  owner: string | undefined,
 ): Promise<void> {
   const names = new Set<string>();
   collectRenderedComponentNames(layout?.layout, names);
@@ -1419,7 +1415,7 @@ async function preloadDmsLayoutComponents(
   });
   await Promise.all(
     [...names].map((name) => {
-      const component = resolveDmsComponent(name, owner) as
+      const component = resolveDmsComponent(name) as
         | DmsAsyncComponent
         | undefined;
       return component?.__asyncLoader?.();
@@ -1561,8 +1557,7 @@ export async function preloadDmsPage(props: DmsPageProps): Promise<void> {
       (entry?.component as DmsAsyncComponent | undefined)?.__asyncLoader?.(),
     ]),
   );
-  if (!props.error)
-    await preloadDmsLayoutComponents(props.page.layout, props.page.module);
+  if (!props.error) await preloadDmsLayoutComponents(props.page.layout);
 }
 
 export function useDmsInjection<T>(
@@ -1580,29 +1575,28 @@ function registerDmsFrontendEntry(
   if (!entries.has(name)) entries.set(name, { component, preload });
 }
 
-function privateComponentsOf(
-  target: DmsFrontendRegistry,
-  owner: string,
-): Map<string, DmsComponentRegistration> {
-  const entries = target.privateComponents.get(owner) ?? new Map();
-  target.privateComponents.set(owner, entries);
-  return entries;
+/** `name` behind `prefix`, as a PascalCase component name. */
+function prefixedComponentName(prefix: string, name: string): string {
+  return prefix ? `${prefix}${capitalize(camelize(name))}` : name;
 }
 
 function createSdk(
   target: DmsFrontendRegistry,
-  { name: owner = "", options }: DmsFrontendModuleRegistration,
+  {
+    name: module,
+    module: { componentPrefix = "" },
+    options,
+  }: DmsFrontendModuleRegistration,
 ): DmsFrontendSdk {
   return {
     options,
-    registerComponent: (name, component, registration = {}) =>
-      registration.private
-        ? registerDmsComponentEntry(privateComponentsOf(target, owner), {
-            name,
-            component,
-            module: owner,
-          })
-        : registerDmsComponentEntry(target.components, { name, component }),
+    registerComponent: (name, component, { prefix = true } = {}) =>
+      registerDmsComponentEntry(target.components, {
+        name: prefix ? prefixedComponentName(componentPrefix, name) : name,
+        component,
+        module,
+        unprefixed: !prefix,
+      }),
     registerPage: (name, component, preload) => {
       const key = normalizeDmsPageKey(name);
       registerDmsFrontendEntry(target.pages, key, component, preload);
