@@ -35,6 +35,7 @@ import {
   installDmsPlugins,
   preloadDmsPage,
   provideDmsFrontendRuntime,
+  readDmsLocaleCookie,
   resolveDmsAsyncComponents,
   resolveDmsComponent,
   serializeDmsAsyncData,
@@ -260,7 +261,12 @@ export async function configureDmsApp(
       options.serverFetch as typeof import("ofetch").ofetch,
       readServerRendered<Record<string, unknown>>(SSR_ASYNC_DATA_ID, {}),
     );
-  const locale = userLocale(options.initialPageProps.user) ?? DEFAULT_LOCALE;
+  // The signed-in user's language, else the one this browser picked, which is
+  // how a visitor's choice on a public page survives a reload.
+  const locale =
+    userLocale(options.initialPageProps.user) ??
+    readDmsLocaleCookie(runtime, supportedLocales) ??
+    DEFAULT_LOCALE;
   const messages = await loadLocaleMessages(locale);
   const i18n = createI18n({
     legacy: false,

@@ -1143,6 +1143,35 @@ function createCookieRef<T>(
   });
 }
 
+// The language a visitor picks, kept by the browser so that a reload renders
+// in it. A signed-in user's own language still comes first.
+const LOCALE_COOKIE = "dms_locale";
+const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+/**
+ * The language this browser picked: read from `document.cookie`, or in a
+ * server render from the request. Only one of `supportedLocales` counts.
+ */
+export function readDmsLocaleCookie(
+  runtime: DmsFrontendRuntime,
+  supportedLocales: string[],
+): string | undefined {
+  const source =
+    typeof document === "undefined" ? runtime.requestCookies : document.cookie;
+  try {
+    const locale = parseCookieValue<unknown>(
+      readCookie(source, LOCALE_COOKIE),
+      {},
+    );
+    return typeof locale === "string" && supportedLocales.includes(locale)
+      ? locale
+      : undefined;
+  } catch {
+    // A value that is not URI-encoded: as if the browser had picked none.
+    return undefined;
+  }
+}
+
 /**
  * A cookie as a ref, shared by every caller of the same name — so a plugin and
  * a page reading one preference see each other's writes — and read on the
@@ -1707,6 +1736,12 @@ export async function installDmsPlugins(
     const messages = await loadLocaleMessages(locale);
     i18n.setLocaleMessage(locale, messages);
     i18n.locale.value = locale;
+    if (typeof document !== "undefined" && supportedLocales.includes(locale))
+      writeCookie(LOCALE_COOKIE, locale, {
+        maxAge: LOCALE_COOKIE_MAX_AGE,
+        sameSite: "lax",
+        secure: globalThis.location?.protocol === "https:",
+      });
   };
   dmsI18n.locales = computed(() =>
     supportedLocales.map((code) => ({
