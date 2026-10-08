@@ -9,16 +9,27 @@ import {
   sessionFrom,
 } from "./oauth.mjs";
 import {
+  clearSealedCookie,
   clearSession,
+  isPersistent,
   persistAccountSession,
   readAccount,
+  readSealedCookie,
   readSession,
   removeAccount,
   setRequestSession,
+  storeAccount,
+  writeSealedCookie,
 } from "./session.mjs";
 
 const REFRESH_TTL_MS = 15_000;
 const refreshes = new Map();
+
+// Carries the "keep me signed in" choice of a login across its 2FA step, whose
+// request names only the challenge. Lives as long as the challenge token.
+const PENDING_LOGIN = "dms_pending_login";
+const PENDING_LOGIN_PATH = "/auth/verify-2fa";
+const PENDING_LOGIN_LIFETIME_S = 300;
 
 const PASSTHROUGH = new Map([
   ["/auth/request-2fa-email", "/api/auth/request-2fa-email"],
@@ -101,20 +112,72 @@ function singleFlight(token, operation) {
   return promise;
 }
 
-async function establishWith(request, response, endpoint, payload) {
+async function establishWith(
+  request,
+  response,
+  endpoint,
+  payload,
+  persistent = true,
+) {
   const result = await backend(endpoint, request, {
     method: "POST",
     body: payload,
   });
+  if (result.requires_2fa && typeof result.two_factor_token === "string")
+    writeSealedCookie(
+      response,
+      PENDING_LOGIN,
+      { token: result.two_factor_token, persistent },
+      PENDING_LOGIN_LIFETIME_S,
+      PENDING_LOGIN_PATH,
+    );
   if (result.requires_2fa || result.requires_tenant_assignment)
     return json(response, 200, result);
-  const session = sessionFrom(result);
+  if (readSealedCookie(request, PENDING_LOGIN))
+    clearSealedCookie(response, PENDING_LOGIN, PENDING_LOGIN_PATH);
+  const session = sessionFrom(result, persistent);
   const account = persistAccountSession(request, response, session);
   json(response, 200, { user: result.user, account });
 }
 
 async function establish(request, response, endpoint) {
   return establishWith(request, response, endpoint, await body(request));
+}
+
+/**
+ * Sign in with a password. Only a login that asked to be kept signed in
+ * outlives the browser; any other ends when the browser closes.
+ */
+async function login(request, response) {
+  const input = await body(request);
+  return establishWith(
+    request,
+    response,
+    "/api/auth/login",
+    input,
+    input.keep_login === true,
+  );
+}
+
+/**
+ * Finish a login on its 2FA step, with the lifetime the login chose. A
+ * challenge that no login of this browser left a choice for, such as the one
+ * an OAuth sign-in hands over, keeps the default.
+ */
+async function verifyTwoFactor(request, response) {
+  const input = await body(request);
+  const pending = readSealedCookie(request, PENDING_LOGIN);
+  const persistent =
+    typeof input.token === "string" && pending?.token === input.token
+      ? isPersistent(pending)
+      : true;
+  return establishWith(
+    request,
+    response,
+    "/api/auth/verify-2fa",
+    input,
+    persistent,
+  );
 }
 
 /**
@@ -196,7 +259,7 @@ export async function refreshSession(request, response) {
     const user = await backend("/api/auth/me", request, {
       token: tokens.access_token,
     });
-    const refreshed = sessionFrom({ ...tokens, user });
+    const refreshed = sessionFrom({ ...tokens, user }, isPersistent(session));
     persistAccountSession(request, response, refreshed, session.accountId);
     setRequestSession(request, refreshed);
     return refreshed;
@@ -246,7 +309,7 @@ async function switchTenant(request, response) {
   const user = await backend("/api/auth/me", request, {
     token: tokens.access_token,
   });
-  const switched = sessionFrom({ ...tokens, user });
+  const switched = sessionFrom({ ...tokens, user }, isPersistent(session));
   persistAccountSession(request, response, switched, session.accountId);
   json(response, 200, { success: true, user });
 }
@@ -263,7 +326,7 @@ async function switchAccount(request, response) {
     const user = await backend("/api/auth/me", request, {
       token: tokens.access_token,
     });
-    const session = sessionFrom({ ...tokens, user });
+    const session = sessionFrom({ ...tokens, user }, isPersistent(account));
     const descriptor = persistAccountSession(
       request,
       response,
@@ -281,6 +344,36 @@ async function switchAccount(request, response) {
   }
 }
 
+/**
+ * Keep the tokens a validation refreshed, without changing which account is
+ * signed in. Another account only has its own cookie updated. The current one
+ * also has the session updated, since a refresh may have rotated the token the
+ * session holds; it keeps its user as the backend gave it.
+ */
+function storeValidatedAccount(request, response, account, accountId, tokens) {
+  const current = readSession(request);
+  if (current?.accountId === accountId) {
+    persistAccountSession(
+      request,
+      response,
+      sessionFrom({ ...tokens, user: current.user }, isPersistent(current)),
+      accountId,
+    );
+    return;
+  }
+  const user = {
+    _id: account.userId,
+    email: account.email,
+    name: account.name,
+  };
+  storeAccount(
+    request,
+    response,
+    sessionFrom({ ...tokens, user }, isPersistent(account)),
+    accountId,
+  );
+}
+
 async function validateAccount(request, response) {
   const input = await body(request);
   const account = readAccount(request, input.accountId);
@@ -290,15 +383,7 @@ async function validateAccount(request, response) {
       method: "POST",
       body: { token: account.refreshToken },
     });
-    persistAccountSession(
-      request,
-      response,
-      sessionFrom({
-        ...tokens,
-        user: { id: account.userId, email: account.email, name: account.name },
-      }),
-      input.accountId,
-    );
+    storeValidatedAccount(request, response, account, input.accountId, tokens);
     json(response, 200, { valid: true });
   } catch (error) {
     const rejected =
@@ -309,12 +394,10 @@ async function validateAccount(request, response) {
 }
 
 const actions = {
-  "/auth/login": (request, response) =>
-    establish(request, response, "/api/auth/login"),
+  "/auth/login": login,
   "/auth/signup": (request, response) =>
     establish(request, response, "/api/auth/signup"),
-  "/auth/verify-2fa": (request, response) =>
-    establish(request, response, "/api/auth/verify-2fa"),
+  "/auth/verify-2fa": verifyTwoFactor,
   "/auth/establish": establishFromEndpoint,
   "/auth/switch-account": switchAccount,
   "/auth/switch-tenant": switchTenant,
