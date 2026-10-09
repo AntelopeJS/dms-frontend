@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.0...v0.5.1)
+
+### 🩹 Fixes
+
+- **auth:** Honour "keep my active session" and stop account validation from switching the session ([#104](https://github.com/AntelopeJS/dms-frontend/pull/104))
+
+### ❤️ Contributors
+
+- Maxime Westhoven ([@mwesto](http://github.com/mwesto))
+
 ## v0.5.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.4.0...v0.5.0)
