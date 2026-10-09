@@ -60,9 +60,27 @@ function cookieValue(request, name) {
     .find(([key]) => key === name)?.[1];
 }
 
+/**
+ * Cookie attributes. Without a `maxAge` the cookie lasts as long as the
+ * browser session: it is gone once the browser is closed.
+ */
 function attributes(maxAge, path = "/") {
   const secure = process.env.DMS_COOKIE_SECURE !== "false" ? "; Secure" : "";
-  return `Path=${path}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+  const lifetime = maxAge === undefined ? "" : `; Max-Age=${maxAge}`;
+  return `Path=${path}; HttpOnly; SameSite=Lax${lifetime}${secure}`;
+}
+
+/**
+ * Whether a session, or a stored account, outlives the browser. Only a login
+ * that left "keep me signed in" unchecked says no; a cookie written before
+ * the flag existed carries none, and keeps the lifetime it was given then.
+ */
+export function isPersistent(session) {
+  return session?.persistent !== false;
+}
+
+function lifetime(persistent) {
+  return persistent ? MAX_AGE : undefined;
 }
 
 function appendCookie(response, cookie) {
@@ -87,6 +105,7 @@ function descriptor(session, accountId) {
     email: session.user?.email,
     name: session.user?.name,
     activeTenantId: session.activeTenantId,
+    persistent: isPersistent(session),
   };
 }
 
@@ -103,7 +122,7 @@ export function setRequestSession(request, session) {
 export function writeSession(response, session) {
   appendCookie(
     response,
-    `${SESSION_COOKIE}=${encode(session)}; ${attributes(MAX_AGE)}`,
+    `${SESSION_COOKIE}=${encode(session)}; ${attributes(lifetime(isPersistent(session)))}`,
   );
 }
 
@@ -117,9 +136,10 @@ export function readAccounts(request) {
 }
 
 function writeAccountIndex(response, accounts) {
+  const persistent = Object.values(accounts).some(isPersistent);
   appendCookie(
     response,
-    `${ACCOUNT_INDEX_COOKIE}=${encode(accounts)}; ${attributes(MAX_AGE)}`,
+    `${ACCOUNT_INDEX_COOKIE}=${encode(accounts)}; ${attributes(lifetime(persistent))}`,
   );
 }
 
@@ -136,7 +156,7 @@ export function storeAccount(request, response, session, accountId) {
   writeAccountIndex(response, accounts);
   appendCookie(
     response,
-    `${accountCookieName(id)}=${encode({ refreshToken: session.refreshToken, ...accountDescriptor })}; ${attributes(MAX_AGE)}`,
+    `${accountCookieName(id)}=${encode({ refreshToken: session.refreshToken, ...accountDescriptor })}; ${attributes(lifetime(accountDescriptor.persistent))}`,
   );
   return accountDescriptor;
 }
@@ -177,13 +197,19 @@ export function readSealedCookie(request, name) {
   return value ? decode(value) : undefined;
 }
 
-export function writeSealedCookie(response, name, value, maxAge) {
+export function writeSealedCookie(
+  response,
+  name,
+  value,
+  maxAge,
+  path = "/auth/oauth",
+) {
   appendCookie(
     response,
-    `${name}=${encode(value)}; ${attributes(maxAge, "/auth/oauth")}`,
+    `${name}=${encode(value)}; ${attributes(maxAge, path)}`,
   );
 }
 
-export function clearSealedCookie(response, name) {
-  appendCookie(response, `${name}=; ${attributes(0, "/auth/oauth")}`);
+export function clearSealedCookie(response, name, path = "/auth/oauth") {
+  appendCookie(response, `${name}=; ${attributes(0, path)}`);
 }

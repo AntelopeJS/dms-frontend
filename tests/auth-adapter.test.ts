@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
 import {
   backend,
   publicBackendMessage,
@@ -518,5 +518,299 @@ describe("session establishment from a module endpoint", () => {
     assert.equal(called, false);
     assert.equal(response.statusCode, 403);
     assert.equal(response.headers.get("set-cookie"), undefined);
+  });
+});
+
+/** Every cookie a response sets, by name. */
+function writtenCookies(response: CookieResponse): Map<string, string> {
+  const header = response.headers.get("set-cookie");
+  const cookies = Array.isArray(header) ? header : header ? [header] : [];
+  return new Map(cookies.map((cookie) => [cookie.split("=", 1)[0], cookie]));
+}
+
+function cookieRequest(payload: unknown, cookie?: string) {
+  const request = establishRequest(payload);
+  if (cookie) Object.assign(request.headers, { cookie });
+  return request;
+}
+
+/** Name=value pairs of the cookies a response set, as a browser sends them. */
+function cookieHeader(response: CookieResponse, names: string[]): string {
+  const written = writtenCookies(response);
+  return names.map((name) => written.get(name)?.split(";", 1)[0]).join("; ");
+}
+
+describe("keep me signed in", () => {
+  const LOGIN_URL = new URL("http://frontend.local/auth/login");
+  const VERIFY_URL = new URL("http://frontend.local/auth/verify-2fa");
+  const THIRTY_DAYS = `Max-Age=${60 * 60 * 24 * 30}`;
+  let requires2fa = false;
+  let api: ReturnType<typeof createServer>;
+
+  before(async () => {
+    api = createServer((request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      if (request.url === "/api/auth/login" && requires2fa) {
+        response.end(
+          JSON.stringify({
+            requires_2fa: true,
+            two_factor_token: "challenge-1",
+            methods: ["totp"],
+          }),
+        );
+        return;
+      }
+      response.end(
+        JSON.stringify({
+          access_token: accessToken("tenant-1"),
+          refresh_token: "keep-login-refresh-token",
+          user: { _id: "user-1", email: "a@b.test", name: "A" },
+        }),
+      );
+    });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const address = api.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_SESSION_SECRET = "dms-frontend-test-session-secret-value";
+    process.env.DMS_COOKIE_SECURE = "false";
+  });
+
+  after(() => {
+    api.close();
+    delete process.env.DMS_SESSION_SECRET;
+    delete process.env.DMS_COOKIE_SECURE;
+  });
+
+  /** The cookies that sign the browser in: the session and its account. */
+  function signInCookies(response: CookieResponse): string[] {
+    return [...writtenCookies(response)]
+      .filter(
+        ([name]) =>
+          name.startsWith("dms_session") || name.startsWith("dms_account"),
+      )
+      .map(([, cookie]) => cookie);
+  }
+
+  it("ends a login that left the box unchecked with the browser", async () => {
+    requires2fa = false;
+    const response = capturedResponse();
+    await handleAuth(
+      cookieRequest({ email: "a@b.test", password: "secret" }),
+      response,
+      LOGIN_URL,
+    );
+    assert.equal(response.statusCode, 200);
+    const cookies = signInCookies(response);
+    assert.equal(cookies.length, 3);
+    for (const cookie of cookies) assert.doesNotMatch(cookie, /Max-Age/);
+    assert.equal(JSON.parse(response.payload).account.persistent, false);
+  });
+
+  it("keeps a login that checked the box for thirty days", async () => {
+    requires2fa = false;
+    const response = capturedResponse();
+    await handleAuth(
+      cookieRequest({
+        email: "a@b.test",
+        password: "secret",
+        keep_login: true,
+      }),
+      response,
+      LOGIN_URL,
+    );
+    const cookies = signInCookies(response);
+    assert.equal(cookies.length, 3);
+    for (const cookie of cookies) assert.ok(cookie.includes(THIRTY_DAYS));
+  });
+
+  for (const keepLogin of [false, true])
+    it(`carries ${keepLogin ? "a checked" : "an unchecked"} box across the 2FA step`, async () => {
+      requires2fa = true;
+      const login = capturedResponse();
+      await handleAuth(
+        cookieRequest({
+          email: "a@b.test",
+          password: "secret",
+          keep_login: keepLogin,
+        }),
+        login,
+        LOGIN_URL,
+      );
+      assert.equal(JSON.parse(login.payload).requires_2fa, true);
+      assert.deepEqual(signInCookies(login), []);
+      const pending = writtenCookies(login).get("dms_pending_login");
+      assert.match(String(pending), /Path=\/auth\/verify-2fa;.*Max-Age=300/);
+
+      const verify = capturedResponse();
+      await handleAuth(
+        cookieRequest(
+          { token: "challenge-1", code: "123456", method: "totp" },
+          cookieHeader(login, ["dms_pending_login"]),
+        ),
+        verify,
+        VERIFY_URL,
+      );
+      assert.equal(verify.statusCode, 200);
+      const cookies = signInCookies(verify);
+      assert.equal(cookies.length, 3);
+      for (const cookie of cookies)
+        if (keepLogin) assert.ok(cookie.includes(THIRTY_DAYS));
+        else assert.doesNotMatch(cookie, /Max-Age/);
+      assert.match(
+        String(writtenCookies(verify).get("dms_pending_login")),
+        /Max-Age=0/,
+      );
+    });
+
+  it("ignores a choice left for another challenge, as for an OAuth 2FA step", async () => {
+    requires2fa = true;
+    const login = capturedResponse();
+    await handleAuth(
+      cookieRequest({ email: "a@b.test", password: "secret" }),
+      login,
+      LOGIN_URL,
+    );
+    const verify = capturedResponse();
+    await handleAuth(
+      cookieRequest(
+        { token: "oauth-challenge", code: "123456", method: "totp" },
+        cookieHeader(login, ["dms_pending_login"]),
+      ),
+      verify,
+      VERIFY_URL,
+    );
+    for (const cookie of signInCookies(verify))
+      assert.ok(cookie.includes(THIRTY_DAYS));
+  });
+
+  it("keeps a session that ends with the browser that way when it is refreshed", async () => {
+    requires2fa = false;
+    const login = capturedResponse();
+    await handleAuth(
+      cookieRequest({ email: "a@b.test", password: "secret" }),
+      login,
+      LOGIN_URL,
+    );
+    const refreshed = cookieResponse();
+    await refreshSession(
+      {
+        headers: { cookie: cookieHeader(login, ["dms_session"]) },
+        socket: { remoteAddress: "127.0.0.1" },
+      },
+      refreshed,
+    );
+    const cookies = signInCookies(refreshed);
+    assert.equal(cookies.length, 3);
+    for (const cookie of cookies) assert.doesNotMatch(cookie, /Max-Age/);
+  });
+});
+
+/** The cookies a browser holds after `responses`, as its `cookie` header. */
+function cookieJar(...responses: CookieResponse[]): string {
+  const jar = new Map<string, string>();
+  for (const response of responses)
+    for (const [name, cookie] of writtenCookies(response))
+      if (/Max-Age=0/.test(cookie)) jar.delete(name);
+      else jar.set(name, cookie.split(";", 1)[0]);
+  return [...jar.values()].join("; ");
+}
+
+describe("account switcher validation", () => {
+  const LOGIN_URL = new URL("http://frontend.local/auth/login");
+  const VALIDATE_URL = new URL("http://frontend.local/auth/validate-account");
+  const SESSION_URL = new URL("http://frontend.local/api/_auth/session");
+  let api: ReturnType<typeof createServer>;
+
+  before(async () => {
+    api = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        const input = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+        const name = String(input.email ?? input.token).slice(0, 1);
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            access_token: accessToken(`tenant-${name}`),
+            refresh_token: `${name}-switcher-refresh-token`,
+            user: { _id: `user-${name}`, email: `${name}@b.test`, name },
+          }),
+        );
+      });
+    });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const address = api.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_SESSION_SECRET = "dms-frontend-test-session-secret-value";
+    process.env.DMS_COOKIE_SECURE = "false";
+  });
+
+  after(() => {
+    api.close();
+    delete process.env.DMS_SESSION_SECRET;
+    delete process.env.DMS_COOKIE_SECURE;
+  });
+
+  /** Sign in as `a`, then add `b`, which becomes the current account. */
+  async function signInTwice() {
+    const first = capturedResponse();
+    await handleAuth(
+      cookieRequest({ email: "a@b.test", password: "secret" }),
+      first,
+      LOGIN_URL,
+    );
+    const second = capturedResponse();
+    await handleAuth(
+      cookieRequest(
+        { email: "b@b.test", password: "secret" },
+        cookieJar(first),
+      ),
+      second,
+      LOGIN_URL,
+    );
+    return {
+      a: JSON.parse(first.payload).account.accountId as string,
+      b: JSON.parse(second.payload).account.accountId as string,
+      cookies: cookieJar(first, second),
+    };
+  }
+
+  async function currentUser(cookie: string) {
+    const response = capturedResponse();
+    await handleAuth(
+      { method: "GET", headers: { cookie } },
+      response,
+      SESSION_URL,
+    );
+    return JSON.parse(response.payload).user;
+  }
+
+  it("refreshes another account without making it the current one", async () => {
+    const { a, cookies } = await signInTwice();
+    const response = capturedResponse();
+    await handleAuth(
+      cookieRequest({ accountId: a }, cookies),
+      response,
+      VALIDATE_URL,
+    );
+    assert.deepEqual(JSON.parse(response.payload), { valid: true });
+    const written = writtenCookies(response);
+    assert.equal(written.has("dms_session"), false);
+    assert.ok(written.has(`dms_account_${a.replaceAll("-", "")}`));
+  });
+
+  it("keeps the current account's session, and its user, in sync", async () => {
+    const { b, cookies } = await signInTwice();
+    const response = capturedResponse();
+    await handleAuth(
+      cookieRequest({ accountId: b }, cookies),
+      response,
+      VALIDATE_URL,
+    );
+    assert.ok(writtenCookies(response).has("dms_session"));
+    const user = await currentUser(cookieJar(response));
+    assert.deepEqual(user, { _id: "user-b", email: "b@b.test", name: "b" });
   });
 });

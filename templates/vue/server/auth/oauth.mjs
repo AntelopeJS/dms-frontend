@@ -197,7 +197,13 @@ export function oauthHandoff(request, response) {
   json(response, 200, handoff);
 }
 
-export function sessionFrom(result) {
+/**
+ * The session a token pair opens.
+ *
+ * @param result Backend answer carrying the tokens and the user
+ * @param persistent Whether the session outlives the browser
+ */
+export function sessionFrom(result, persistent = true) {
   const payload = JSON.parse(
     Buffer.from(
       result.access_token.split(".")[1] ?? "",
@@ -209,5 +215,6 @@ export function sessionFrom(result) {
     accessToken: result.access_token,
     refreshToken: result.refresh_token,
     activeTenantId: payload.tenantId ?? "default",
+    persistent,
   };
 }
