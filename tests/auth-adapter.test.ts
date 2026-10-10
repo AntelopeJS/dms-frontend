@@ -27,6 +27,8 @@ import {
 import {
   assertAccountInvariant,
   persistAccountSession,
+  readSession,
+  scopedCookieName,
   writeSession,
 } from "../templates/vue/server/auth/session.mjs";
 
@@ -318,6 +320,53 @@ function accessToken(tenantId: string): string {
   return `header.${claims}.signature`;
 }
 
+describe("cookies of instances sharing a host", () => {
+  /** Run `action` as the frontend of `backendUrl`, with its own secret. */
+  function asInstance<T>(backendUrl: string, secret: string, action: () => T) {
+    const previous = process.env.DMS_API_BASE_URL;
+    process.env.DMS_API_BASE_URL = backendUrl;
+    process.env.DMS_SESSION_SECRET = secret;
+    try {
+      return action();
+    } finally {
+      process.env.DMS_API_BASE_URL = previous;
+      delete process.env.DMS_SESSION_SECRET;
+    }
+  }
+  const first = ["http://localhost:5010", "a".repeat(32)] as const;
+  const second = ["http://localhost:5020", "b".repeat(32)] as const;
+
+  it("names them after the backend, whatever its spelling", () => {
+    const name = (backendUrl: string) =>
+      asInstance(backendUrl, "a".repeat(32), () =>
+        scopedCookieName("dms_session"),
+      );
+    assert.match(name(first[0]), /^dms_session_[0-9a-f]{12}$/);
+    assert.equal(name(first[0]), name("HTTP://127.0.0.1:5010/"));
+    assert.notEqual(name(first[0]), name(second[0]));
+  });
+
+  it("keeps one instance's session out of another's", () => {
+    const write = (backendUrl: string, secret: string, accountId: string) =>
+      asInstance(backendUrl, secret, () => {
+        const response = cookieResponse();
+        writeSession(response, { refreshToken: "refresh", accountId });
+        return String(response.headers.get("set-cookie")).split(";", 1)[0];
+      });
+    // The browser sends both, as it does for two ports of one host.
+    const cookie = [
+      write(...first, "account-1"),
+      write(...second, "account-2"),
+    ].join("; ");
+    const read = (backendUrl: string, secret: string) =>
+      asInstance(backendUrl, secret, () =>
+        readSession({ headers: { cookie } }),
+      );
+    assert.equal(read(...first)?.accountId, "account-1");
+    assert.equal(read(...second)?.accountId, "account-2");
+  });
+});
+
 const ESTABLISH_URL = new URL("http://frontend.local/auth/establish");
 
 describe("session freshness", () => {
@@ -489,7 +538,11 @@ describe("session establishment from a module endpoint", () => {
 
     const cookies = response.headers.get("set-cookie");
     const written = Array.isArray(cookies) ? cookies : [cookies];
-    assert.ok(written.some((cookie) => cookie?.startsWith("dms_session=")));
+    assert.ok(
+      written.some((cookie) =>
+        cookie?.startsWith(`${scopedCookieName("dms_session")}=`),
+      ),
+    );
   });
 
   it("refuses an endpoint the deployment never declared, without calling it", async () => {
@@ -587,7 +640,7 @@ describe("keep me signed in", () => {
     return [...writtenCookies(response)]
       .filter(
         ([name]) =>
-          name.startsWith("dms_session") || name.startsWith("dms_account"),
+          name.startsWith("dms_session_") || name.startsWith("dms_account_"),
       )
       .map(([, cookie]) => cookie);
   }
@@ -639,14 +692,16 @@ describe("keep me signed in", () => {
       );
       assert.equal(JSON.parse(login.payload).requires_2fa, true);
       assert.deepEqual(signInCookies(login), []);
-      const pending = writtenCookies(login).get("dms_pending_login");
+      const pending = writtenCookies(login).get(
+        scopedCookieName("dms_pending_login"),
+      );
       assert.match(String(pending), /Path=\/auth\/verify-2fa;.*Max-Age=300/);
 
       const verify = capturedResponse();
       await handleAuth(
         cookieRequest(
           { token: "challenge-1", code: "123456", method: "totp" },
-          cookieHeader(login, ["dms_pending_login"]),
+          cookieHeader(login, [scopedCookieName("dms_pending_login")]),
         ),
         verify,
         VERIFY_URL,
@@ -658,7 +713,9 @@ describe("keep me signed in", () => {
         if (keepLogin) assert.ok(cookie.includes(THIRTY_DAYS));
         else assert.doesNotMatch(cookie, /Max-Age/);
       assert.match(
-        String(writtenCookies(verify).get("dms_pending_login")),
+        String(
+          writtenCookies(verify).get(scopedCookieName("dms_pending_login")),
+        ),
         /Max-Age=0/,
       );
     });
@@ -675,7 +732,7 @@ describe("keep me signed in", () => {
     await handleAuth(
       cookieRequest(
         { token: "oauth-challenge", code: "123456", method: "totp" },
-        cookieHeader(login, ["dms_pending_login"]),
+        cookieHeader(login, [scopedCookieName("dms_pending_login")]),
       ),
       verify,
       VERIFY_URL,
@@ -695,7 +752,9 @@ describe("keep me signed in", () => {
     const refreshed = cookieResponse();
     await refreshSession(
       {
-        headers: { cookie: cookieHeader(login, ["dms_session"]) },
+        headers: {
+          cookie: cookieHeader(login, [scopedCookieName("dms_session")]),
+        },
         socket: { remoteAddress: "127.0.0.1" },
       },
       refreshed,
@@ -797,8 +856,10 @@ describe("account switcher validation", () => {
     );
     assert.deepEqual(JSON.parse(response.payload), { valid: true });
     const written = writtenCookies(response);
-    assert.equal(written.has("dms_session"), false);
-    assert.ok(written.has(`dms_account_${a.replaceAll("-", "")}`));
+    assert.equal(written.has(scopedCookieName("dms_session")), false);
+    assert.ok(
+      written.has(scopedCookieName(`dms_account_${a.replaceAll("-", "")}`)),
+    );
   });
 
   it("keeps the current account's session, and its user, in sync", async () => {
@@ -809,7 +870,7 @@ describe("account switcher validation", () => {
       response,
       VALIDATE_URL,
     );
-    assert.ok(writtenCookies(response).has("dms_session"));
+    assert.ok(writtenCookies(response).has(scopedCookieName("dms_session")));
     const user = await currentUser(cookieJar(response));
     assert.deepEqual(user, { _id: "user-b", email: "b@b.test", name: "b" });
   });
