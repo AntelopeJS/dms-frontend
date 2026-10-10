@@ -14,6 +14,32 @@ const MAX_AGE = 60 * 60 * 24 * 30;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/**
+ * A suffix that keeps this instance's cookies apart from another's on the same
+ * host. Browsers scope cookies by hostname, not port: without it, two DMS
+ * frontends on localhost:3000 and localhost:3001 would overwrite each other's
+ * session, each failing to decrypt the other's and signing the user out. The
+ * suffix follows the backend, so a restart keeps the cookies it wrote.
+ */
+function cookieScope() {
+  const backendUrl = (process.env.DMS_API_BASE_URL ?? "").trim();
+  let canonical = backendUrl;
+  try {
+    const url = new URL(backendUrl);
+    if (url.hostname === "localhost" || url.hostname === "[::1]")
+      url.hostname = "127.0.0.1";
+    canonical = url.toString().replace(/\/$/, "");
+  } catch {
+    // Not a URL: the raw string still tells two backends apart.
+  }
+  return createHash("sha256").update(canonical).digest("hex").slice(0, 12);
+}
+
+/** The name `name` takes in this instance's cookie jar. */
+export function scopedCookieName(name) {
+  return `${name}_${cookieScope()}`;
+}
+
 function key() {
   const secret = process.env.DMS_SESSION_SECRET;
   if (!secret || secret.length < 32)
@@ -54,10 +80,11 @@ function decode(value) {
 }
 
 function cookieValue(request, name) {
+  const scoped = scopedCookieName(name);
   const cookies = request.headers.cookie?.split(";") ?? [];
   return cookies
     .map((part) => part.trim().split("="))
-    .find(([key]) => key === name)?.[1];
+    .find(([key]) => key === scoped)?.[1];
 }
 
 /**
@@ -83,7 +110,8 @@ function lifetime(persistent) {
   return persistent ? MAX_AGE : undefined;
 }
 
-function appendCookie(response, cookie) {
+function appendCookie(response, name, value, cookieAttributes) {
+  const cookie = `${scopedCookieName(name)}=${value}; ${cookieAttributes}`;
   const current = response.getHeader("set-cookie");
   response.setHeader(
     "set-cookie",
@@ -122,12 +150,14 @@ export function setRequestSession(request, session) {
 export function writeSession(response, session) {
   appendCookie(
     response,
-    `${SESSION_COOKIE}=${encode(session)}; ${attributes(lifetime(isPersistent(session)))}`,
+    SESSION_COOKIE,
+    encode(session),
+    attributes(lifetime(isPersistent(session))),
   );
 }
 
 export function clearSession(response) {
-  appendCookie(response, `${SESSION_COOKIE}=; ${attributes(0)}`);
+  appendCookie(response, SESSION_COOKIE, "", attributes(0));
 }
 
 export function readAccounts(request) {
@@ -139,7 +169,9 @@ function writeAccountIndex(response, accounts) {
   const persistent = Object.values(accounts).some(isPersistent);
   appendCookie(
     response,
-    `${ACCOUNT_INDEX_COOKIE}=${encode(accounts)}; ${attributes(lifetime(persistent))}`,
+    ACCOUNT_INDEX_COOKIE,
+    encode(accounts),
+    attributes(lifetime(persistent)),
   );
 }
 
@@ -156,7 +188,9 @@ export function storeAccount(request, response, session, accountId) {
   writeAccountIndex(response, accounts);
   appendCookie(
     response,
-    `${accountCookieName(id)}=${encode({ refreshToken: session.refreshToken, ...accountDescriptor })}; ${attributes(lifetime(accountDescriptor.persistent))}`,
+    accountCookieName(id),
+    encode({ refreshToken: session.refreshToken, ...accountDescriptor }),
+    attributes(lifetime(accountDescriptor.persistent)),
   );
   return accountDescriptor;
 }
@@ -186,10 +220,7 @@ export function removeAccount(request, response, accountId) {
   delete accounts[accountId];
   writeAccountIndex(response, accounts);
   if (UUID.test(accountId ?? ""))
-    appendCookie(
-      response,
-      `${accountCookieName(accountId)}=; ${attributes(0)}`,
-    );
+    appendCookie(response, accountCookieName(accountId), "", attributes(0));
 }
 
 export function readSealedCookie(request, name) {
@@ -204,12 +235,9 @@ export function writeSealedCookie(
   maxAge,
   path = "/auth/oauth",
 ) {
-  appendCookie(
-    response,
-    `${name}=${encode(value)}; ${attributes(maxAge, path)}`,
-  );
+  appendCookie(response, name, encode(value), attributes(maxAge, path));
 }
 
 export function clearSealedCookie(response, name, path = "/auth/oauth") {
-  appendCookie(response, `${name}=; ${attributes(0, path)}`);
+  appendCookie(response, name, "", attributes(0, path));
 }
