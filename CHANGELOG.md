@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.2
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.1...v0.5.2)
+
+### 🩹 Fixes
+
+- **vue:** Keep route objects stable and compare navigations with the shown URL ([#105](https://github.com/AntelopeJS/dms-frontend/pull/105))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.5.1
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.0...v0.5.1)
