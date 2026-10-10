@@ -537,11 +537,54 @@ function parseRoute(runtime: DmsFrontendRuntime, url: string): DmsRoute {
   };
 }
 
+function hasSameEntries(
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean {
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => right[key] === left[key])
+  );
+}
+
+// Every parse builds a new query, params and matched: assigning them as they
+// come would re-run each watcher of the route on every call of useDmsRoute,
+// though the URL did not change. They are only replaced when their content did.
 function updateRoute(runtime: DmsFrontendRuntime, url: string): void {
   // The meta is the page's, not the URL's: a page declares it, then reads its
   // route, and the middleware the meta selected must still find it.
-  const { meta: _pageMeta, ...location } = parseRoute(runtime, url);
-  Object.assign(runtime.route, location);
+  const {
+    meta: _pageMeta,
+    query,
+    params,
+    matched,
+    ...location
+  } = parseRoute(runtime, url);
+  const route = runtime.route;
+  if (!hasSameEntries(query, route.query)) route.query = query;
+  if (!hasSameEntries(params, route.params)) route.params = params;
+  if (matched.length !== route.matched.length) route.matched = matched;
+  Object.assign(route, location);
+}
+
+const URL_BASE = "http://frontend.local";
+
+// The URL the browser shows: it may be ahead of the route, which follows
+// Inertia's page, when a component wrote it in place (history.replaceState).
+function currentUrl(runtime: DmsFrontendRuntime): string {
+  if (runtime.isServer || typeof window === "undefined")
+    return new URL(runtime.route.fullPath, URL_BASE).href;
+  return window.location.href;
+}
+
+// One spelling per URL: `a b`, `a+b` and `a%20b` are the same query, as are
+// `:` and `%3A`. The origin is kept, so a URL of another site never matches
+// the current one, whatever its path.
+function normalizeUrl(url: string, base: string): string {
+  const parsed = new URL(url, base);
+  const search = parsed.searchParams.toString();
+  return `${parsed.origin}${parsed.pathname}${search ? `?${search}` : ""}${parsed.hash}`;
 }
 
 function locationToUrl(
@@ -645,10 +688,13 @@ export function useDmsRoute(pattern?: string): DmsRoute {
 
 export function useDmsRouter(): DmsRouter {
   const runtime = useDmsRuntime();
-  const navigate = (to: RouteLocationRaw, options?: DmsNavigationOptions) =>
-    locationToUrl(runtime, to) === runtime.route.fullPath
+  const navigate = (to: RouteLocationRaw, options?: DmsNavigationOptions) => {
+    const current = currentUrl(runtime);
+    return normalizeUrl(locationToUrl(runtime, to), current) ===
+      normalizeUrl(current, current)
       ? Promise.resolve()
       : visit(runtime, to, options);
+  };
   return {
     currentRoute: computed(() => runtime.route),
     push: navigate,
