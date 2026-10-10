@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.3
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.2...v0.5.3)
+
+### 🩹 Fixes
+
+- **auth:** Scope session cookies to the backend instance ([#106](https://github.com/AntelopeJS/dms-frontend/pull/106))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.5.2
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.1...v0.5.2)
