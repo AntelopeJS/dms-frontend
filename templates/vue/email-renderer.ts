@@ -4,6 +4,7 @@ import { type Component, createSSRApp, h } from "vue";
 import { createI18n } from "vue-i18n";
 import moduleRegistry from "./generated-frontend-modules.json";
 import { loadEmailLocaleMessages } from "./email-locales";
+import { stripSsrMarkers } from "./email-markup";
 
 interface EmailModule {
   default: Component;
@@ -155,5 +156,5 @@ export async function renderEmail(
     ),
   });
   registerEmailElements(app);
-  return `<!doctype html>${await renderToString(app)}`;
+  return `<!doctype html>${stripSsrMarkers(await renderToString(app))}`;
 }
