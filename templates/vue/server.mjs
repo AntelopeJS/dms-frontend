@@ -10,7 +10,7 @@ import {
   RequestBodyError,
   UpstreamError,
 } from "./server/auth/backend.mjs";
-import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./server/auth/client-ip.mjs";
+import { proxyAccess, refuseCrossOrigin } from "./server/public-endpoints.mjs";
 import {
   handleAuth,
   publicSession,
@@ -120,15 +120,17 @@ async function developmentServer() {
   return vitePromise;
 }
 
-function backendHeaders(request) {
+function backendHeaders(request, publicEndpoint) {
   const headers = relayedHeaders(request, [
     "accept",
     "content-type",
+    "if-match",
     "user-agent",
     "x-content-language",
     "x-realtime-session",
+    ...(publicEndpoint?.headers ?? []),
   ]);
-  const session = readSession(request);
+  const session = publicEndpoint ? undefined : readSession(request);
   if (session?.accessToken)
     headers.authorization = `Bearer ${session.accessToken}`;
   return headers;
@@ -232,9 +234,9 @@ export function requestOwnership(method, pathname) {
 }
 
 async function proxy(request, response, fallbackOnNotFound = false) {
-  if (!SAFE_METHODS.has(request.method) && !isSameOrigin(request)) {
-    response.writeHead(403, { "content-type": JSON_TYPE });
-    response.end(JSON.stringify(CROSS_ORIGIN_ERROR));
+  const { publicEndpoint, isRefused } = proxyAccess(request, SAFE_METHODS);
+  if (isRefused) {
+    refuseCrossOrigin(response);
     return true;
   }
   const target = new URL(request.url, process.env.DMS_API_BASE_URL);
@@ -245,7 +247,7 @@ async function proxy(request, response, fallbackOnNotFound = false) {
   const upstream = await fetch(target, {
     signal: abandoned.signal,
     method: request.method,
-    headers: backendHeaders(request),
+    headers: backendHeaders(request, publicEndpoint),
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
   });

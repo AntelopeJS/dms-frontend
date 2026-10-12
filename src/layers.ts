@@ -157,6 +157,7 @@ function resolveLayer(layerPath: string, mod: ManifestModule): ResolvedLayer {
     configKey: mod.configKey,
     options: mod.options,
     authEstablishEndpoints: mod.authEstablishEndpoints,
+    publicEndpoints: mod.publicEndpoints,
   };
 }
 

@@ -923,6 +923,111 @@ describe("frontend auth runtime", () => {
   });
 });
 
+describe("public endpoints through the proxy", () => {
+  it("lets a declared public route through anonymously, with its headers", async () => {
+    process.env.DMS_SESSION_SECRET =
+      "test-secret-with-at-least-thirty-two-characters";
+    process.env.DMS_PUBLIC_ENDPOINTS = JSON.stringify([
+      { path: "/api/hooks/*", headers: ["x-hook-secret"] },
+    ]);
+    const jwt = `x.${Buffer.from('{"tenantId":"tenant-1"}').toString("base64url")}.x`;
+    const seen: Record<string, string | undefined>[] = [];
+    const backend = createServer((request, response) => {
+      if (request.url === "/api/auth/login") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            user: { id: "user-1" },
+            access_token: jwt,
+            refresh_token: "refresh-1",
+          }),
+        );
+        return;
+      }
+      seen.push({
+        url: request.url,
+        authorization: request.headers.authorization,
+        secret: request.headers["x-hook-secret"] as string | undefined,
+        other: request.headers["x-other"] as string | undefined,
+        ifMatch: request.headers["if-match"],
+      });
+      response.writeHead(202, { "content-type": "application/json" });
+      response.end("{}");
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const backendAddress = backend.address();
+    assert.ok(backendAddress && typeof backendAddress === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
+    const runtime = await server;
+    const frontend = createServer(runtime.handleRequestSafely);
+    await new Promise<void>((resolve) =>
+      frontend.listen(0, "127.0.0.1", resolve),
+    );
+    const address = frontend.address();
+    assert.ok(address && typeof address === "object");
+    const base = `http://127.0.0.1:${address.port}`;
+    try {
+      const login = await fetch(`${base}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: base },
+        body: '{"email":"a@example.com"}',
+      });
+      const cookie = login.headers.get("set-cookie") ?? "";
+      assert.match(cookie, /dms_/);
+
+      const hook = await fetch(`${base}/api/hooks/resend?tenant=acme`, {
+        method: "POST",
+        headers: {
+          cookie,
+          origin: "https://evil.example",
+          "x-hook-secret": "s3cret",
+          "x-other": "dropped",
+        },
+        body: "{}",
+      });
+      assert.equal(hook.status, 202);
+      assert.deepEqual(seen.at(-1), {
+        url: "/api/hooks/resend?tenant=acme",
+        authorization: undefined,
+        secret: "s3cret",
+        other: undefined,
+        ifMatch: undefined,
+      });
+
+      const deeper = await fetch(`${base}/api/hooks/resend/more`, {
+        method: "POST",
+        body: "{}",
+      });
+      assert.equal(deeper.status, 403);
+
+      const owned = await fetch(`${base}/api/items`, {
+        method: "PUT",
+        headers: {
+          cookie,
+          origin: base,
+          "if-match": '"7"',
+          "x-hook-secret": "not-relayed",
+        },
+        body: "{}",
+      });
+      assert.equal(owned.status, 202);
+      assert.deepEqual(seen.at(-1), {
+        url: "/api/items",
+        authorization: `Bearer ${jwt}`,
+        secret: undefined,
+        other: undefined,
+        ifMatch: '"7"',
+      });
+    } finally {
+      delete process.env.DMS_PUBLIC_ENDPOINTS;
+      frontend.close();
+      backend.close();
+    }
+  });
+});
+
 describe("HTML render HTTP endpoint", () => {
   it("rejects an empty template name with 400", async () => {
     process.env.DMS_HTML_RENDER_SECRET = "render-secret";

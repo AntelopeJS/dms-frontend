@@ -70,6 +70,23 @@ export interface ManifestModule {
    * predates the field.
    */
   authEstablishEndpoints?: string[];
+  /**
+   * Backend API routes this module serves to anyone (a provider's webhook):
+   * the generated server lets them through without an Origin and without
+   * the session. Absent from a manifest produced by a DMS that predates the
+   * field.
+   */
+  publicEndpoints?: PublicEndpointDeclaration[];
+}
+
+/** A backend route a module serves to anyone, as the manifest names it. */
+export interface PublicEndpointDeclaration {
+  /** Absolute `/api/` path; a `*` segment matches any one segment. */
+  path: string;
+  /** Methods it answers, `["POST"]` by default. */
+  methods?: string[];
+  /** The module's own `x-` request headers relayed to it. */
+  headers?: string[];
 }
 
 export interface Manifest {
@@ -109,6 +126,7 @@ export interface ResolvedLayer {
   configKey?: string;
   options?: FrontendModuleOptions;
   authEstablishEndpoints?: string[];
+  publicEndpoints?: PublicEndpointDeclaration[];
 }
 
 // ============================================================================
