@@ -504,8 +504,8 @@ async function writeRequestFailure(error, request, response) {
 }
 
 export async function handleRequestSafely(request, response) {
-  if (refuseForeignTarget(request, response)) return;
   try {
+    if (refuseForeignTarget(request, response)) return;
     await handleRequest(request, response);
   } catch (error) {
     // An error page failing too must not reject: that would end the process.
