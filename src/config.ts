@@ -96,6 +96,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["email-renderer.ts", "email-renderer.ts"],
   ["email-runtime.ts", "email-runtime.ts"],
   ["email-locales.ts", "email-locales.ts"],
+  ["email-markup.ts", "email-markup.ts"],
   ["tsconfig.json", "tsconfig.json"],
   ["typecheck-loader.mjs", "typecheck-loader.mjs"],
   ["app-config-stub.mjs", "app-config-stub.mjs"],
