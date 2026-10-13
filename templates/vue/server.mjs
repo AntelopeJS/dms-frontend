@@ -42,6 +42,7 @@ import { HOMEPAGE } from "./server/homepage.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
+import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
 import { handleTester } from "./server/tester.mjs";
 import {
   createInertiaPage,
@@ -239,12 +240,11 @@ async function proxy(request, response, fallbackOnNotFound = false) {
     refuseCrossOrigin(response);
     return true;
   }
-  const target = new URL(request.url, process.env.DMS_API_BASE_URL);
   // Cancelling the body alone misses a client that leaves before the backend
   // answers: its stream, an SSE feed above all, then stayed open for good.
   const abandoned = new AbortController();
   response.once("close", () => abandoned.abort());
-  const upstream = await fetch(target, {
+  const upstream = await fetch(backendUrl(request.url), {
     signal: abandoned.signal,
     method: request.method,
     headers: backendHeaders(request, publicEndpoint),
@@ -504,6 +504,7 @@ async function writeRequestFailure(error, request, response) {
 }
 
 export async function handleRequestSafely(request, response) {
+  if (refuseForeignTarget(request, response)) return;
   try {
     await handleRequest(request, response);
   } catch (error) {
