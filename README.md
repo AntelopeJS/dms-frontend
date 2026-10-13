@@ -426,6 +426,57 @@ pair can be turned into a login by a request from the browser. An undeclared
 endpoint is answered `403` and never called. The route is `POST`-only and
 same-origin, like every other auth action.
 
+### Public endpoints
+
+Every state-changing request the server proxies to `/api/` must carry an
+`Origin` matching the frontend's own, and goes out with the signed-in user's
+session. A route meant for callers outside the dashboard — a mail provider's
+delivery webhook, a payment provider's callback — fails both ways: the caller
+sends no `Origin`, and its secret header is not among the few the proxy
+relays.
+
+A backend module declares such a route public when it registers its
+frontend:
+
+```ts
+await AddFrontendModule({
+  name: "@antelopejs/dms-mailing-frontend-vue",
+  sourcePath: path.join(__dirname, "../frontend-vue"),
+  renderer: { name: "vue", version: "3" },
+  publicEndpoints: [
+    {
+      path: "/api/mailing/events/*/*",
+      methods: ["POST"],
+      headers: ["x-mailing-webhook-secret"],
+    },
+  ],
+});
+```
+
+A request to a public endpoint:
+
+- needs no `Origin`;
+- is never sent the session, even from a signed-in browser, so a cross-site
+  form posting to it acts as nobody: the route authenticates its caller
+  itself (a shared secret, a signature);
+- carries the module's declared headers on top of the usual ones.
+
+`path` is an absolute `/api/` path whose first segment is literal (the
+module's own prefix, never `*`) and whose later `*` segments match exactly one
+segment; nothing else matches (no prefix, no query string, no `.` or `..`
+segment). The proxy matches the request's normalized path, the one it sends
+the backend, so `..`, `%2e%2e` or `\` cannot reach another route through a
+public one. `methods` defaults
+to `["POST"]`. `headers` names the module's own `x-` headers; the ones a proxy
+or the DMS gives a meaning to (`x-forwarded-*`, `x-real-ip`, `x-dms-*`,
+`x-inertia*`, method overrides) are refused, as are `authorization` and
+`cookie`. A malformed declaration is dropped whole, with a warning, never
+widened. `DMS_PUBLIC_ENDPOINTS` adds entries of the same shape, as a JSON
+array, for a route no module declares.
+
+Every proxied request also relays `If-Match`, so a backend route can refuse a
+write made from a stale copy (`412` or `409`).
+
 ### Workspaces
 
 Each canonical backend URL gets its own owner-only workspace under
@@ -529,6 +580,7 @@ browser as before.
 | | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests; without it, e-mail renders are refused. Defaults to the `htmlRender.serviceSecret` the backend publishes in the frontend manifest |
 | | `DMS_OAUTH_RELAY_SECRET` | Secret the server presents to the backend's OAuth endpoints; without it, the backend refuses OAuth sign-in. Defaults to the `oauth.relaySecret` the backend publishes in the frontend manifest |
 | | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Extra backend endpoints `/auth/establish` may open a session from, on top of those the backend's modules declare (comma-separated, empty by default) |
+| | `DMS_PUBLIC_ENDPOINTS` | Extra backend routes the proxy serves to anyone, on top of those the backend's modules declare: a JSON array of `{ path, methods?, headers? }` (see [Public endpoints](#public-endpoints)) |
 | | `DMS_CLIENT_BASE_URL` | Public frontend URL used in generated links and emails |
 
 All of these can be set in the project's `.env` instead of the environment; see [Configuration](#configuration).

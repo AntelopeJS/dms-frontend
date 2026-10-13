@@ -125,6 +125,14 @@ export const FRONTEND_BUILD_ENTRY = "dms.frontend.build.ts";
 export const AUTH_ESTABLISH_FILE = "generated-auth-establish.json";
 
 /**
+ * Generated file naming the backend routes the modules serve to anyone,
+ * which the generated server's proxy lets through without an Origin and
+ * without the session. Written next to `AUTH_ESTABLISH_FILE`, for the same
+ * reason.
+ */
+export const PUBLIC_ENDPOINTS_FILE = "generated-public-endpoints.json";
+
+/**
  * Gitignore-style patterns we never want to copy from a layer source into
  * its workspace materialization. Hardcoded rather than driven by the
  * layer's own `.gitignore` so the behavior is deterministic across

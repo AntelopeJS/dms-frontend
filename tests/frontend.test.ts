@@ -77,6 +77,28 @@ describe("Vite frontend generation", () => {
     assert.deepEqual(declared.endpoints, []);
   });
 
+  it("writes the public endpoints the modules declare for the server", () => {
+    const source = mkdtempSync(join(tmpdir(), "dms-public-module-"));
+    const workspace = mkdtempSync(join(tmpdir(), "dms-public-workspace-"));
+    const webhook = {
+      path: "/api/mailing/events/*/*",
+      headers: ["x-mailing-webhook-secret"],
+    };
+    writeFrontendModuleRegistry(workspace, [
+      {
+        path: source,
+        packageName: "@dms/mailing",
+        priority: 0,
+        publicEndpoints: [webhook, "not-an-object" as never],
+      },
+      { path: source, packageName: "@dms/legacy", priority: 1 },
+    ]);
+    const declared = JSON.parse(
+      readFileSync(join(workspace, "generated-public-endpoints.json"), "utf8"),
+    );
+    assert.deepEqual(declared.endpoints, [webhook]);
+  });
+
   it("drops malformed declared endpoints instead of materializing them", () => {
     assert.deepEqual(
       collectAuthEstablishEndpoints([

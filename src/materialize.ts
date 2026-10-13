@@ -17,6 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { getProcessUi } from "@antelopejs/core/cli";
 import {
   AUTH_ESTABLISH_FILE,
+  PUBLIC_ENDPOINTS_FILE,
   LAYERS_SUBDIR,
   TAILWIND_SOURCE_GLOB,
   TEMPLATE_FILES,
@@ -26,7 +27,7 @@ import {
   DERIVED_OUTPUTS,
 } from "./derived-outputs";
 import { getLayerWorkspacePath } from "./layers";
-import { ResolvedLayer } from "./workspace";
+import { PublicEndpointDeclaration, ResolvedLayer } from "./workspace";
 
 import {
   applyContent,
@@ -248,12 +249,42 @@ function writeAuthEstablishEndpoints(
   );
 }
 
+/**
+ * The public endpoints the workspace's modules declared, as written for the
+ * generated server. Only their shape is checked here: the server checks each
+ * entry in full, whether it came from here or from `DMS_PUBLIC_ENDPOINTS`, and
+ * drops a malformed one.
+ *
+ * @param layers Resolved layers, in workspace order
+ * @returns The declared entries that are objects
+ */
+function collectPublicEndpoints(
+  layers: ResolvedLayer[],
+): PublicEndpointDeclaration[] {
+  return layers.flatMap((layer) =>
+    (Array.isArray(layer.publicEndpoints) ? layer.publicEndpoints : []).filter(
+      (endpoint) => typeof endpoint === "object" && endpoint !== null,
+    ),
+  );
+}
+
+function writePublicEndpoints(
+  workspaceDir: string,
+  layers: ResolvedLayer[],
+): void {
+  writeFileSync(
+    join(workspaceDir, PUBLIC_ENDPOINTS_FILE),
+    `${JSON.stringify({ endpoints: collectPublicEndpoints(layers) }, null, 2)}\n`,
+  );
+}
+
 export function writeFrontendModuleRegistry(
   workspaceDir: string,
   layers: ResolvedLayer[],
 ): void {
   const registry = createFrontendModuleRegistry(workspaceDir, layers);
   writeAuthEstablishEndpoints(workspaceDir, layers);
+  writePublicEndpoints(workspaceDir, layers);
   for (const output of DERIVED_OUTPUTS) output.write(workspaceDir, registry);
 }
 

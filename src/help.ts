@@ -51,6 +51,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "DMS_AUTH_ESTABLISH_ENDPOINTS",
     "More backend endpoints /auth/establish may open a session from, comma-separated",
   ],
+  [
+    "DMS_PUBLIC_ENDPOINTS",
+    "More backend routes the proxy serves to anyone, as a JSON array",
+  ],
   ["DMS_CLIENT_BASE_URL", "Public frontend URL used in links and e-mails"],
   ["NO_COLOR", "Same as --no-color"],
   ["ANTELOPEJS_VERBOSE", "Same as --verbose"],
