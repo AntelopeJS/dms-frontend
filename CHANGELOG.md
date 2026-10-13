@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.5
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.4...v0.5.5)
+
+### 🩹 Fixes
+
+- **proxy:** Refuse request targets naming another host ([#111](https://github.com/AntelopeJS/dms-frontend/pull/111))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.5.4
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.3...v0.5.4)
