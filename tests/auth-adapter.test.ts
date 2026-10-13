@@ -14,6 +14,8 @@ import { isSameOrigin } from "../templates/vue/server/auth/client-ip.mjs";
 import {
   hitOAuthRateLimitKey,
   isValidOAuthProvider,
+  oauthCallback,
+  oauthStart,
   resolveOAuthClientKey,
 } from "../templates/vue/server/auth/oauth.mjs";
 import {
@@ -29,6 +31,7 @@ import {
   persistAccountSession,
   readSession,
   scopedCookieName,
+  writeSealedCookie,
   writeSession,
 } from "../templates/vue/server/auth/session.mjs";
 
@@ -146,6 +149,102 @@ describe("OAuth adapter invariants", () => {
     assert.equal(isValidOAuthProvider("github-enterprise"), true);
     for (const provider of ["GitHub", "../github", "", "a".repeat(33)])
       assert.equal(isValidOAuthProvider(provider), false);
+  });
+});
+
+describe("OAuth failure keys", () => {
+  let api: ReturnType<typeof createServer>;
+  let status = 403;
+  let payload = "";
+  let previousBaseUrl: string | undefined;
+
+  before(async () => {
+    api = createServer((_request, response) => {
+      response.writeHead(status, { "content-type": "application/json" });
+      response.end(payload);
+    });
+    await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const address = api.address();
+    assert.ok(address && typeof address === "object");
+    previousBaseUrl = process.env.DMS_API_BASE_URL;
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    process.env.DMS_SESSION_SECRET = "dms-frontend-test-session-secret-value";
+    process.env.DMS_COOKIE_SECURE = "false";
+  });
+
+  after(() => {
+    process.env.DMS_API_BASE_URL = previousBaseUrl;
+    api.close();
+  });
+
+  function redirectResponse() {
+    const response = {
+      ...cookieResponse(),
+      location: "",
+      writeHead(_status: number, headers: { location: string }) {
+        response.location = headers.location;
+      },
+      end() {},
+    };
+    return response;
+  }
+
+  function oauthError(response: { location: string }) {
+    return new URL(response.location, "http://dms.test").searchParams.get(
+      "oauth_error",
+    );
+  }
+
+  async function callbackError(client: string) {
+    const flow = cookieResponse();
+    writeSealedCookie(flow, "dms_oauth_flow", {
+      state: "state-1",
+      expiresAt: Date.now() + 60_000,
+    });
+    const cookie = String(flow.headers.get("set-cookie")).split(";", 1)[0];
+    const response = redirectResponse();
+    await oauthCallback(
+      { headers: { cookie }, socket: { remoteAddress: client } },
+      response,
+      "github",
+      new URL(
+        "http://dms.test/auth/oauth/github/callback?code=c&state=state-1",
+      ),
+    );
+    return oauthError(response);
+  }
+
+  it("shows why an unknown identity without invitation cannot sign in", async () => {
+    status = 403;
+    payload = '{"message":"error.oauth.registration_disabled"}';
+    assert.equal(
+      await callbackError("127.0.1.1"),
+      "error.oauth.registration_disabled",
+    );
+  });
+
+  it("keeps the generic key for failures outside the OAuth namespace", async () => {
+    for (const [code, body] of [
+      [401, '{"message":"error.invalid_credentials"}'],
+      [500, "private database host"],
+    ] as const) {
+      status = code;
+      payload = body;
+      assert.equal(await callbackError("127.0.1.2"), "error.oauth.failed");
+    }
+  });
+
+  it("shows why a provider cannot start", async () => {
+    status = 404;
+    payload = '{"message":"error.oauth.provider_disabled"}';
+    const response = redirectResponse();
+    await oauthStart(
+      { headers: {}, socket: { remoteAddress: "127.0.1.3" } },
+      response,
+      "github",
+      new URL("http://dms.test/auth/oauth/github"),
+    );
+    assert.equal(oauthError(response), "error.oauth.provider_disabled");
   });
 });
 

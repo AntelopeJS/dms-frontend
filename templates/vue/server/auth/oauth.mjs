@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { backend, json } from "./backend.mjs";
+import { backend, json, UpstreamError } from "./backend.mjs";
 import { clientIp } from "./client-ip.mjs";
 import {
   clearSealedCookie,
@@ -11,6 +11,8 @@ import {
 const FLOW = "dms_oauth_flow";
 const HANDOFF = "dms_oauth_handoff";
 const COMPLETE = "/auth/oauth/complete";
+const OAUTH_ERROR = "error.oauth.";
+const FAILED = "error.oauth.failed";
 const FLOW_LIFETIME_MS = 10 * 60 * 1000;
 const RATE_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT = 10;
@@ -78,13 +80,24 @@ function errorRedirect(response, key) {
   redirect(response, `/auth?oauth_error=${encodeURIComponent(key)}`);
 }
 
+// The backend's own OAuth key says why a provider sign-in failed; any other
+// failure keeps the generic one.
+function failureRedirect(response, error) {
+  errorRedirect(
+    response,
+    error instanceof UpstreamError && error.message.startsWith(OAUTH_ERROR)
+      ? error.message
+      : FAILED,
+  );
+}
+
 export async function oauthStart(request, response, provider, url) {
   if (
     !isValidOAuthProvider(provider) ||
     request.headers["sec-fetch-site"] === "cross-site" ||
     rateLimited(request, "start")
   )
-    return errorRedirect(response, "error.oauth.failed");
+    return errorRedirect(response, FAILED);
   try {
     const result = await backend(
       `/api/auth/oauth/${provider}/authorize-url`,
@@ -104,8 +117,8 @@ export async function oauthStart(request, response, provider, url) {
       FLOW_LIFETIME_MS / 1000,
     );
     redirect(response, result.authorizeUrl);
-  } catch {
-    errorRedirect(response, "error.oauth.failed");
+  } catch (error) {
+    failureRedirect(response, error);
   }
 }
 
@@ -174,14 +187,14 @@ async function completeOAuth(request, response, provider, url, flow) {
         ? `${COMPLETE}?redirect=${encodeURIComponent(flow.redirect)}`
         : COMPLETE,
     );
-  } catch {
-    errorRedirect(response, "error.oauth.failed");
+  } catch (error) {
+    failureRedirect(response, error);
   }
 }
 
 export async function oauthCallback(request, response, provider, url) {
   if (!isValidOAuthProvider(provider) || rateLimited(request, "callback"))
-    return errorRedirect(response, "error.oauth.failed");
+    return errorRedirect(response, FAILED);
   const flow = readSealedCookie(request, FLOW);
   clearSealedCookie(response, FLOW);
   if (url.searchParams.has("error"))
