@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.5.4
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.3...v0.5.4)
+
+### 🚀 Enhancements
+
+- **proxy:** Let modules declare public endpoints and relay If-Match ([#108](https://github.com/AntelopeJS/dms-frontend/pull/108))
+
+### 🩹 Fixes
+
+- **auth:** Surface the backend OAuth error key on provider sign-in failures ([#109](https://github.com/AntelopeJS/dms-frontend/pull/109))
+- **email:** Strip Vue hydration markers from rendered emails ([#107](https://github.com/AntelopeJS/dms-frontend/pull/107))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.5.3
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.2...v0.5.3)
