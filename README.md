@@ -461,8 +461,12 @@ A request to a public endpoint:
   itself (a shared secret, a signature);
 - carries the module's declared headers on top of the usual ones.
 
-`path` is an absolute `/api/` path whose `*` segments match exactly one
-segment; nothing else matches (no prefix, no query string). `methods` defaults
+`path` is an absolute `/api/` path whose first segment is literal (the
+module's own prefix, never `*`) and whose later `*` segments match exactly one
+segment; nothing else matches (no prefix, no query string, no `.` or `..`
+segment). The proxy matches the request's normalized path, the one it sends
+the backend, so `..`, `%2e%2e` or `\` cannot reach another route through a
+public one. `methods` defaults
 to `["POST"]`. `headers` names the module's own `x-` headers; the ones a proxy
 or the DMS gives a meaning to (`x-forwarded-*`, `x-real-ip`, `x-dms-*`,
 `x-inertia*`, method overrides) are refused, as are `authorization` and

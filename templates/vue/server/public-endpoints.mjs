@@ -9,9 +9,13 @@ const DECLARED_ENDPOINTS_FILE = new URL(
   import.meta.url,
 );
 
-// An absolute backend API path whose segments are literal or `*` (exactly one
-// segment): no prefix match, no query string, no segment that climbs out.
-const PUBLIC_PATH = /^\/api(?:\/(?:\*|[A-Za-z0-9][A-Za-z0-9._~-]*))+$/;
+// An absolute backend API path whose first segment is literal (a `*` there
+// would open a route of every module) and whose next ones are literal or `*`
+// (exactly one segment): no prefix match, no query string, no segment that
+// climbs out. Kept in step with `PUBLIC_PATH` in the DMS
+// (`frontend-public-endpoints.ts`), which validates the modules' declarations.
+const PUBLIC_PATH =
+  /^\/api\/[A-Za-z0-9][A-Za-z0-9._~-]*(?:\/(?:\*|[A-Za-z0-9][A-Za-z0-9._~-]*))*$/;
 const SEGMENT_WILDCARD = "*";
 const SEGMENT_PATTERN = "[^/]+";
 const ALLOWED_METHODS = new Set([
@@ -25,6 +29,7 @@ const ALLOWED_METHODS = new Set([
 const DEFAULT_METHODS = ["POST"];
 // A declared header is a module's own `x-` header. Those the proxy, a reverse
 // proxy or the backend give a meaning to are never taken from the caller.
+// Kept in step with the DMS's `RESERVED_HEADER`.
 const HEADER_NAME = /^x-[a-z0-9-]+$/;
 const RESERVED_HEADER =
   /^x-(?:forwarded-|real-ip$|dms-|inertia|http-method|method-override|original-|rewrite-)/;
@@ -123,7 +128,7 @@ export function allowedPublicEndpoints(
       if (!endpoint)
         console.warn(
           `Ignoring malformed public endpoint ${JSON.stringify(entry)}: expected ` +
-            '{ path: "/api/…" (segments or *), methods?: ["POST"], headers?: ["x-…"] }',
+            '{ path: "/api/<prefix>/…" (segments or *), methods?: ["POST"], headers?: ["x-…"] }',
         );
       return endpoint ? [endpoint] : [];
     },
