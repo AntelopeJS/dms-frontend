@@ -163,6 +163,28 @@ describe("generated workspace typecheck", () => {
     assert.equal(result.code, 0, result.output);
   });
 
+  it("checks a module's server entry and server files against Node.js and #dms/server", () => {
+    // A server entry imports Node.js built-ins, which the browser-only
+    // `types` of the workspace leave out: `#dms/server` brings them in.
+    const workspace = generatedWorkspace({
+      "dms.server.ts":
+        'import { defineDmsServer } from "#dms/server";\nimport { digest } from "./server/digest";\n\nexport default defineDmsServer((server) => {\n  server.registerRoute("POST", "/api/_fixture/digest", digest);\n});\n',
+      "server/digest.ts":
+        'import { createHash } from "node:crypto";\nimport type { DmsServerEvent } from "#dms/server";\n\nexport async function digest(event: DmsServerEvent): Promise<Response> {\n  const { text } = await event.readJson<{ text: string }>();\n  return Response.json({ digest: createHash("sha256").update(text).digest("hex"), id: event.module.id });\n}\n',
+    });
+    cpSync(
+      join(repoRoot, "templates", "vue", "server-module.ts"),
+      join(workspace, "server-module.ts"),
+    );
+    writeFileSync(
+      join(workspace, "frontend-paths.generated.json"),
+      '{ "compilerOptions": { "paths": { "#dms/server": ["./server-module.ts"] } } }\n',
+    );
+
+    const result = typecheck(workspace);
+    assert.equal(result.code, 0, result.output);
+  });
+
   it("covers Vue single-file components too", () => {
     // `tsc` cannot parse `.vue`; vue-tsc, which the verifier runs, reads the
     // same `include`. Pin the effective globs so the two extensions cannot

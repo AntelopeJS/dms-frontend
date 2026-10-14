@@ -202,6 +202,9 @@ export default defineConfig({
     dedupe: ["vue", "reka-ui", "@nuxt/ui", "@vueuse/core", "@iconify/vue"],
     alias: {
       "#dms/frontend-module": resolve(__dirname, "frontend-module.ts"),
+      // For the server's development loader only: no browser module imports
+      // a `dms.server.ts`.
+      "#dms/server": resolve(__dirname, "server-module.ts"),
       "#build/nuxt-icon-client-bundle": "virtual:nuxt-ui-icons",
       "#shortcuts-aggregated": resolve(
         __dirname,

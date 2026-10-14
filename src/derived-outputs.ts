@@ -20,6 +20,7 @@ import {
   FRONTEND_BUILD_ENTRY,
   FRONTEND_MODULE_ENTRY,
   LAYERS_SUBDIR,
+  SERVER_MODULE_ENTRY,
 } from "./config";
 import { frontendLayerTypePaths, MODULE_LAYERS_DIRNAME } from "./layer-aliases";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
@@ -41,6 +42,7 @@ export interface FrontendModuleRegistryEntry {
   priority: number;
   entry?: string;
   build?: string;
+  server?: string;
   options: FrontendModuleOptions;
 }
 
@@ -65,6 +67,8 @@ function validateFrontendModuleRegistry(
       throw new Error(`Invalid frontend module entry: ${module.id}`);
     if (module.build !== undefined && module.build !== FRONTEND_BUILD_ENTRY)
       throw new Error(`Invalid frontend module build entry: ${module.id}`);
+    if (module.server !== undefined && module.server !== SERVER_MODULE_ENTRY)
+      throw new Error(`Invalid frontend module server entry: ${module.id}`);
     if (!resolve(module.root).startsWith(moduleRoot))
       throw new Error(
         `Frontend module root escapes the workspace: ${module.id}`,
@@ -81,6 +85,7 @@ export function createFrontendModuleRegistry(
   const modules = layers.map((layer) => {
     const sourceEntry = join(layer.path, FRONTEND_MODULE_ENTRY);
     const buildEntry = join(layer.path, FRONTEND_BUILD_ENTRY);
+    const serverEntry = join(layer.path, SERVER_MODULE_ENTRY);
     const options = layer.options ?? {};
     return {
       id: getLayerSafeName(layer),
@@ -90,6 +95,7 @@ export function createFrontendModuleRegistry(
       priority: layer.priority ?? 0,
       entry: existsSync(sourceEntry) ? FRONTEND_MODULE_ENTRY : undefined,
       build: existsSync(buildEntry) ? FRONTEND_BUILD_ENTRY : undefined,
+      server: existsSync(serverEntry) ? SERVER_MODULE_ENTRY : undefined,
       options: layer.configKey ? { [layer.configKey]: options } : options,
     };
   });
@@ -118,6 +124,7 @@ function writeFrontendTypePaths(
   const paths: Record<string, string[]> = {
     "#dms/frontend-module": ["./frontend-module.ts"],
     "#dms/frontend-build": ["./frontend-build.ts"],
+    "#dms/server": ["./server-module.ts"],
     "@frontend/*": ["./frontend-modules/*"],
     ...frontendLayerTypePaths(
       [...registry.modules].reverse().map((module) => module.root),
@@ -186,9 +193,39 @@ function writeFrontendBuildLoader(
 }
 
 /**
+ * The module through which the generated server imports each module's
+ * `dms.server.ts`: through Vite in development, from its own bundle in
+ * production. The browser bundle never imports it.
+ */
+function writeServerModuleLoader(
+  workspaceDir: string,
+  registry: FrontendModuleRegistry,
+): boolean {
+  const modules = registry.modules.filter((module) => module.server);
+  const imports = modules
+    .map(
+      (module, index) =>
+        `import server${index} from "./${LAYERS_SUBDIR}/${module.id}/${module.server}";`,
+    )
+    .join("\n");
+  const declarations = modules
+    .map(
+      (module, index) =>
+        `{ id: ${JSON.stringify(module.id)}, priority: ${module.priority}, setup: server${index} }`,
+    )
+    .join(", ");
+  const content = `${imports}\n\nimport type { DmsServerSetup } from "./server-module";\n\nexport const serverModules: { id: string; priority: number; setup: DmsServerSetup }[] = [${declarations}];\n`;
+  return applyContent(
+    content,
+    join(workspaceDir, "server-modules.generated.ts"),
+  );
+}
+
+/**
  * The registry itself, which the generated configs and server read, and the
- * loaders through which the application imports each module's entry and the
- * Vite config each module's build declarations.
+ * loaders through which the application imports each module's entry, the
+ * Vite config each module's build declarations and the server each module's
+ * server entry.
  */
 function writeModuleRegistry(
   workspaceDir: string,
@@ -200,7 +237,8 @@ function writeModuleRegistry(
   );
   const wroteModules = writeFrontendModuleLoader(workspaceDir, registry);
   const wroteBuilds = writeFrontendBuildLoader(workspaceDir, registry);
-  return wroteRegistry || wroteModules || wroteBuilds;
+  const wroteServer = writeServerModuleLoader(workspaceDir, registry);
+  return wroteRegistry || wroteModules || wroteBuilds || wroteServer;
 }
 
 interface DiscoveredAsset {
@@ -572,7 +610,11 @@ export const DERIVED_OUTPUTS: readonly DerivedOutput[] = [
   {
     name: "module registry",
     affects: (path) =>
-      [FRONTEND_MODULE_ENTRY, FRONTEND_BUILD_ENTRY].includes(toPosixPath(path)),
+      [
+        FRONTEND_MODULE_ENTRY,
+        FRONTEND_BUILD_ENTRY,
+        SERVER_MODULE_ENTRY,
+      ].includes(toPosixPath(path)),
     write: writeModuleRegistry,
   },
   {

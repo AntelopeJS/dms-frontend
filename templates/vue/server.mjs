@@ -11,11 +11,8 @@ import {
   UpstreamError,
 } from "./server/auth/backend.mjs";
 import { proxyAccess, refuseCrossOrigin } from "./server/public-endpoints.mjs";
-import {
-  handleAuth,
-  publicSession,
-  refreshSession,
-} from "./server/auth/routes.mjs";
+import { publicSession, refreshSession } from "./server/auth/routes.mjs";
+import { builtInRoute, isBuiltInAuthRoute } from "./server/built-in-routes.mjs";
 import { readSession } from "./server/auth/session.mjs";
 import {
   BackendResponseError,
@@ -37,14 +34,18 @@ import {
   writeViteError,
 } from "./server/vite-errors.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
-import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
+import { watchEmailBundle } from "./server/email.mjs";
+import { isRendererFilePath } from "./server/module-routes.mjs";
+import {
+  handleModuleRoute,
+  loadServerModules,
+} from "./server/module-server.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
 import { writeProxyHeaders } from "./server/proxy-headers.mjs";
 import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
-import { handleTester } from "./server/tester.mjs";
 import {
   createInertiaPage,
   htmlHeaders,
@@ -66,23 +67,7 @@ const MIME_TYPES = {
 };
 const PROXY_PREFIXES = ["/api/", "/dms/"];
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const AUTH_SERVER_ROUTES = [
-  ["GET", /^\/api\/_auth\/session\/?$/],
-  ["POST", /^\/api\/_auth\/session\/?$/],
-  ["DELETE", /^\/api\/_auth\/session\/?$/],
-  [
-    "POST",
-    /^\/auth\/(?:login|signup|verify-2fa|establish|request-2fa-email|switch-account|switch-tenant|validate-account|remove-account)\/?$/,
-  ],
-  ["POST", /^\/auth\/oauth\/handoff\/?$/],
-  ["GET", /^\/auth\/oauth\/[^/]+\/(?:start|callback)\/?$/],
-];
-const HTML_RENDER_ROUTE = "/api/html/render";
-const TESTER_ROUTE = /^\/api\/_dms\/tester\/?$/;
-const LOCAL_ROUTES = [
-  [(pathname) => TESTER_ROUTE.test(pathname), handleTester],
-  [icons.isIconRequest, icons.handleIcons],
-];
+const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const AUTH_PAGE = "/auth";
 const ONBOARDING_PAGE = "/onboarding";
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
@@ -217,13 +202,7 @@ function redirectSignedOutPrivatePage(request, response, props) {
 export function requestOwnership(method, pathname) {
   if (PROXY_PREFIXES.some((prefix) => pathname.startsWith(prefix)))
     return "server";
-  if (
-    AUTH_SERVER_ROUTES.some(
-      ([routeMethod, pattern]) =>
-        routeMethod === method && pattern.test(pathname),
-    )
-  )
-    return "server";
+  if (isBuiltInAuthRoute(method, pathname)) return "server";
   return method === "GET" ? "frontend" : "server";
 }
 
@@ -418,27 +397,33 @@ async function answeredWithFile(devServer, request, response, pathname) {
   return pathname !== "/" && answeredByVite(devServer, request, response);
 }
 
+/**
+ * Answers the routes the frontend server serves itself: those the modules
+ * declare in their `dms.server.ts` first, then the built-in ones, which a
+ * module route on the same method and path shadows.
+ */
+async function answeredByServerRoute(request, response, url, devServer) {
+  if (isRendererFilePath(url.pathname)) return false;
+  const modules = await loadServerModules(devServer);
+  if (await handleModuleRoute(request, response, url.pathname, modules))
+    return true;
+  const route = builtInRoute(request.method, url.pathname);
+  if (!route) return false;
+  await route(request, response, url);
+  return true;
+}
+
 export async function handleRequest(request, response) {
   const url = new URL(request.url, "http://frontend.local");
   const pathname = url.pathname;
   const localRoute = LOCAL_ROUTES.find(([matches]) => matches(pathname));
   if (localRoute) return localRoute[1](request, response);
-  if (pathname === "/api/_auth/session")
-    return handleAuth(request, response, url);
-  if (request.method === "POST" && pathname === HTML_RENDER_ROUTE)
-    return handleEmailRender(request, response);
-  if (
-    AUTH_SERVER_ROUTES.some(
-      ([method, pattern]) =>
-        method === request.method && pattern.test(pathname),
-    )
-  )
-    return handleAuth(request, response, url);
+  const devServer = await developmentServer();
+  if (await answeredByServerRoute(request, response, url, devServer)) return;
   if (requestOwnership(request.method, pathname) === "server")
     return proxy(request, response);
   if (requestFailure.hasMalformedPath(request.url))
     return requestFailure.writeBadRequest(response);
-  const devServer = await developmentServer();
   const visit = isFrontendVisit(request);
   // A file is looked for among the frontend's own before the backend is asked
   // for it: asking first cost a backend round trip for each of the hundreds of

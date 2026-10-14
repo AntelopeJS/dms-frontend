@@ -125,6 +125,11 @@ export interface ResolvedLayer {
   priority?: number;
   configKey?: string;
   options?: FrontendModuleOptions;
+  /**
+   * The private options the manifest served, which the module's server
+   * routes read. Absent without an authenticated manifest.
+   */
+  privateOptions?: FrontendModuleOptions;
   authEstablishEndpoints?: string[];
   publicEndpoints?: PublicEndpointDeclaration[];
 }

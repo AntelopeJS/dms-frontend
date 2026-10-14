@@ -233,6 +233,57 @@ The file runs in Node.js when Vite starts, under `ajs dms dev` and `ajs dms buil
 
 Up to 0.3, every module's `app/composables`, `app/types`, `app/utils`, `app/build/composables` and `app/build/types` were auto-imported. A module that relies on auto-imports declares its public directories in `dms.frontend.build.ts`, and imports its `app/build/` code by path.
 
+### Server routes (`dms.server.ts`)
+
+A module serves routes from the frontend server, next to the session, in an optional `dms.server.ts` beside its `dms.frontend.ts`: a sign-in flow that writes cookies, a provider redirect, a render a backend asks for.
+
+```ts
+import { defineDmsServer } from "#dms/server";
+import { ping, startExport } from "./server/routes";
+
+export default defineDmsServer((server) => {
+  server.registerRoute("GET", "/api/_acme/ping", ping);
+  server.registerRoute("POST", "/api/_acme/exports/:kind", startExport);
+});
+```
+
+```ts
+// server/routes.ts
+import type { DmsServerEvent } from "#dms/server";
+
+export function ping() {
+  return { ok: true };
+}
+
+export async function startExport(event: DmsServerEvent) {
+  const input = await event.readJson<{ from: string }>();
+  return event.backend(`/api/acme/exports/${event.params.kind}`, {
+    method: "POST",
+    body: input,
+    token: event.session.read()?.accessToken,
+  });
+}
+```
+
+A handler takes the request and answers with a Web-standard `Response`, or with a value sent as JSON (`null` or nothing is an empty `204`). The event it receives carries:
+
+- `request`, `url`, `params` (the `:name` segments, decoded) and `readJson()`;
+- `session`: `read()`, `write()` (stamped with `updatedAt`, ends with the browser unless `persistent`), `clear()`, `useForRequest()`;
+- `cookies`: sealed cookies by logical name (`readSealed`, `writeSealed` with an optional `maxAge` and `path`, `clear`). The server scopes the name to its backend and sets `HttpOnly`, `SameSite=Lax` and `Secure`, so a module never depends on how cookies are named; the session cookie is only reachable through `session`;
+- `backend(path, init)`: a JSON call to the backend that always carries the client's address and the headers the proxy relays; a refusal throws an error with the status and the backend's public `error.*` message, which reaches the client as is when the handler lets it through;
+- `backendUrl(path)`: the backend URL of a path, always on the backend's origin, for a call `backend` cannot make (a raw response);
+- `clientIp()`, `renderEmail(template, props, { locale })`, and `module`: this module's id, its options and its own `privateOptions`, never another module's.
+
+Every route gets the same defaults: a request with a state-changing method must carry the frontend's own `Origin` (`{ sameOrigin: false }` only for a route authenticated otherwise, such as by a service token), its body stops at 64 KiB (`bodyLimit`) with a `413`, and the answer is `Cache-Control: no-store` unless the handler sets its own. An error the handler lets through is answered like a backend failure: its status, and only a public `error.*` message.
+
+Paths are literal segments and `:name` parameters. Module routes are tried after the renderer's own (`/api/_dms/`, `/@…`, `/assets/`, which no module can declare) and before the backend proxy, literal paths before parameters. A route under `/api/` or `/dms/` outside a module namespace (`/api/_<module>/`) hides what the backend serves there, so the server warns unless the route passes `{ overridesBackend: true }`. When two modules declare the same method and path, the module of higher priority keeps it and a warning names both, the module id settling a tie; a module route answering a [public endpoint](#public-endpoints) is reported too. A malformed declaration is ignored with a warning naming its module.
+
+`dms.server.ts` runs in the frontend server's Node.js process, next to the session secret: it is the module's own trusted code, as its backend half is, not a sandbox. It may import `#dms/server`, Node.js built-ins, npm dependencies and the module's own server files (a `server/` directory is copied into the workspace for that), never the application's code (`.vue` files, `dms.frontend.ts`); nothing it imports reaches the browser bundle, and `verify-source` checks both. Under `ajs dms dev` the server loads it through Vite, so an edited handler answers on the next request; `ajs dms build` bundles it into `dist/server-modules`, and a workspace built without that bundle simply serves no module route. Import what a handler uses: auto-imports do not apply to server code.
+
+A module tests its routes through the same router, event and cookie jar with `serveModuleRoutes` from `@antelopejs/dms-frontend/templates/vue/server/module-testing.mjs`, which serves the default export of its `dms.server.ts` on a local port.
+
+A module that ships `dms.server.ts` raises its [loader range](#declaring-the-loader-releases-a-module-supports) floor to the release that serves it: an older one never reads the file, so the routes would silently be missing.
+
 ### Page loading state
 
 After a client navigation, the page renders under a `<Suspense>` until its chunk and any async `setup` resolve. `useDmsPageLoading()` (auto-imported) is `true` meanwhile, so a layout can show its own placeholder instead of an empty page body:

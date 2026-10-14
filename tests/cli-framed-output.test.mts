@@ -277,6 +277,7 @@ describePosix("framing pnpm install and the production build", () => {
           "✔ Compressed the client assets",
           "✔ Built the SSR bundle",
           "✔ Built the e-mail bundle",
+          "✔ Built the server modules",
         ].join(DONE) +
           `${DONE}▲ 1 Vite warning\n  \\(!\\) Some chunks are larger than 500 kB`,
       ),
@@ -297,9 +298,13 @@ describePosix("framing pnpm install and the production build", () => {
     const steps = run.calls.slice(1);
     assert.deepEqual(
       steps.map((call) => call.args),
-      ["build:client", "build:compress", "build:ssr", "build:email"].map(
-        (script) => ["--silent", "run", script],
-      ),
+      [
+        "build:client",
+        "build:compress",
+        "build:ssr",
+        "build:email",
+        "build:server",
+      ].map((script) => ["--silent", "run", script]),
     );
     assert.ok(steps.every((call) => call.env.viteLogLevel === "warn"));
   });

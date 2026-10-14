@@ -6,7 +6,7 @@ import {
   randomUUID,
 } from "node:crypto";
 
-const SESSION_COOKIE = "dms_session";
+export const SESSION_COOKIE = "dms_session";
 const ACCOUNT_INDEX_COOKIE = "dms_account_index";
 const ACCOUNT_COOKIE_PREFIX = "dms_account_";
 const REQUEST_SESSION = Symbol("dms-request-session");

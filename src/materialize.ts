@@ -19,14 +19,17 @@ import {
   AUTH_ESTABLISH_FILE,
   PUBLIC_ENDPOINTS_FILE,
   LAYERS_SUBDIR,
+  SERVER_OPTIONS_FILE,
   TAILWIND_SOURCE_GLOB,
   TEMPLATE_FILES,
+  writeSecretBearingFile,
 } from "./config";
 import {
   createFrontendModuleRegistry,
   DERIVED_OUTPUTS,
 } from "./derived-outputs";
-import { getLayerWorkspacePath } from "./layers";
+import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
+import { MANIFEST_SECRET_ENV } from "./manifest-secrets";
 import { PublicEndpointDeclaration, ResolvedLayer } from "./workspace";
 
 import {
@@ -278,6 +281,29 @@ function writePublicEndpoints(
   );
 }
 
+/**
+ * Write each module's private options where the generated server hands them
+ * to that module's server routes, owner-readable only: they hold the backend's
+ * secrets. `environment` names the variables that replace a published secret
+ * when the environment sets them, as for the built-in routes.
+ */
+function writeServerOptions(
+  workspaceDir: string,
+  layers: ResolvedLayer[],
+): void {
+  const modules = Object.fromEntries(
+    layers.flatMap((layer) =>
+      layer.privateOptions
+        ? [[getLayerSafeName(layer), layer.privateOptions]]
+        : [],
+    ),
+  );
+  writeSecretBearingFile(
+    join(workspaceDir, SERVER_OPTIONS_FILE),
+    `${JSON.stringify({ modules, environment: MANIFEST_SECRET_ENV }, null, 2)}\n`,
+  );
+}
+
 export function writeFrontendModuleRegistry(
   workspaceDir: string,
   layers: ResolvedLayer[],
@@ -285,6 +311,7 @@ export function writeFrontendModuleRegistry(
   const registry = createFrontendModuleRegistry(workspaceDir, layers);
   writeAuthEstablishEndpoints(workspaceDir, layers);
   writePublicEndpoints(workspaceDir, layers);
+  writeServerOptions(workspaceDir, layers);
   for (const output of DERIVED_OUTPUTS) output.write(workspaceDir, registry);
 }
 

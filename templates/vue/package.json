@@ -4,11 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node compress-assets.mjs && vite build --ssr ssr-renderer.ts --outDir dist/ssr && vite build --config vite.email.config.ts",
+    "build": "vite build && node compress-assets.mjs && vite build --ssr ssr-renderer.ts --outDir dist/ssr && vite build --config vite.email.config.ts && vite build --config vite.server.config.ts",
     "build:client": "vite build",
     "build:compress": "node compress-assets.mjs",
     "build:ssr": "vite build --ssr ssr-renderer.ts --outDir dist/ssr",
     "build:email": "vite build --config vite.email.config.ts",
+    "build:server": "vite build --config vite.server.config.ts",
     "build:types": "node prepare-types.mjs",
     "typecheck": "node --import ./typecheck-loader.mjs ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit",
     "start": "node server.mjs"
@@ -37,6 +38,7 @@
     "vue-i18n": "^11.1.12"
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
     "typescript": "^5.8.2",
     "vue-tsc": "3.1.1"
   },
