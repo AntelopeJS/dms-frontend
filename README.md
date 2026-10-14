@@ -155,7 +155,7 @@ attempt. The throttle stamp lives at
 
 Manifest negotiation and module materialization are the renderer contract described in [Renderers](#renderers).
 
-The generated Vue application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router: "inertia" }`, and `@nuxt/ui/vue-plugin`. The Node server resolves each Inertia visit through `/dms/page?path=…`, including fresh shared data so account, tenant, and permission changes update navigation state. It proxies backend routes and manages authentication through server-side sessions. `DMS_BOOTSTRAP_SECRET` is used only by the CLI's server-to-server frontend manifest and module archive requests and is never sent by, or exposed to, browser traffic.
+The generated Vue application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router: "inertia" }`, and `@nuxt/ui/vue-plugin`. The Node server resolves each Inertia visit through `/dms/page?path=…`; the site layout it returns comes as a once prop the browser reuses for five minutes per account and workspace (see [Navigation and the site layout](#navigation-and-the-site-layout)). It proxies backend routes and manages authentication through server-side sessions. `DMS_BOOTSTRAP_SECRET` is used only by the CLI's server-to-server frontend manifest and module archive requests and is never sent by, or exposed to, browser traffic.
 
 Vue modules register through `dms.frontend.ts` and import the SDK from the `#dms/frontend-module` alias, which the loader resolves to the generated `frontend-module.ts`: `defineDmsPlugin`, `useDmsRouter`, the page and session types, and everything else a module needs from the host. Email templates register separately through `dms.email.ts`.
 
@@ -534,6 +534,39 @@ changing or removing a `dms.frontend.build.ts` restarts Vite. A layer
 directory added to or removed from `layers/` is the exception: Vite reads the
 `#<layer>` aliases and the auto-imported directories at startup only, so the
 dev server says it needs a restart.
+
+### Navigation and the site layout
+
+Every visit's page object carries the page (`page`: its route and layout), the
+session (`user`, `session`) and the site layout (`shared`: the menu with each
+entry's access, quick actions, modules). The site layout is most of that
+object, and the same from page to page, so it is an Inertia once prop:
+
+- The server sends it when the browser does not hold it for the session's
+  account and workspace, then asks the backend for the page alone
+  (`/dms/page?path=…&shared=false`) while the browser's copy is less than five
+  minutes old. Signing in, signing out, or switching account or workspace
+  changes the key the copy is held under, so the next visit brings the new
+  session's layout.
+- `router.reload({ only: ["shared"] })` reloads it at once, and `only` /
+  `except` name any of `page`, `shared`, `user` and `session`: the server
+  fetches only what is named. The DMS reloads the menu this way when the
+  backend announces a change.
+- The access a menu entry shows is for display: the backend checks access on
+  every request, whatever the menu says.
+
+A navigation that changes only the query or the hash of the page on screen
+(`useDmsRouter().push({ query })`, `navigateDms`, `DmsLink`) is an Inertia
+client-side visit: the URL and the history entry change, the page stays
+mounted with its props, and no request is made, since the page props depend
+on the path alone. Pass a server-only option (`only`, `data`, `headers`,
+`onStart`…) to make the request anyway; an error page is always left through
+the server.
+
+`DmsLink` prefetches the page it points to on hover; once Inertia has the
+props, the page, its layout and its block components start loading, so
+following the link waits for neither. A change of account or workspace, and
+signing out, drop the prefetched pages.
 
 ### Data loading
 

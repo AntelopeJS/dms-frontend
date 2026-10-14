@@ -32,13 +32,58 @@ export function inertiaAppHtml(page) {
   return `<script data-page="app" type="application/json">${serialized}</script><div id="app"></div>`;
 }
 
-export function createInertiaPage(url, props, version = assetVersion()) {
-  return {
-    component: "DmsDynamicPage",
+/** The one Inertia component every DMS page renders through. */
+export const DMS_PAGE_COMPONENT = "DmsDynamicPage";
+
+export function createInertiaPage(
+  url,
+  props,
+  version = assetVersion(),
+  onceProps,
+) {
+  const page = {
+    component: DMS_PAGE_COMPONENT,
     props: { ...props, errors: props?.errors ?? {} },
     url,
     version,
   };
+  if (onceProps) page.onceProps = onceProps;
+  return page;
+}
+
+function headerList(request, name) {
+  return String(request.headers[name] ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Which top-level props a request asks for. A full visit asks for all of them.
+ * A partial reload (`router.reload({ only, except })`) of the page on screen
+ * names them: a nested path selects its top-level prop, which is sent whole,
+ * and only a top-level name excludes one.
+ */
+export function requestedProps(request) {
+  const partial =
+    Boolean(request.headers["x-inertia"]) &&
+    request.headers["x-inertia-partial-component"] === DMS_PAGE_COMPONENT;
+  if (!partial) return { partial, wants: () => true };
+  const only = new Set(
+    headerList(request, "x-inertia-partial-data").map(
+      (path) => path.split(".")[0],
+    ),
+  );
+  const except = new Set(headerList(request, "x-inertia-partial-except"));
+  return {
+    partial,
+    wants: (prop) => (only.size === 0 || only.has(prop)) && !except.has(prop),
+  };
+}
+
+/** The once props the browser already holds, unexpired, by key. */
+export function heldOnceProps(request) {
+  return new Set(headerList(request, "x-inertia-except-once-props"));
 }
 
 export function inertiaHeaders(version = assetVersion()) {

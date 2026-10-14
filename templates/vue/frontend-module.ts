@@ -60,7 +60,6 @@ export interface DmsPagePayload {
   componentName?: string;
   layoutUrl?: string;
   layout?: DmsPageLayout;
-  shared?: DmsSharedPagePayload;
   [key: string]: unknown;
 }
 export interface DmsSharedPagePayload {
@@ -82,6 +81,11 @@ export interface DmsPageLayout {
 export interface DmsPageProps {
   path: string;
   page: DmsPagePayload;
+  /**
+   * The site layout. An Inertia once prop: a visit carries it over from the
+   * previous page until it expires, unless the server sends a newer one.
+   */
+  shared?: DmsSharedPagePayload;
   user?: DmsUser;
   session?: DmsSession;
   error?: DmsErrorData;
@@ -448,6 +452,10 @@ export interface DmsFrontendRuntime {
   pageVersion: number;
   /** Whether the page `<Suspense>` waits on the page being navigated to. */
   pageLoading: Ref<boolean>;
+  /** The site layout last copied into the state, as the page props hold it. */
+  appliedShared?: DmsSharedPagePayload;
+  /** Whether Inertia is putting back a page from the browser history. */
+  restoringHistory?: boolean;
   /**
    * Identifies the page on screen (its path, or the error page shown at that
    * path), whose meta `route.meta` holds.
@@ -723,6 +731,73 @@ async function runMiddleware(
   }
 }
 
+// What only a request to the server can honour: a client-side visit sends
+// none and has none of these events.
+const SERVER_VISIT_OPTIONS = [
+  "async",
+  "component",
+  "data",
+  "except",
+  "headers",
+  "method",
+  "onBefore",
+  "onCancel",
+  "onCancelToken",
+  "onProgress",
+  "onStart",
+  "only",
+  "preserveUrl",
+  "queryStringArrayFormat",
+] as const satisfies readonly (keyof DmsNavigationOptions)[];
+
+/**
+ * Whether a visit to another query or hash of the page on screen can stay in
+ * the browser. The page props depend on the path alone: the server would
+ * answer with the same page, the site layout included. An error page is left
+ * through the server, which renders the page in its place, and so is the
+ * same path on another site.
+ */
+function staysOnPage(
+  runtime: DmsFrontendRuntime,
+  url: string,
+  options: DmsNavigationOptions,
+): boolean {
+  return (
+    new URL(url, currentUrl(runtime)).origin ===
+      new URL(currentUrl(runtime)).origin &&
+    !runtime.pageKey?.startsWith("error:") &&
+    runtime.currentError.value === null &&
+    SERVER_VISIT_OPTIONS.every((name) => options[name] === undefined)
+  );
+}
+
+/**
+ * An Inertia client-side visit: the URL and the history entry change, the
+ * page keeps its props, and no request is made.
+ */
+function visitInBrowser(
+  url: string,
+  options: DmsNavigationOptions,
+): Promise<void> {
+  const clientVisit = options.replace
+    ? inertiaRouter.replace
+    : inertiaRouter.push;
+  return new Promise<void>((resolve) => {
+    clientVisit.call(inertiaRouter, {
+      url,
+      preserveScroll: options.preserveScroll ?? true,
+      preserveState: options.preserveState ?? true,
+      viewTransition: options.viewTransition,
+      onSuccess: options.onSuccess,
+      onError: options.onError,
+      onFinish: (visit) => {
+        (options.onFinish as ((visit: unknown) => void) | undefined)?.(visit);
+        resolve();
+      },
+    } as Parameters<typeof inertiaRouter.push>[0]);
+  });
+}
+
 async function visit(
   runtime: DmsFrontendRuntime,
   to: RouteLocationRaw,
@@ -742,6 +817,10 @@ async function visit(
   // component on every visit and its local state (open tabs, selection,
   // inputs) is lost.
   const samePath = target.path === runtime.route.path;
+  if (samePath && staysOnPage(runtime, url, options)) {
+    await visitInBrowser(url, options);
+    return;
+  }
   await new Promise<void>((resolve) =>
     inertiaRouter.visit(url, {
       ...options,
@@ -1735,6 +1814,41 @@ export async function clearError(options?: {
   if (options?.redirect) await navigateDms(options.redirect);
 }
 
+function sessionIdentity(session: unknown): string {
+  const { accountId, activeTenantId } = (session ?? {}) as Partial<DmsSession>;
+  return `${accountId ?? ""}\n${activeTenantId ?? ""}`;
+}
+
+/**
+ * Drops the pages Inertia prefetched (a hovered link) once the session is
+ * another account's or workspace's, or none: each carries the user, the page
+ * and the site layout of the session it was fetched with, and a visit would
+ * show them as current.
+ */
+function forgetPrefetchedPages(): void {
+  if (typeof window !== "undefined") inertiaRouter.flushAll();
+}
+
+/**
+ * Warms what a prefetched page renders (its page, layout and block
+ * components) once Inertia has its props, so following the link does not wait
+ * for those chunks after the props.
+ */
+export function preloadPrefetchedDmsPages(): () => void {
+  return inertiaRouter.on("prefetched", (event) => {
+    const data = event.detail.response.data as unknown;
+    let page: { props?: DmsPageProps } | undefined;
+    try {
+      page = (typeof data === "string" ? JSON.parse(data) : data) as
+        | { props?: DmsPageProps }
+        | undefined;
+    } catch {
+      return;
+    }
+    if (page?.props?.page) void preloadDmsPage(page.props).catch(() => {});
+  });
+}
+
 export function useUserSession<
   TUser = DmsUser,
   TSession = DmsSession,
@@ -1746,17 +1860,20 @@ export function useUserSession<
     session,
     loggedIn: computed(() => user.value !== null),
     fetch: async () => {
+      const before = sessionIdentity(session.value);
       const value = await ofetch<{
         user?: TUser;
         session?: TSession;
       }>("/api/_auth/session", { method: "POST" });
       user.value = value.user ?? null;
       session.value = value.session ?? null;
+      if (sessionIdentity(session.value) !== before) forgetPrefetchedPages();
     },
     clear: async () => {
       await ofetch("/api/_auth/session", { method: "DELETE" });
       user.value = null;
       session.value = null;
+      forgetPrefetchedPages();
     },
   };
 }
@@ -1947,6 +2064,9 @@ function collectRenderedComponentNames(
   for (const key of ["component", "componentName"]) {
     if (typeof definition[key] === "string") names.add(definition[key]);
   }
+  // A child places a component definition: `{ id, component: { … } }`.
+  if (typeof definition.component === "object")
+    collectRenderedComponentNames(definition.component, names);
   collectRenderedComponentNames(definition.children, names);
 }
 
@@ -2038,6 +2158,61 @@ function isStaleSession(
   );
 }
 
+/**
+ * Copies the site layout of the page props into the state. A visit carries
+ * the layout it was sent over from page to page (a once prop): the same copy
+ * is applied once, so the state keeps what a later refresh wrote into it, and
+ * `dms-lastRefreshTime` tells when the layout was last received.
+ */
+export function hydrateDmsSharedProps(
+  shared: DmsSharedPagePayload | undefined,
+): void {
+  const runtime = useDmsRuntime();
+  if (!shared || shared === runtime.appliedShared) return;
+  // A page from the history carries the layout it was shown with, which the
+  // state has replaced since: see `keepSharedOverHistory`.
+  if (runtime.restoringHistory) return;
+  runtime.appliedShared = shared;
+  useDmsState<unknown>("dms-siteLayout", () => undefined).value =
+    shared.siteLayout;
+  useDmsState<unknown>("dms-pageTree", () => undefined).value =
+    shared.siteLayoutTree;
+  useDmsState<unknown>("dms-quickActions", () => undefined).value =
+    shared.quickActions;
+  useDmsState<unknown>("dms-modules", () => undefined).value = shared.modules;
+  useDmsState("dms-isOwner", () => false).value = shared.isOwner ?? false;
+  useDmsState("dms-lastRefreshTime", () => 0).value = Date.now();
+}
+
+/**
+ * Keeps the newest site layout when Back or Forward puts a page back. The
+ * page carries the layout it was shown with, which a later reload replaced
+ * (a menu change the backend announced); it is not copied into the state, and
+ * the page is given the current one, so the next visit carries that over
+ * rather than the older one.
+ */
+export function keepSharedOverHistory(): () => void {
+  const runtime = useDmsRuntime();
+  const onPopstate = (event: PopStateEvent) => {
+    // Inertia restores only the entries it wrote, which hold a page.
+    if ((event.state as { page?: unknown } | null)?.page)
+      runtime.restoringHistory = true;
+  };
+  window.addEventListener("popstate", onPopstate);
+  const stopListening = inertiaRouter.on("navigate", (event) => {
+    if (!runtime.restoringHistory) return;
+    runtime.restoringHistory = false;
+    const current = runtime.appliedShared;
+    const restored = (event.detail.page.props as Partial<DmsPageProps>).shared;
+    if (current && restored !== current)
+      inertiaRouter.replaceProp("shared", current);
+  });
+  return () => {
+    window.removeEventListener("popstate", onPopstate);
+    stopListening();
+  };
+}
+
 export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
   const runtime = useDmsRuntime();
   if (url) updateRoute(runtime, url);
@@ -2061,18 +2236,7 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
       props.user ?? null;
     session.value = props.session ?? null;
   }
-  const shared = props.page.shared;
-  if (shared) {
-    useDmsState<unknown>("dms-siteLayout", () => undefined).value =
-      shared.siteLayout;
-    useDmsState<unknown>("dms-pageTree", () => undefined).value =
-      shared.siteLayoutTree;
-    useDmsState<unknown>("dms-quickActions", () => undefined).value =
-      shared.quickActions;
-    useDmsState<unknown>("dms-modules", () => undefined).value = shared.modules;
-    useDmsState("dms-isOwner", () => false).value = shared.isOwner ?? false;
-    useDmsState("dms-lastRefreshTime", () => 0).value = Date.now();
-  }
+  hydrateDmsSharedProps(props.shared);
   const layoutUrl = props.page.route?.layoutUrl ?? props.page.layoutUrl;
   const pageLayouts = useDmsState<Record<string, DmsPageLayout>>(
     "dms-pageLayouts",
