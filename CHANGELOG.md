@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.6
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.5...v0.5.6)
+
+### 🤖 CI
+
+- Speed up pipeline and verify-source ([#112](https://github.com/AntelopeJS/dms-frontend/pull/112))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.5.5
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.4...v0.5.5)
