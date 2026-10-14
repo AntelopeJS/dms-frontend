@@ -1486,7 +1486,15 @@ export function defineDmsPageMeta(meta: Record<string, unknown>): void {
     ? Promise.all([runtime.pendingNavigation, navigation]).then(() => undefined)
     : navigation;
   void runtime.pendingNavigation;
+  // A server renders the page's subtree once its middleware is done, so the
+  // state a middleware sets is the one the HTML shows and the payload carries.
+  // A failure still reaches the render through `pendingNavigation`. Registered
+  // in the browser too, where only a server calls it: both sides must agree
+  // on the async boundaries `useId()` counts.
+  if (getCurrentInstance())
+    onServerPrefetch(() => navigation.then(ignoreSettlement, ignoreSettlement));
 }
+function ignoreSettlement(): void {}
 export function abortNavigation(): false {
   return false;
 }

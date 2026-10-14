@@ -12,6 +12,7 @@ import {
   onScopeDispose,
   ref,
   Suspense,
+  useId,
 } from "vue";
 import {
   createDmsFrontendRuntime,
@@ -661,6 +662,44 @@ describe("Page meta", () => {
     await renderDeclaringPage("/first?tab=a");
     await renderDeclaringPage("/second");
     assert.deepEqual(seen, [true, true]);
+  });
+
+  it("renders a page once its middleware is done, with the same ids in the browser", async () => {
+    await registerGlobalMiddleware(async () => {
+      const guard = useDmsState("guard", () => "");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      guard.value = "ready";
+    });
+    const ids = new Map<string, string>();
+    const Child = defineComponent({
+      props: { label: { type: String, required: true } },
+      setup(props) {
+        const id = useId();
+        ids.set(props.label, id);
+        return () => h("i", id);
+      },
+    });
+    const Page = defineComponent({
+      setup() {
+        defineDmsPageMeta({});
+        const guard = useDmsState("guard", () => "");
+        return () =>
+          h("p", [`guard:${guard.value}`, h(Child, { label: "inside" })]);
+      },
+    });
+    const Root = {
+      render: () => h("div", [h(Page), h(Child, { label: "after" })]),
+    };
+    const runtime = createDmsFrontendRuntime(undefined, {}, true);
+    const app = createSSRApp(Root);
+    provideDmsFrontendRuntime(app, runtime);
+    assert.match(await renderToString(app), /guard:ready/);
+    const serverIds = Object.fromEntries(ids);
+    ids.clear();
+
+    const browser = mountRuntime(createDmsFrontendRuntime(), Root);
+    browser.unmount();
+    assert.deepEqual(Object.fromEntries(ids), serverIds);
   });
 
   it("keeps a page's meta while it stays on screen and drops it for the next page", async () => {

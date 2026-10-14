@@ -53,13 +53,18 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
       join(workspace, "frontend-modules.generated.ts"),
       `
 import {defineComponent,h} from 'vue';
-import {createError,defineDmsPageMeta,useUserSession,useI18n,useDmsState} from './frontend-module';
+import {createError,defineDmsPageMeta,navigateDms,useUserSession,useI18n,useDmsState} from './frontend-module';
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 let exactPreloads=0;
 let catchAllPreloads=0;
 let initialMiddlewarePath='unset';
 export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerMiddleware('capture-initial-route',to=>{initialMiddlewarePath=to.fullPath},{global:true});
  sdk.registerMiddleware('async-runtime',async to=>{if(!to.path.startsWith('/async-runtime'))return;await Promise.resolve();useDmsState('async-runtime',()=>undefined).value=to.path},{global:true});
+ sdk.registerMiddleware('slow-guard',async to=>{if(!to.path.startsWith('/slow-guard-'))return;await sleep(20);if(to.path!=='/slow-guard-page-redirect')return '/onboarding?source=guard'},{global:true});
+ sdk.registerPage('slow-guard-redirect',defineComponent({setup(){defineDmsPageMeta({auth:true});return()=>h('p','Guarded page')}}));
+ sdk.registerPage('slow-guard-page-redirect',defineComponent({async setup(){defineDmsPageMeta({auth:true});await navigateDms('/onboarding?source=page');return()=>h('p','Leaving page')}}));
+ sdk.registerPage('slow-guard-both',defineComponent({async setup(){defineDmsPageMeta({auth:true});await navigateDms('/onboarding?source=page');return()=>h('p','Leaving page')}}));
  sdk.registerMiddleware('onboarding-redirect',to=>to.path.startsWith('/requires-onboarding-')?'/onboarding?source='+to.path.slice(-1):undefined,{global:true});
  sdk.registerPlugin(()=>{const {user}=useUserSession();useDmsState('plugin-user',()=>user.value?._id??'anonymous')});
  sdk.registerPage('session',defineComponent({setup(){const {user}=useUserSession();const {locale}=useI18n();const pluginUser=useDmsState('plugin-user');return()=>h('p',(user.value?._id??'anonymous')+':'+locale.value+':'+pluginUser.value)}}));
@@ -157,6 +162,21 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.equal(redirectB.headers.get("location"), "/onboarding?source=b");
     assert.equal(isolatedHealthy.status, 200);
     assert.match(await isolatedHealthy.text(), /Healthy request/);
+    // The page renders once its middleware is done, and a redirect still wins
+    // over the page: the middleware's, the one the page issues while its
+    // middleware still runs, and the middleware's over the page's.
+    for (const [path, location] of [
+      ["/slow-guard-redirect", "/onboarding?source=guard"],
+      ["/slow-guard-page-redirect", "/onboarding?source=page"],
+      ["/slow-guard-both", "/onboarding?source=guard"],
+    ]) {
+      const response = await fetch(`${base}${path}`, {
+        headers: { accept: "text/html" },
+        redirect: "manual",
+      });
+      assert.equal(response.status, 302, path);
+      assert.equal(response.headers.get("location"), location, path);
+    }
     const asyncRuntimeResponses = await Promise.all([
       fetch(`${base}/async-runtime-a`, { headers: { accept: "text/html" } }),
       fetch(`${base}/async-runtime-b`, { headers: { accept: "text/html" } }),
