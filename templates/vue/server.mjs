@@ -42,6 +42,7 @@ import { HOMEPAGE } from "./server/homepage.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
+import { writeProxyHeaders } from "./server/proxy-headers.mjs";
 import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
 import { handleTester } from "./server/tester.mjs";
 import {
@@ -192,14 +193,6 @@ async function pageProps(request) {
       },
     };
   }
-}
-
-function writeProxyHeaders(response, upstream) {
-  const headers = Object.fromEntries(upstream.headers);
-  delete headers["set-cookie"];
-  const cookies = upstream.headers.getSetCookie?.() ?? [];
-  if (cookies.length) headers["set-cookie"] = cookies;
-  response.writeHead(upstream.status, headers);
 }
 
 function redirectToHomepage(request, response, pathname) {
