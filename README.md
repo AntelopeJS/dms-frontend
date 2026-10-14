@@ -582,9 +582,16 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
   `deep: false` makes `data` a shallow ref.
 - **`useDmsFetch(url, options)`** is `useDmsAsyncData` around a request,
   keyed on its method, base URL, URL, query and body (not its headers): the
-  callers of one request share it, and a server render transfers it. A URL
-  getter moves the caller to the key of each URL; `key` names one instead,
-  and `$fetch` replaces the fetch function, which receives the signal.
+  callers of one request share it, and a server render transfers it. The URL,
+  `method`, `query`, `params` and `body` may each be a ref or a getter, read
+  again for each request: the caller moves to the key of each request, as in
+  Nuxt's `useFetch`. A URL that is `null` or `undefined` requests nothing
+  until it has a value, on the server as in the browser. `key` names a key
+  instead, and `$fetch` replaces the fetch function, which receives the
+  signal.
+- **A key that is `null` or `undefined`** (a ref or a getter for it) has
+  nothing to load: the caller holds its default, and runs nothing until the
+  key has a value.
 
 ### Icons
 

@@ -11,6 +11,7 @@ import {
   isShallow,
   nextTick,
   ref,
+  computed,
   Suspense,
   useId,
   watch,
@@ -805,6 +806,110 @@ describe("useDmsFetch", () => {
       ["order 2"],
       "the first URL's data went with the key nobody shows",
     );
+    app.unmount();
+  });
+
+  it("follows a reactive query and body to the key of each request", async () => {
+    const runtime = createDmsFrontendRuntime();
+    const page = ref(1);
+    const requests: string[] = [];
+    const fetcher = (async (
+      url: string,
+      options: { method?: string; query?: unknown; body?: unknown },
+    ) => {
+      requests.push(
+        `${options.method ?? "GET"} ${url} ${JSON.stringify(options.query ?? options.body)}`,
+      );
+      return JSON.stringify(options.query ?? options.body);
+    }) as never;
+    const listed: Array<ReturnType<typeof runtimeModule.useDmsFetch<string>>> =
+      [];
+    const Consumer = defineComponent({
+      setup() {
+        listed.push(
+          runtimeModule.useDmsFetch<string>("/api/list", {
+            query: () => ({ page: page.value }),
+            $fetch: fetcher,
+          }),
+          runtimeModule.useDmsFetch<string>("/api/count", {
+            method: "POST",
+            body: computed(() => ({ page: page.value })),
+            $fetch: fetcher,
+          }),
+        );
+        return () => h("p");
+      },
+    });
+    const app = mountRuntime(runtime, { render: () => h(Consumer) });
+    await settle();
+    page.value = 2;
+    await settle();
+
+    assert.deepEqual(requests, [
+      'GET /api/list {"page":1}',
+      'POST /api/count {"page":1}',
+      'GET /api/list {"page":2}',
+      'POST /api/count {"page":2}',
+    ]);
+    assert.deepEqual(
+      listed.map((result) => result.data.value),
+      ['{"page":2}', '{"page":2}'],
+    );
+    app.unmount();
+  });
+
+  it("requests nothing while the URL is null, on the server as in the browser", async () => {
+    const server = fetchingRuntime(true);
+    const Waiting = defineComponent({
+      setup() {
+        const { data, status } = runtimeModule.useDmsFetch<string>(() => null, {
+          default: () => "none",
+        });
+        return () => h("p", `${status.value}:${data.value}`);
+      },
+    });
+    const ssr = createSSRApp(Waiting);
+    provideDmsFrontendRuntime(ssr, server.runtime);
+    assert.equal(await renderToString(ssr), "<p>idle:none</p>");
+    assert.deepEqual(server.requests, []);
+    assert.deepEqual(
+      runtimeModule.serializeDmsPayload(server.runtime).data,
+      {},
+    );
+
+    const browser = fetchingRuntime(false);
+    const id = ref<number | null>(null);
+    let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
+    const app = mountRuntime(browser.runtime, {
+      render: () =>
+        h(
+          defineComponent({
+            setup() {
+              entry = runtimeModule.useDmsFetch<string>(() =>
+                id.value === null ? null : `/api/orders/${id.value}`,
+              );
+              return () => h("p");
+            },
+          }),
+        ),
+    });
+    await settle();
+    await entry!.refresh();
+    assert.deepEqual(browser.requests, [], "not even when refreshed");
+    assert.equal(entry!.status.value, "idle");
+
+    id.value = 7;
+    await settle();
+    assert.deepEqual(
+      browser.requests.map(({ url }) => url),
+      ["/api/orders/7"],
+    );
+    assert.equal(entry!.data.value, "data:/api/orders/7");
+
+    id.value = null;
+    await settle();
+    assert.equal(entry!.data.value, "data:/api/orders/7", "kept on screen");
+    assert.equal(browser.requests.length, 1);
     app.unmount();
   });
 });

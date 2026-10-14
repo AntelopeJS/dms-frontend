@@ -27,6 +27,7 @@ import {
   hasInjectionContext,
   type InjectionKey,
   inject,
+  isRef,
   type MaybeRefOrGetter,
   nextTick,
   onBeforeMount,
@@ -198,12 +199,26 @@ export interface DmsAsyncDataContext {
 export type DmsAsyncDataHandler<T> = (
   context: DmsAsyncDataContext,
 ) => Promise<T>;
-export interface UseFetchOptions<T> extends FetchOptions {
+/** A key, or `null` (or `undefined`) while there is nothing to load. */
+export type DmsAsyncDataKey = string | null | undefined;
+/**
+ * The request options a ref or a getter may stand for: read again for each
+ * request, and part of the key the response is shared under.
+ */
+type DmsFetchRequestSources = "method" | "query" | "params" | "body";
+export interface UseFetchOptions<T> extends Omit<
+  FetchOptions,
+  DmsFetchRequestSources
+> {
   /**
    * The key the response is shared and transferred under, in place of the
    * one the request gives: its method, base URL, URL, query and body.
    */
   key?: string;
+  method?: MaybeRefOrGetter<FetchOptions["method"]>;
+  query?: MaybeRefOrGetter<FetchOptions["query"]>;
+  params?: MaybeRefOrGetter<FetchOptions["params"]>;
+  body?: MaybeRefOrGetter<FetchOptions["body"]>;
   immediate?: boolean;
   lazy?: boolean;
   server?: boolean;
@@ -874,13 +889,29 @@ function requestKey(url: string, options: FetchOptions): string | undefined {
   return request === undefined ? undefined : `${FETCH_KEY_PREFIX}${request}`;
 }
 
+/** A URL to request, or nothing to request while it is null or undefined. */
+type DmsFetchRequest = string | null | undefined;
+
+function isReactiveSource(value: unknown): boolean {
+  return isRef(value) || typeof value === "function";
+}
+
+/** The options given, without the ones left undefined. */
+function definedOptions(options: FetchOptions): FetchOptions {
+  return Object.fromEntries(
+    Object.entries(options).filter(([, value]) => value !== undefined),
+  ) as FetchOptions;
+}
+
 /**
  * Fetches a URL as `useDmsAsyncData` loads its data, under the key of the
  * request, so that the callers of one request share it and a server render
- * transfers it. A URL getter moves the caller to the key of each URL.
+ * transfers it. A ref or a getter for the URL, the method, the query, the
+ * params or the body moves the caller to the key of each request; a URL that
+ * is null or undefined requests nothing.
  */
 export function useDmsFetch<T>(
-  request: string | (() => string),
+  request: MaybeRefOrGetter<DmsFetchRequest>,
   options: UseFetchOptions<T> = {},
 ): DmsAsyncDataResult<T> {
   const runtime = useDmsRuntime();
@@ -896,12 +927,24 @@ export function useDmsFetch<T>(
     deep,
     dedupe,
     $fetch: fetcher,
-    ...requestOptions
+    method,
+    query,
+    params,
+    body,
+    ...fixedOptions
   } = options;
-  const url = () => (typeof request === "function" ? request() : request);
+  const url = () => toValue(request);
+  const requestOptions = (): FetchOptions =>
+    definedOptions({
+      ...fixedOptions,
+      method: toValue(method),
+      query: toValue(query),
+      params: toValue(params),
+      body: toValue(body),
+    });
   const handler: DmsAsyncDataHandler<T> = ({ signal }) =>
-    (fetcher ?? runtime.serverFetch ?? ofetch)(url(), {
-      ...requestOptions,
+    (fetcher ?? runtime.serverFetch ?? ofetch)(url() as string, {
+      ...requestOptions(),
       signal,
     }) as Promise<T>;
   const asyncOptions: UseAsyncDataOptions<T> = {
@@ -915,24 +958,37 @@ export function useDmsFetch<T>(
     deep,
     dedupe,
   };
-  // The request gives its key, which a URL getter moves along with the URL.
-  if (key === undefined && requestKey(url(), requestOptions) !== undefined) {
-    const derived = () => requestKey(url(), requestOptions) as string;
+  const reactiveSources = [request, method, query, params, body].filter(
+    isReactiveSource,
+  );
+  const isReactive = reactiveSources.length > 0;
+  // The request gives its key, which follows the request as it changes.
+  const derived = (): string | null | undefined => {
+    const target = url();
+    return target == null ? null : requestKey(target, requestOptions());
+  };
+  if (key === undefined && derived() !== undefined)
     return useDmsAsyncData(
-      typeof request === "function" ? derived : derived(),
+      isReactive ? derived : derived(),
       handler,
       asyncOptions,
     );
-  }
   // The key the caller names, or none for a body without one, stays put while
-  // the URL changes: the URL is watched instead.
+  // the request changes: the request is watched instead.
   const watched =
-    typeof request === "function" && sources !== false
-      ? [request, ...(sources ?? [])]
+    isReactive && sources !== false
+      ? [...reactiveSources, ...(sources ?? [])]
       : sources;
-  return key === undefined
-    ? useDmsAsyncData(handler, undefined, { ...asyncOptions, watch: watched })
-    : useDmsAsyncData(key, handler, { ...asyncOptions, watch: watched });
+  if (key === undefined)
+    return useDmsAsyncData(handler, undefined, {
+      ...asyncOptions,
+      watch: watched,
+    });
+  const named = () => (url() == null ? null : key);
+  return useDmsAsyncData(isReactiveSource(request) ? named : named(), handler, {
+    ...asyncOptions,
+    watch: watched,
+  });
 }
 
 interface AsyncDataBinding<T> {
@@ -1175,7 +1231,7 @@ function asyncDataEntry<T>(
  * the wait; `server: false` leaves it to the browser.
  */
 export function useDmsAsyncData<T>(
-  keyOrHandler: MaybeRefOrGetter<string> | DmsAsyncDataHandler<T>,
+  keyOrHandler: MaybeRefOrGetter<DmsAsyncDataKey> | DmsAsyncDataHandler<T>,
   handler?: DmsAsyncDataHandler<T>,
   options: UseAsyncDataOptions<T> = {},
 ): DmsAsyncDataResult<T> {
@@ -1183,7 +1239,7 @@ export function useDmsAsyncData<T>(
   // With a handler second, the first argument is the key: a string, or a ref
   // or getter whose changes move the caller to the data of another key.
   const keySource = handler
-    ? (keyOrHandler as MaybeRefOrGetter<string>)
+    ? (keyOrHandler as MaybeRefOrGetter<DmsAsyncDataKey>)
     : undefined;
   const execute = handler ?? keyOrHandler;
   if (typeof execute !== "function")
@@ -1192,7 +1248,7 @@ export function useDmsAsyncData<T>(
   const consumer = shallowRef(
     attachAsyncData(
       runtime,
-      keySource === undefined ? undefined : toValue(keySource),
+      keySource === undefined ? undefined : (toValue(keySource) ?? null),
       execute as DmsAsyncDataHandler<T>,
       options,
       inComponent,
@@ -1211,7 +1267,7 @@ export function useDmsAsyncData<T>(
   const { entry, stale } = consumer.value;
   const waited = startAsyncData(runtime, entry, stale, options, inComponent);
   const result =
-    keySource === undefined || typeof keySource === "string"
+    keySource == null || typeof keySource === "string"
       ? entry.result
       : followAsyncDataKey(
           runtime,
@@ -1274,15 +1330,20 @@ interface AsyncDataConsumer<T> extends AsyncDataBindingHandle {
   alone: boolean;
 }
 
+/**
+ * Binds a caller to the data of its key. A `null` key has no data to load:
+ * the caller holds its default, and nothing runs until it has a key.
+ */
 function attachAsyncData<T>(
   runtime: DmsFrontendRuntime,
-  key: string | undefined,
+  key: string | null | undefined,
   handler: DmsAsyncDataHandler<T>,
   options: UseAsyncDataOptions<T>,
   inComponent: boolean,
 ): AsyncDataConsumer<T> {
-  const entry = asyncDataEntry(runtime, key, options, inComponent);
+  const entry = asyncDataEntry(runtime, key ?? undefined, options, inComponent);
   const alone = entry.unused();
+  if (key === null) return { entry, alone, stale: false, unbind() {} };
   const binding = { handler, options, pageVersion: runtime.pageVersion };
   return { entry, alone, ...entry.bind(binding) };
 }
@@ -1295,12 +1356,12 @@ function attachAsyncData<T>(
 function followAsyncDataKey<T>(
   runtime: DmsFrontendRuntime,
   consumer: ShallowRef<AsyncDataConsumer<T>>,
-  keySource: MaybeRefOrGetter<string>,
+  keySource: MaybeRefOrGetter<DmsAsyncDataKey>,
   handler: DmsAsyncDataHandler<T>,
   options: UseAsyncDataOptions<T>,
 ): DmsAsyncData<T> {
   watch(
-    () => toValue(keySource),
+    () => toValue(keySource) ?? null,
     (key) => {
       const previous = consumer.value.entry.result;
       const shown = previous.data.value;
@@ -1341,7 +1402,7 @@ function followAsyncDataKey<T>(
 }
 
 export function useDmsLazyAsyncData<T>(
-  keyOrHandler: string | DmsAsyncDataHandler<T>,
+  keyOrHandler: MaybeRefOrGetter<DmsAsyncDataKey> | DmsAsyncDataHandler<T>,
   handler?: DmsAsyncDataHandler<T>,
   options: UseAsyncDataOptions<T> = {},
 ): DmsAsyncDataResult<T> {
