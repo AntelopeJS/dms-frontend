@@ -56,8 +56,15 @@ jobs:
       - run: pnpm knip
 
   test:
+    name: test (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The suite is CPU-bound: node --test already runs the files in parallel
+    # on every core, so splitting the files across two runners halves it.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       COREPACK_DEFAULT_TO_LATEST: 0
     steps:
@@ -79,9 +86,13 @@ jobs:
       # DMS_PREBUILT set, the CLI runs of cli-sandbox spawn it too instead of
       # the sources under tsx, several times slower to start.
       - run: pnpm build
+      # --test-shard goes through NODE_OPTIONS because node only reads it
+      # before the file list `pnpm test` ends with; node ignores it outside a
+      # test run, so the processes the tests spawn are unaffected.
       - run: pnpm test
         env:
           DMS_PREBUILT: 1
+          NODE_OPTIONS: --test-shard=${{ matrix.shard }}/2
 
   ubuntu:
     if: always()
