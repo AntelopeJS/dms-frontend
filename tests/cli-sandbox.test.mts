@@ -24,10 +24,22 @@ const packageJson = JSON.parse(
   ),
 );
 
-const cliEntry = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../src/index.ts",
-);
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const builtEntry = join(repository, "dist/index.js");
+/**
+ * The CLI the runs spawn. CI builds before testing and sets DMS_PREBUILT, so
+ * the runs take the compiled CLI, which starts several times faster than the
+ * sources under tsx. Elsewhere `dist/` may be stale: the runs take the
+ * sources.
+ */
+const cliCommand =
+  process.env.DMS_PREBUILT && existsSync(builtEntry)
+    ? [builtEntry]
+    : [
+        "--import",
+        import.meta.resolve("tsx"),
+        join(repository, "src/index.ts"),
+      ];
 
 interface CliResult {
   code: number;
@@ -85,10 +97,8 @@ async function runCli(
     const { stdout, stderr } = await promisify(execFile)(
       process.execPath,
       [
-        "--import",
-        import.meta.resolve("tsx"),
         ...(options.isTerminal ? ["--import", TERMINAL_STDERR] : []),
-        cliEntry,
+        ...cliCommand,
         ...args,
       ],
       { cwd: sandbox, env: env as NodeJS.ProcessEnv },
@@ -268,15 +278,11 @@ describe("following the ajs output contract", () => {
   });
 
   it("exits quietly when the reader of its output goes away", async () => {
-    const cli = spawn(
-      process.execPath,
-      ["--import", import.meta.resolve("tsx"), cliEntry, "help", "dev"],
-      {
-        cwd: mkdtempSync(join(tmpdir(), "dms-cli-")),
-        stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
-      },
-    );
+    const cli = spawn(process.execPath, [...cliCommand, "help", "dev"], {
+      cwd: mkdtempSync(join(tmpdir(), "dms-cli-")),
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
+    });
     // What `| head` does once it has read enough: close its end of the pipe.
     cli.stdout.destroy();
     let stderr = "";

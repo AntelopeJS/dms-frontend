@@ -9,6 +9,7 @@
     "build:compress": "node compress-assets.mjs",
     "build:ssr": "vite build --ssr ssr-renderer.ts --outDir dist/ssr",
     "build:email": "vite build --config vite.email.config.ts",
+    "build:types": "node prepare-types.mjs",
     "typecheck": "node --import ./typecheck-loader.mjs ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit",
     "start": "node server.mjs"
   },

@@ -22,7 +22,32 @@ async function listen(server: Server): Promise<number> {
   return address.port;
 }
 
-/** Sends `target` verbatim, as `fetch` would normalize it first. */
+const HEAD_END = "\r\n\r\n";
+const LAST_CHUNK = "0\r\n\r\n";
+
+/** The head and body of `data` once it holds a whole response. */
+function completeResponse(data: string) {
+  const headEnd = data.indexOf(HEAD_END);
+  if (headEnd < 0) return undefined;
+  const head = data.slice(0, headEnd);
+  const body = data.slice(headEnd + HEAD_END.length);
+  const length = /^content-length:\s*(\d+)\s*$/im.exec(head)?.[1];
+  if (length !== undefined)
+    return Buffer.byteLength(body) >= Number(length)
+      ? { head, body }
+      : undefined;
+  if (/^transfer-encoding:\s*chunked\s*$/im.test(head))
+    return body === LAST_CHUNK || body.endsWith(`\r\n${LAST_CHUNK}`)
+      ? { head, body }
+      : undefined;
+  return undefined;
+}
+
+/**
+ * Sends `target` verbatim, as `fetch` would normalize it first. Settles once
+ * the whole response is read rather than when the server closes the socket,
+ * which a kept-alive connection only does after its idle timeout.
+ */
 function rawRequest(port: number, method: string, target: string) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
     const socket = connect(port, "127.0.0.1", () => {
@@ -34,11 +59,23 @@ function rawRequest(port: number, method: string, target: string) {
       socket.destroy(new Error("timeout")),
     );
     let data = "";
-    socket.on("data", (chunk) => (data += chunk));
+    const settle = (response: { head: string; body: string }) => {
+      socket.destroy();
+      resolve({
+        status: Number(response.head.split(" ")[1]),
+        body: response.body,
+      });
+    };
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      data += chunk;
+      const response = completeResponse(data);
+      if (response) settle(response);
+    });
     socket.on("error", reject);
     socket.on("end", () => {
-      const [head = "", body = ""] = data.split("\r\n\r\n");
-      resolve({ status: Number(head.split(" ")[1]), body });
+      const [head = "", body = ""] = data.split(HEAD_END);
+      settle({ head, body });
     });
   });
 }
