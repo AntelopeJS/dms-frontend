@@ -16,10 +16,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# The checks run as parallel jobs, so a pull request waits for the slowest
+# one rather than for their sum. `ubuntu`, the name of the former single job,
+# gathers them for branch protection.
 jobs:
-  ubuntu:
+  static:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     env:
       COREPACK_DEFAULT_TO_LATEST: 0
     steps:
@@ -34,6 +37,15 @@ jobs:
       # packageManager. Pinned so a corepack release cannot break every
       # build at once.
       - run: npm i -g --force corepack@0.34.0 && corepack enable
+      # setup-node's own `cache: pnpm` needs pnpm before setup-node runs, and
+      # pnpm only exists once corepack is enabled above.
+      - id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       # oxlint's type-aware pass degrades to `any` on a broken tsconfig
@@ -42,5 +54,44 @@ jobs:
       # Unused dependencies only. `pnpm knip:all` also reports dead files and
       # exports, which need a human to confirm, so they stay out of the gate.
       - run: pnpm knip
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COREPACK_DEFAULT_TO_LATEST: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm i -g --force corepack@0.34.0 && corepack enable
+      - id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      # The suite needs dist/ anyway (cli-startup spawns it); with
+      # DMS_PREBUILT set, the CLI runs of cli-sandbox spawn it too instead of
+      # the sources under tsx, several times slower to start.
       - run: pnpm build
       - run: pnpm test
+        env:
+          DMS_PREBUILT: 1
+
+  ubuntu:
+    if: always()
+    needs: [static, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every check passed
+        run: |
+          results='${{ join(needs.*.result, ' ') }}'
+          echo "$results"
+          for result in $results; do
+            [ "$result" = success ] || exit 1
+          done
