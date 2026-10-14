@@ -453,7 +453,12 @@ describePosix("framing verify-source", () => {
       run.stderr,
       new RegExp(
         `✔ Materialized 1 module${DONE}✔ Installed 3 packages${DONE}` +
+          `✔ Generated the type declarations${DONE}` +
+          // The bundles build and the type check runs at once: the steps
+          // that passed end in any order.
+          `(?:✔ .+\n)*` +
           "✖ SSR bundle failed(?: \\S+)?\n" +
+          `(?:✔ .+\n)*` +
           "✖ Vite could not compile \\./frontend-vue/app/components/Callout\\.vue:10:50\n" +
           " {2}\\[vue/compiler-sfc\\] Unexpected token\n" +
           " {2}10 \\|.*\n {5}\\| +\\^\n" +

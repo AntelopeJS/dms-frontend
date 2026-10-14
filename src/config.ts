@@ -99,6 +99,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["email-markup.ts", "email-markup.ts"],
   ["tsconfig.json", "tsconfig.json"],
   ["typecheck-loader.mjs", "typecheck-loader.mjs"],
+  ["prepare-types.mjs", "prepare-types.mjs"],
   ["app-config-stub.mjs", "app-config-stub.mjs"],
   ["DmsDynamicPage.vue", "DmsDynamicPage.vue"],
   ["server.mjs", "server.mjs"],

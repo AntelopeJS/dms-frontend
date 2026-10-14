@@ -20,12 +20,7 @@ import {
   runWithErrorBoundary,
   getProcessUi,
 } from "@antelopejs/core/cli";
-import {
-  createPathMapper,
-  describeChildFailure,
-  type PathMapper,
-} from "./child-output";
-import { BUILD_STEPS, buildStepFailure } from "./commands/build-action";
+import { createPathMapper } from "./child-output";
 import {
   assertLayersSupportRenderer,
   CancelledError,
@@ -34,7 +29,6 @@ import {
   installDeps,
   materializeLayers,
   type ResolvedLayer,
-  runFramedCommand,
   writeFrontendModuleRegistry,
   writeWorkspacePackageJson,
 } from "./common";
@@ -46,17 +40,16 @@ import {
 } from "./output";
 import { createTemporaryWorkspace } from "./temporary-workspace";
 import {
-  describeTypeCheckErrors,
-  parseTypeCheckOutput,
-} from "./typecheck-output";
+  buildAndTypeCheck,
+  prepareTypes,
+  type VerificationContext,
+} from "./verify-source-build";
 import {
   reportVerification,
   type VerificationResult,
-  VERIFY_SOURCE_COMMAND,
 } from "./verify-source-result";
 import { readSourceOptions, readSources } from "./verify-source-sources";
 import {
-  reportViteWarnings,
   VITE_LOG_LEVEL_VARIABLE,
   viteLogLevel,
   ViteWarnings,
@@ -66,14 +59,6 @@ interface LayerPackage {
   name?: string;
   devDependencies?: Record<string, string>;
   [key: string]: unknown;
-}
-
-interface VerificationContext {
-  workspace: string;
-  env: NodeJS.ProcessEnv;
-  mapLine: PathMapper;
-  warnings: ViteWarnings;
-  isVerbose: boolean;
 }
 
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;
@@ -156,42 +141,6 @@ function materializeWorkspace(
 // Checks
 // ============================================================================
 
-async function buildBundles(context: VerificationContext): Promise<void> {
-  const [firstStep] = BUILD_STEPS;
-  await getProcessTasks().run(
-    firstStep.running,
-    async (task) => {
-      for (const step of BUILD_STEPS) {
-        task.update(step.running);
-        // --silent drops pnpm's script echo and its ELIFECYCLE line: the
-        // failure is reported here.
-        const result = await runFramedCommand(
-          "pnpm",
-          ["--silent", "run", step.script],
-          {
-            name: step.name,
-            cwd: context.workspace,
-            env: context.env,
-            mapLine: context.mapLine,
-            onLine: (line) => context.warnings.read(line),
-          },
-        );
-        if (result.code !== 0) {
-          task.fail(step.failed);
-          throw buildStepFailure(
-            step,
-            result,
-            context.isVerbose,
-            VERIFY_SOURCE_COMMAND,
-          );
-        }
-      }
-    },
-    { done: "Built client, SSR and e-mail bundles" },
-  );
-  reportViteWarnings(context.warnings, context.isVerbose, getProcessUi());
-}
-
 /**
  * The client bundle keeps the heavy libraries out of the main chunk, and
  * still reaches them and the pages every DMS serves: those of the DMS core
@@ -226,48 +175,6 @@ function checkClientBundle(workspace: string): void {
       javascript.includes(marker),
       `${marker} is not reachable at runtime`,
     );
-}
-
-async function typeCheck(context: VerificationContext): Promise<void> {
-  const typecheckArguments = [
-    "--import",
-    "./typecheck-loader.mjs",
-    "./node_modules/vue-tsc/bin/vue-tsc.js",
-    "--noEmit",
-    "--pretty",
-  ];
-  const isWindows = process.platform === "win32";
-  const command = isWindows ? process.execPath : "env";
-  const commandArguments = isWindows
-    ? typecheckArguments
-    : ["-u", "NODE_OPTIONS", process.execPath, ...typecheckArguments];
-  await getProcessTasks().run(
-    "Type checking",
-    async (task) => {
-      const result = await runFramedCommand(command, commandArguments, {
-        name: "vue-tsc",
-        cwd: context.workspace,
-        mapLine: context.mapLine,
-      });
-      if (result.code === 0) return;
-      const report = parseTypeCheckOutput(result.lines);
-      const count = report.count > 0 ? [pluralize(report.count, "error")] : [];
-      task.fail(
-        ["Type check failed", ...count].join(getProcessUi().symbols.separator),
-      );
-      throw new CliError(
-        describeTypeCheckErrors(report, VERIFY_SOURCE_COMMAND) ??
-          describeChildFailure({
-            title: "Type check failed",
-            command: "vue-tsc --noEmit",
-            code: result.code,
-            lines: result.lines,
-            isVerbose: context.isVerbose,
-          }),
-      );
-    },
-    { done: "Type check passed" },
-  );
 }
 
 interface EmailCase {
@@ -462,13 +369,13 @@ async function verifySources(): Promise<VerificationResult> {
     { done: `Materialized ${pluralize(layers.length, "module")}` },
   );
   await installDeps(workspace, context.mapLine, ["--ignore-scripts"]);
-  await buildBundles(context);
+  await prepareTypes(context);
+  await buildAndTypeCheck(context);
   await tasks.run(
     "Checking the client bundle",
     async () => checkClientBundle(workspace),
     { done: "Client bundle checked", failed: "Client bundle check failed" },
   );
-  await typeCheck(context);
   await tasks.run(
     "Checking the e-mail contracts",
     async () => checkEmailContracts(workspace),

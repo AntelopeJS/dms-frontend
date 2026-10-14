@@ -1,6 +1,6 @@
 // Stands in for pnpm in the generated workspace: prints what pnpm and Vite
 // print, as FAKE_PNPM_SCENARIO asks, and records every call in FAKE_PNPM_LOG.
-import { appendFileSync, readdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const args = process.argv.slice(2);
@@ -33,11 +33,17 @@ function install() {
     );
     process.exit(1);
   }
+  // The type check of verify-source runs this vue-tsc, which passes.
+  const vueTsc = join(process.cwd(), "node_modules/vue-tsc/bin");
+  mkdirSync(vueTsc, { recursive: true });
+  writeFileSync(join(vueTsc, "vue-tsc.js"), "");
   console.log("Packages: +3");
   console.log("Progress: resolved 3, reused 3, downloaded 0, added 3, done");
 }
 
 function build(script) {
+  if (script === "build:types")
+    writeFileSync(join(process.cwd(), "auto-imports.d.ts"), "export {};\n");
   if (script === "build:client") {
     console.error("");
     console.error(
