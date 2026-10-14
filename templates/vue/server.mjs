@@ -39,6 +39,7 @@ import {
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { watchEmailBundle } from "./server/email.mjs";
 import { isRendererFilePath } from "./server/module-routes.mjs";
+import { routeRuleFor, ruleHeaders } from "./server/route-rules.mjs";
 import {
   handleModuleRoute,
   loadServerModules,
@@ -282,11 +283,37 @@ async function ssrRenderer(devServer) {
   return renderer;
 }
 
+function clientRenderedShell(page) {
+  return {
+    body: inertiaAppHtml(page),
+    head: { headTags: "", htmlAttrs: "", bodyAttrs: "" },
+    overlays: "",
+  };
+}
+
+async function serverRendered(page, serverFetch, requestCookies, devServer) {
+  try {
+    const renderer = await ssrRenderer(devServer);
+    return await renderer.renderDmsPage(page, serverFetch, requestCookies);
+  } catch (error) {
+    console.error(
+      "DMS SSR render failed; falling back to client rendering",
+      error,
+    );
+    return { ...clientRenderedShell(page), error: { statusCode: 500 } };
+  }
+}
+
+/**
+ * Renders a page document. With `{ ssr: false }` (a route rule), the client
+ * renders the page from the shell instead.
+ */
 export async function renderHtml(
   page,
   requestUrl,
   serverFetch,
   requestCookies,
+  options = {},
 ) {
   const devServer = await developmentServer();
   const rawTemplate = devServer
@@ -295,22 +322,10 @@ export async function renderHtml(
   const template = devServer
     ? await devServer.transformIndexHtml(requestUrl, rawTemplate)
     : rawTemplate;
-  let rendered;
-  try {
-    const renderer = await ssrRenderer(devServer);
-    rendered = await renderer.renderDmsPage(page, serverFetch, requestCookies);
-  } catch (error) {
-    console.error(
-      "DMS SSR render failed; falling back to client rendering",
-      error,
-    );
-    rendered = {
-      body: inertiaAppHtml(page),
-      head: { headTags: "", htmlAttrs: "", bodyAttrs: "" },
-      overlays: "",
-      error: { statusCode: 500 },
-    };
-  }
+  const rendered =
+    options.ssr === false
+      ? clientRenderedShell(page)
+      : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
   const preloads = await documentStyleTags(devServer, page, template);
@@ -329,9 +344,11 @@ export async function renderHtml(
   return { html, status: rendered.error?.statusCode ?? 200 };
 }
 
-function renderRequestHtml(page, request) {
+function renderRequestHtml(page, request, rule = {}) {
   const fetch = serverComponentFetch(request);
-  return renderHtml(page, request.url, fetch, request.headers.cookie);
+  return renderHtml(page, request.url, fetch, request.headers.cookie, {
+    ssr: rule.ssr,
+  });
 }
 
 async function writeBackendError(error, request, response) {
@@ -441,20 +458,23 @@ export async function handleRequest(request, response) {
   if (!fileFirst && (await serveFile())) return;
   if (handleAssetVersionMismatch(request, response)) return;
   if (redirectToHomepage(request, response, pathname)) return;
-  const auth = await currentAuth();
+  const { serverAuth: auth, rules } = await loadServerModules(devServer);
   const props = await pageProps(request, auth);
   if (redirectSignedOutPrivatePage(request, response, props, auth)) return;
   const page = createInertiaPage(request.url, props);
+  const rule = routeRuleFor(rules, pathname);
+  const headersFor = (status) =>
+    ruleHeaders(rule, request, props.page?.route, status);
   if (request.headers[INERTIA_HEADER]) {
     return writeContent(
       request,
       response,
       200,
-      inertiaHeaders(page.version),
+      { ...inertiaHeaders(page.version), ...headersFor(200) },
       JSON.stringify(page),
     );
   }
-  const rendered = await renderRequestHtml(page, request);
+  const rendered = await renderRequestHtml(page, request, rule);
   if (rendered.redirect) {
     redirectFrontendVisit(request, response, rendered.redirect);
     return;
@@ -463,7 +483,7 @@ export async function handleRequest(request, response) {
     request,
     response,
     rendered.status,
-    htmlHeaders(),
+    { ...htmlHeaders(), ...headersFor(rendered.status) },
     rendered.html,
   );
 }

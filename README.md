@@ -300,6 +300,24 @@ server.registerAuth({
 
 `refreshSession` is called once when the backend answers `401` to a signed-in page visit, which is then retried with the session it wrote (`event.session.write`). `publicSession` gives the page props of a signed-in session; the server adds `session.updatedAt`, the stamp of its last write, which the browser compares to drop a page restored from its cache (see [Interface language](#interface-language)), and `event.session.view()` returns the same props to a route. `signInExempt` patterns are `/x`, `/x/*` (one segment below) or `/x/**` (the page and everything below). The highest-priority module that registers them provides all of them; another one is reported and ignored, and a part left out keeps the built-in one.
 
+#### Route rules
+
+A module also declares how its pages are rendered and cached, by page pattern (`/x`, `/x/*` one segment below, `/x/**` the page and everything below):
+
+```ts
+server.registerRouteRules({
+  "/terms-of-use": { cache: { public: true, maxAge: 300, staleWhileRevalidate: 3600 } },
+  "/builder/**": { ssr: false },
+  "/reports/**": { headers: { "x-robots-tag": "noindex" } },
+});
+```
+
+- `cache`: page documents and Inertia answers default to `private, no-cache`, since they carry the visitor's session. A public `cache` replaces it, with `Vary: Cookie`, only for a `GET` of a page the backend serves to anyone (`publicAccess`), answered `200` to a request without any cookie and without `x-content-language`: such an answer holds nobody's data. Any other request keeps the private default. The frontend server itself stores nothing; the rule is for a shared cache or a CDN in front of it. `cache: false` keeps the default under a broader rule.
+- `ssr: false`: a document request gets the client-rendered shell instead of a server render; Inertia visits are unchanged.
+- `headers`: added to the page's document and Inertia answers; `cache-control`, `vary`, `set-cookie` and the content and Inertia headers stay the server's.
+
+The rules matching a page merge from the least to the most specific pattern; for one pattern, the highest-priority module's rule wins, with a warning. A rule never changes who may see a page.
+
 Until 0.6.0 the renderer keeps serving the DMS's session, sign-in, OAuth and e-mail render routes and the API tester itself, for a DMS or DMS API release that predates its own `dms.server.ts`; a module route on the same method and path takes precedence, and the built-in tester stops once a module serves `/api/_dms-api/tester`. The server reports at startup which built-in routes and hooks are still in use.
 
 A module that ships `dms.server.ts` raises its [loader range](#declaring-the-loader-releases-a-module-supports) floor to the release that serves it: an older one never reads the file, so the routes would silently be missing.

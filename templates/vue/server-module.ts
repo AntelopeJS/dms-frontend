@@ -193,6 +193,28 @@ export interface DmsServerAuth {
   publicSession?(session: DmsSession): DmsPublicSession;
 }
 
+/**
+ * How a page is rendered, and what its document and Inertia answers carry.
+ * A rule changes rendering and caching, never who may see the page.
+ */
+export interface DmsRouteRule {
+  /**
+   * `false`: a document request gets the client-rendered shell instead of a
+   * server render. Inertia visits are unchanged.
+   */
+  ssr?: false;
+  /** Headers added to the page's answers (not `cache-control`: see `cache`). */
+  headers?: Record<string, string>;
+  /**
+   * Public caching, for a page the backend serves to anyone, asked without
+   * any cookie or content language; any other request keeps the private
+   * default. `false` keeps the default under a broader rule.
+   */
+  cache?:
+    | { public: true; maxAge: number; staleWhileRevalidate?: number }
+    | false;
+}
+
 export interface DmsServer {
   /**
    * Serves `path` for `method` from the frontend server, before the backend
@@ -211,6 +233,13 @@ export interface DmsServer {
    * reported and ignored.
    */
   registerAuth(auth: DmsServerAuth): void;
+  /**
+   * Route rules by page pattern: `/x`, `/x/*` (one segment below) or `/x/**`
+   * (the page and everything below). The rules matching a page merge from the
+   * least to the most specific pattern; for one pattern, the
+   * highest-priority module's rule wins.
+   */
+  registerRouteRules(rules: Readonly<Record<string, DmsRouteRule>>): void;
 }
 
 export type DmsServerSetup = (server: DmsServer) => void;

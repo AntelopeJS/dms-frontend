@@ -5,6 +5,7 @@
 
 import { compilePathPattern } from "./path-patterns.mjs";
 import { matchPublicEndpoint } from "./public-endpoints.mjs";
+import { ruleRejection } from "./route-rules.mjs";
 
 const METHODS = new Set([
   "GET",
@@ -116,11 +117,12 @@ function compilePath(path) {
 
 /** What a module's setup declares, by kind, in declaration order. */
 function collectDeclarations(setup) {
-  const declared = { routes: [], auth: [] };
+  const declared = { routes: [], auth: [], rules: [] };
   setup({
     registerRoute: (method, path, handler, options) =>
       declared.routes.push({ method, path, handler, options }),
     registerAuth: (auth) => declared.auth.push(auth),
+    registerRouteRules: (rules) => declared.rules.push(rules),
   });
   return declared;
 }
@@ -314,6 +316,41 @@ function resolveAuth(modules, warn) {
 }
 
 /**
+ * The route rules: of two declarations of the same pattern, the module of
+ * higher priority keeps it, with a warning.
+ */
+function resolveRules(modules, warn) {
+  const kept = new Map();
+  for (const module of modules) {
+    for (const rules of module.declared.rules) {
+      if (typeof rules !== "object" || rules === null) {
+        warn(
+          `Frontend module ${module.id} declares route rules that are ignored: they are not an object.`,
+        );
+        continue;
+      }
+      for (const [pattern, rule] of Object.entries(rules)) {
+        const reason = ruleRejection(pattern, rule);
+        const current = kept.get(pattern);
+        if (reason || current) {
+          warn(
+            `Frontend module ${module.id} declares the route rule "${pattern}", which is ignored: ${reason ?? `${current.id} (priority ${current.priority}) declares it`}.`,
+          );
+          continue;
+        }
+        kept.set(pattern, {
+          id: module.id,
+          priority: module.priority ?? 0,
+          pattern: compilePathPattern(pattern),
+          rule,
+        });
+      }
+    }
+  }
+  return [...kept.values()];
+}
+
+/**
  * What the modules declared, ready to serve. Each declaration is checked, and
  * a bad one is ignored with a warning naming its module.
  *
@@ -324,6 +361,8 @@ function resolveAuth(modules, warn) {
  *
  * `auth`: the auth hooks of the highest-priority module that registers them,
  * `undefined` when none does.
+ *
+ * `rules`: the route rules, one per pattern.
  *
  * @param declarations `{ id, priority, setup }` per module with a dms.server.ts
  * @param warn Reports a declaration problem
@@ -342,6 +381,7 @@ export function resolveServerDeclarations(
   return {
     routes: resolveRoutes(modules, warn, publicEndpoints),
     auth: resolveAuth(modules, warn),
+    rules: resolveRules(modules, warn),
   };
 }
 
