@@ -3,6 +3,7 @@
 // request reaches. Pure: the server hands it the declarations it loaded, and
 // `module-event.mjs` runs the handler a request reaches.
 
+import { compilePathPattern } from "./path-patterns.mjs";
 import { matchPublicEndpoint } from "./public-endpoints.mjs";
 
 const METHODS = new Set([
@@ -115,10 +116,11 @@ function compilePath(path) {
 
 /** What a module's setup declares, by kind, in declaration order. */
 function collectDeclarations(setup) {
-  const declared = { routes: [] };
+  const declared = { routes: [], auth: [] };
   setup({
     registerRoute: (method, path, handler, options) =>
       declared.routes.push({ method, path, handler, options }),
+    registerAuth: (auth) => declared.auth.push(auth),
   });
   return declared;
 }
@@ -252,6 +254,65 @@ function resolveRoutes(modules, warn, publicEndpoints) {
   );
 }
 
+const AUTH_HOOKS = ["refreshSession", "publicSession"];
+
+function authRejection(auth) {
+  if (typeof auth !== "object" || auth === null) return "it is not an object";
+  for (const hook of AUTH_HOOKS)
+    if (auth[hook] !== undefined && typeof auth[hook] !== "function")
+      return `${hook} is not a function`;
+  if (
+    auth.signInPath !== undefined &&
+    (typeof auth.signInPath !== "string" ||
+      !compilePathPattern(auth.signInPath) ||
+      auth.signInPath.includes("*"))
+  )
+    return "signInPath is not a page path";
+  if (
+    auth.signInExempt !== undefined &&
+    !(
+      Array.isArray(auth.signInExempt) &&
+      auth.signInExempt.every((pattern) => compilePathPattern(pattern))
+    )
+  )
+    return "signInExempt is not a list of /x, /x/* or /x/** patterns";
+  return undefined;
+}
+
+/**
+ * The auth hooks: those of the highest-priority module that registers them.
+ * A module registering them twice, or after another one, is reported.
+ */
+function resolveAuth(modules, warn) {
+  let provider;
+  for (const module of modules) {
+    for (const auth of module.declared.auth) {
+      const reason = authRejection(auth);
+      if (reason) {
+        warn(
+          `Frontend module ${module.id} registers auth hooks, which are ignored: ${reason}.`,
+        );
+        continue;
+      }
+      if (provider) {
+        warn(
+          `Frontend module ${module.id} registers auth hooks, which are ignored: ${provider.id} (priority ${provider.priority ?? 0}) provides them.`,
+        );
+        continue;
+      }
+      provider = {
+        id: module.id,
+        priority: module.priority ?? 0,
+        signInPath: auth.signInPath,
+        signInExempt: auth.signInExempt?.map(compilePathPattern),
+        refreshSession: auth.refreshSession,
+        publicSession: auth.publicSession,
+      };
+    }
+  }
+  return provider;
+}
+
 /**
  * What the modules declared, ready to serve. Each declaration is checked, and
  * a bad one is ignored with a warning naming its module.
@@ -260,6 +321,9 @@ function resolveRoutes(modules, warn, publicEndpoints) {
  * higher priority keeps it, with a warning naming both (module id on a tie).
  * Routes with fewer parameters are tried first, so a literal path is never
  * hidden by a parameter of another route.
+ *
+ * `auth`: the auth hooks of the highest-priority module that registers them,
+ * `undefined` when none does.
  *
  * @param declarations `{ id, priority, setup }` per module with a dms.server.ts
  * @param warn Reports a declaration problem
@@ -275,7 +339,10 @@ export function resolveServerDeclarations(
     const declared = declarationsOfModule(declaration, warn);
     return declared ? [{ ...declaration, declared }] : [];
   });
-  return { routes: resolveRoutes(modules, warn, publicEndpoints) };
+  return {
+    routes: resolveRoutes(modules, warn, publicEndpoints),
+    auth: resolveAuth(modules, warn),
+  };
 }
 
 function decodedParams(route, match) {

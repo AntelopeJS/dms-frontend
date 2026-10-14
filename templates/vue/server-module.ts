@@ -56,6 +56,12 @@ export interface DmsBackendRequest {
   headers?: Record<string, string>;
 }
 
+/** What a session shows the browser: the `user` and `session` page props. */
+export interface DmsPublicSession {
+  user?: unknown;
+  session?: Record<string, unknown>;
+}
+
 /** What a route handler receives. */
 export interface DmsServerEvent {
   /**
@@ -70,6 +76,12 @@ export interface DmsServerEvent {
   readJson<T = Record<string, unknown>>(): Promise<T>;
   session: {
     read(): DmsSession | undefined;
+    /**
+     * What the session shows a page (`user`, `session`), as the module that
+     * owns sign-in renders it: the page props, and what
+     * `useUserSession().fetch()` reads.
+     */
+    view(): DmsPublicSession;
     /**
      * Writes the session cookie, stamped with `updatedAt`; it ends with the
      * browser unless `persistent` is true or unset.
@@ -152,6 +164,35 @@ export interface DmsServerRouteOptions {
   overridesBackend?: boolean;
 }
 
+/**
+ * The session logic the frontend server runs outside any route, which the
+ * module owning sign-in provides. Each part left out keeps the built-in one.
+ */
+export interface DmsServerAuth {
+  /** Where a signed-out visit to a private page goes, with `?redirect=`. */
+  signInPath?: string;
+  /**
+   * Pages a signed-out visit is never sent to sign in from when the backend
+   * refuses it: `/x`, `/x/*` (one segment below) or `/x/**` (the page and
+   * everything below).
+   */
+  signInExempt?: readonly string[];
+  /**
+   * Renews a session the backend refused (a 401 to a signed-in page visit,
+   * which is then retried once): writes it with `event.session.write` and
+   * returns it, or clears it and returns `undefined`.
+   */
+  refreshSession?(
+    event: DmsServerEvent,
+    session: DmsSession,
+  ): Promise<DmsSession | undefined>;
+  /**
+   * The page props `user` and `session` of a signed-in session. The server
+   * adds `session.updatedAt` itself.
+   */
+  publicSession?(session: DmsSession): DmsPublicSession;
+}
+
 export interface DmsServer {
   /**
    * Serves `path` for `method` from the frontend server, before the backend
@@ -164,6 +205,12 @@ export interface DmsServer {
     handler: DmsServerHandler,
     options?: DmsServerRouteOptions,
   ): void;
+  /**
+   * Provides the session logic the server runs outside routes. The
+   * highest-priority module that registers it provides it; another one is
+   * reported and ignored.
+   */
+  registerAuth(auth: DmsServerAuth): void;
 }
 
 export type DmsServerSetup = (server: DmsServer) => void;

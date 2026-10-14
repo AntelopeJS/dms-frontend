@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { allowedEstablishEndpoints } from "./auth/routes.mjs";
+import { serverAuth } from "./auth-hooks.mjs";
 import { answerModuleRoute } from "./module-event.mjs";
 import {
   matchModuleRoute,
@@ -113,8 +114,9 @@ async function currentDeclarations(devServer) {
  *   publicEndpoints, warn }`: each module's options by id, the session-opening
  *   endpoints as a function (the environment can change them), the public
  *   endpoints, and where declaration problems are reported
- * @returns `{ routes, context(id) }`, `context` being what a handler of that
- *   module reads besides its request
+ * @returns `{ routes, auth, context(id), serverAuth }`: `context` is what a
+ *   handler of that module reads besides its request, `serverAuth` the
+ *   session logic the module owning sign-in provides (see `auth-hooks.mjs`)
  */
 export function createServerModules(declarations, deployment) {
   const resolution = resolveServerDeclarations(
@@ -122,18 +124,20 @@ export function createServerModules(declarations, deployment) {
     deployment.warn,
     deployment.publicEndpoints ?? [],
   );
+  const context = (id) => ({
+    module: {
+      id,
+      options: deployment.publicOptions?.[id],
+      privateOptions: deployment.privateOptions?.[id],
+    },
+    app: {
+      authEstablishEndpoints: deployment.authEstablishEndpoints?.() ?? [],
+    },
+  });
   return {
     ...resolution,
-    context: (id) => ({
-      module: {
-        id,
-        options: deployment.publicOptions?.[id],
-        privateOptions: deployment.privateOptions?.[id],
-      },
-      app: {
-        authEstablishEndpoints: deployment.authEstablishEndpoints?.() ?? [],
-      },
-    }),
+    context,
+    serverAuth: serverAuth(resolution.auth, context),
   };
 }
 
@@ -180,6 +184,7 @@ export async function handleModuleRoute(request, response, pathname, modules) {
     response,
     route: reached.route,
     params: reached.params,
+    view: modules.serverAuth.view,
     ...modules.context(reached.route.id),
   });
   return true;

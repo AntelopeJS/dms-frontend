@@ -103,9 +103,10 @@ function checkedCookieName(name) {
   return name;
 }
 
-function sessionAccess(request, response) {
+function sessionAccess(request, response, view) {
   return {
     read: () => readSession(request),
+    view: () => view?.(readSession(request)) ?? {},
     write(session) {
       session.updatedAt = Date.now();
       writeSession(response, session);
@@ -138,16 +139,16 @@ function frozenCopy(value) {
 /**
  * The event a handler receives.
  *
- * @param context `{ request, response, route, params, module, app }`, where
- *   `module` is `{ id, options, privateOptions }` and `app` the deployment's
- *   read-only data
+ * @param context `{ request, response, route, params, module, app, view }`,
+ *   where `module` is `{ id, options, privateOptions }`, `app` the
+ *   deployment's read-only data and `view` what a session shows a page
  */
 export function createServerEvent(context) {
   const { request, response, route, params } = context;
   const event = {
     request: webRequest(request, route),
     params: Object.freeze({ ...params }),
-    session: sessionAccess(request, response),
+    session: sessionAccess(request, response, context.view),
     cookies: cookieAccess(request, response),
     backend: (path, init = {}) => backend(path, request, init),
     backendUrl: (path) => backendUrl(path),

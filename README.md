@@ -282,6 +282,26 @@ Paths are literal segments and `:name` parameters. Module routes are tried after
 
 A module tests its routes through the same router, event and cookie jar with `serveModuleRoutes` from `@antelopejs/dms-frontend/templates/vue/server/module-testing.mjs`, which serves the default export of its `dms.server.ts` on a local port.
 
+#### Session hooks
+
+The server also runs session logic outside any route: it renews a session the backend refused on a page visit, puts the `user` and `session` page props together, and sends a signed-out visit to sign in. The module that owns sign-in provides it:
+
+```ts
+server.registerAuth({
+  signInPath: "/auth",
+  signInExempt: ["/auth/**", "/onboarding"],
+  refreshSession: renewSession, // (event, session) => the new session, or undefined
+  publicSession: (session) => ({
+    user: session.user,
+    session: { accountId: session.accountId, activeTenantId: session.activeTenantId },
+  }),
+});
+```
+
+`refreshSession` is called once when the backend answers `401` to a signed-in page visit, which is then retried with the session it wrote (`event.session.write`). `publicSession` gives the page props of a signed-in session; the server adds `session.updatedAt`, the stamp of its last write, which the browser compares to drop a page restored from its cache (see [Interface language](#interface-language)), and `event.session.view()` returns the same props to a route. `signInExempt` patterns are `/x`, `/x/*` (one segment below) or `/x/**` (the page and everything below). The highest-priority module that registers them provides all of them; another one is reported and ignored, and a part left out keeps the built-in one.
+
+Until 0.6.0 the renderer keeps serving the DMS's session, sign-in, OAuth and e-mail render routes and the API tester itself, for a DMS or DMS API release that predates its own `dms.server.ts`; a module route on the same method and path takes precedence, and the built-in tester stops once a module serves `/api/_dms-api/tester`. The server reports at startup which built-in routes and hooks are still in use.
+
 A module that ships `dms.server.ts` raises its [loader range](#declaring-the-loader-releases-a-module-supports) floor to the release that serves it: an older one never reads the file, so the routes would silently be missing.
 
 ### Page loading state
