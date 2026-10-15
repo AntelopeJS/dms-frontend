@@ -68,6 +68,10 @@ it("serves an edited component on the next server render in development", async 
     writeFileSync(join(workspace, "package.json"), '{"type":"module"}');
     writeFileSync(join(workspace, "frontend-paths.generated.json"), "{}");
     writeFileSync(
+      join(workspace, "app-configs.generated.ts"),
+      "export const appConfigs = [];\n",
+    );
+    writeFileSync(
       join(workspace, "locales.generated.ts"),
       'export const localeMessages={en:{}};export const supportedLocales=["en"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );

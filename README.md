@@ -159,7 +159,7 @@ The generated Vue application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ ro
 
 Vue modules register through `dms.frontend.ts` and import the SDK from the `#dms/frontend-module` alias, which the loader resolves to the generated `frontend-module.ts`: `defineDmsPlugin`, `useDmsRouter`, the page and session types, and everything else a module needs from the host. Email templates register separately through `dms.email.ts`.
 
-An email entry exports `serverEmailTemplates` and may export a plain `appConfig` object, such as shared branding defaults. Email rendering merges these configurations in manifest-priority order and provides them to `useDmsAppConfig` per render. Public runtime options come from the module manifest; `DMS_CLIENT_BASE_URL` overrides `public.dms.clientBaseUrl`. Email entries must not import the browser frontend module. The rendered HTML carries no Vue hydration comments (`<!--[-->`, `<!---->`, teleport anchors): an email is never hydrated, so the renderer strips them, and keeps every other comment, Outlook's conditional comments included.
+An email entry exports `serverEmailTemplates` and may export a plain `appConfig` object, such as shared branding defaults. Email rendering merges these configurations with the layers' [app configs](#app-config-appappconfigts) and provides the result to `useDmsAppConfig` per render: module by module, in manifest-priority order, a module's email `appConfig` first, then its layers' `app/app.config.ts`. A higher-priority module's layers thus override a lower one's email `appConfig`, and a module's email `appConfig`, the more specific of its two, keeps the values it gives emails over its own layers. Public runtime options come from the module manifest; `DMS_CLIENT_BASE_URL` overrides `public.dms.clientBaseUrl`. Email entries must not import the browser frontend module. The rendered HTML carries no Vue hydration comments (`<!--[-->`, `<!---->`, teleport anchors): an email is never hydrated, so the renderer strips them, and keeps every other comment, Outlook's conditional comments included.
 
 Email builds ship complete merged translation catalogs as JSON under `dist/server/locales/`, separate from executable JavaScript. Deploy the entire `dist/server` directory. Each render loads only its requested language and the English fallback; arbitrary translation keys and module overrides remain available. Unknown languages fall back to English, while missing or corrupt files for a supported language fail rendering rather than silently dropping translations. The source harness keeps the 256 KiB JavaScript ceiling and reports locale-data bytes separately.
 
@@ -190,6 +190,23 @@ export default frontendModule;
 The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
 
 Within one setup, the first module to register a name keeps it. `ajs-dms dev` sets every module up again each time a change to a layer reaches the server renderer, into empty registries, so the next server render uses the edited component without a restart. A `setup` may therefore run more than once in a process: it should only register, and keep no state of its own between runs.
+
+### App config (`app/app.config.ts`)
+
+Each layer of a module, or the module root when it has no `layers/` directory, may hold an `app/app.config.ts` whose default export is a plain object: branding, Nuxt UI's `ui` (colors, icons, component themes), anything the modules read through `useDmsAppConfig()`.
+
+```ts
+export default defineAppConfig({
+  branding: { logo: { light: "/branding/logo.svg" } },
+  ui: { colors: { primary: "emerald" } },
+});
+```
+
+The loader merges every one of them with `defu` (records key by key, arrays concatenated) before the first module is set up, so `useDmsAppConfig()` already holds the result when a `setup` runs: modules in manifest-priority order, and within a module its layers from the last by name to the first, the order in which a contested `public/` file is resolved. A project's layer therefore overrides the DMS's, and the DMS fills in everything the project leaves out. A `setup` may still read and extend the config. Nuxt UI's own app config is merged from the result, and so are emails' (see above). The file is TypeScript only, and is imported in Node.js by the server renderer and the email bundle as well as in the browser: it must not touch browser globals when it loads.
+
+`ajs-dms dev` applies an edit at once: the next server render uses it, and the open page updates `useDmsAppConfig()` and Nuxt UI's app config in place, colors included, without a reload. What the modules' `setup` changed in the config stays on top of the edited values; adding or removing a config file is applied the same way.
+
+Up to 0.5.6, the loader applied none of these files: an entry merged its own into `useDmsAppConfig()` in its `setup`, as the DMS up to 0.8 does (`Object.assign(useDmsAppConfig(), defu(useDmsAppConfig(), appConfig))`). Such an entry keeps working, its values unchanged, but its config is now merged twice, and `defu` concatenates arrays: every array it declares, Nuxt UI's `compoundVariants` among them, holds its entries twice. Nuxt UI resolves the repeated classes through `tailwind-merge` to the same ones, so nothing changes on screen, but an entry should stop merging its own config once it requires a release of the loader that applies it. The DMS does so in a release coordinated with this one. Until then, an edit to a config its entry imports reloads the page instead of updating it in place, since the entry imports it too.
 
 ### Component prefix
 
@@ -667,15 +684,25 @@ merged catalogs the application imports: the next server render uses them, and
 the open page applies them in place, without a reload. Adding or removing a
 locale reloads the page instead.
 
+An edit to a layer's `app/app.config.ts` reaches the page the same way (see
+[App config](#app-config-appappconfigts)).
+
 The other files the workspace derives from every module follow their sources
 the same way. A file added to, changed in or removed from a module's `public/`
-is served, or no longer served, at once. Adding or removing an
-`app/config/shortcuts-registry.ts` or a `dms.frontend.ts` regenerates the
-aggregated shortcuts or the module loader, and the page reloads. Adding,
-changing or removing a `dms.frontend.build.ts` restarts Vite. A layer
-directory added to or removed from `layers/` is the exception: Vite reads the
-`#<layer>` aliases and the auto-imported directories at startup only, so the
-dev server says it needs a restart.
+is served, or no longer served, at once. Public files and catalogs are written
+before the other files saved with them, so an app config or a component that
+names a new logo or a new translation, saved at the same time, never finds it
+missing. Adding or removing an `app/config/shortcuts-registry.ts` or a
+`dms.frontend.ts` regenerates the aggregated shortcuts or the module loader,
+and the page reloads. Adding, changing or removing a `dms.frontend.build.ts`
+restarts Vite. A layer directory added to or removed from `layers/` is the
+exception: Vite reads the `#<layer>` aliases and the auto-imported directories
+at startup only, so the dev server says it needs a restart.
+
+A page whose render declares no icon, through `useHead`, gets an empty
+`<link rel="icon" href="data:,">`, which keeps the browser from asking for
+`/favicon.ico`. A page that declares its icons, one per color scheme for
+instance, gets only those.
 
 ### Navigation and the site layout
 

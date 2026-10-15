@@ -16,7 +16,8 @@
   "files": [
     "globals.d.ts",
     "auto-imports.d.ts",
-    "frontend-modules.generated.ts"
+    "frontend-modules.generated.ts",
+    "app-configs.generated.ts"
   ],
   "include": ["frontend-modules/**/*.ts", "frontend-modules/**/*.vue"],
   "exclude": [

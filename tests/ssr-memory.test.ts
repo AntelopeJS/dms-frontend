@@ -82,6 +82,10 @@ it("releases every server render once it is sent", async () => {
       '{"modules":[]}',
     );
     writeFileSync(
+      join(workspace, "app-configs.generated.ts"),
+      "export const appConfigs = [];\n",
+    );
+    writeFileSync(
       join(workspace, "locales.generated.ts"),
       'export const localeMessages={en:{}};export const supportedLocales=["en"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );

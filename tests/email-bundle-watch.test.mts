@@ -36,6 +36,10 @@ it("builds the email bundle in development and rebuilds it when a template chang
       }),
     );
     writeFileSync(join(workspace, "email-locales.generated.json"), '["en"]');
+    writeFileSync(
+      join(workspace, "app-configs.generated.ts"),
+      "export const appConfigs = [];\n",
+    );
     mkdirSync(join(workspace, "locales.generated"));
     writeFileSync(join(workspace, "locales.generated", "en.json"), "{}");
     mkdirSync(join(moduleRoot, "emails"), { recursive: true });

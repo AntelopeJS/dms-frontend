@@ -33,6 +33,7 @@ import {
 } from "./server/vite-errors.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { watchEmailBundle } from "./server/email.mjs";
+import { withFaviconPlaceholder } from "./server/favicon.mjs";
 import { DEV_FS_DENY, denyPrivateFiles } from "./server/dev-private-files.mjs";
 import { ownerLabel, requestOwner } from "./server/request-routing.mjs";
 import { routingReport } from "./server/backend-proxies.mjs";
@@ -306,7 +307,9 @@ export async function renderHtml(
     return { html: "", status: 200, redirect: rendered.redirect };
   const preloads = await documentStyleTags(devServer, page, template);
   const html = template
-    .replace("<title>Antelope DMS</title>", rendered.head.headTags)
+    .replace("<title>Antelope DMS</title>", () =>
+      withFaviconPlaceholder(rendered.head.headTags),
+    )
     .replace(/<html([^>]*)>/, (_, attributes) =>
       htmlTag(attributes, rendered.head.htmlAttrs),
     )

@@ -59,6 +59,35 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     });
   });
 
+  it("merges a DMS config changed in place again when told it changed", () => {
+    // A layer's app config edited in development updates the DMS config the
+    // page holds, the same object.
+    const merge = createUiAppConfigMerger();
+    const ui = nuxtUiConfig();
+    const dms = {
+      ui: {
+        colors: { primary: "v1" },
+        button: { compoundVariants: [{ color: "primary", class: "dms" }] },
+      },
+    };
+    merge(ui, dms);
+    dms.ui.colors.primary = "v2";
+    merge(ui, dms);
+    const uiOf = () =>
+      ui.ui as {
+        colors: unknown;
+        button: { compoundVariants: unknown[] };
+      };
+    assert.deepEqual(uiOf().colors, { primary: "v1", neutral: "slate" });
+
+    merge(ui, dms, { isChanged: true });
+    assert.deepEqual(uiOf().colors, { primary: "v2", neutral: "slate" });
+    assert.deepEqual(uiOf().button.compoundVariants, [
+      { color: "primary", class: "dms" },
+      { color: "neutral", class: "base" },
+    ]);
+  });
+
   it("never lets a merge write into the DMS config", () => {
     const merge = createUiAppConfigMerger();
     const dms = { ui: { colors: { primary: "v1" } } };

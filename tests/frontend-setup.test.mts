@@ -2,10 +2,18 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToString } from "@vue/server-renderer";
 import { defu } from "defu";
-import { type Component, createSSRApp, defineComponent, h, toRaw } from "vue";
+import {
+  type Component,
+  computed,
+  createSSRApp,
+  defineComponent,
+  h,
+  toRaw,
+} from "vue";
 import { createI18n } from "vue-i18n";
 import {
   type DmsFrontendModuleRegistration,
+  type DmsLayerAppConfig,
   createDmsFrontendRuntime,
   defineDmsPageMeta,
   getDmsDynamicPage,
@@ -18,6 +26,7 @@ import {
   resolveDmsAccessRedirect,
   resolveDmsComponent,
   setupFrontendModules,
+  updateDmsAppConfig,
   useDmsAppConfig,
   useDmsInjection,
   useDmsRuntimeConfig,
@@ -218,5 +227,130 @@ describe("Frontend module setup", () => {
     finishSetup();
     await setup;
     assert.equal(await rendered(resolveDmsComponent("Block")), "<p>new</p>");
+  });
+});
+
+/** A module whose setup only does `setup`, with `useDmsAppConfig()` at hand. */
+function configuring(
+  setup: (appConfig: Record<string, any>) => void,
+): DmsFrontendModuleRegistration {
+  return {
+    options: { public: {} },
+    module: { setup: () => setup(useDmsAppConfig()) },
+  };
+}
+
+/** The layer configs of a project above the DMS, highest precedence first. */
+function layerConfigs(project: Record<string, unknown>): DmsLayerAppConfig[] {
+  return [
+    { module: "project", config: project },
+    {
+      module: "dms",
+      config: {
+        branding: { name: "DMS", logo: { light: "/dms.svg" } },
+        ui: { colors: { primary: "dms", neutral: "neutral" } },
+      },
+    },
+  ];
+}
+
+describe("Layer app configs", () => {
+  it("are merged into the app config before the first module is set up", async () => {
+    let seen: unknown;
+    await setupFrontendModules(
+      [
+        configuring((appConfig) => {
+          seen = structuredClone(toRaw(appConfig));
+        }),
+      ],
+      layerConfigs({
+        branding: { logo: { light: "/project.svg" } },
+        ui: { colors: { primary: "green" } },
+      }),
+    );
+    assert.deepEqual(seen, {
+      branding: { name: "DMS", logo: { light: "/project.svg" } },
+      ui: { colors: { primary: "green", neutral: "neutral" } },
+    });
+  });
+
+  it("let the modules extend the app config, but never the layers' configs", async () => {
+    const layers = layerConfigs({
+      branding: { logo: { light: "/project.svg" } },
+    });
+    const pristine = structuredClone(layers);
+    await setupFrontendModules(
+      [
+        configuring((appConfig) => {
+          appConfig.branding.name = "Renamed by a setup";
+          appConfig.extra = { addedBy: "setup" };
+        }),
+      ],
+      layers,
+    );
+    assert.equal(useDmsAppConfig().branding.name, "Renamed by a setup");
+    assert.deepEqual(toRaw(useDmsAppConfig().extra), { addedBy: "setup" });
+    // A development server keeps a config module between two setups.
+    assert.deepEqual(layers, pristine);
+  });
+
+  it("apply an edit in place, under what the setups changed", async () => {
+    await setupFrontendModules(
+      [configuring((appConfig) => (appConfig.extra = "by setup"))],
+      layerConfigs({ branding: { logo: { light: "/v1.svg" } } }),
+    );
+    const appConfig = useDmsAppConfig() as Record<string, any>;
+    const branding = appConfig.branding;
+    const logo = computed(() => appConfig.branding.logo.light);
+    assert.equal(logo.value, "/v1.svg");
+
+    updateDmsAppConfig(
+      layerConfigs({
+        branding: { logo: { light: "/v2.svg", dark: "/v2-dark.svg" } },
+        ui: { colors: { primary: "green" } },
+      }),
+    );
+    // The objects components hold, the nested ones included, and what they
+    // compute from them.
+    assert.equal(useDmsAppConfig(), appConfig);
+    assert.equal(appConfig.branding, branding);
+    assert.equal(logo.value, "/v2.svg");
+    assert.deepEqual(toRaw(appConfig), {
+      branding: {
+        name: "DMS",
+        logo: { light: "/v2.svg", dark: "/v2-dark.svg" },
+      },
+      ui: { colors: { primary: "green", neutral: "neutral" } },
+      extra: "by setup",
+    });
+
+    // A value the edit no longer declares falls back to the layer below.
+    updateDmsAppConfig(layerConfigs({}));
+    assert.equal(logo.value, "/dms.svg");
+    assert.equal("dark" in appConfig.branding.logo, false);
+    assert.equal(appConfig.ui.colors.primary, "dms");
+    assert.equal(appConfig.extra, "by setup");
+  });
+
+  it("repeat the arrays of an entry that still merges its own config", async () => {
+    // What the DMS up to 0.8 does in its `setup`: its layer's config, which
+    // the loader now merges too, is merged once more, and defu concatenates
+    // arrays. Nuxt UI resolves the repeated classes to the same ones.
+    const dms = { ui: { button: { compoundVariants: [{ class: "dms" }] } } };
+    await setupFrontendModules(
+      [
+        configuring((appConfig) =>
+          Object.assign(appConfig, defu(appConfig, dms)),
+        ),
+      ],
+      [{ module: "dms", config: dms }],
+    );
+    const variants = () =>
+      toRaw((useDmsAppConfig() as Record<string, any>).ui.button)
+        .compoundVariants;
+    assert.deepEqual(variants(), [{ class: "dms" }, { class: "dms" }]);
+    // An edit applied in place keeps them as the setup left them, no more.
+    updateDmsAppConfig([{ module: "dms", config: dms }]);
+    assert.deepEqual(variants(), [{ class: "dms" }, { class: "dms" }]);
   });
 });

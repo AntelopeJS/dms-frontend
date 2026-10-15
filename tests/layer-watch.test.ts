@@ -496,6 +496,74 @@ describe("derived outputs in the dev layer watcher", () => {
     ]);
   });
 
+  it("imports the app config a layer adds, and drops it once removed", async () => {
+    const appConfigs = (): string => workspaceFile("app-configs.generated.ts");
+    const baseConfig = join(baseUi, "app", "app.config.ts");
+    const appConfig = join(app, "app", "app.config.ts");
+    assert.doesNotMatch(appConfigs(), /import config/);
+    await eventually(
+      () => {
+        writeFile(
+          baseConfig,
+          "export default { branding: { name: 'base' } };\n",
+        );
+        writeFile(appConfig, "export default { branding: { name: 'app' } };\n");
+      },
+      () =>
+        appConfigs().includes("fixture__app/app/app.config.ts") &&
+        appConfigs().includes("fixture__base/layers/ui/app/app.config.ts"),
+    );
+    // Highest precedence first, as at materialization.
+    assert.match(
+      appConfigs(),
+      /config0 from "@frontend\/fixture__app\/app\/app\.config\.ts";\nimport config1 from "@frontend\/fixture__base\/layers\/ui\/app\/app\.config\.ts"/,
+    );
+    await eventually(
+      () => rmSync(appConfig, { force: true }),
+      () => !appConfigs().includes("fixture__app"),
+    );
+    assert.match(
+      appConfigs(),
+      /appConfigs: DmsLayerAppConfig\[\] = \[\{ module: "fixture__base", config: config0 \}\];/,
+    );
+  });
+
+  it("serves a public file before the source saved with it that names it", async () => {
+    // What a theme editor saves at once: a new logo, and the app config that
+    // points at it. The page Vite updates for the config asks for the logo
+    // straight away, which must not find it missing.
+    const logo = join(app, "public", "branding", "logo-1a2b.png");
+    const served = join(publicDir, "branding", "logo-1a2b.png");
+    const config = join(
+      workspace,
+      "frontend-modules",
+      "fixture__app",
+      "app",
+      "app.config.ts",
+    );
+    const rename = mock.method(fs, "renameSync");
+    try {
+      await eventually(
+        () => {
+          writeFile(logo, "PNG");
+          writeFile(
+            join(app, "app", "app.config.ts"),
+            'export default { branding: { logo: "/branding/logo-1a2b.png" } };\n',
+          );
+        },
+        () => existsSync(served) && existsSync(config),
+      );
+      const renamedTo = rename.mock.calls.map((call) => call.arguments[1]);
+      assert.ok(renamedTo.includes(served));
+      assert.ok(
+        renamedTo.indexOf(served) < renamedTo.indexOf(config),
+        renamedTo.join("\n"),
+      );
+    } finally {
+      rename.mock.restore();
+    }
+  });
+
   it("says once that a layer directory added or removed needs a restart", async () => {
     const extra = join(base, "layers", "extra");
     output.clear();
@@ -631,6 +699,7 @@ describe("derived outputs in the dev layer watcher", () => {
       [join(workspace, "frontend-modules.generated.ts"), "// marker\n"],
       [join(workspace, "generated-frontend-modules.json"), '{"marker":1}'],
       [join(workspace, "frontend-paths.generated.json"), '{"marker":1}'],
+      [join(workspace, "app-configs.generated.ts"), "// marker\n"],
     ];
     for (const [path, content] of markers) writeFileSync(path, content);
     const mirrored = join(

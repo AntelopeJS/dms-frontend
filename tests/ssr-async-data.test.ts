@@ -78,6 +78,10 @@ it("hydrates a server render with exactly the data its HTML shows", async (conte
       '{"modules":[]}',
     );
     writeFileSync(
+      join(workspace, "app-configs.generated.ts"),
+      "export const appConfigs = [];\n",
+    );
+    writeFileSync(
       join(workspace, "locales.generated.ts"),
       'export const localeMessages={en:{},fr:{}};export const supportedLocales=["en","fr"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );

@@ -36,16 +36,20 @@ import {
 // Constants
 // ============================================================================
 
+/**
+ * Quiet time after the last watcher event, of any layer, before the pass that
+ * applies them all.
+ */
 const WATCH_DEBOUNCE_MS = 80;
 
 /**
- * Delay between the last pass that touched the sources of a derived output and
- * its regeneration, shared by every layer. It must stay above the 50 ms during
- * which Vite's file watcher (chokidar, without FSEvents, so on Linux) drops a
- * second change to the same file: two regenerations closer than that would
- * leave the dev server on the first one.
+ * Least time between a pass that regenerated a derived output and the next
+ * pass. It must stay above the 50 ms during which Vite's file watcher
+ * (chokidar, without FSEvents, so on Linux) drops a second change to the same
+ * file: two regenerations closer than that would leave the dev server on the
+ * first one.
  */
-const DERIVED_REFRESH_DEBOUNCE_MS = 100;
+const DERIVED_REFRESH_GAP_MS = 100;
 
 /**
  * What the watcher tells the user while dev runs: a failure it survives, the
@@ -89,143 +93,125 @@ function createSyncFailures(src: string, reporter: WatchReporter) {
 }
 
 /**
- * Per-layer event batcher. Watcher events are coalesced over
- * `WATCH_DEBOUNCE_MS` and applied as one ordered pass: create dirs, upsert
- * files (content-gated + atomic), then deletions LAST. Applying deletes
- * last — and only when the entry is truly gone from the source — means a
- * rapid delete+recreate (common during editor saves and re-materialize)
- * never leaves the workspace tree transiently missing a file the Vite importer
- * is mid-scan over. `onFlushed` then receives every path the pass touched.
+ * Per-layer event stager. Watcher events are coalesced, with those of every
+ * other layer, over `WATCH_DEBOUNCE_MS` (see `createPassScheduler`) and
+ * applied as one ordered pass: create dirs, upsert files (content-gated +
+ * atomic), then deletions LAST. Applying deletes last — and only when the
+ * entry is truly gone from the source — means a rapid delete+recreate (common
+ * during editor saves and re-materialize) never leaves the workspace tree
+ * transiently missing a file the Vite importer is mid-scan over. A pass may
+ * apply a layer's changes in two rounds (see `runPass`), each in that order.
  */
 function createLayerSync(
   src: string,
   dest: string,
-  onFlushed: (paths: string[]) => void,
   reporter: WatchReporter,
+  onStaged: () => void,
 ) {
   const fileUpserts = new Set<string>();
   const fileDeletes = new Set<string>();
   const dirCreates = new Set<string>();
   const dirDeletes = new Set<string>();
   const failures = createSyncFailures(src, reporter);
-  let timer: ReturnType<typeof setTimeout> | null = null;
 
   const toRel = (p: string): string | null => {
     const r = relative(src, p);
     return r ? r : null;
   };
 
-  // Per-entry isolation: a single file racing the flush (deleted between the
+  /** Removes the staged entries `select` picks, and returns them. */
+  const take = (
+    staged: Set<string>,
+    select: (rel: string) => boolean,
+  ): string[] => {
+    const taken = [...staged].filter(select);
+    for (const rel of taken) staged.delete(rel);
+    return taken;
+  };
+
+  // Per-entry isolation: a single file racing the pass (deleted between the
   // existsSync guard and the copy, or a locked dest on Windows) must not abort
   // the rest of the batch — and crucially must not escape as an uncaught
   // exception out of the setTimeout(flush) callback, which would crash the dev
   // process (there is no global uncaughtException handler). Log and continue.
 
-  const flush = (): void => {
-    timer = null;
-    const touched = [
-      ...dirCreates,
-      ...fileUpserts,
-      ...fileDeletes,
-      ...dirDeletes,
-    ];
-    for (const rel of [...dirCreates].sort((a, b) => a.length - b.length)) {
-      try {
-        mkdirSync(join(dest, rel), { recursive: true });
-        failures.applied(rel);
-      } catch (err) {
-        failures.fail(rel, err);
+  const upsert = (rel: string): void => {
+    try {
+      const srcPath = join(src, rel);
+      if (!existsSync(srcPath)) return; // vanished before the pass
+      const destPath = join(dest, rel);
+      if (rel === "package.json") {
+        // dest is the post-stripped form, so applyFile would always copy
+        // (src still has its scripts); gate on the stripped bytes instead so
+        // an unchanged package.json doesn't churn the dest mtime.
+        applyContent(
+          sanitizedPackageContent(readFileSync(srcPath, "utf-8")),
+          destPath,
+        );
+      } else {
+        applyFile(srcPath, destPath);
       }
+      failures.applied(rel);
+    } catch (err) {
+      failures.fail(rel, err);
     }
-    dirCreates.clear();
-    for (const rel of fileUpserts) {
-      try {
-        const srcPath = join(src, rel);
-        if (!existsSync(srcPath)) continue; // vanished before flush
-        const destPath = join(dest, rel);
-        if (rel === "package.json") {
-          // dest is the post-stripped form, so applyFile would always copy
-          // (src still has its scripts); gate on the stripped bytes instead so
-          // an unchanged package.json doesn't churn the dest mtime.
-          applyContent(
-            sanitizedPackageContent(readFileSync(srcPath, "utf-8")),
-            destPath,
-          );
-        } else {
-          applyFile(srcPath, destPath);
-        }
-        failures.applied(rel);
-      } catch (err) {
-        failures.fail(rel, err);
-      }
-    }
-    fileUpserts.clear();
-    for (const rel of fileDeletes) {
-      try {
-        if (existsSync(join(src, rel))) continue; // re-created; keep
-        const destPath = join(dest, rel);
-        if (existsSync(destPath)) rmSync(destPath, { force: true });
-        failures.applied(rel);
-      } catch (err) {
-        failures.fail(rel, err);
-      }
-    }
-    fileDeletes.clear();
-    for (const rel of [...dirDeletes].sort((a, b) => b.length - a.length)) {
-      try {
-        if (existsSync(join(src, rel))) continue;
-        const destPath = join(dest, rel);
-        if (existsSync(destPath))
-          rmSync(destPath, { recursive: true, force: true });
-        failures.applied(rel);
-      } catch (err) {
-        failures.fail(rel, err);
-      }
-    }
-    dirDeletes.clear();
-    onFlushed(touched);
   };
 
-  const arm = (): void => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(flush, WATCH_DEBOUNCE_MS);
+  const remove = (rel: string, recursive: boolean): void => {
+    try {
+      if (existsSync(join(src, rel))) return; // re-created; keep
+      const destPath = join(dest, rel);
+      if (existsSync(destPath)) rmSync(destPath, { recursive, force: true });
+      failures.applied(rel);
+    } catch (err) {
+      failures.fail(rel, err);
+    }
+  };
+
+  const stage = (p: string, add: Set<string>, cancel: Set<string>): void => {
+    const r = toRel(p);
+    if (!r) return;
+    cancel.delete(r);
+    add.add(r);
+    onStaged();
   };
 
   return {
-    upsertFile(p: string) {
-      const r = toRel(p);
-      if (!r) return;
-      fileDeletes.delete(r);
-      fileUpserts.add(r);
-      arm();
+    src,
+    upsertFile: (p: string) => stage(p, fileUpserts, fileDeletes),
+    deleteFile: (p: string) => stage(p, fileDeletes, fileUpserts),
+    createDir: (p: string) => stage(p, dirCreates, dirDeletes),
+    deleteDir: (p: string) => stage(p, dirDeletes, dirCreates),
+    /** Every path the next pass touches, relative to `src`. */
+    pending(): string[] {
+      return [...dirCreates, ...fileUpserts, ...fileDeletes, ...dirDeletes];
     },
-    deleteFile(p: string) {
-      const r = toRel(p);
-      if (!r) return;
-      fileUpserts.delete(r);
-      fileDeletes.add(r);
-      arm();
+    /** Creates every staged directory, parents first. */
+    createDirs(): void {
+      for (const rel of take(dirCreates, () => true).sort(
+        (a, b) => a.length - b.length,
+      )) {
+        try {
+          mkdirSync(join(dest, rel), { recursive: true });
+          failures.applied(rel);
+        } catch (err) {
+          failures.fail(rel, err);
+        }
+      }
     },
-    createDir(p: string) {
-      const r = toRel(p);
-      if (!r) return;
-      dirDeletes.delete(r);
-      dirCreates.add(r);
-      arm();
-    },
-    deleteDir(p: string) {
-      const r = toRel(p);
-      if (!r) return;
-      dirCreates.delete(r);
-      dirDeletes.add(r);
-      arm();
-    },
-    flushNow() {
-      if (timer) clearTimeout(timer);
-      flush();
+    /** Applies the staged file and directory changes `select` picks. */
+    apply(select: (rel: string) => boolean): void {
+      for (const rel of take(fileUpserts, select)) upsert(rel);
+      for (const rel of take(fileDeletes, select)) remove(rel, false);
+      for (const rel of take(dirDeletes, select).sort(
+        (a, b) => b.length - a.length,
+      ))
+        remove(rel, true);
     },
   };
 }
+
+type LayerSync = ReturnType<typeof createLayerSync>;
 
 /** What a regeneration that failed said, and what to say once one succeeds. */
 interface OutputFailure {
@@ -278,14 +264,13 @@ function describeLayerDirectories(
 }
 
 /**
- * Regenerate the derived outputs whose sources the passes touched, from the
- * workspace copies, once those passes have settled. Each output merges every
- * layer, so passes of several layers flushed together (a checkout, an editor
- * saving several files) make one regeneration per output with all of their
- * changes, and an output no pass touched is left alone. Only the files whose
- * content changed are rewritten, and Vite's own watcher takes it from there,
- * except for an output it reads at startup only: that one says, once per
- * run, that a restart is needed.
+ * Regenerate the derived outputs whose sources a pass touched, from the
+ * workspace copies. A pass applies the changes of every layer at once, so a
+ * checkout or an editor saving several files makes one regeneration per output
+ * with all of them, and an output the pass did not touch is left alone. Only
+ * the files whose content changed are rewritten, and Vite's own watcher takes
+ * it from there, except for an output it reads at startup only: that one says,
+ * once per run, that a restart is needed.
  *
  * A regeneration that fails leaves the previous output in place and says so;
  * the one that succeeds next says the failure is over.
@@ -295,11 +280,8 @@ function createDerivedOutputRefresher(
   layers: ResolvedLayer[],
   reporter: WatchReporter,
 ) {
-  /** Each pending output, with the touched source paths it depends on. */
-  const pending = new Map<DerivedOutput, string[]>();
   const failures = new Map<DerivedOutput | "registry", OutputFailure>();
   let hasRestartNotice = false;
-  let timer: ReturnType<typeof setTimeout> | null = null;
 
   const fail = (key: DerivedOutput | "registry", failure: OutputFailure) => {
     failures.set(key, failure);
@@ -324,30 +306,27 @@ function createDerivedOutputRefresher(
     output: DerivedOutput,
     paths: string[],
     registry: FrontendModuleRegistry,
-  ): void => {
+  ): boolean => {
     try {
       const isChanged = output.write(workspaceDir, registry);
       recover(output);
       if (isChanged) noticeRestart(output, paths);
+      return isChanged;
     } catch (err) {
       // Same reason as the layer sync's: a file saved half-written, a catalog
       // for instance, must not take the dev process down. The previous
       // output stays in place.
       fail(output, describeOutputFailure(output, err, reporter));
+      return false;
     }
   };
 
-  const refresh = (): void => {
-    timer = null;
-    const outputs = DERIVED_OUTPUTS.filter((output) => pending.has(output)).map(
-      (output) => [output, pending.get(output) ?? []] as const,
-    );
-    pending.clear();
-    let registry: FrontendModuleRegistry;
+  const buildRegistry = (): FrontendModuleRegistry | undefined => {
     try {
       // Built again: a module may have added or removed its entry since.
-      registry = createFrontendModuleRegistry(workspaceDir, layers);
+      const registry = createFrontendModuleRegistry(workspaceDir, layers);
       recover("registry");
+      return registry;
     } catch (err) {
       fail("registry", {
         text: "Derived files not regenerated",
@@ -359,32 +338,106 @@ function createDerivedOutputRefresher(
         },
         fixed: "Derived files regenerated",
       });
-      return;
+      return undefined;
     }
-    for (const [output, paths] of outputs) regenerate(output, paths, registry);
   };
 
   return {
-    /** `paths` are relative to `src`, the layer source they were touched in. */
-    schedule(src: string, paths: string[]) {
-      let isAffected = false;
+    /**
+     * Prepares the regenerations of a pass, before it copies anything.
+     * `touched` holds, for each layer source, the paths relative to it that
+     * the pass touches. Returns what writes the outputs `select` picks among
+     * those, and tells whether any changed.
+     */
+    plan(
+      touched: ReadonlyArray<{ src: string; paths: string[] }>,
+    ): (select: (output: DerivedOutput) => boolean) => boolean {
+      const pending = new Map<DerivedOutput, string[]>();
       for (const output of DERIVED_OUTPUTS) {
-        const affected = paths.filter((path) => output.affects(path));
-        if (affected.length === 0) continue;
-        isAffected = true;
-        pending.set(output, [
-          ...(pending.get(output) ?? []),
-          ...affected.map((path) => join(src, path)),
-        ]);
+        const affected = touched.flatMap(({ src, paths }) =>
+          paths
+            .filter((path) => output.affects(path))
+            .map((path) => join(src, path)),
+        );
+        if (affected.length > 0) pending.set(output, affected);
       }
-      if (!isAffected) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(refresh, DERIVED_REFRESH_DEBOUNCE_MS);
+      const registry = pending.size > 0 ? buildRegistry() : undefined;
+      return (select) => {
+        let isChanged = false;
+        if (!registry) return isChanged;
+        for (const [output, paths] of pending) {
+          if (select(output))
+            isChanged = regenerate(output, paths, registry) || isChanged;
+        }
+        return isChanged;
+      };
     },
-    flushNow() {
+  };
+}
+
+type DerivedOutputRefresher = ReturnType<typeof createDerivedOutputRefresher>;
+
+/** Whether a change at `relativePath` feeds an output that reads it as data. */
+function isReadAsData(relativePath: string): boolean {
+  return DERIVED_OUTPUTS.some(
+    (output) => output.readsSourcesAsData && output.affects(relativePath),
+  );
+}
+
+/**
+ * Apply what every layer staged, and regenerate the derived outputs it
+ * affects, in an order that never shows the dev server a file referring to
+ * one not written yet. The sources an output reads as data, a public file or a
+ * catalog, are copied and that output regenerated first: a component or an
+ * app config saved with them, which may name the new file or translation, is
+ * copied after, so the page Vite updates never asks for a file the dev server
+ * does not serve yet. The outputs that import module copies, the module loader
+ * or the app configs, come last, once the copies they import are in place.
+ *
+ * Returns whether a derived output changed.
+ */
+function runPass(
+  syncs: LayerSync[],
+  refresher: DerivedOutputRefresher,
+): boolean {
+  const writeOutputs = refresher.plan(
+    syncs.map((sync) => ({ src: sync.src, paths: sync.pending() })),
+  );
+  const isDataOutput = (output: DerivedOutput) =>
+    output.readsSourcesAsData === true;
+  for (const sync of syncs) sync.createDirs();
+  for (const sync of syncs) sync.apply(isReadAsData);
+  const isDataChanged = writeOutputs(isDataOutput);
+  for (const sync of syncs) sync.apply((path) => !isReadAsData(path));
+  const isChanged = writeOutputs((output) => !isDataOutput(output));
+  return isDataChanged || isChanged;
+}
+
+/**
+ * Runs `pass` once the watchers have been quiet for `WATCH_DEBOUNCE_MS`, and
+ * never within `DERIVED_REFRESH_GAP_MS` of a pass that regenerated a derived
+ * output. One pass for every layer, rather than one per layer, is what makes
+ * the changes of several layers saved together one regeneration.
+ */
+function createPassScheduler(pass: () => boolean) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastRegeneration = Number.NEGATIVE_INFINITY;
+
+  const flush = (): void => {
+    timer = null;
+    if (pass()) lastRegeneration = Date.now();
+  };
+
+  return {
+    arm: (): void => {
+      if (timer) clearTimeout(timer);
+      const gap = lastRegeneration + DERIVED_REFRESH_GAP_MS - Date.now();
+      timer = setTimeout(flush, Math.max(WATCH_DEBOUNCE_MS, gap));
+    },
+    flushNow: (): void => {
       if (!timer) return;
       clearTimeout(timer);
-      refresh();
+      flush();
     },
   };
 }
@@ -412,9 +465,9 @@ function createDerivedOutputRefresher(
  *
  * Mirroring is not enough for the files materialization derives from every
  * module (the locale catalogs, the public assets, the aggregated shortcuts,
- * the module loader and the type paths): the app reads those, never a
- * module's own copy, so a pass that touches their sources regenerates them
- * (see `createDerivedOutputRefresher`).
+ * the module loader, the app configs and the type paths): the app reads
+ * those, never a module's own copy, so a pass that touches their sources
+ * regenerates them (see `createDerivedOutputRefresher` and `runPass`).
  */
 export function startLayerWatchers(
   workspaceDir: string,
@@ -442,23 +495,19 @@ export function startLayerWatchers(
     },
   };
   const watchers: FSWatcher[] = [];
-  const syncs: Array<ReturnType<typeof createLayerSync>> = [];
+  const syncs: LayerSync[] = [];
   const refresher = createDerivedOutputRefresher(
     workspaceDir,
     layers,
     reporter,
   );
+  const passes = createPassScheduler(() => runPass(syncs, refresher));
 
   for (const layer of layers) {
     if (!layer.packageName) continue;
     const dest = getLayerWorkspacePath(workspaceDir, layer);
     const src = layer.path;
-    const sync = createLayerSync(
-      src,
-      dest,
-      (paths) => refresher.schedule(src, paths),
-      reporter,
-    );
+    const sync = createLayerSync(src, dest, reporter, passes.arm);
     syncs.push(sync);
 
     const watcher = chokidar.watch(src, {
@@ -478,8 +527,7 @@ export function startLayerWatchers(
 
   return async () => {
     await Promise.all(watchers.map((w) => w.close().catch(() => {})));
-    for (const sync of syncs) sync.flushNow();
-    refresher.flushNow();
+    passes.flushNow();
   };
 }
 

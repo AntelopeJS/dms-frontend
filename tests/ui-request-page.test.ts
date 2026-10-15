@@ -140,6 +140,11 @@ it("gives Nuxt UI's Link and route stub their own request's URL while another re
       "frontend-builds.generated.ts",
       "export const frontendBuilds = [];\n",
     );
+    write(
+      workspace,
+      "app-configs.generated.ts",
+      "export const appConfigs = [];\n",
+    );
     write(workspace, "package.json", '{"type":"module"}');
     write(workspace, "frontend-paths.generated.json", "{}");
     write(
