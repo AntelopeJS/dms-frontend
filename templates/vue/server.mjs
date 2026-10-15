@@ -38,6 +38,7 @@ import {
 } from "./server/vite-errors.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
+import { withFaviconPlaceholder } from "./server/favicon.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import * as icons from "./server/icons.mjs";
@@ -331,7 +332,9 @@ export async function renderHtml(
     return { html: "", status: 200, redirect: rendered.redirect };
   const preloads = await documentStyleTags(devServer, page, template);
   const html = template
-    .replace("<title>Antelope DMS</title>", rendered.head.headTags)
+    .replace("<title>Antelope DMS</title>", () =>
+      withFaviconPlaceholder(rendered.head.headTags),
+    )
     .replace(/<html([^>]*)>/, (_, attributes) =>
       htmlTag(attributes, rendered.head.htmlAttrs),
     )
