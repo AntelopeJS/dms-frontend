@@ -65,6 +65,11 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('slow-guard-redirect',defineComponent({setup(){defineDmsPageMeta({auth:true});return()=>h('p','Guarded page')}}));
  sdk.registerPage('slow-guard-page-redirect',defineComponent({async setup(){defineDmsPageMeta({auth:true});await navigateDms('/onboarding?source=page');return()=>h('p','Leaving page')}}));
  sdk.registerPage('slow-guard-both',defineComponent({async setup(){defineDmsPageMeta({auth:true});await navigateDms('/onboarding?source=page');return()=>h('p','Leaving page')}}));
+ sdk.registerMiddleware('failing-guard',async to=>{if(!to.path.startsWith('/guard-'))return;await Promise.resolve();if(to.path==='/guard-not-found')throw createError({statusCode:404,statusMessage:'Module not found'});if(to.path==='/guard-broken')throw new Error('private middleware detail');return '/onboarding?source=guard'},{global:true});
+ const Guarded=defineComponent({async setup(){defineDmsPageMeta({auth:true});await new Promise(r=>setTimeout(r,20));return()=>h('p','Guarded content')}});
+ sdk.registerPage('guard-not-found',Guarded);
+ sdk.registerPage('guard-broken',Guarded);
+ sdk.registerPage('guard-redirect',Guarded);
  sdk.registerMiddleware('onboarding-redirect',to=>to.path.startsWith('/requires-onboarding-')?'/onboarding?source='+to.path.slice(-1):undefined,{global:true});
  sdk.registerPlugin(()=>{const {user}=useUserSession();useDmsState('plugin-user',()=>user.value?._id??'anonymous')});
  sdk.registerPage('session',defineComponent({setup(){const {user}=useUserSession();const {locale}=useI18n();const pluginUser=useDmsState('plugin-user');return()=>h('p',(user.value?._id??'anonymous')+':'+locale.value+':'+pluginUser.value)}}));
@@ -177,6 +182,41 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       assert.equal(response.status, 302, path);
       assert.equal(response.headers.get("location"), location, path);
     }
+    // A middleware that throws fails the page as a page setup does: the
+    // server renders the error page with the error's status, and a redirect
+    // a middleware decides still answers with a redirect. The pages take
+    // longer than their middleware: a failure that nothing handled yet then
+    // took the whole server down as an unhandled rejection.
+    const [guardNotFound, guardBroken, guardRedirect] = await Promise.all(
+      ["/guard-not-found", "/guard-broken", "/guard-redirect"].map((path) =>
+        fetch(`${base}${path}`, {
+          headers: { accept: "text/html" },
+          redirect: "manual",
+        }),
+      ),
+    );
+    assert.equal(guardNotFound.status, 404);
+    const guardNotFoundHtml = await guardNotFound.text();
+    assert.match(
+      guardNotFoundHtml,
+      /<main id="error"[^>]*>404: Module not found \/ Module not found<\/main>/,
+    );
+    assert.doesNotMatch(guardNotFoundHtml, /Guarded content/);
+    assert.equal(guardBroken.status, 500);
+    const guardBrokenHtml = await guardBroken.text();
+    assert.match(
+      guardBrokenHtml,
+      /<main id="error"[^>]*>500: no message \/ no status message<\/main>/,
+    );
+    assert.doesNotMatch(
+      guardBrokenHtml,
+      /Guarded content|private middleware detail/,
+    );
+    assert.equal(guardRedirect.status, 302);
+    assert.equal(
+      guardRedirect.headers.get("location"),
+      "/onboarding?source=guard",
+    );
     const asyncRuntimeResponses = await Promise.all([
       fetch(`${base}/async-runtime-a`, { headers: { accept: "text/html" } }),
       fetch(`${base}/async-runtime-b`, { headers: { accept: "text/html" } }),
