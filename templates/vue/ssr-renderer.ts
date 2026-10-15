@@ -3,7 +3,7 @@ import { createInertiaApp } from "@inertiajs/vue3";
 import { createHead, renderSSRHead } from "@unhead/vue/server";
 import { renderToString } from "@vue/server-renderer";
 import { stringify } from "devalue";
-import { createSSRApp, h } from "vue";
+import { createSSRApp, h, readonly } from "vue";
 import {
   DMS_PAYLOAD_ID,
   type DmsServerFetch,
@@ -15,6 +15,7 @@ import {
 import {
   type DmsErrorData,
   type DmsFrontendRuntime,
+  type DmsInertiaPage,
   type DmsPageProps,
   type DmsPayload,
   createDmsFrontendRuntime,
@@ -136,6 +137,8 @@ export async function renderDmsPage(
     true,
     requestCookies,
   );
+  // The page Inertia's app sets as it starts, held by the request's runtime.
+  runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
   const store = { runtime };
   try {
     return await runtimeStorage.run(store, () =>
