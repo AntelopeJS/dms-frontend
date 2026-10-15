@@ -857,6 +857,7 @@ to the same sprite.
 | | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests; without it, e-mail renders are refused. Defaults to the `htmlRender.serviceSecret` the backend publishes in the frontend manifest |
 | | `DMS_OAUTH_RELAY_SECRET` | Secret the server presents to the backend's OAuth endpoints; without it, the backend refuses OAuth sign-in. Defaults to the `oauth.relaySecret` the backend publishes in the frontend manifest |
 | | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Extra backend endpoints `/auth/establish` may open a session from, on top of those the backend's modules declare (comma-separated, empty by default) |
+| | `DMS_BACKEND_PROXIES` | Extra backend prefixes the server proxies, on top of those the modules declare: a JSON array of `{ path, auth? }` (see [Routing and the backend proxy](#routing-and-the-backend-proxy)) |
 | | `DMS_PUBLIC_ENDPOINTS` | Extra backend routes the proxy serves to anyone, on top of those the backend's modules declare: a JSON array of `{ path, methods?, headers? }` (see [Public endpoints](#public-endpoints)) |
 | | `DMS_CLIENT_BASE_URL` | Public frontend URL used in generated links and emails |
 

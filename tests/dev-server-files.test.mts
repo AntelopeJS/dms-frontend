@@ -44,6 +44,10 @@ describe("files the development server serves", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
+    // Read once, as the server reads it when it starts.
+    process.env.DMS_BACKEND_PROXIES = JSON.stringify([
+      { path: "/media/**", auth: "none" },
+    ]);
     // The real development server: Vite in middleware mode, rooted in a
     // directory of its own, without the watcher and HMR socket that would keep
     // the test process alive.
@@ -65,6 +69,7 @@ describe("files the development server serves", () => {
     process.chdir(previousCwd);
     process.env.DMS_DEV = previousDev;
     process.env.DMS_API_BASE_URL = previousBackend;
+    delete process.env.DMS_BACKEND_PROXIES;
     frontend?.close();
     backend.close();
     rmSync(root, { recursive: true, force: true });
@@ -84,19 +89,28 @@ describe("files the development server serves", () => {
     assert.deepEqual(backendPaths, []);
   });
 
-  it("still serves a file the frontend does not have from the backend", async () => {
+  it("serves a file the frontend does not have from a declared backend prefix only", async () => {
     backendPaths.length = 0;
-    const response = await fetch(`${base}${MEDIA_PATH}`);
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "backend media");
-    assert.deepEqual(backendPaths, [MEDIA_PATH]);
+    {
+      const response = await fetch(`${base}${MEDIA_PATH}`);
+      assert.equal(response.status, 200);
+      assert.equal(
+        response.headers.get("x-dms-route-owner"),
+        "backend:/media/**",
+      );
+      assert.equal(await response.text(), "backend media");
+      assert.deepEqual(backendPaths, [MEDIA_PATH]);
+    }
   });
 
-  it("still asks the backend first for a path without an extension", async () => {
+  it("never asks the backend for a path no module declares", async () => {
     backendPaths.length = 0;
-    const response = await fetch(`${base}${UNREAD_COUNT_PATH}`);
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { unreadCount: 7 });
-    assert.deepEqual(backendPaths, [UNREAD_COUNT_PATH]);
+    const write = await fetch(`${base}${UNREAD_COUNT_PATH}`, {
+      method: "POST",
+    });
+    assert.equal(write.status, 404);
+    assert.equal(write.headers.get("x-dms-route-owner"), "not-found");
+    await write.body?.cancel();
+    assert.deepEqual(backendPaths, []);
   });
 });

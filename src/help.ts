@@ -58,6 +58,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "DMS_PUBLIC_ENDPOINTS",
     "More backend routes the proxy serves to anyone, as a JSON array",
   ],
+  [
+    "DMS_BACKEND_PROXIES",
+    "More backend prefixes the server proxies, as a JSON array of { path, auth? }",
+  ],
   ["DMS_CLIENT_BASE_URL", "Public frontend URL used in links and e-mails"],
   ["NO_COLOR", "Same as --no-color"],
   ["ANTELOPEJS_VERBOSE", "Same as --verbose"],
