@@ -351,7 +351,7 @@ A frontend module names the `@antelopejs/dms-frontend` releases it runs on in it
 {
   "name": "@acme/dms-billing-frontend-vue",
   "engines": {
-    "@antelopejs/dms-frontend": ">=0.3.2 <0.4.0"
+    "@antelopejs/dms-frontend": ">=0.6.0 <0.7.0"
   }
 }
 ```
