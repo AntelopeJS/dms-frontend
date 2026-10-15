@@ -1166,3 +1166,165 @@ describe("useDmsFetch", () => {
     );
   });
 });
+
+describe("A reactive key a render sets", () => {
+  // A backend that answers at once, and records each request on its side.
+  function backend(isServer: boolean) {
+    const requests: string[] = [];
+    const runtime = createDmsFrontendRuntime(
+      (async (url: string) => {
+        requests.push(url);
+        return `data:${url}`;
+      }) as never,
+      undefined,
+      isServer,
+    );
+    return { runtime, requests };
+  }
+
+  // Renders `root` on a server, then mounts it in a browser hydrating that
+  // render, and returns what each side requested and what the browser's
+  // renders showed.
+  async function renderThenHydrate(
+    root: (rendered: string[]) => Component,
+    expectedHtml: string,
+  ) {
+    const server = backend(true);
+    const ssr = createSSRApp(root([]));
+    provideDmsFrontendRuntime(ssr, server.runtime);
+    assert.equal(await renderToString(ssr), expectedHtml);
+    await sleep(5);
+    const payload = runtimeModule.serializeDmsPayload(server.runtime);
+
+    const browser = backend(false);
+    runtimeModule.restoreDmsPayload(browser.runtime, payload);
+    const rendered: string[] = [];
+    const app = mountRuntime(browser.runtime, {
+      render: () => h(root(rendered)),
+    });
+    const first = rendered[0];
+    await settle();
+    await nextTick();
+    app.unmount();
+    return {
+      serverRequests: server.requests,
+      payload: payload.data,
+      browserRequests: browser.requests,
+      first,
+      last: rendered.at(-1),
+    };
+  }
+
+  it("leaves a server: false read whose key its setup sets to the browser, which reads it once mounted", async () => {
+    const result = await renderThenHydrate(
+      (rendered) =>
+        defineComponent({
+          setup() {
+            const ready = ref(false);
+            const sizes = runtimeModule.useDmsFetch<string>(
+              () => (ready.value ? "/api/sizes" : null),
+              { server: false, default: () => "none" },
+            );
+            ready.value = true;
+            return () => {
+              const text = `${sizes.status.value}:${sizes.data.value}`;
+              rendered.push(text);
+              return h("p", text);
+            };
+          },
+        }),
+      "<p>idle:none</p>",
+    );
+
+    assert.deepEqual(result.serverRequests, [], "the server reads nothing");
+    assert.deepEqual(result.payload, {}, "nor transfers anything");
+    assert.equal(result.first, "idle:none", "hydration matches the HTML");
+    assert.deepEqual(result.browserRequests, ["/api/sizes"]);
+    assert.equal(result.last, "success:data:/api/sizes");
+  });
+
+  it("renders the default for a key a server read moves to once its render stopped waiting, and leaves it to the browser", async () => {
+    const result = await renderThenHydrate(
+      (rendered) =>
+        defineComponent({
+          setup() {
+            const details = runtimeModule.useDmsFetch<string>("/api/details");
+            // Known once the details are in, past the component's prefetch.
+            const sizes = runtimeModule.useDmsFetch<string>(
+              () => (details.data.value ? "/api/sizes" : null),
+              { default: () => "none" },
+            );
+            return () => {
+              const text = `${sizes.status.value}:${sizes.data.value}`;
+              rendered.push(text);
+              return h("p", text);
+            };
+          },
+        }),
+      "<p>idle:none</p>",
+    );
+
+    assert.deepEqual(result.serverRequests, ["/api/details"]);
+    assert.deepEqual(Object.values(result.payload), ["data:/api/details"]);
+    assert.equal(result.first, "idle:none", "hydration matches the HTML");
+    assert.deepEqual(result.browserRequests, ["/api/sizes"]);
+    assert.equal(result.last, "success:data:/api/sizes");
+  });
+
+  it("renders and transfers the key a setup sets for a server read, lazy or not", async () => {
+    const result = await renderThenHydrate(
+      (rendered) =>
+        defineComponent({
+          setup() {
+            const id = ref<number | null>(null);
+            const order = runtimeModule.useDmsFetch<string>(() =>
+              id.value === null ? null : `/api/orders/${id.value}`,
+            );
+            const lines = runtimeModule.useDmsFetch<string>(
+              () => (id.value === null ? null : `/api/lines/${id.value}`),
+              { lazy: true },
+            );
+            id.value = 7;
+            return () => {
+              const text = `${order.data.value}|${lines.data.value}`;
+              rendered.push(text);
+              return h("p", text);
+            };
+          },
+        }),
+      "<p>data:/api/orders/7|data:/api/lines/7</p>",
+    );
+
+    assert.deepEqual(result.serverRequests, ["/api/orders/7", "/api/lines/7"]);
+    assert.equal(Object.keys(result.payload).length, 2);
+    assert.equal(result.first, "data:/api/orders/7|data:/api/lines/7");
+    assert.deepEqual(result.browserRequests, [], "the browser reads nothing");
+  });
+
+  it("runs no immediate: false read on a server when its key changes, even with a default", async () => {
+    const server = backend(true);
+    let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
+    const ssr = createSSRApp(
+      defineComponent({
+        setup() {
+          const id = ref<number | null>(null);
+          entry = runtimeModule.useDmsFetch<string>(
+            () => (id.value === null ? null : `/api/orders/${id.value}`),
+            { immediate: false, default: () => "none" },
+          );
+          id.value = 7;
+          return () => h("p", `${entry!.status.value}:${entry!.data.value}`);
+        },
+      }),
+    );
+    provideDmsFrontendRuntime(ssr, server.runtime);
+
+    assert.equal(await renderToString(ssr), "<p>idle:none</p>");
+    await sleep(5);
+    assert.deepEqual(server.requests, []);
+    assert.deepEqual(
+      runtimeModule.serializeDmsPayload(server.runtime).data,
+      {},
+    );
+  });
+});
