@@ -569,6 +569,14 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
   and `data`, any other failure becomes a `500` whose cause only the server
   logs. A fetch error's message names the backend's address on a server, so
   its status text replaces it.
+- **`transfer: false`** keeps a key's data, or its failure, out of the
+  payload, for data the HTML needs but that weighs too much to carry twice
+  (a long history, a large list): the server renders it, and the browser
+  reads it again as it hydrates. The hydration must wait for that read, so
+  the setup awaits the call, and the read must give what the server rendered
+  for the HTML to match; a component that renders first gets a warning. For
+  data the HTML does not need, `server: false` (or `lazy` with a
+  placeholder) is the lighter choice. The first call of a key decides.
 - **`useDmsState(key, init, { transfer: true })`** hands the server's value
   to the browser, which then starts from it instead of calling `init`. State
   is never transferred unless a key opts in, and must never hold a token or

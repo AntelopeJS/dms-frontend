@@ -229,6 +229,7 @@ export interface UseFetchOptions<T> extends Omit<
   deep?: boolean;
   dedupe?: DmsAsyncDataDedupe;
   refreshOnMount?: boolean;
+  transfer?: boolean;
   $fetch?: typeof ofetch;
 }
 export interface UseAsyncDataOptions<T> {
@@ -255,6 +256,13 @@ export interface UseAsyncDataOptions<T> {
    * their data.
    */
   refreshOnMount?: boolean;
+  /**
+   * `false` keeps the data, or its failure, out of what a server render hands
+   * the browser: the server renders it, and the browser reads it again as it
+   * hydrates. The setup must await the call, so that the hydration waits for
+   * the browser's read; the first call of a key decides, as for `deep`.
+   */
+  transfer?: boolean;
 }
 export interface DmsErrorData {
   statusCode?: number;
@@ -950,6 +958,7 @@ export function useDmsFetch<T>(
     deep,
     dedupe,
     refreshOnMount,
+    transfer,
     $fetch: fetcher,
     method,
     query,
@@ -983,6 +992,7 @@ export function useDmsFetch<T>(
     deep,
     dedupe,
     refreshOnMount,
+    transfer,
   };
   const reactiveSources = [request, method, query, params, body].filter(
     isReactiveSource,
@@ -1046,6 +1056,8 @@ interface AsyncDataInitialState<T> {
 /** What the components showing one key share: its data and its runs. */
 interface AsyncDataEntry<T> {
   result: DmsAsyncData<T>;
+  /** Whether a server render hands its data, or its failure, to the browser. */
+  transfer: boolean;
   bind(binding: AsyncDataBinding<T>): AsyncDataBindingHandle;
   /** The first run: it joins a run in flight rather than replacing it. */
   load(): Promise<void>;
@@ -1075,6 +1087,7 @@ function createAsyncDataEntry<T>(
   runtime: DmsFrontendRuntime,
   initial: AsyncDataInitialState<T>,
   deep: boolean,
+  transfer: boolean,
 ): AsyncDataEntry<T> {
   const data = (
     deep ? ref(initial.data) : shallowRef(initial.data)
@@ -1155,6 +1168,7 @@ function createAsyncDataEntry<T>(
   };
   return {
     result,
+    transfer,
     bind(binding) {
       // The last component showing the data left it on an earlier page: the
       // next one to show it refreshes it, as a navigation is meant to.
@@ -1240,6 +1254,7 @@ function asyncDataEntry<T>(
     runtime,
     server && !inComponent ? server : fallback,
     options.deep !== false,
+    options.transfer !== false,
   );
   // A component's setup saw the server's run in flight, not its result: the
   // browser holds the result back as long, see `startAsyncData`.
@@ -1284,6 +1299,16 @@ export function useDmsAsyncData<T>(
     ),
   );
   if (getCurrentScope()) onScopeDispose(() => consumer.value.unbind());
+  if (
+    inComponent &&
+    runtime.hydrating &&
+    options.transfer === false &&
+    options.server !== false &&
+    options.immediate !== false
+  )
+    onBeforeMount(() =>
+      warnUntransferredRender(consumer.value.entry, keySource),
+    );
   if (options.watch && options.watch.length)
     watch(options.watch as never[], () =>
       consumer.value.entry.result.refresh(),
@@ -1366,6 +1391,25 @@ function startAsyncData<T>(
   return !options.lazy && entry.result.pending.value
     ? entry.settled()
     : undefined;
+}
+
+/**
+ * Data a server render does not transfer is read again by the browser: a
+ * component rendered before that read settles hydrates the server's HTML
+ * with something else than what it shows.
+ */
+function warnUntransferredRender<T>(
+  entry: AsyncDataEntry<T>,
+  keySource: MaybeRefOrGetter<DmsAsyncDataKey> | undefined,
+): void {
+  const status = entry.result.status.value;
+  if (status === "success" || status === "error") return;
+  const key = keySource === undefined ? "(no key)" : toValue(keySource);
+  console.warn(
+    `[dms] Async data "${String(key)}" has transfer: false but its component ` +
+      "hydrates before the browser read it again: await the call in the " +
+      "setup, or use server: false.",
+  );
 }
 
 interface AsyncDataConsumer<T> extends AsyncDataBindingHandle {
@@ -1466,12 +1510,18 @@ export async function refreshDmsData(keys?: string | string[]): Promise<void> {
   );
 }
 
+function isTransferred(result: DmsAsyncData<unknown>): boolean {
+  return asyncDataEntries.get(result)?.transfer !== false;
+}
+
 export function serializeDmsAsyncData(
   runtime: DmsFrontendRuntime,
 ): Record<string, unknown> {
   return Object.fromEntries(
     [...runtime.asyncData.entries()]
-      .filter(([, entry]) => entry.status.value === "success")
+      .filter(
+        ([, entry]) => entry.status.value === "success" && isTransferred(entry),
+      )
       .map(([key, entry]) => [key, toRaw(entry.data.value)]),
   );
 }
@@ -1522,7 +1572,9 @@ function transferredError(key: string, reason: unknown): DmsErrorData {
  */
 export function serializeDmsPayload(runtime: DmsFrontendRuntime): DmsPayload {
   const errors = [...runtime.asyncData.entries()]
-    .filter(([, entry]) => entry.status.value === "error")
+    .filter(
+      ([, entry]) => entry.status.value === "error" && isTransferred(entry),
+    )
     .map(([key, entry]): [string, DmsErrorData] => [
       key,
       transferredError(key, entry.error.value),

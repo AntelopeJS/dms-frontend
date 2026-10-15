@@ -740,6 +740,87 @@ describe("Server payload", () => {
     assert.deepEqual(payload.errors, { unexpected: { statusCode: 500 } });
   });
 
+  it("keeps a key with transfer: false out of the payload, and the browser reads it again before hydrating it", async (context) => {
+    const warn = context.mock.method(console, "warn", () => {});
+    const reads = { history: 0, missing: 0 };
+    const rendered: string[] = [];
+    const Page = defineComponent({
+      async setup() {
+        const [history, missing, kept] = await Promise.all([
+          useDmsAsyncData(
+            "history",
+            async () => {
+              reads.history++;
+              return "rows listed";
+            },
+            { transfer: false },
+          ),
+          useDmsAsyncData(
+            "missing",
+            async () => {
+              reads.missing++;
+              throw runtimeModule.createError({ statusCode: 404 });
+            },
+            { transfer: false, default: () => "none" },
+          ),
+          useDmsAsyncData("kept", async () => "kept"),
+        ]);
+        return () => {
+          const text = `${history.data.value}:${missing.status.value}:${kept.data.value}`;
+          rendered.push(text);
+          return h("p", text);
+        };
+      },
+    });
+    const { html, payload } = await serverPayload(() => () => h(Page));
+    assert.equal(html, "<p>rows listed:error:kept</p>");
+    assert.deepEqual(payload.data, { kept: "kept" });
+    assert.deepEqual(payload.errors, {});
+    rendered.length = 0;
+
+    const runtime = createDmsFrontendRuntime();
+    runtimeModule.restoreDmsPayload(runtime, payload);
+    const app = mountRuntime(runtime, {
+      render: () => h(Suspense, null, { default: () => h(Page) }),
+    });
+    await sleep(10);
+
+    assert.deepEqual(reads, { history: 2, missing: 2 });
+    assert.equal(
+      rendered[0],
+      "rows listed:error:kept",
+      "the first render matches the HTML",
+    );
+    assert.equal(warn.mock.callCount(), 0);
+    app.unmount();
+  });
+
+  it("warns when a component hydrates a key with transfer: false before the browser read it again", async (context) => {
+    const warn = context.mock.method(console, "warn", () => {});
+    const Page = defineComponent({
+      setup() {
+        const { data } = useDmsAsyncData("unawaited", async () => "rows", {
+          transfer: false,
+        });
+        return () => h("p", String(data.value));
+      },
+    });
+    const { html, payload } = await serverPayload(() => () => h(Page));
+    assert.equal(html, "<p>rows</p>");
+
+    const runtime = createDmsFrontendRuntime();
+    runtimeModule.restoreDmsPayload(runtime, payload);
+    const app = mountRuntime(runtime, Page);
+    await settle();
+
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(
+      String(warn.mock.calls[0].arguments[0]),
+      /"unawaited" has transfer: false/,
+    );
+    app.unmount();
+  });
+
   it("transfers only the state a key opts into (E5)", async () => {
     let browserInit = 0;
     const { payload } = await serverPayload(() => {
