@@ -816,13 +816,28 @@ export function navigateDms(
   return visit(useDmsRuntime(), to, options);
 }
 
+/**
+ * The options of a request a runtime makes. A server render does not retry a
+ * failed read, as ofetch would once: the page waits for it, and a backend
+ * failing once mostly fails twice. A browser keeps ofetch's retries, and a
+ * caller that names its own keeps them everywhere.
+ */
+function runtimeFetchOptions(
+  runtime: DmsFrontendRuntime,
+  options: FetchOptions,
+): FetchOptions {
+  return runtime.isServer && options.retry === undefined
+    ? { ...options, retry: 0 }
+    : options;
+}
+
 function createDmsFetch(defaults: FetchOptions = {}): typeof ofetch {
   const execute = (request: string, options?: FetchOptions) => {
     const runtime = useDmsRuntime();
-    return (runtime.serverFetch ?? ofetch)(request, {
-      ...defaults,
-      ...options,
-    });
+    return (runtime.serverFetch ?? ofetch)(
+      request,
+      runtimeFetchOptions(runtime, { ...defaults, ...options }),
+    );
   };
   return Object.assign(execute, {
     create: (options: FetchOptions) =>
@@ -873,20 +888,60 @@ function stableJson(value: unknown): string | undefined {
 const FETCH_KEY_PREFIX = "$dmsfetch:";
 const DEFAULT_FETCH_METHOD = "GET";
 
+// cyrb53's mixing constants, with its two 32-bit lanes both kept: a 64-bit
+// digest, as short as Nuxt's keys and as unlikely to collide within a page.
+const HASH_SEEDS = [0xdeadbeef, 0x41c6ce57];
+const HASH_MULTIPLIERS = [2654435761, 1597334677];
+const HASH_FINALIZERS = [2246822507, 3266489909];
+const HASH_SHIFTS = [16, 13];
+const HASH_RADIX = 36;
+const HASH_LANE_LENGTH = 7;
+
 /**
- * The key a request's response is shared and transferred under: its method,
- * base URL, URL, query and body, the headers aside. A body only a request can
- * read, such as a FormData, gives none.
+ * A short digest of a text, the same in a server and in a browser: pure
+ * JavaScript, so no `node:crypto` reaches a browser bundle.
+ */
+function hashText(text: string): string {
+  let [first, second] = HASH_SEEDS;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    first = Math.imul(first ^ code, HASH_MULTIPLIERS[0]);
+    second = Math.imul(second ^ code, HASH_MULTIPLIERS[1]);
+  }
+  first = Math.imul(first ^ (first >>> HASH_SHIFTS[0]), HASH_FINALIZERS[0]);
+  first ^= Math.imul(second ^ (second >>> HASH_SHIFTS[1]), HASH_FINALIZERS[1]);
+  second = Math.imul(second ^ (second >>> HASH_SHIFTS[0]), HASH_FINALIZERS[0]);
+  second ^= Math.imul(first ^ (first >>> HASH_SHIFTS[1]), HASH_FINALIZERS[1]);
+  return [second, first]
+    .map((lane) =>
+      (lane >>> 0).toString(HASH_RADIX).padStart(HASH_LANE_LENGTH, "0"),
+    )
+    .join("");
+}
+
+/**
+ * The key a request's response is shared and transferred under: a digest of
+ * its method, base URL, URL, query and params, and body, the headers aside. A
+ * server render writes the key into its HTML, which must not show the URL, a
+ * token in its query or a body. A body only a request can read, such as a
+ * FormData, gives none.
  */
 function requestKey(url: string, options: FetchOptions): string | undefined {
+  // ofetch sends the params and the query together, the query winning.
+  const query =
+    options.query || options.params
+      ? { ...options.params, ...options.query }
+      : null;
   const request = stableJson([
     (options.method ?? DEFAULT_FETCH_METHOD).toUpperCase(),
     options.baseURL ?? "",
     url,
-    options.query ?? options.params ?? null,
+    query,
     options.body ?? null,
   ]);
-  return request === undefined ? undefined : `${FETCH_KEY_PREFIX}${request}`;
+  return request === undefined
+    ? undefined
+    : `${FETCH_KEY_PREFIX}${hashText(request)}`;
 }
 
 /** A URL to request, or nothing to request while it is null or undefined. */
@@ -942,11 +997,14 @@ export function useDmsFetch<T>(
       params: toValue(params),
       body: toValue(body),
     });
+  // A `$fetch` of the caller's own applies its own retries.
   const handler: DmsAsyncDataHandler<T> = ({ signal }) =>
-    (fetcher ?? runtime.serverFetch ?? ofetch)(url() as string, {
-      ...requestOptions(),
-      signal,
-    }) as Promise<T>;
+    (fetcher
+      ? fetcher(url() as string, { ...requestOptions(), signal })
+      : (runtime.serverFetch ?? ofetch)(
+          url() as string,
+          runtimeFetchOptions(runtime, { ...requestOptions(), signal }),
+        )) as Promise<T>;
   const asyncOptions: UseAsyncDataOptions<T> = {
     immediate,
     lazy,
@@ -1351,7 +1409,9 @@ function attachAsyncData<T>(
 /**
  * Moves a caller to the data of each key its reactive key takes, and returns
  * refs that follow it there. Until the new key's data is in, the previous
- * data stays on screen rather than the default flashing in its place.
+ * data stays on screen rather than the default flashing in its place: the
+ * caller's refs show it, while the new key's own data stays its own, so a run
+ * that fails or that a switch away aborts never leaves it another key's data.
  */
 function followAsyncDataKey<T>(
   runtime: DmsFrontendRuntime,
@@ -1360,18 +1420,38 @@ function followAsyncDataKey<T>(
   handler: DmsAsyncDataHandler<T>,
   options: UseAsyncDataOptions<T>,
 ): DmsAsyncData<T> {
+  const current = () => consumer.value.entry.result;
+  // The previous key's data, shown until the current key settles.
+  const carried = shallowRef<{ value: T | null } | undefined>();
+  const settled = (result: DmsAsyncData<T>) =>
+    result.status.value === "success" || result.status.value === "error";
+  const shownData = (): T | null => {
+    const result = current();
+    return carried.value && !settled(result)
+      ? carried.value.value
+      : result.data.value;
+  };
+  watch(
+    () => settled(current()),
+    (done) => {
+      if (done) carried.value = undefined;
+    },
+    { flush: "sync" },
+  );
   watch(
     () => toValue(keySource) ?? null,
     (key) => {
-      const previous = consumer.value.entry.result;
-      const shown = previous.data.value;
+      const previous = current();
+      const shown = shownData();
       const wasRunning = previous.pending.value;
       // Past the setup, the server's data for the new key, if it rendered
       // any, is taken over at once.
       const next = attachAsyncData(runtime, key, handler, options, false);
       const { entry } = next;
-      if (next.alone && entry.result.status.value === "idle" && shown !== null)
-        entry.result.data.value = shown;
+      carried.value =
+        next.alone && entry.result.status.value === "idle" && shown !== null
+          ? { value: shown }
+          : undefined;
       consumer.value.unbind();
       consumer.value = next;
       const wanted =
@@ -1382,7 +1462,6 @@ function followAsyncDataKey<T>(
     },
     { flush: "sync" },
   );
-  const current = () => consumer.value.entry.result;
   const through = <V>(read: (result: DmsAsyncData<T>) => Ref<V>): Ref<V> =>
     computed({
       get: () => read(current()).value,
@@ -1391,13 +1470,22 @@ function followAsyncDataKey<T>(
       },
     });
   return {
-    data: through((result) => result.data),
+    data: computed({
+      get: shownData,
+      set: (value) => {
+        carried.value = undefined;
+        current().data.value = value;
+      },
+    }),
     error: through((result) => result.error),
     pending: computed(() => current().pending.value),
     status: through((result) => result.status),
     execute: (refreshOptions) => current().refresh(refreshOptions),
     refresh: (refreshOptions) => current().refresh(refreshOptions),
-    clear: () => current().clear(),
+    clear: () => {
+      carried.value = undefined;
+      current().clear();
+    },
   };
 }
 
@@ -1444,7 +1532,8 @@ interface DmsFailure extends DmsErrorData {
 
 /**
  * What of a failure a page may carry, by the rule the error page follows: an
- * HTTP failure keeps its status, status text, body and message, anything else
+ * HTTP failure keeps its status, status text and message, and its body if it
+ * is a 4xx, anything else
  * is a server failure whose cause only reaches the server log. A fetch error
  * names the URL it requested, which on a server is the backend's own address:
  * its status text stands for it.
@@ -1462,13 +1551,16 @@ function transferredError(key: string, reason: unknown): DmsErrorData {
     return { statusCode: SERVER_FAILURE_STATUS };
   }
   const statusMessage = failure.statusMessage ?? failure.statusText;
-  return {
+  const transferred: DmsErrorData = {
     statusCode,
     statusMessage,
     message:
       failure.name === FETCH_ERROR_NAME ? statusMessage : failure.message,
-    data: failure.data,
   };
+  // A 5xx body is the backend's own account of its failure, a stack or a
+  // query at times: only a 4xx body, written for the client, is transferred.
+  if (statusCode < SERVER_FAILURE_STATUS) transferred.data = failure.data;
+  return transferred;
 }
 
 /**
