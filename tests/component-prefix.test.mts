@@ -222,6 +222,23 @@ describe("Component prefix", () => {
     assert.equal(lazyTotals.loads(), 1);
   });
 
+  it("preloads a component a page places inside another one", async () => {
+    // How a page layout nests blocks: each child places a definition.
+    const layout = {
+      components: {
+        grid: {
+          componentName: "Grid",
+          children: [
+            { id: "totals", component: { componentName: "BillingLazyTotals" } },
+          ],
+        },
+      },
+    };
+
+    await preloadDmsPage({ path: "/billing", page: { layout } });
+    assert.equal(lazyTotals.loads(), 1);
+  });
+
   it("resolves before hydration the components the server render reached", async () => {
     const server = createSSRApp({
       render: () => h(resolveDmsComponent("BillingLazyTotals")!),

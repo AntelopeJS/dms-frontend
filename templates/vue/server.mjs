@@ -39,6 +39,7 @@ import {
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
+import { loadPageProps } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
@@ -162,37 +163,14 @@ async function backendJson(path, request) {
   return response.json();
 }
 
-async function fetchPage(request, pathname) {
-  const query = new URLSearchParams({ path: pathname });
-  return backendJson(`/dms/page?${query}`, request);
-}
-
-async function pageProps(request) {
-  const pathname = new URL(request.url, "http://frontend.local").pathname;
-  const session = publicSession(readSession(request));
-  try {
-    const page = await fetchPage(request, pathname);
-    return { path: pathname, page, ...session };
-  } catch (error) {
-    if (!(error instanceof BackendResponseError) || error.status !== 404)
-      throw error;
-    const renderer = await ssrRenderer(await developmentServer());
-    if (!renderer.isDmsFrontendPage(pathname)) throw error;
-    return {
-      path: pathname,
-      ...session,
-      page: {
-        componentName: pathname,
-        isFrontendOnly: true,
-        route: {
-          fullId: pathname.slice(1).replaceAll("/", "."),
-          fullSlug: pathname,
-          hasAccess: pathname.startsWith("/auth/"),
-        },
-        layout: { layout: { componentName: "DefaultLayout" } },
-      },
-    };
-  }
+function pageProps(request) {
+  return loadPageProps(request, {
+    fetchJson: (path) => backendJson(path, request),
+    isFrontendPage: async (pathname) =>
+      (await ssrRenderer(await developmentServer())).isDmsFrontendPage(
+        pathname,
+      ),
+  });
 }
 
 function redirectToHomepage(request, response, pathname) {
@@ -452,9 +430,9 @@ export async function handleRequest(request, response) {
   if (!fileFirst && (await serveFile())) return;
   if (handleAssetVersionMismatch(request, response)) return;
   if (redirectToHomepage(request, response, pathname)) return;
-  const props = await pageProps(request);
+  const { props, onceProps } = await pageProps(request);
   if (redirectSignedOutPrivatePage(request, response, props)) return;
-  const page = createInertiaPage(request.url, props);
+  const page = createInertiaPage(request.url, props, undefined, onceProps);
   if (request.headers[INERTIA_HEADER]) {
     return writeContent(
       request,

@@ -34,8 +34,11 @@ import {
   getDmsLayoutProps,
   getDmsPage,
   hydrateDmsPageProps,
+  hydrateDmsSharedProps,
   installDmsPlugins,
+  keepSharedOverHistory,
   preloadDmsPage,
+  preloadPrefetchedDmsPages,
   provideDmsFrontendRuntime,
   readDmsLocaleCookie,
   resolveDmsAsyncComponents,
@@ -185,6 +188,13 @@ const DmsPersistentLayout = defineComponent({
       () => hydrateDmsPageProps(props.value),
       { immediate: true, flush: "sync" },
     );
+    // Apart from the page: a reload of the site layout alone (`router.reload({
+    // only: ["shared"] })`) is not a navigation.
+    watch(
+      () => attrs.shared,
+      () => hydrateDmsSharedProps(props.value.shared),
+      { flush: "sync" },
+    );
     // The session, not the page props: a page restored from history or from
     // the prefetch cache carries the user as it was when it was fetched, and
     // would switch the interface back to a language the user has left. A
@@ -307,6 +317,8 @@ export async function configureDmsApp(
   if (typeof window !== "undefined") {
     const toast = options.app.runWithContext(() => useToast());
     showNetworkErrors(toast.add, i18n.global);
+    preloadPrefetchedDmsPages();
+    options.app.runWithContext(keepSharedOverHistory);
   }
   // Resolve, before the app mounts, every async component the server
   // rendered: the page, its layout, and the components the render reached.

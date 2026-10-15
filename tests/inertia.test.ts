@@ -48,6 +48,9 @@ const SSR_RENDERER_FIXTURE = `export async function renderDmsPage(page) {
   const serialized = JSON.stringify(page).replaceAll("/", "\\\\/");
   return { body: \`<script data-page="app" type="application/json">\${serialized}</script><div data-server-rendered="true" id="app"></div>\`, head: { headTags: "", htmlAttrs: "", bodyAttrs: "" }, overlays: "" };
 }
+export function isDmsFrontendPage(path) {
+  return path === "/auth/custom";
+}
 export function accessRedirect(code) {
   return code === "${ACCESS_BLOCKED_CODE}" ? "/workspace-suspended" : undefined;
 }\n`;
@@ -1099,6 +1102,266 @@ describe("HTML render HTTP endpoint", () => {
       await rm(join(process.cwd(), "templates", "vue", "dist"), {
         recursive: true,
         force: true,
+      });
+    }
+  });
+});
+
+interface PagePropsTemplate {
+  sharedOnceKey: (session?: Record<string, unknown>) => string;
+  SHARED_PROP_TTL_MS: number;
+}
+
+const pagePropsModule = import(
+  join(process.cwd(), "templates", "vue", "server", "page-props.mjs")
+) as Promise<PagePropsTemplate>;
+
+describe("Site layout as an Inertia once prop", () => {
+  const PAGE = { route: { fullSlug: "/articles" }, layout: { id: "layout" } };
+  const SHARED = { siteLayout: { pages: {} }, isOwner: true };
+  const FRESH_SHARED = { siteLayout: { pages: {} }, isOwner: false };
+
+  async function frontendWithBackend() {
+    const backendCalls: string[] = [];
+    const backend = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://backend.local");
+      backendCalls.push(`${url.pathname}${url.search}`);
+      if (url.pathname === "/dms/sitelayout") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(FRESH_SHARED));
+        return;
+      }
+      if (url.searchParams.get("path") === "/auth/custom") {
+        response.writeHead(404, { "content-type": "application/json" });
+        response.end('{"message":"error.page_not_found"}');
+        return;
+      }
+      const omitShared = url.searchParams.get("shared") === "false";
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify(omitShared ? PAGE : { ...PAGE, shared: SHARED }),
+      );
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const address = backend.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+    const runtime = await server;
+    const frontend = createServer(runtime.handleRequestSafely);
+    await new Promise<void>((resolve) =>
+      frontend.listen(0, "127.0.0.1", resolve),
+    );
+    const frontendAddress = frontend.address();
+    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const base = `http://127.0.0.1:${frontendAddress.port}`;
+    const visit = async (
+      path: string,
+      headers: Record<string, string> = {},
+    ) => {
+      backendCalls.length = 0;
+      const response = await fetch(`${base}${path}`, {
+        headers: { "x-inertia": "true", ...headers },
+        redirect: "manual",
+      });
+      const page = (await response.json()) as {
+        props: Record<string, unknown>;
+        onceProps?: Record<string, { prop: string; expiresAt: number | null }>;
+      };
+      return { page, backendCalls: [...backendCalls] };
+    };
+    const close = () => {
+      frontend.close();
+      backend.close();
+    };
+    return { visit, close };
+  }
+
+  async function accountCookie(accountId: string): Promise<string> {
+    process.env.DMS_SESSION_SECRET ??=
+      "test-secret-with-at-least-thirty-two-characters";
+    const sessionRuntime = await sessions;
+    const headers = new Map<string, string | string[]>();
+    sessionRuntime.writeSession(
+      {
+        getHeader: (name: string) => headers.get(name),
+        setHeader: (name: string, value: string | string[]) =>
+          headers.set(name, value),
+      },
+      {
+        accessToken: "access",
+        accountId,
+        activeTenantId: "tenant-1",
+        user: { id: accountId },
+      },
+    );
+    return [headers.get("set-cookie") ?? []]
+      .flat()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+  }
+
+  it("sends the site layout once per session, then the page alone", async () => {
+    const { sharedOnceKey, SHARED_PROP_TTL_MS } = await pagePropsModule;
+    const { visit, close } = await frontendWithBackend();
+    const anonymous = sharedOnceKey(undefined);
+    try {
+      const before = Date.now();
+      const first = await visit("/articles");
+      assert.deepEqual(first.backendCalls, ["/dms/page?path=%2Farticles"]);
+      assert.deepEqual(first.page.props.shared, SHARED);
+      assert.deepEqual(first.page.props.page, PAGE);
+      assert.deepEqual(Object.keys(first.page.onceProps ?? {}), [anonymous]);
+      const declared = first.page.onceProps?.[anonymous];
+      assert.equal(declared?.prop, "shared");
+      assert.ok(
+        (declared?.expiresAt ?? 0) >= before + SHARED_PROP_TTL_MS &&
+          (declared?.expiresAt ?? 0) <= Date.now() + SHARED_PROP_TTL_MS,
+      );
+
+      const next = await visit("/articles", {
+        "x-inertia-except-once-props": anonymous,
+      });
+      assert.deepEqual(next.backendCalls, [
+        "/dms/page?path=%2Farticles&shared=false",
+      ]);
+      assert.equal("shared" in next.page.props, false);
+      assert.deepEqual(next.page.props.page, PAGE);
+      assert.deepEqual(next.page.onceProps, {
+        [anonymous]: { prop: "shared", expiresAt: null },
+      });
+
+      // The layout another session was sent is not this one's.
+      const cookie = await accountCookie("account-a");
+      const signedIn = await visit("/articles", {
+        cookie,
+        "x-inertia-except-once-props": anonymous,
+      });
+      assert.deepEqual(signedIn.backendCalls, ["/dms/page?path=%2Farticles"]);
+      assert.deepEqual(signedIn.page.props.shared, SHARED);
+      const accountKey = sharedOnceKey({
+        accountId: "account-a",
+        activeTenantId: "tenant-1",
+      });
+      assert.notEqual(accountKey, anonymous);
+      assert.deepEqual(Object.keys(signedIn.page.onceProps ?? {}), [
+        accountKey,
+      ]);
+      const held = await visit("/articles", {
+        cookie,
+        "x-inertia-except-once-props": `${anonymous},${accountKey}`,
+      });
+      assert.deepEqual(held.backendCalls, [
+        "/dms/page?path=%2Farticles&shared=false",
+      ]);
+      assert.equal(
+        sharedOnceKey({
+          accountId: "account-a",
+          activeTenantId: "tenant-2",
+        }) === accountKey,
+        false,
+      );
+    } finally {
+      close();
+    }
+  });
+
+  it("answers a partial reload with the props it names", async () => {
+    const { sharedOnceKey } = await pagePropsModule;
+    const { visit, close } = await frontendWithBackend();
+    const held = sharedOnceKey(undefined);
+    const partial = (data: string, extra: Record<string, string> = {}) =>
+      visit("/articles?tab=b", {
+        "x-inertia-partial-component": "DmsDynamicPage",
+        "x-inertia-partial-data": data,
+        ...extra,
+      });
+    try {
+      // A forced reload of the layout the browser holds.
+      const shared = await partial("shared", {
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(shared.backendCalls, ["/dms/sitelayout"]);
+      assert.deepEqual(Object.keys(shared.page.props).sort(), [
+        "errors",
+        "shared",
+      ]);
+      assert.deepEqual(shared.page.props.shared, FRESH_SHARED);
+      assert.notEqual(shared.page.onceProps?.[held]?.expiresAt, null);
+
+      const page = await partial("page.layout", {
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(page.backendCalls, [
+        "/dms/page?path=%2Farticles&shared=false",
+      ]);
+      assert.deepEqual(Object.keys(page.page.props).sort(), ["errors", "page"]);
+
+      // A signed-out session is sent as one, so the merge cannot keep the old.
+      const session = await partial("user,session", {
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(session.backendCalls, []);
+      assert.deepEqual(session.page.props, {
+        user: null,
+        session: null,
+        errors: {},
+      });
+
+      // A browser without this session's layout gets it with any reload.
+      const stale = await partial("page");
+      assert.deepEqual(stale.backendCalls, ["/dms/page?path=%2Farticles"]);
+      assert.deepEqual(stale.page.props.shared, SHARED);
+
+      const excepted = await visit("/articles", {
+        "x-inertia-partial-component": "DmsDynamicPage",
+        "x-inertia-partial-except": "page",
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(excepted.backendCalls, ["/dms/sitelayout"]);
+      assert.equal("page" in excepted.page.props, false);
+
+      // Another component's reload is a full visit.
+      const other = await visit("/articles", {
+        "x-inertia-partial-component": "Other",
+        "x-inertia-partial-data": "shared",
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(other.backendCalls, [
+        "/dms/page?path=%2Farticles&shared=false",
+      ]);
+      assert.equal(typeof other.page.props.path, "string");
+    } finally {
+      close();
+    }
+  });
+
+  it("keeps the layout over a frontend-only page only when the browser holds it", async () => {
+    await writeSsrRendererFixture();
+    const { sharedOnceKey } = await pagePropsModule;
+    const { visit, close } = await frontendWithBackend();
+    const held = sharedOnceKey(undefined);
+    try {
+      const holding = await visit("/auth/custom", {
+        "x-inertia-except-once-props": held,
+      });
+      assert.equal(
+        (holding.page.props.page as { isFrontendOnly?: boolean })
+          .isFrontendOnly,
+        true,
+      );
+      assert.deepEqual(holding.page.onceProps, {
+        [held]: { prop: "shared", expiresAt: null },
+      });
+      const bare = await visit("/auth/custom");
+      assert.equal("shared" in bare.page.props, false);
+      assert.equal(bare.page.onceProps, undefined);
+    } finally {
+      close();
+      await rm(join(process.cwd(), "templates", "vue", "dist"), {
+        force: true,
+        recursive: true,
       });
     }
   });
