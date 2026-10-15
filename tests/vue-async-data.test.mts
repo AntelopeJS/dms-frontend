@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
 import { renderToString } from "@vue/server-renderer";
 import {
@@ -991,5 +993,68 @@ describe("useDmsFetch", () => {
     assert.equal(entry!.data.value, "data:/api/orders/7", "kept on screen");
     assert.equal(browser.requests.length, 1);
     app.unmount();
+  });
+});
+
+describe("Requests on a server", () => {
+  // A backend that fails every request with a 503, and counts them.
+  async function failingBackend() {
+    let hits = 0;
+    const backend = createServer((_request, response) => {
+      hits++;
+      response.writeHead(503, { "content-type": "application/json" });
+      response.end('{"message":"down"}');
+    });
+    await new Promise<void>((done) => backend.listen(0, "127.0.0.1", done));
+    const { port } = backend.address() as AddressInfo;
+    return {
+      url: `http://127.0.0.1:${port}/api/down`,
+      hits: () => hits,
+      close: () => new Promise((done) => backend.close(done)),
+    };
+  }
+
+  it("makes one attempt for a read or a request on a server, where ofetch sends a failed GET twice", async () => {
+    const backend = await failingBackend();
+    try {
+      const { runtime, render } = serverRender(
+        defineComponent({
+          setup() {
+            const { status } = runtimeModule.useDmsFetch(backend.url);
+            const handled = useDmsAsyncData("handled", () =>
+              runtimeModule.$fetch.create({})(backend.url),
+            );
+            return () => h("p", `${status.value}:${handled.status.value}`);
+          },
+        }),
+      );
+      assert.equal(await render(), "<p>error:error</p>");
+      assert.equal(backend.hits(), 2, "one request per read");
+      assert.equal(
+        runtimeModule.serializeDmsPayload(runtime).errors.handled?.statusCode,
+        503,
+      );
+
+      const { app } = clientApp();
+      const browserRead = app.runWithContext(() =>
+        runtimeModule.useDmsFetch(backend.url, { key: "browser-read" }),
+      );
+      await browserRead;
+      assert.equal(browserRead.status.value, "error");
+      assert.equal(backend.hits(), 4, "the browser keeps ofetch's retry");
+
+      const { render: renderWithRetry } = serverRender(
+        defineComponent({
+          setup() {
+            runtimeModule.useDmsFetch(backend.url, { retry: 2 });
+            return () => h("p");
+          },
+        }),
+      );
+      await renderWithRetry();
+      assert.equal(backend.hits(), 7, "a caller's own retry still applies");
+    } finally {
+      await backend.close();
+    }
   });
 });

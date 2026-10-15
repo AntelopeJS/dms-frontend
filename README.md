@@ -594,6 +594,11 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
   until it has a value, on the server as in the browser. `key` names a key
   instead, and `$fetch` replaces the fetch function, which receives the
   signal.
+- **A request made on a server is sent once.** ofetch sends a failed `GET`
+  again (on a 408, 409, 425, 429 or 5xx), and the render would wait for both
+  answers: on a server, `useDmsFetch`, `$fetch` and the fetches created from
+  it default to `retry: 0`. A caller's own `retry` still applies, and the
+  browser keeps ofetch's default.
 - **A key that is `null` or `undefined`** (a ref or a getter for it) has
   nothing to load: the caller holds its default, and runs nothing until the
   key has a value.

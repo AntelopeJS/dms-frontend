@@ -825,10 +825,24 @@ export function navigateDms(
   return visit(useDmsRuntime(), to, options);
 }
 
+/**
+ * ofetch sends a failed GET again once (on a 408, 409, 425, 429 or 5xx): a
+ * server render would wait for both answers before it answers itself, and
+ * the browser takes a failure over without asking again. A server's request
+ * makes one attempt, unless the caller sets `retry`.
+ */
+const SERVER_REQUEST_DEFAULTS: FetchOptions = { retry: 0 };
+
+/** The options a request starts from on the runtime's side. */
+function sideRequestDefaults(runtime: DmsFrontendRuntime): FetchOptions {
+  return runtime.isServer ? SERVER_REQUEST_DEFAULTS : {};
+}
+
 function createDmsFetch(defaults: FetchOptions = {}): typeof ofetch {
   const execute = (request: string, options?: FetchOptions) => {
     const runtime = useDmsRuntime();
     return (runtime.serverFetch ?? ofetch)(request, {
+      ...sideRequestDefaults(runtime),
       ...defaults,
       ...options,
     });
@@ -954,6 +968,7 @@ export function useDmsFetch<T>(
     });
   const handler: DmsAsyncDataHandler<T> = ({ signal }) =>
     (fetcher ?? runtime.serverFetch ?? ofetch)(url() as string, {
+      ...sideRequestDefaults(runtime),
       ...requestOptions(),
       signal,
     }) as Promise<T>;
