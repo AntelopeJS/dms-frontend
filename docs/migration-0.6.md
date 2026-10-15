@@ -52,8 +52,16 @@ compatibility.
 - `registerBackendProxy(pattern, { auth: "session" | "none" })`, the routing
   report at startup and `x-dms-route-owner` in development.
 - `refreshDmsPageData()` and `refreshOnPageRefresh: false`;
-  `setDmsAsyncDataScope()`; `refreshInterval`; `key` and `placeholder` on the
-  result.
+  `setDmsAsyncDataScope()`; `refreshInterval`, which may be a ref or a getter
+  (`0` or `null` stops the polling); `key` and `placeholder` on the result.
+- `useDmsPagedData(key, handler, { nextCursor })`: a list read page by page
+  under one key, with `loadMore()`, `pages`, `hasMore` and `loadingMore`; the
+  server renders the first page, and a revalidation reads every loaded page.
+- A call to `useDmsAsyncData`, `useDmsFetch` or `useDmsPagedData` outside a
+  component and outside any effect scope runs in the application's scope: a
+  plugin's polling keeps going past its first `await`.
+- `useDmsFetch`'s `key` may be a ref or a getter.
+- `dmsRequestKey(url, options)`, the key `useDmsFetch` gives a request.
 - `{ parallel: true }` for independent middlewares.
 - Icons rendered once per page, from a sprite.
 
@@ -72,7 +80,10 @@ compatibility.
 1. Raise the module's range to `"@antelopejs/dms-frontend": ">=0.6.0 <0.7.0"`.
 2. Read the backend through `useDmsFetch` / `useDmsAsyncData` (in the DMS,
    `useApiData`), dialogs and drawers with `immediate: false` + `execute()`,
-   polling with `refreshInterval`; keep `$fetch` / `$authFetch` for writes.
+   polling with `refreshInterval` (a ref or a getter to stop it, also from a
+   plugin), "load more" lists with `useDmsPagedData` (in the DMS,
+   `useApiPagedData`); keep `$fetch` / `$authFetch` for writes. A test that
+   needs a response's key computes it with `dmsRequestKey()`.
    Drop the `refresh()` calls made after a write when the page refresh covers
    them, and any reset of `status` to force a read on mount.
 3. Give every server-rendered call a key; a keyless call now renders its

@@ -780,7 +780,23 @@ kept after a failure, the first `lazy` run started after the caller's turn):
 - **`immediate: false`** waits for `execute()` (a dialog, a drawer), and
   **`refreshInterval: ms`** reads again on an interval in the browser, while a
   component shows the data and the page is visible: every read of a module can
-  go through `useDmsAsyncData` or `useDmsFetch`.
+  go through `useDmsAsyncData` or `useDmsFetch`. The interval may be a ref or
+  a getter: the polling follows it, and `0`, `null` or `undefined` stops it.
+- **A call outside a component** (a plugin, also past its first `await`, a
+  callback) belongs to the application: its watchers and its polling run for
+  as long as the application does, so a plugin can poll a status with
+  `refreshInterval` and stop it through a reactive interval.
+- **`useDmsPagedData(key, handler, { nextCursor, initialCursor })`** reads a
+  list page by page under one key ("load more", an infinite list). The
+  handler receives `{ cursor, index, signal }` and returns a page;
+  `nextCursor(page, pages)` gives the next page's cursor, or `null` at the
+  end. The first page loads like any data (a server render waits for it and
+  transfers it); `loadMore()` appends the next one, `pages`, `hasMore` and
+  `loadingMore` follow it, and a failure lands in `error` with the pages
+  kept. A revalidation (a mount, `refresh()`, `refreshDmsPageData()`, the
+  polling) reads every page loaded so far again and replaces them once all
+  are in. Put what filters the list in the key: a new key starts again from
+  its first page.
 - **`refreshDmsPageData()`** reads again the data the components on screen
   show, after a save or on a realtime event; a call opts out with
   `refreshOnPageRefresh: false`, and data waiting for `execute()` is left
@@ -803,8 +819,12 @@ kept after a failure, the first `lazy` run started after the caller's turn):
   again for each request: the caller moves to the key of each request, as in
   Nuxt's `useFetch`. A URL that is `null` or `undefined` requests nothing
   until it has a value, on the server as in the browser. `key` names a key
-  instead, and `$fetch` replaces the fetch function, which receives the
-  signal.
+  instead (a ref or a getter too: `null` requests nothing), and `$fetch`
+  replaces the fetch function, which receives the signal.
+- **`dmsRequestKey(url, { method, baseURL, query, params, body })`** is the
+  key `useDmsFetch` gives a request, without the scope: for
+  `refreshDmsData(keys)`, and for a test that looks for a response's entry
+  instead of computing the digest itself.
 - **A key that is `null` or `undefined`** (a ref or a getter for it) has
   nothing to load: the caller holds its default, and runs nothing until the
   key has a value.
