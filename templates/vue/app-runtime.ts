@@ -22,6 +22,7 @@ import {
 import { createI18n, useI18n } from "vue-i18n";
 import DmsDynamicPage from "./DmsDynamicPage.vue";
 import {
+  type DmsLayerAppConfig,
   type DmsLocaleLoader,
   type DmsPageProps,
   type DmsUser,
@@ -40,6 +41,7 @@ import {
   resolveDmsComponent,
   serializeDmsAsyncData,
   trackDmsAsyncComponents,
+  updateDmsAppConfig,
   useDmsAppConfig,
   useDmsState,
   useError,
@@ -249,6 +251,16 @@ const mergeUiAppConfig = createUiAppConfigMerger();
 
 function mergeDmsAppConfig(): void {
   mergeUiAppConfig(useAppConfig(), useDmsAppConfig());
+}
+
+/**
+ * Development only: applies the layers' app configs, edited while the page is
+ * open, to the DMS app config and to Nuxt UI's, both in place, so the
+ * components reading them and Nuxt UI's colors follow without a reload.
+ */
+export function applyLayerAppConfigs(appConfigs: DmsLayerAppConfig[]): void {
+  updateDmsAppConfig(appConfigs);
+  mergeUiAppConfig(useAppConfig(), useDmsAppConfig(), { isChanged: true });
 }
 
 export async function configureDmsApp(

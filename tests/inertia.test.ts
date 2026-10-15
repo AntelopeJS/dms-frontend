@@ -17,7 +17,10 @@ interface ServerTemplate {
     response: unknown,
     location: string,
   ) => void;
-  renderHtml: (page: unknown, requestUrl: string) => Promise<string>;
+  renderHtml: (
+    page: unknown,
+    requestUrl: string,
+  ) => Promise<{ html: string; status: number }>;
   requestOwnership: (method: string, pathname: string) => string;
 }
 
@@ -430,6 +433,31 @@ describe("Inertia HTTP protocol", () => {
       frontend.close();
       backend.closeAllConnections();
       backend.close();
+    }
+  });
+
+  it("puts a favicon placeholder in a page whose render declares no icon", async () => {
+    // The template no longer carries one: a page declaring its own icons
+    // would compete with it (see server/favicon.mjs).
+    await writeSsrRendererFixture();
+    const runtime = await server;
+    try {
+      const page = runtime.createInertiaPage("/articles", {
+        path: "/articles",
+      });
+      const { html } = await runtime.renderHtml(page, "/articles");
+      assert.deepEqual(html.match(/<link rel="icon"[^>]*>/g), [
+        '<link rel="icon" href="data:," />',
+      ]);
+      assert.match(
+        html,
+        /<head>[^]*<link rel="icon" href="data:," \/>[^]*<\/head>/,
+      );
+    } finally {
+      await rm(join(process.cwd(), "templates", "vue", "dist"), {
+        force: true,
+        recursive: true,
+      });
     }
   });
 

@@ -3,6 +3,7 @@ import { createInertiaApp } from "@inertiajs/vue3";
 import { createHead, renderSSRHead } from "@unhead/vue/server";
 import { renderToString } from "@vue/server-renderer";
 import { createSSRApp, h } from "vue";
+import { appConfigs } from "./app-configs.generated";
 import {
   type DmsServerFetch,
   SSR_ASYNC_COMPONENTS_ID,
@@ -90,7 +91,7 @@ function iconsScript(names: Set<string>): string {
   return `<script id="${SSR_ICONS_ID}" type="application/json">${value}</script>`;
 }
 
-await setupFrontendModules(frontendModules);
+await setupFrontendModules(frontendModules, appConfigs);
 
 export function isDmsFrontendPage(path: string): boolean {
   return hasDmsPage(path);

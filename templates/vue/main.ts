@@ -3,7 +3,12 @@ import { addAPIProvider } from "@iconify/vue";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { createHead } from "@unhead/vue/client";
 import { createApp, createSSRApp, h } from "vue";
-import { configureDmsApp, resolveDmsInertiaPage } from "./app-runtime";
+import { appConfigs, syncAppConfigs } from "./app-configs.generated";
+import {
+  applyLayerAppConfigs,
+  configureDmsApp,
+  resolveDmsInertiaPage,
+} from "./app-runtime";
 import { setupFrontendModules } from "./frontend-module";
 import { frontendModules } from "./frontend-modules.generated";
 import { sameOriginIconProvider } from "./icon-api.mjs";
@@ -52,7 +57,10 @@ if (import.meta.env.DEV) adoptViteDevStyles();
 // the generated server answers those queries from the installed collections.
 addAPIProvider("", sameOriginIconProvider(location.origin));
 
-await setupFrontendModules(frontendModules);
+await setupFrontendModules(frontendModules, appConfigs);
+// A layer's app config edited during development reaches the page without a
+// reload. A server render imports the new configs instead.
+syncAppConfigs(applyLayerAppConfigs);
 
 createInertiaApp({
   resolve: resolveDmsInertiaPage,

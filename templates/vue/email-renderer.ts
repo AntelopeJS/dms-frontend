@@ -2,6 +2,7 @@ import { renderToString } from "@vue/server-renderer";
 import { defu } from "defu";
 import { type Component, createSSRApp, h } from "vue";
 import { createI18n } from "vue-i18n";
+import { appConfigs } from "./app-configs.generated";
 import moduleRegistry from "./generated-frontend-modules.json";
 import { loadEmailLocaleMessages } from "./email-locales";
 import { stripSsrMarkers } from "./email-markup";
@@ -27,6 +28,21 @@ const registries = import.meta.glob<EmailRegistry>(
 const orderedRegistries = moduleRegistry.modules
   .map((module) => registries[`/frontend-modules/${module.id}/dms.email.ts`])
   .filter((registry): registry is EmailRegistry => Boolean(registry));
+
+/**
+ * Every app config an email reads, highest precedence first: module by module,
+ * by descending priority, what its `dms.email.ts` declares for emails, then
+ * its layers' `app/app.config.ts`. A higher-priority module's layers still
+ * override a lower one's email config, and a module's own email config, the
+ * more specific of its two, keeps the values it gave emails before the layers'
+ * configs applied to them.
+ */
+const emailAppConfigs = moduleRegistry.modules.flatMap((module) => [
+  registries[`/frontend-modules/${module.id}/dms.email.ts`]?.appConfig ?? {},
+  ...appConfigs
+    .filter((layer) => layer.module === module.id)
+    .map((layer) => layer.config),
+]);
 
 function templateEntries(): Array<[string, () => Promise<EmailModule>]> {
   return orderedRegistries.flatMap((registry) =>
@@ -138,10 +154,7 @@ export async function renderEmail(
     }),
   );
   app.provide("dmsEmailLocale", locale);
-  app.provide(
-    "dmsEmailAppConfig",
-    defu({}, ...orderedRegistries.map((registry) => registry.appConfig ?? {})),
-  );
+  app.provide("dmsEmailAppConfig", defu({}, ...emailAppConfigs));
   const publicConfig = defu(
     {},
     ...moduleRegistry.modules.map((module) => module.options),

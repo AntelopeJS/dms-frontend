@@ -39,6 +39,12 @@ import {
 } from "vue";
 import type { Composer } from "vue-i18n";
 import { useI18n as useVueI18n } from "vue-i18n";
+import {
+  appConfigChanges,
+  assignInPlace,
+  mergeLayerAppConfigs,
+  withAppConfigChanges,
+} from "./layer-app-config";
 
 export interface DmsPageRoute {
   displayName?: string;
@@ -298,6 +304,12 @@ export interface DmsFrontendModuleRegistration {
   module: DmsFrontendModule;
   options: DmsModuleOptions;
 }
+/** A layer's `app/app.config.ts`, as `app-configs.generated.ts` lists them. */
+export interface DmsLayerAppConfig {
+  /** The id of the frontend module the layer belongs to. */
+  module: string;
+  config: Record<string, unknown>;
+}
 // Async middleware without a redirect naturally infers Promise<void>.
 // biome-ignore lint/suspicious/noConfusingVoidType: preserve that valid handler signature.
 export type DmsMiddlewareResult = void | false | RouteLocationRaw;
@@ -407,6 +419,9 @@ const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
 const appConfig = ref<Record<string, unknown>>({});
+// What the last setup of the modules changed in the layers' app configs, which
+// a development update of those configs keeps: see `updateDmsAppConfig`.
+let appConfigSetupChanges: Record<string, unknown> = {};
 const DMS_RUNTIME_KEY: InjectionKey<DmsFrontendRuntime> = Symbol("dms-runtime");
 type DmsRuntimeContext = DmsAppContext["runWithContext"];
 const runtimeContexts = new WeakMap<DmsFrontendRuntime, DmsRuntimeContext>();
@@ -1717,16 +1732,22 @@ function createSdk(
  * replace, so the server kept rendering the old ones, and every list gained the
  * same entries once more. A render still in progress keeps reading a complete
  * registry: the new one is only published once every module is set up.
+ *
+ * `useDmsAppConfig()` holds the layers' app configs merged, highest precedence
+ * first, before the first module is set up: a project's layer overrides the
+ * DMS's, which fills in the rest. A setup may still read and extend it.
  */
 export async function setupFrontendModules(
   registrations: DmsFrontendModuleRegistration[],
+  layerAppConfigs: DmsLayerAppConfig[] = [],
 ): Promise<void> {
   const next = createDmsFrontendRegistry();
-  // Modules read and extend these two while they are set up (the DMS layout
-  // merges its app config into `useDmsAppConfig()`), so they restart empty
-  // here rather than being published with the registry.
+  const configs = layerAppConfigs.map(({ config }) => config);
+  // Modules read and extend these two while they are set up, so they restart
+  // here rather than being published with the registry: the public options
+  // empty, the app config from the layers alone.
   runtimeConfig.value.public = {} as PublicRuntimeConfig;
-  appConfig.value = {};
+  appConfig.value = mergeLayerAppConfigs(configs);
   for (const registration of registrations) {
     runtimeConfig.value.public = defu(
       runtimeConfig.value.public,
@@ -1734,7 +1755,27 @@ export async function setupFrontendModules(
     );
     await registration.module.setup(createSdk(next, registration));
   }
+  appConfigSetupChanges = appConfigChanges(
+    mergeLayerAppConfigs(configs),
+    appConfig.value,
+  );
   registry = next;
+}
+
+/**
+ * Development only: applies the layers' app configs, edited while the page
+ * is open, to `useDmsAppConfig()`, with what the setup of the modules changed
+ * in the previous ones still on top. The object is updated in place, records
+ * included, since components hold it: the modules are not set up again.
+ */
+export function updateDmsAppConfig(layerAppConfigs: DmsLayerAppConfig[]): void {
+  const layered = mergeLayerAppConfigs(
+    layerAppConfigs.map(({ config }) => config),
+  );
+  assignInPlace(
+    appConfig.value,
+    withAppConfigChanges(layered, appConfigSetupChanges),
+  );
 }
 
 export async function installDmsPlugins(
