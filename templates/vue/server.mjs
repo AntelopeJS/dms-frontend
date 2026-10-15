@@ -38,6 +38,7 @@ import {
 } from "./server/vite-errors.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { watchEmailBundle } from "./server/email.mjs";
+import { DEV_FS_DENY, denyPrivateFiles } from "./server/dev-private-files.mjs";
 import { isRendererFilePath } from "./server/module-routes.mjs";
 import { routeRuleFor, ruleHeaders } from "./server/route-rules.mjs";
 import {
@@ -90,13 +91,17 @@ async function developmentServer() {
   if (vite) return vite;
   vitePromise ??= import("vite")
     .then(({ createServer: createViteServer }) => {
-      const serverOptions = { middlewareMode: true };
+      const serverOptions = {
+        middlewareMode: true,
+        // The generated secrets and the modules' server code, never served.
+        fs: { deny: DEV_FS_DENY },
+      };
       if (frontendHttpServer)
         serverOptions.hmr = { server: frontendHttpServer };
       return createViteServer({
         server: serverOptions,
         appType: "custom",
-        plugins: [captureViteErrors()],
+        plugins: [denyPrivateFiles(), captureViteErrors()],
       });
     })
     .then((server) => {
