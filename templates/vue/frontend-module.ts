@@ -1374,6 +1374,11 @@ interface AsyncDataEntry<T> {
   unused(): boolean;
   /** When a caller last stopped showing the data (`asyncDataClock`). */
   lastShown(): number;
+  /**
+   * Whether another caller shows the data and its last run answered within
+   * `JOIN_WITHOUT_READ_MS`: a caller joining it then reads nothing again.
+   */
+  justReadForAnother(): boolean;
   running(): boolean;
   /** `refreshDmsPageData`'s run, for data a caller shows and opted into. */
   pageRefresh(): Promise<void> | undefined;
@@ -1393,6 +1398,12 @@ const DEFAULT_DEDUPE: DmsAsyncDataDedupe = "cancel";
  * recently shown, for a return to them to show their data at once.
  */
 const MAX_UNUSED_ASYNC_DATA = 50;
+/**
+ * How long after a run answered a caller that joins a key another caller
+ * shows takes the data as it is, instead of reading it again: two components
+ * of one page sharing a read mount a moment apart.
+ */
+const JOIN_WITHOUT_READ_MS = 2000;
 
 const asyncDataEntries = new WeakMap<
   DmsAsyncData<unknown>,
@@ -1417,6 +1428,8 @@ function createAsyncDataEntry<T>(
   let heldBack: AsyncDataInitialState<T> | undefined;
   let adoption: Promise<void> | undefined;
   let lastShown = 0;
+  // When the last run answered, to spare a caller joining at once a second read.
+  let answeredAt = 0;
   const adoptNow = () => {
     if (!heldBack) return;
     data.value = heldBack.data;
@@ -1451,6 +1464,7 @@ function createAsyncDataEntry<T>(
         data.value = pickValue<T>(transformed, binding.options.pick);
         error.value = null;
         status.value = "success";
+        answeredAt = Date.now();
       } catch (reason) {
         if (run !== current) return;
         // The data of the last success stays on screen next to the failure.
@@ -1533,6 +1547,8 @@ function createAsyncDataEntry<T>(
     },
     unused: () => bindings.length === 0,
     lastShown: () => lastShown,
+    justReadForAnother: () =>
+      bindings.length > 1 && Date.now() - answeredAt < JOIN_WITHOUT_READ_MS,
     running: () => run !== undefined,
     pageRefresh() {
       const wanted = bindings.some(
@@ -1817,8 +1833,9 @@ function startAsyncData<T>(
   if (entry.running()) return waitForData();
   if (!idle) {
     // Loaded before: shown at once and read again in the background, except
-    // while the page the server rendered hydrates with the server's data.
-    if (!runtime.hydrating) void entry.load();
+    // while the page the server rendered hydrates with the server's data, or
+    // when another caller of the page has just read it.
+    if (!runtime.hydrating && !entry.justReadForAnother()) void entry.load();
     return waitForData();
   }
   // The server rendered the default in place of this data: the browser's

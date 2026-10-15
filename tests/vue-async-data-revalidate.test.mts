@@ -131,6 +131,31 @@ describe("Stale while revalidate", () => {
     app.unmount();
   });
 
+  it("spares a caller joining data another one has just read a second read", async () => {
+    let calls = 0;
+    const second = ref(false);
+    const Reader = defineComponent({
+      setup() {
+        const { data } = useDmsAsyncData("security", async () => {
+          calls++;
+          return "summary";
+        });
+        return () => h("p", String(data.value));
+      },
+    });
+    const app = mountRuntime(createDmsFrontendRuntime(), {
+      render: () => h("div", [h(Reader), second.value ? h(Reader) : null]),
+    });
+    await settle();
+    assert.equal(calls, 1);
+    // A second block of the page mounts once the first one's read answered.
+    second.value = true;
+    await nextTick();
+    await settle();
+    assert.equal(calls, 1, "no second read for a caller joining at once");
+    app.unmount();
+  });
+
   it("does not hold an awaiting caller for data it already has", async () => {
     const { app } = clientApp();
     const first = await app.runWithContext(() =>
@@ -144,7 +169,11 @@ describe("Stale while revalidate", () => {
       .then(() => (resumed = true));
     await settle();
     assert.equal(resumed, true);
-    assert.equal(first.status.value, "pending", "read again meanwhile");
+    assert.equal(
+      first.status.value,
+      "success",
+      "not read again: the first caller has just read it",
+    );
     assert.equal(first.data.value, "first");
   });
 
