@@ -4,18 +4,17 @@ import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createServer, type Server } from "node:net";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 const packageJson = JSON.parse(
   readFileSync(
@@ -68,7 +67,7 @@ async function runCli(
   args: string[],
   options: RunCliOptions = {},
 ): Promise<CliResult> {
-  const sandbox = mkdtempSync(join(tmpdir(), "dms-cli-"));
+  const sandbox = temporaryDirectory("dms-cli-");
   for (const [name, content] of Object.entries(options.files ?? {})) {
     mkdirSync(dirname(join(sandbox, name)), { recursive: true });
     writeFileSync(join(sandbox, name), content);
@@ -279,7 +278,7 @@ describe("following the ajs output contract", () => {
 
   it("exits quietly when the reader of its output goes away", async () => {
     const cli = spawn(process.execPath, [...cliCommand, "help", "dev"], {
-      cwd: mkdtempSync(join(tmpdir(), "dms-cli-")),
+      cwd: temporaryDirectory("dms-cli-"),
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
     });

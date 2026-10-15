@@ -1,7 +1,6 @@
 import * as assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { after, before, describe, it } from "node:test";
@@ -34,6 +33,7 @@ import {
   writeSealedCookie,
   writeSession,
 } from "../templates/vue/server/auth/session.mjs";
+import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 const LIMIT = 10;
 const WINDOW_MS = 60_000;
@@ -531,7 +531,7 @@ describe("session establishment from a module endpoint", () => {
   });
 
   it("reads the endpoints the loader generated into the workspace", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "dms-declared-"));
+    const workspace = temporaryDirectory("dms-declared-");
     const file = join(workspace, "generated-auth-establish.json");
     writeFileSync(
       file,
@@ -543,7 +543,7 @@ describe("session establishment from a module endpoint", () => {
   });
 
   it("falls back to no declaration when the workspace carries no such file", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "dms-declared-absent-"));
+    const workspace = temporaryDirectory("dms-declared-absent-");
     assert.deepEqual(
       readDeclaredEstablishEndpoints(join(workspace, "absent.json")),
       [],

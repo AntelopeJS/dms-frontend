@@ -1,8 +1,7 @@
 import * as assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { type AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -18,13 +17,10 @@ import {
 } from "../src/update-check";
 import { DMS_FRONTEND_HOME } from "../src/config";
 import { memoryUi } from "./fixtures/memory-ui";
+import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 function cacheFile(): string {
-  return join(
-    mkdtempSync(join(tmpdir(), "dms-update-check-")),
-    "nested",
-    "state.json",
-  );
+  return join(temporaryDirectory("dms-update-check-"), "nested", "state.json");
 }
 
 /** The notice as a finished command ends on it, set apart from its output. */
