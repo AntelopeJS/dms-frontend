@@ -31,6 +31,18 @@ export function sharedOnceKey(session) {
   return `${SHARED_PROP}:${digest.slice(0, 16)}`;
 }
 
+/**
+ * Whether the browser holds this session's layout and no other: a browser
+ * that holds another session's key too (a switch back and forth without a
+ * full visit) may show that one under `shared`, so it is sent this one.
+ */
+function holdsOnlyThisLayout(held, sharedKey) {
+  if (!held.has(sharedKey)) return false;
+  return ![...held].some(
+    (key) => key !== sharedKey && key.startsWith(`${SHARED_PROP}:`),
+  );
+}
+
 function pagePath(pathname, withShared) {
   const query = new URLSearchParams({ path: pathname });
   if (!withShared) query.set(SHARED_PROP, "false");
@@ -88,7 +100,7 @@ export async function loadPageProps(request, backend, auth) {
   // The sealed session names the account and workspace, whatever the module
   // owning sign-in shows a page of it.
   const sharedKey = sharedOnceKey(sealed);
-  const holdsShared = heldOnceProps(request).has(sharedKey);
+  const holdsShared = holdsOnlyThisLayout(heldOnceProps(request), sharedKey);
   const withShared = (partial && wants(SHARED_PROP)) || !holdsShared;
   const props = {};
   if (wants("path")) props.path = pathname;

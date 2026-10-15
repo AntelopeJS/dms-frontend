@@ -996,11 +996,20 @@ describe("Site layout as an Inertia once prop", () => {
       ]);
       const held = await visit("/articles", {
         cookie,
-        "x-inertia-except-once-props": `${anonymous},${accountKey}`,
+        "x-inertia-except-once-props": accountKey,
       });
       assert.deepEqual(held.backendCalls, [
         "/dms/page?path=%2Farticles&shared=false",
       ]);
+      // A browser that holds another session's layout too may show that one
+      // under `shared`: it is sent this session's again.
+      const mixed = await visit("/articles", {
+        cookie,
+        "x-inertia-except-once-props": `${anonymous},${accountKey}`,
+      });
+      assert.deepEqual(mixed.backendCalls, ["/dms/page?path=%2Farticles"]);
+      assert.deepEqual(mixed.page.props.shared, SHARED);
+      assert.deepEqual(Object.keys(mixed.page.onceProps ?? {}), [accountKey]);
       assert.equal(
         sharedOnceKey({
           accountId: "account-a",
