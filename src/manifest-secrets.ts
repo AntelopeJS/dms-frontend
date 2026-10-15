@@ -53,7 +53,7 @@ export interface ResolvedManifestSecrets {
   /** Variables to add to the server's environment (unset ones are omitted) */
   env: Partial<Record<ManifestSecretName, string>>;
   sources: Record<ManifestSecretName, ManifestSecretSource>;
-  /** Conflicts that matter: the environment did not settle the value */
+  /** The manifest's conflicts, for the secrets it settles */
   conflicts: ManifestSecretConflict[];
 }
 
@@ -103,9 +103,10 @@ export function collectManifestSecrets(
 }
 
 /**
- * The values the generated server receives. A variable set explicitly in the
- * environment (or the project's `.env`, loaded into it at startup) always
- * wins over the manifest.
+ * The values the generated server receives. The manifest's value wins; a
+ * variable set in the environment (or the project's `.env`, loaded into it
+ * at startup) only fills in a secret the manifest leaves out, as the
+ * server's own fallback does.
  */
 export function resolveManifestSecrets(
   secrets: ManifestSecrets,
@@ -119,12 +120,12 @@ export function resolveManifestSecrets(
   for (const name of SECRET_NAMES) {
     const explicit = env[name];
     const published = secrets.published[name];
-    if (explicit) {
-      resolved.env[name] = explicit;
-      resolved.sources[name] = "env";
-    } else if (published) {
+    if (published) {
       resolved.env[name] = published.value;
       resolved.sources[name] = "manifest";
+    } else if (explicit) {
+      resolved.env[name] = explicit;
+      resolved.sources[name] = "env";
     } else {
       resolved.sources[name] = "not set";
     }

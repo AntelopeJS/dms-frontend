@@ -44,11 +44,11 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ],
   [
     "DMS_HTML_RENDER_SECRET",
-    "Overrides the e-mail render secret the backend publishes",
+    "E-mail render secret, used when the backend publishes none in the manifest",
   ],
   [
     "DMS_OAUTH_RELAY_SECRET",
-    "Overrides the OAuth relay secret the backend publishes",
+    "OAuth relay secret, used when the backend publishes none in the manifest",
   ],
   [
     "DMS_AUTH_ESTABLISH_ENDPOINTS",

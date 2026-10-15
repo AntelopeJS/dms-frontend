@@ -886,8 +886,8 @@ to the same sprite.
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
 | | `DMS_COUNTRY_HEADER` | Client country header the server relays to the backend, set by a trusted reverse proxy (default `CF-IPCountry`; empty relays none). Name the same header in the backend's `auth.signInCountry.header`. Relayed only when `DMS_TRUSTED_PROXY_HOPS` is above `0`, like the client address |
 | | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
-| | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests; without it, e-mail renders are refused. Defaults to the `htmlRender.serviceSecret` the backend publishes in the frontend manifest |
-| | `DMS_OAUTH_RELAY_SECRET` | Secret the server presents to the backend's OAuth endpoints; without it, the backend refuses OAuth sign-in. Defaults to the `oauth.relaySecret` the backend publishes in the frontend manifest |
+| | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests; without it, e-mail renders are refused. The `htmlRender.serviceSecret` the backend publishes in the frontend manifest wins; the variable is the fallback for a manifest without one |
+| | `DMS_OAUTH_RELAY_SECRET` | Secret the server presents to the backend's OAuth endpoints; without it, the backend refuses OAuth sign-in. The `oauth.relaySecret` the backend publishes in the frontend manifest wins; the variable is the fallback for a manifest without one |
 | | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Extra backend endpoints `/auth/establish` may open a session from, on top of those the backend's modules declare (comma-separated, empty by default) |
 | | `DMS_BACKEND_PROXIES` | Extra backend prefixes the server proxies, on top of those the modules declare: a JSON array of `{ path, auth? }` (see [Routing and the backend proxy](#routing-and-the-backend-proxy)) |
 | | `DMS_PUBLIC_ENDPOINTS` | Extra backend routes the proxy serves to anyone, on top of those the backend's modules declare: a JSON array of `{ path, methods?, headers? }` (see [Public endpoints](#public-endpoints)) |

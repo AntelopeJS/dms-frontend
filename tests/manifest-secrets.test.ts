@@ -88,21 +88,21 @@ describe("manifest secrets resolution", () => {
     );
   });
 
-  it("lets an explicit variable win over the manifest", () => {
+  it("lets the manifest win, a variable filling in a secret it leaves out", () => {
     const resolved = resolveManifestSecrets(
-      collectManifestSecrets([dmsModule(MANIFEST_SECRET)]),
+      collectManifestSecrets([dmsModule(MANIFEST_SECRET, null)]),
       {
         DMS_HTML_RENDER_SECRET: "deployment-secret",
-        DMS_OAUTH_RELAY_SECRET: "",
+        DMS_OAUTH_RELAY_SECRET: "deployment-relay",
       },
     );
     assert.deepEqual(resolved.env, {
-      DMS_HTML_RENDER_SECRET: "deployment-secret",
-      DMS_OAUTH_RELAY_SECRET: RELAY_SECRET,
+      DMS_HTML_RENDER_SECRET: MANIFEST_SECRET,
+      DMS_OAUTH_RELAY_SECRET: "deployment-relay",
     });
     assert.deepEqual(resolved.sources, {
-      DMS_HTML_RENDER_SECRET: "env",
-      DMS_OAUTH_RELAY_SECRET: "manifest",
+      DMS_HTML_RENDER_SECRET: "manifest",
+      DMS_OAUTH_RELAY_SECRET: "env",
     });
     assert.equal(
       resolveManifestSecrets(collectManifestSecrets([]), {
@@ -145,11 +145,11 @@ describe("manifest secrets resolution", () => {
     for (const value of ["high-render", "low-render", "low-relay"])
       assert.ok(!warnings.join("\n").includes(value));
 
-    // An explicit variable settles the value: the conflict no longer matters.
+    // A variable does not settle a value the manifest publishes.
     assert.deepEqual(
       resolveManifestSecrets(secrets, { DMS_HTML_RENDER_SECRET: "set" })
         .conflicts,
-      [],
+      resolved.conflicts,
     );
   });
 
@@ -224,8 +224,8 @@ describe("the server secrets report", () => {
   it("never prints a secret value", () => {
     const resolved = resolveManifestSecrets(
       collectManifestSecrets([
-        dmsModule(MANIFEST_SECRET),
-        dmsModule("other-render", RELAY_SECRET, {
+        dmsModule(MANIFEST_SECRET, null),
+        dmsModule("other-render", null, {
           name: "@fixture/other",
           priority: -1,
         }),
@@ -335,20 +335,24 @@ describe("ajs dms start", () => {
     assert.ok(!log.includes(RELAY_SECRET));
   });
 
-  it("keeps explicit variables", async () => {
-    const { report, log } = await start({
-      DMS_HTML_RENDER_SECRET: "deployment-secret",
-      DMS_OAUTH_RELAY_SECRET: "deployment-relay",
-    });
+  it("prefers the manifest's secrets, and fills in the others from the environment", async () => {
+    const { report, log } = await start(
+      {
+        DMS_HTML_RENDER_SECRET: "deployment-secret",
+        DMS_OAUTH_RELAY_SECRET: "deployment-relay",
+      },
+      [dmsModule(MANIFEST_SECRET, null)],
+    );
     assert.deepEqual(report, {
-      secret: "deployment-secret",
+      secret: MANIFEST_SECRET,
       relay: "deployment-relay",
     });
     assert.match(
       log,
-      /Secrets: +DMS_HTML_RENDER_SECRET, DMS_OAUTH_RELAY_SECRET from the environment\n/,
+      /Secrets: +DMS_OAUTH_RELAY_SECRET from the environment; DMS_HTML_RENDER_SECRET from the build-time manifest\n/,
     );
     assert.ok(!log.includes("deployment-"));
+    assert.ok(!log.includes(MANIFEST_SECRET));
   });
 
   it("starts the server without secrets and says what they cost", async () => {
