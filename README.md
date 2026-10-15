@@ -620,6 +620,15 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
 - **A key that is `null` or `undefined`** (a ref or a getter for it) has
   nothing to load: the caller holds its default, and runs nothing until the
   key has a value.
+- **A new key is read where the first one would have been.** On a server,
+  `server: false` and `immediate: false` read nothing, whatever key the
+  render gives them. Another read follows a key its setup sets: the
+  component's render waits for it and transfers it, `lazy` or not. A key that
+  changes once that wait has started (the answer of another read of the
+  same component, a later component) is not read on the server: the HTML
+  shows the default, and the browser reads it once the component is mounted.
+  To render a read that depends on another one's answer, await the first one
+  in the setup.
 
 ### Icons
 
