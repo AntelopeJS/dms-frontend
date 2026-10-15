@@ -579,7 +579,12 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
   `Set`, a `Map` or a `Date`, escaped like Inertia's page object. A value it
   cannot write, such as a class instance, is left out and logged.
 - Data no component shows any more is dropped at the next navigation, and
-  `deep: false` makes `data` a shallow ref.
+  `deep: false` makes `data` a shallow ref. Until then, a component that
+  mounts again (a drawer, a dialog or a tab opened again) shows the data as it
+  was; **`refreshOnMount: true`** reads it again each time a component making
+  the call mounts after another showed it, and awaiting the call waits for the
+  new read. Neither the server nor the hydration of its HTML reads it again,
+  and components mounting together share one read.
 - **`useDmsFetch(url, options)`** is `useDmsAsyncData` around a request,
   keyed on its method, base URL, URL, query and body (not its headers): the
   callers of one request share it, and a server render transfers it. The URL,

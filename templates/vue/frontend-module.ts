@@ -228,6 +228,7 @@ export interface UseFetchOptions<T> extends Omit<
   pick?: string[];
   deep?: boolean;
   dedupe?: DmsAsyncDataDedupe;
+  refreshOnMount?: boolean;
   $fetch?: typeof ofetch;
 }
 export interface UseAsyncDataOptions<T> {
@@ -246,6 +247,14 @@ export interface UseAsyncDataOptions<T> {
   /** `false` tracks the replacement of the whole value only, not its content. */
   deep?: boolean;
   dedupe?: DmsAsyncDataDedupe;
+  /**
+   * Loads the data again when a component mounts while its key still holds
+   * the data an earlier component showed: data outlives the components that
+   * show it until the next navigation, so a drawer, a dialog or a tab opened
+   * again shows it as it was. The server and the hydration of its HTML keep
+   * their data.
+   */
+  refreshOnMount?: boolean;
 }
 export interface DmsErrorData {
   statusCode?: number;
@@ -926,6 +935,7 @@ export function useDmsFetch<T>(
     pick,
     deep,
     dedupe,
+    refreshOnMount,
     $fetch: fetcher,
     method,
     query,
@@ -957,6 +967,7 @@ export function useDmsFetch<T>(
     pick,
     deep,
     dedupe,
+    refreshOnMount,
   };
   const reactiveSources = [request, method, query, params, body].filter(
     isReactiveSource,
@@ -1005,6 +1016,8 @@ interface AsyncDataRun {
 interface AsyncDataBindingHandle {
   /** Whether the data was left by a component of an earlier page. */
   stale: boolean;
+  /** Whether a component, or another caller, showed the data before. */
+  shownBefore: boolean;
   unbind(): void;
 }
 
@@ -1130,9 +1143,10 @@ function createAsyncDataEntry<T>(
     bind(binding) {
       // The last component showing the data left it on an earlier page: the
       // next one to show it refreshes it, as a navigation is meant to.
+      const shownBefore = lastBindingPageVersion !== undefined;
       const stale =
         bindings.length === 0 &&
-        lastBindingPageVersion !== undefined &&
+        shownBefore &&
         lastBindingPageVersion !== binding.pageVersion;
       lastBindingPageVersion = binding.pageVersion;
       bindings.push(binding);
@@ -1143,7 +1157,7 @@ function createAsyncDataEntry<T>(
         run = undefined;
         status.value = data.value === null ? "idle" : "success";
       };
-      return { stale, unbind };
+      return { stale, shownBefore, unbind };
     },
     load,
     schedule() {
@@ -1264,8 +1278,21 @@ export function useDmsAsyncData<T>(
   // `useId()` gives the components after it, and both sides must agree.
   if (inComponent && options.immediate !== false && options.server !== false)
     onServerPrefetch(() => consumer.value.entry.settled());
-  const { entry, stale } = consumer.value;
-  const waited = startAsyncData(runtime, entry, stale, options, inComponent);
+  const { entry, stale, shownBefore } = consumer.value;
+  // The server and the hydration of its HTML have the data fresh.
+  const remounted =
+    inComponent &&
+    options.refreshOnMount === true &&
+    shownBefore &&
+    !runtime.isServer &&
+    !runtime.hydrating;
+  const waited = startAsyncData(
+    runtime,
+    entry,
+    stale || remounted,
+    options,
+    inComponent,
+  );
   const result =
     keySource == null || typeof keySource === "string"
       ? entry.result
@@ -1284,18 +1311,20 @@ export function useDmsAsyncData<T>(
 
 /**
  * Starts the first run a caller needs, where its side needs it, and returns
- * what awaiting the call waits for.
+ * what awaiting the call waits for. Outdated data, left by a component of an
+ * earlier page or shown before to a caller that reads it again on mount, is
+ * read again.
  */
 function startAsyncData<T>(
   runtime: DmsFrontendRuntime,
   entry: AsyncDataEntry<T>,
-  stale: boolean,
+  outdated: boolean,
   options: UseAsyncDataOptions<T>,
   inComponent: boolean,
 ): Promise<void> | undefined {
   const immediate = options.immediate !== false;
   const onServer = options.server !== false;
-  const due = immediate && (entry.result.status.value === "idle" || stale);
+  const due = immediate && (entry.result.status.value === "idle" || outdated);
   if (runtime.isServer) {
     if (!immediate || !onServer) return undefined;
     if (due && options.lazy) entry.schedule();
@@ -1343,7 +1372,8 @@ function attachAsyncData<T>(
 ): AsyncDataConsumer<T> {
   const entry = asyncDataEntry(runtime, key ?? undefined, options, inComponent);
   const alone = entry.unused();
-  if (key === null) return { entry, alone, stale: false, unbind() {} };
+  if (key === null)
+    return { entry, alone, stale: false, shownBefore: false, unbind() {} };
   const binding = { handler, options, pageVersion: runtime.pageVersion };
   return { entry, alone, ...entry.bind(binding) };
 }

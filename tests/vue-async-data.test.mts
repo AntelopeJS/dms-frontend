@@ -486,6 +486,86 @@ describe("Async data in the browser", () => {
     app.unmount();
   });
 
+  it("reads the data again when a component asking for it mounts again, before it renders", async () => {
+    const runtime = createDmsFrontendRuntime();
+    const open = ref(true);
+    const calls = { fresh: 0, kept: 0 };
+    const seen: string[] = [];
+    const Drawer = (name: "fresh" | "kept") =>
+      defineComponent({
+        async setup() {
+          const { data } = await useDmsAsyncData(
+            `drawer-${name}`,
+            async () => {
+              await sleep(1);
+              return `${name} ${++calls[name]}`;
+            },
+            { refreshOnMount: name === "fresh" },
+          );
+          seen.push(String(data.value));
+          return () => h("p");
+        },
+      });
+    const Fresh = Drawer("fresh");
+    const Kept = Drawer("kept");
+    const app = mountRuntime(runtime, {
+      render: () =>
+        h(Suspense, null, {
+          default: () => h("div", open.value ? [h(Fresh), h(Kept)] : []),
+        }),
+    });
+    await sleep(20);
+    assert.deepEqual(seen, ["fresh 1", "kept 1"]);
+
+    open.value = false;
+    await nextTick();
+    open.value = true;
+    await sleep(20);
+
+    assert.deepEqual(calls, { fresh: 2, kept: 1 });
+    assert.deepEqual(
+      seen.slice(2).sort(),
+      ["fresh 2", "kept 1"],
+      "the setup awaits the new read, not the data shown before",
+    );
+    app.unmount();
+  });
+
+  it("does not read again on mount what the server rendered, nor what another caller is reading", async () => {
+    let calls = 0;
+    const Shared = defineComponent({
+      setup() {
+        const { data } = useDmsAsyncData(
+          "mounted-twice",
+          async () => {
+            await sleep(1);
+            return `read ${++calls}`;
+          },
+          { refreshOnMount: true },
+        );
+        return () => h("p", String(data.value));
+      },
+    });
+    const Page = { render: () => h("div", [h(Shared), h(Shared)]) };
+
+    const { runtime: server, render } = serverRender(Page);
+    assert.equal(await render(), "<div><p>read 1</p><p>read 1</p></div>");
+    assert.equal(calls, 1, "the server reads it once");
+
+    const app = mountRuntime(
+      createDmsFrontendRuntime(undefined, serializeDmsAsyncData(server)),
+      Page,
+    );
+    await sleep(20);
+    assert.equal(calls, 1, "the hydration takes the server's data");
+    app.unmount();
+
+    const browser = mountRuntime(createDmsFrontendRuntime(), Page);
+    await sleep(20);
+    assert.equal(calls, 2, "two components mounting together share one read");
+    browser.unmount();
+  });
+
   it("forgets the server data no component claimed once hydration is over", async () => {
     const { app } = clientApp(
       createDmsFrontendRuntime(undefined, { unclaimed: "server value" }),
