@@ -23,6 +23,7 @@ import {
 import { reservePort } from "../ports";
 import { readyLines, runServer } from "../server-process";
 import { reportAvailableUpdate } from "../update-check";
+import { reportFrontendReady } from "../module-set";
 
 const BUILD_TIME_MANIFEST = "the build-time manifest";
 
@@ -116,6 +117,15 @@ export async function runStart(options: StartOptions): Promise<void> {
         ]),
         footer: "Ctrl+C to stop",
       });
+      // The backend's module store reads it to tell the Modules page which
+      // modules this build serves.
+      void reportFrontendReady(
+        backendUrl,
+        (readCachedManifest(workspaceDir)?.manifest.modules ?? []).map(
+          (module) => module.name,
+        ),
+        process.env.DMS_BOOTSTRAP_SECRET,
+      );
       void reportAvailableUpdate({ isFollowed: true });
     },
   });

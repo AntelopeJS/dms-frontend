@@ -92,12 +92,18 @@ export interface PublicEndpointDeclaration {
 export interface Manifest {
   pack: string;
   modules: ManifestModule[];
+  /**
+   * The backend is changing its set of modules (its module store runs an
+   * operation): a follower waits for the set to settle.
+   */
+  settling?: boolean;
 }
 
 export interface FrontendManifest {
   version: number;
   archive: string;
   modules: ManifestModule[];
+  settling?: boolean;
 }
 
 /**
