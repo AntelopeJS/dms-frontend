@@ -187,6 +187,7 @@ export default defineConfig({
               "setDmsAsyncDataScope",
               "showError",
               "useDmsAsyncData",
+              "useDmsData",
               "useDmsCookie",
               "useDmsFetch",
               "useHead",

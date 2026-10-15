@@ -41,6 +41,7 @@ import {
   readonly,
   ref,
   type ShallowRef,
+  shallowReactive,
   shallowRef,
   toRaw,
   toValue,
@@ -225,6 +226,16 @@ export type DmsAsyncDataHandler<T> = (
 ) => Promise<T>;
 /** A key, or `null` (or `undefined`) while there is nothing to load. */
 export type DmsAsyncDataKey = string | null | undefined;
+/** What `useDmsData` gives of a key's data. */
+export interface DmsData<T> {
+  /**
+   * The data loaded under the key, shared with every caller showing it:
+   * `undefined` while the key has none of its own (no caller loaded it yet,
+   * or it shows the previous key's data meanwhile). Assigning it replaces the
+   * key's data; a key nobody loaded keeps none.
+   */
+  data: Ref<T | undefined>;
+}
 /** What `transform` knows of the run whose result it transforms. */
 export interface DmsAsyncDataTransformContext {
   /** The key the data is loaded under; none for a call without a key. */
@@ -507,6 +518,7 @@ interface DmsFrontendRegistry {
 
 export interface DmsFrontendRuntime {
   sharedState: Map<string, Ref<unknown>>;
+  /** Reactive: `useDmsData` follows a key as it appears and is dropped. */
   asyncData: Map<string, DmsAsyncData<unknown>>;
   /** The server's data, which the browser takes over once per key. */
   hydratedAsyncData: Map<string, unknown>;
@@ -622,7 +634,7 @@ export function createDmsFrontendRuntime(
   const runtime: DmsFrontendRuntime = {
     requestCookies,
     sharedState: new Map(),
-    asyncData: new Map(),
+    asyncData: shallowReactive(new Map()),
     hydratedAsyncData: new Map(Object.entries(hydratedAsyncData ?? {})),
     hydratedAsyncErrors: new Map(),
     transferredState: new Set(),
@@ -1908,6 +1920,15 @@ function followAsyncDataKey<T>(
     },
     { flush: "sync" },
   );
+  // Data written to the current key from elsewhere (`useDmsData`, another
+  // caller of the key) is its own: it replaces what is carried.
+  watch(
+    () => [current(), current().data.value] as const,
+    ([result], [previous]) => {
+      if (result === previous) carried.value = undefined;
+    },
+    { flush: "sync" },
+  );
   watch(
     () => toValue(keySource) ?? null,
     (key) => {
@@ -2148,6 +2169,50 @@ function pagedControls<TPage, TCursor>(
     hasMore,
     loadingMore: readonly(loadingMore),
     loadMore,
+  };
+}
+
+/**
+ * The data another caller loads under `key`, as Nuxt's `useNuxtData`: to
+ * update it in place without reading it again, from what a write answered
+ * (an optimistic update) or what a realtime event says changed. It follows
+ * the key in the runtime's scope (`setDmsAsyncDataScope`): `undefined` until
+ * a caller loads the key, its data once there, `undefined` again once the
+ * browser lets the key go (past the most recent keys it keeps) or the scope
+ * changes. It does not load the key, nor keep it.
+ */
+export function useDmsData<T>(
+  key: MaybeRefOrGetter<DmsAsyncDataKey>,
+): DmsData<T> {
+  const runtime = useDmsRuntime();
+  const entry = () => {
+    const name = toValue(key);
+    const result =
+      name == null
+        ? undefined
+        : runtime.asyncData.get(scopedKey(runtime, String(name)));
+    return result && asyncDataEntries.get(result);
+  };
+  // A component after the caller, in the page or in its subtree, renders the
+  // data the browser hydrates it with: the server waits for the caller's run
+  // too. One before it has none on either side. Whether the key is there as
+  // the setup runs is the same on both sides, and so are the async
+  // boundaries `useId()` counts.
+  const loaded = entry();
+  if (loaded && getCurrentInstance()) onServerPrefetch(() => loaded.settled());
+  return {
+    data: computed({
+      get() {
+        // An entry only ever holds its own key's data: a caller showing the
+        // previous key's data meanwhile keeps it in its own refs.
+        return (entry()?.result.data.value ?? undefined) as T | undefined;
+      },
+      set(value) {
+        const current = entry();
+        if (!current) return;
+        current.result.data.value = value ?? null;
+      },
+    }),
   };
 }
 

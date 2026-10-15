@@ -864,6 +864,22 @@ kept after a failure, the first `lazy` run started after the caller's turn):
   shows the default, and the browser reads it once the component is mounted.
   To render a read that depends on another one's answer, await the first one
   in the setup.
+- **`useDmsData(key)`** gives the `data` another caller loads under `key`,
+  as Nuxt's `useNuxtData`: assigning it, or changing it in place (unless the
+  key is `deep: false`), updates every component showing the key without
+  reading it again. It is how a write's answer (an optimistic update, put
+  back if the write fails) or a realtime event patches data, including the
+  data of a key the component does not show. `data` is `undefined` until a
+  caller loads the key, while a reactive key still shows the previous key's
+  data, and once the browser lets the key go (past the 50 most recent keys
+  it keeps) or the account or workspace changes; a write to a key
+  nobody loaded is ignored. The key may be a ref or a getter, and a key
+  loaded by `useDmsFetch` is the `key` option it was given. It loads
+  nothing and keeps nothing alive: a component showing the data calls
+  `useDmsAsyncData` with the key. A run in flight still writes its answer
+  over an update, so a writer refreshes the key once the write is done.
+  In a server render, a component called after the caller's call waits for
+  its data, so it renders what the browser hydrates it with.
 
 ### Icons
 
