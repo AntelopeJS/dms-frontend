@@ -10,6 +10,7 @@ import {
   RequestBodyError,
   UpstreamError,
 } from "./server/auth/backend.mjs";
+import { forwardedHeaders } from "./server/auth/client-ip.mjs";
 import { proxyAccess, refuseCrossOrigin } from "./server/public-endpoints.mjs";
 import { readSession } from "./server/auth/session.mjs";
 import {
@@ -113,19 +114,26 @@ async function developmentServer() {
 }
 
 /**
- * The headers of a backend request: the relayed client headers, and the
- * session's access token unless the request goes anonymously.
+ * The headers of a backend request: the relayed client headers, the client's
+ * Origin and Referer as received, the `X-Forwarded-*` headers (set last, so no
+ * caller writes them), and the session's access token unless the request goes
+ * anonymously.
  */
 function backendHeaders(request, access = { anonymous: false, headers: [] }) {
-  const headers = relayedHeaders(request, [
-    "accept",
-    "content-type",
-    "if-match",
-    "user-agent",
-    "x-content-language",
-    "x-realtime-session",
-    ...access.headers,
-  ]);
+  const headers = {
+    ...relayedHeaders(request, [
+      "accept",
+      "content-type",
+      "if-match",
+      "origin",
+      "referer",
+      "user-agent",
+      "x-content-language",
+      "x-realtime-session",
+      ...access.headers,
+    ]),
+    ...forwardedHeaders(request),
+  };
   const session = access.anonymous ? undefined : readSession(request);
   if (session?.accessToken)
     headers.authorization = `Bearer ${session.accessToken}`;

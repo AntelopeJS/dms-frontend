@@ -634,7 +634,12 @@ widened. `DMS_PUBLIC_ENDPOINTS` adds entries of the same shape, as a JSON
 array, for a route no module declares.
 
 Every proxied request also relays `If-Match`, so a backend route can refuse a
-write made from a stale copy (`412` or `409`).
+write made from a stale copy (`412` or `409`), and the client's `Origin` and
+`Referer` as received, so a public route can check where a beacon comes from.
+The proxy sets `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host`
+itself, so a route can limit each client: the client's own `X-Forwarded-For`
+is extended with the socket's address only behind `DMS_TRUSTED_PROXY_HOPS`
+trusted proxies, and replaced by it otherwise.
 
 ### Workspaces
 
