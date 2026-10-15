@@ -10,6 +10,7 @@ import {
   type Plugin,
 } from "vite";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
+import { uiInertiaPage } from "./ui-inertia-page.mjs";
 import { autoImportDirectories } from "./frontend-build-loader";
 import { frontendBuilds } from "./frontend-builds.generated";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
@@ -131,10 +132,6 @@ const uiInertiaLinkImport = resolve(
  * request's URL to set its active state. Their `usePage()` is the DMS one,
  * which gives the page of the request being rendered.
  */
-const uiInertiaPageImport =
-  /import\s*\{\s*usePage\s*\}\s*from\s*["']@inertiajs\/vue3["']/;
-const dmsInertiaPageImport =
-  'import { useDmsInertiaPage as usePage } from "#dms/frontend-module"';
 const isNuxtUiFile = (id: string) =>
   normalizePath(id).includes("/node_modules/@nuxt/ui/");
 
@@ -151,17 +148,7 @@ export default defineConfig({
         return id === uiLinkImport ? uiInertiaLinkImport : null;
       },
     },
-    {
-      name: "dms-ui-inertia-page",
-      enforce: "pre",
-      transform(code, id) {
-        if (!isNuxtUiFile(id) || !uiInertiaPageImport.test(code)) return null;
-        return {
-          code: code.replace(uiInertiaPageImport, dmsInertiaPageImport),
-          map: null,
-        };
-      },
-    },
+    uiInertiaPage(isNuxtUiFile),
     vue(),
     ui({
       router: "inertia",
