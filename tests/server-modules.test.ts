@@ -30,7 +30,10 @@ import {
 } from "../templates/vue/server/module-routes.mjs";
 import { compilePublicEndpoint } from "../templates/vue/server/public-endpoints.mjs";
 import { readSealedCookie } from "../templates/vue/server/auth/session.mjs";
-import { defineDmsServer } from "../templates/vue/server-module";
+import {
+  type DmsServerSetup,
+  defineDmsServer,
+} from "../templates/vue/server-module";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const SERVER_ENTRY = "dms.server.ts";
@@ -646,11 +649,14 @@ describe("Module server routes in the production server", () => {
     const [cookie] = response.headers.getSetCookie();
     assert.match(
       cookie,
-      /^fixture_flow_[0-9a-f]{12}=[^;]+; Path=\/auth\/fixture; HttpOnly; SameSite=Lax; Max-Age=60$/,
+      /^acme__fixture-frontend\.fixture_flow_[0-9a-f]{12}=[^;]+; Path=\/auth\/fixture; HttpOnly; SameSite=Lax; Max-Age=60$/,
     );
     const pair = cookie.split(";", 1)[0];
     assert.deepEqual(
-      readSealedCookie({ headers: { cookie: pair } }, "fixture_flow"),
+      readSealedCookie(
+        { headers: { cookie: pair } },
+        "acme__fixture-frontend.fixture_flow",
+      ),
       { input: { a: 1 } },
     );
   });
@@ -690,7 +696,10 @@ describe("Module server routes in the production server", () => {
     assert.equal(await response.text(), "one two three");
     const cookies = response.headers.getSetCookie();
     assert.equal(cookies.length, 3);
-    assert.match(cookies[0], /^fixture_seen_[0-9a-f]{12}=/);
+    assert.match(
+      cookies[0],
+      /^acme__fixture-frontend\.fixture_seen_[0-9a-f]{12}=/,
+    );
     assert.deepEqual(cookies.slice(1), [
       "plain_a=1; Path=/",
       "plain_b=2; Path=/",
@@ -924,6 +933,72 @@ describe("The module testing helper", () => {
         endpoints: ["/api/billing/finalize"],
       });
       assert.equal((await fetch(`${served.url}/nothing`)).status, 404);
+    } finally {
+      await served.close();
+    }
+  });
+
+  it("keeps the dms_* sealed cookies to the module that owns sign-in, and each module's to itself", async () => {
+    process.env.DMS_SESSION_SECRET ??=
+      "a-test-only-session-secret-of-32-characters";
+    const { serveModuleRoutes } =
+      await import("../templates/vue/server/module-testing.mjs");
+    const cookieRoutes = (
+      server: Parameters<DmsServerSetup>[0],
+      base: string,
+    ) => {
+      server.registerRoute("GET", `${base}/write/:name`, (event) => {
+        event.cookies.writeSealed(event.params.name, { from: base });
+        return null;
+      });
+      server.registerRoute("GET", `${base}/read/:name`, (event) => ({
+        value: event.cookies.readSealed(event.params.name) ?? null,
+      }));
+    };
+    const served = await serveModuleRoutes([
+      {
+        id: "dms",
+        priority: 10,
+        setup: defineDmsServer((server) => {
+          server.registerAuth({});
+          cookieRoutes(server, "/api/_dms-auth");
+        }),
+      },
+      {
+        id: "shop",
+        setup: defineDmsServer((server) => cookieRoutes(server, "/api/_shop")),
+      },
+    ]);
+    const call = async (path: string, cookie = "") => {
+      const response = await fetch(`${served.url}${path}`, {
+        headers: cookie ? { cookie } : {},
+      });
+      return {
+        status: response.status,
+        cookie: response.headers.getSetCookie()[0]?.split(";", 1)[0] ?? "",
+        body: response.status === 200 ? await response.json() : undefined,
+      };
+    };
+    try {
+      const account = await call("/api/_dms-auth/write/dms_account_1");
+      assert.equal(account.status, 204);
+      assert.match(account.cookie, /^dms_account_1_[0-9a-f]{12}=/);
+      // Another module can neither read nor write the owner's cookies.
+      assert.equal(
+        (await call("/api/_shop/read/dms_account_1", account.cookie)).status,
+        502,
+      );
+      assert.equal((await call("/api/_shop/write/dms_account_1")).status, 502);
+      // Its own cookies carry its id, and the owner's same name is another.
+      const flow = await call("/api/_shop/write/flow");
+      assert.match(flow.cookie, /^shop\.flow_[0-9a-f]{12}=/);
+      assert.deepEqual((await call("/api/_shop/read/flow", flow.cookie)).body, {
+        value: { from: "/api/_shop" },
+      });
+      assert.deepEqual(
+        (await call("/api/_dms-auth/read/flow", flow.cookie)).body,
+        { value: null },
+      );
     } finally {
       await served.close();
     }

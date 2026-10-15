@@ -95,7 +95,10 @@ export interface DmsServerEvent {
   /**
    * Sealed (encrypted, authenticated) cookies, by logical name: the frontend
    * server scopes the name to its backend and sets `HttpOnly`, `SameSite=Lax`
-   * and `Secure`. The session cookie is not reachable here.
+   * and `Secure`. The session cookie is not reachable here. The `dms_*`
+   * names are the module that owns sign-in's (`registerAuth`): any other
+   * module's cookie is stored as `<module id>.<name>`, so no module reads or
+   * overwrites another's, and naming a `dms_*` cookie throws.
    */
   cookies: {
     readSealed<T = unknown>(name: string): T | undefined;

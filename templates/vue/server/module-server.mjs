@@ -139,6 +139,8 @@ export function createServerModules(declarations, deployment) {
     app: {
       authEstablishEndpoints: deployment.authEstablishEndpoints?.() ?? [],
     },
+    // The module whose sealed cookies are the `dms_*` ones.
+    authOwner: resolution.auth?.id,
   });
   return {
     ...resolution,

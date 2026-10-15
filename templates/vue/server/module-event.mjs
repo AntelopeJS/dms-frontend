@@ -27,6 +27,8 @@ import { backendUrl } from "./request-target.mjs";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const COOKIE_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+/** The sealed cookies of the module that owns sign-in: session, accounts, flows. */
+const RESERVED_COOKIE_PREFIX = "dms_";
 const BODY_TOO_LARGE = "Request body too large";
 
 function requestOrigin(request) {
@@ -116,19 +118,38 @@ function sessionAccess(request, response, view) {
   };
 }
 
-function cookieAccess(request, response) {
+/**
+ * The name a module's sealed cookie takes in the jar. The module that owns
+ * sign-in (`registerAuth`) names its own, the `dms_*` ones included; any other
+ * module's are prefixed with its id and a dot, which no name of the owner's
+ * holds, so no module reads or overwrites another's, nor the owner's session
+ * and account cookies.
+ */
+function moduleCookieName(name, moduleId, authOwner) {
+  const checked = checkedCookieName(name);
+  if (moduleId === authOwner) return checked;
+  if (checked.startsWith(RESERVED_COOKIE_PREFIX))
+    throw new Error(
+      `The ${RESERVED_COOKIE_PREFIX}* cookies belong to the module that owns sign-in` +
+        `${authOwner ? ` (${authOwner})` : ""}: choose another name than ${name}`,
+    );
+  return `${String(moduleId).replaceAll(/[^A-Za-z0-9_-]/g, "-")}.${checked}`;
+}
+
+function cookieAccess(request, response, moduleId, authOwner) {
+  const named = (name) => moduleCookieName(name, moduleId, authOwner);
   return {
-    readSealed: (name) => readSealedCookie(request, checkedCookieName(name)),
+    readSealed: (name) => readSealedCookie(request, named(name)),
     writeSealed: (name, value, options = {}) =>
       writeSealedCookie(
         response,
-        checkedCookieName(name),
+        named(name),
         value,
         options.maxAge,
         options.path ?? "/",
       ),
     clear: (name, options = {}) =>
-      clearSealedCookie(response, checkedCookieName(name), options.path ?? "/"),
+      clearSealedCookie(response, named(name), options.path ?? "/"),
   };
 }
 
@@ -139,9 +160,10 @@ function frozenCopy(value) {
 /**
  * The event a handler receives.
  *
- * @param context `{ request, response, route, params, module, app, view }`,
- *   where `module` is `{ id, options, privateOptions }`, `app` the
- *   deployment's read-only data and `view` what a session shows a page
+ * @param context `{ request, response, route, params, module, app, view,
+ *   authOwner }`, where `module` is `{ id, options, privateOptions }`, `app`
+ *   the deployment's read-only data, `view` what a session shows a page and
+ *   `authOwner` the id of the module that owns sign-in
  */
 export function createServerEvent(context) {
   const { request, response, route, params } = context;
@@ -149,7 +171,12 @@ export function createServerEvent(context) {
     request: webRequest(request, route),
     params: Object.freeze({ ...params }),
     session: sessionAccess(request, response, context.view),
-    cookies: cookieAccess(request, response),
+    cookies: cookieAccess(
+      request,
+      response,
+      context.module.id,
+      context.authOwner,
+    ),
     backend: (path, init = {}) => backend(path, request, init),
     backendUrl: (path) => backendUrl(path),
     clientIp: () => clientIp(request),
