@@ -48,6 +48,7 @@ import {
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { loadPageProps } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
+import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
 import { writeProxyHeaders } from "./server/proxy-headers.mjs";
@@ -514,7 +515,7 @@ if (
     handleClientError(error, socket, maxHeaderSize),
   );
   const port = Number(process.env.PORT ?? 3001);
-  const host = process.env.HOST ?? "0.0.0.0";
+  const host = listenHost();
   const onListenError = (error) => void reportListenError(error, host, port);
   frontendHttpServer.once("error", onListenError);
   frontendHttpServer.listen(port, host, () => {

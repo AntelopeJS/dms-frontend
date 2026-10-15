@@ -752,7 +752,7 @@ browser as before.
 | `--offline` | `DMS_OFFLINE` | Reuse cached manifest and archives; the only way `build` uses them |
 | `--strict` | `DMS_PREPARE_STRICT` | Make `prepare` fail instead of warning; see [Commands](#commands) |
 | `--bootstrap-secret` | `DMS_BOOTSTRAP_SECRET` | Backend bootstrap credential |
-| | `HOST` | Address the frontend server binds to (default `0.0.0.0`) |
+| | `HOST` | Address the frontend server binds to: `127.0.0.1` by default for `ajs dms dev`, so only this machine reaches the development server (set `HOST=0.0.0.0` to open it to the network); `0.0.0.0` for `ajs dms start` |
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
 | | `DMS_COUNTRY_HEADER` | Client country header the server relays to the backend, set by a trusted reverse proxy (default `CF-IPCountry`; empty relays none). Name the same header in the backend's `auth.signInCountry.header`. Relayed only when `DMS_TRUSTED_PROXY_HOPS` is above `0`, like the client address |

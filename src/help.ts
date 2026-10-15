@@ -26,7 +26,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ["DMS_OFFLINE", "Same as --offline, unless 0, false, no or off"],
   ["DMS_PREPARE_STRICT", "Same as prepare --strict, read like DMS_OFFLINE"],
   ["PORT", "Same as -p"],
-  ["HOST", "Address the server binds to (default: 0.0.0.0)"],
+  [
+    "HOST",
+    "Address the server binds to (default: 127.0.0.1 for dev, 0.0.0.0 for start)",
+  ],
   [
     "DMS_COOKIE_SECURE",
     "Secure cookies unless false (default: false in dev, true in start)",
