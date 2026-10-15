@@ -167,6 +167,9 @@ Email builds ship complete merged translation catalogs as JSON under `dist/serve
 
 ## Frontend modules
 
+Moving a module, or the DMS, from 0.5 to 0.6: see
+[Migrating to 0.6.0](docs/migration-0.6.md).
+
 A materialized module opts into the Vue adapter with a root `dms.frontend.ts`:
 
 ```ts
