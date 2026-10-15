@@ -620,6 +620,21 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
 - **A key that is `null` or `undefined`** (a ref or a getter for it) has
   nothing to load: the caller holds its default, and runs nothing until the
   key has a value.
+- **`useDmsData(key)`** gives the `data` another caller loads under `key`,
+  as Nuxt's `useNuxtData`: assigning it, or changing it in place (unless the
+  key is `deep: false`), updates every component showing the key without
+  reading it again. It is how a write's answer (an optimistic update, put
+  back if the write fails) or a realtime event patches data, including the
+  data of a key the component does not show. `data` is `undefined` until a
+  caller loads the key, while a reactive key still shows the previous key's
+  data, and once the key is dropped at a navigation; a write to a key
+  nobody loaded is ignored. The key may be a ref or a getter, and a key
+  loaded by `useDmsFetch` is the `key` option it was given. It loads
+  nothing and keeps nothing alive: a component showing the data calls
+  `useDmsAsyncData` with the key. A run in flight still writes its answer
+  over an update, so a writer refreshes the key once the write is done.
+  In a server render, a component called after the caller's call waits for
+  its data, so it renders what the browser hydrates it with.
 
 ### Icons
 

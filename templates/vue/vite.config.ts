@@ -170,6 +170,7 @@ export default defineConfig({
               "refreshDmsData",
               "showError",
               "useDmsAsyncData",
+              "useDmsData",
               "useDmsCookie",
               "useDmsFetch",
               "useHead",
