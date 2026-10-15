@@ -231,6 +231,64 @@ function parameterCount(route) {
   return route.params.length;
 }
 
+/**
+ * Whether one request path can match both routes: as many segments, and at
+ * each position the same literal or a parameter on either side.
+ */
+function routesOverlap(left, right) {
+  const leftSegments = left.shape === "" ? [] : left.shape.split("/");
+  const rightSegments = right.shape === "" ? [] : right.shape.split("/");
+  return (
+    leftSegments.length === rightSegments.length &&
+    leftSegments.every(
+      (segment, index) =>
+        segment === ":" ||
+        rightSegments[index] === ":" ||
+        segment === rightSegments[index],
+    )
+  );
+}
+
+/** `first` is tried before `second`: it answers what both can match. */
+function overlapWarning(first, second) {
+  const settled =
+    parameterCount(first) < parameterCount(second)
+      ? "it has fewer parameters"
+      : first.priority === second.priority
+        ? "same priority, the first module id wins"
+        : "the higher priority wins";
+  return (
+    `${describeRoute(first.method, first.path)} of ${first.id} (priority ${first.priority}) and ` +
+    `${describeRoute(second.method, second.path)} of ${second.id} (priority ${second.priority}) ` +
+    `can match the same request, which ${first.id} answers: ${settled}.`
+  );
+}
+
+function rootParameterWarning(route) {
+  return (
+    `Frontend module ${route.id} serves ${describeRoute(route.method, route.path)}, whose first ` +
+    "segment is a parameter: it answers every path of that shape, the pages and other modules' " +
+    "routes included. Start the path with a literal segment."
+  );
+}
+
+/**
+ * Reports what the order of `routes` settles silently: two modules' routes
+ * that can match one request, and a route that catches every first segment.
+ */
+function warnOverlaps(routes, warn) {
+  for (const [index, route] of routes.entries()) {
+    if (route.shape.startsWith(":")) warn(rootParameterWarning(route));
+    for (const later of routes.slice(index + 1))
+      if (
+        later.method === route.method &&
+        later.id !== route.id &&
+        routesOverlap(route, later)
+      )
+        warn(overlapWarning(route, later));
+  }
+}
+
 function resolveRoutes(modules, warn, publicEndpoints) {
   const kept = new Map();
   for (const module of modules) {
@@ -248,12 +306,14 @@ function resolveRoutes(modules, warn, publicEndpoints) {
       if (notice) warn(notice);
     }
   }
-  return [...kept.values()].sort(
+  const routes = [...kept.values()].sort(
     (left, right) =>
       parameterCount(left) - parameterCount(right) ||
       byPriority(left, right) ||
       left.order - right.order,
   );
+  warnOverlaps(routes, warn);
+  return routes;
 }
 
 const AUTH_HOOKS = ["refreshSession", "publicSession"];
@@ -357,7 +417,9 @@ function resolveRules(modules, warn) {
  * `routes`: of two declarations of the same method and path, the module of
  * higher priority keeps it, with a warning naming both (module id on a tie).
  * Routes with fewer parameters are tried first, so a literal path is never
- * hidden by a parameter of another route.
+ * hidden by a parameter of another route. Two modules' routes that can match
+ * the same request, and a route whose first segment is a parameter, are
+ * reported too: the order settles them, but silently.
  *
  * `auth`: the auth hooks of the highest-priority module that registers them,
  * `undefined` when none does.

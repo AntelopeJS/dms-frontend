@@ -174,7 +174,7 @@ export interface DmsServerAuth {
   /**
    * Pages a signed-out visit is never sent to sign in from when the backend
    * refuses it: `/x`, `/x/*` (one segment below) or `/x/**` (the page and
-   * everything below).
+   * everything below). Left out, `<signInPath>/**` and `/onboarding`.
    */
   signInExempt?: readonly string[];
   /**

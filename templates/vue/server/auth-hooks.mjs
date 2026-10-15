@@ -10,17 +10,22 @@ import {
 } from "./auth/routes.mjs";
 import { readSession, setRequestSession } from "./auth/session.mjs";
 import { createServerEvent } from "./module-event.mjs";
+import { compilePathPattern } from "./path-patterns.mjs";
 
 const BUILT_IN_SIGN_IN_PATH = "/auth";
 const BUILT_IN_ONBOARDING_PATH = "/onboarding";
 /** A hook reads no request body. */
 const HOOK_ROUTE = Object.freeze({ bodyLimit: 0 });
 
-function builtInExempt(pathname) {
-  return (
-    pathname.startsWith(BUILT_IN_SIGN_IN_PATH) ||
-    pathname === BUILT_IN_ONBOARDING_PATH
-  );
+/**
+ * The pages a signed-out visit reaches when the provider names none: the
+ * sign-in page and everything below it, whole segments only (`/auth` exempts
+ * `/auth/callback`, never `/authors`), and the onboarding page. Derived from
+ * the sign-in path in use, or a custom one would redirect to itself.
+ */
+function defaultExempt(signInPath) {
+  const signIn = signInPath === "/" ? "/" : `${signInPath}/**`;
+  return [signIn, BUILT_IN_ONBOARDING_PATH].map(compilePathPattern);
 }
 
 /**
@@ -46,15 +51,14 @@ function hookView(publicSession, session) {
  */
 export function serverAuth(provider, context) {
   const signInPath = provider?.signInPath ?? BUILT_IN_SIGN_IN_PATH;
-  const exempt = provider?.signInExempt;
+  const exempt = provider?.signInExempt ?? defaultExempt(signInPath);
   const publicSession = provider?.publicSession;
   const refreshSession = provider?.refreshSession;
   return {
     provider: provider?.id,
     signInPath,
-    isSignInExempt: exempt
-      ? (pathname) => exempt.some((pattern) => pattern.test(pathname))
-      : builtInExempt,
+    isSignInExempt: (pathname) =>
+      exempt.some((pattern) => pattern.test(pathname)),
     signInLocation: (requestUrl) =>
       `${signInPath}?redirect=${encodeURIComponent(requestUrl)}`,
     view: publicSession

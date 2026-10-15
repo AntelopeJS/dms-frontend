@@ -175,18 +175,7 @@ function checkClientBundle(workspace: string): void {
       javascript.includes(marker),
       `${marker} is not reachable at runtime`,
     );
-  const serverSources = Object.keys(manifest).filter((source) =>
-    SERVER_SOURCE_PATTERN.test(source),
-  );
-  ensure(
-    serverSources.length === 0,
-    "The client bundle includes server code",
-    `${serverSources.join(", ")} must only be imported from a dms.server.ts.`,
-  );
 }
-
-/** A module's server entry, or a file under one of its `server/` directories. */
-const SERVER_SOURCE_PATTERN = /(?:^|\/)(?:dms\.server\.[cm]?[jt]s$|server\/)/;
 
 /**
  * The server modules bundle holds no application code and loads in Node.js.

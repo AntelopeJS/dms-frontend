@@ -95,6 +95,9 @@ describe("Auth hook declarations", () => {
     assert.equal(auth.isSignInExempt("/auth/2fa"), true);
     assert.equal(auth.isSignInExempt("/onboarding"), true);
     assert.equal(auth.isSignInExempt("/dashboard"), false);
+    assert.equal(auth.isSignInExempt("/auth"), true);
+    assert.equal(auth.isSignInExempt("/authors"), false);
+    assert.equal(auth.isSignInExempt("/auth-callback"), false);
     assert.deepEqual(
       auth.view({
         user: { name: "Ada" },
@@ -108,6 +111,22 @@ describe("Auth hook declarations", () => {
         session: { accountId: "a", activeTenantId: "t", updatedAt: 7 },
       },
     );
+  });
+
+  it("exempt the provider's sign-in path when it names no exempt pages", () => {
+    const { modules } = resolved([
+      { id: "dms", setup: (s) => s.registerAuth({ signInPath: "/login" }) },
+    ]);
+    const auth = serverAuth(modules.auth, () => ({}));
+    assert.equal(auth.signInLocation("/x"), "/login?redirect=%2Fx");
+    // The sign-in page itself: exempting /auth instead looped on /login.
+    assert.equal(auth.isSignInExempt("/login"), true);
+    assert.equal(auth.isSignInExempt("/login/"), true);
+    assert.equal(auth.isSignInExempt("/login/reset"), true);
+    assert.equal(auth.isSignInExempt("/onboarding"), true);
+    assert.equal(auth.isSignInExempt("/logins"), false);
+    assert.equal(auth.isSignInExempt("/auth"), false);
+    assert.equal(auth.isSignInExempt("/dashboard"), false);
   });
 
   it("use the provider's, the server adding the session stamp", () => {

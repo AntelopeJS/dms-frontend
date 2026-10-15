@@ -211,6 +211,95 @@ describe("Module server declarations", () => {
     );
   });
 
+  it("warn when two modules' different routes can match the same request", () => {
+    const { routes, warnings } = resolved([
+      {
+        id: "oauth",
+        priority: 5,
+        setup: (s) =>
+          s.registerRoute("GET", "/auth/oauth/:provider/callback", handler),
+      },
+      {
+        id: "google",
+        setup: (s) =>
+          s.registerRoute("GET", "/auth/oauth/google/callback", handler),
+      },
+    ]);
+    assert.deepEqual(warnings, [
+      '"GET /auth/oauth/google/callback" of google (priority 0) and ' +
+        '"GET /auth/oauth/:provider/callback" of oauth (priority 5) can match ' +
+        "the same request, which google answers: it has fewer parameters.",
+    ]);
+    // The order is unchanged: the literal route still answers its path.
+    assert.equal(
+      matchModuleRoute(routes, "GET", "/auth/oauth/google/callback")?.route.id,
+      "google",
+    );
+    assert.equal(
+      matchModuleRoute(routes, "GET", "/auth/oauth/github/callback")?.route.id,
+      "oauth",
+    );
+  });
+
+  it("warn on overlapping parameter routes settled by priority", () => {
+    const { warnings } = resolved([
+      {
+        id: "low",
+        setup: (s) => s.registerRoute("POST", "/api/_x/:id/a", handler),
+      },
+      {
+        id: "high",
+        priority: 3,
+        setup: (s) => s.registerRoute("POST", "/api/_x/b/:name", handler),
+      },
+    ]);
+    assert.equal(warnings.length, 1);
+    assert.match(
+      warnings[0],
+      /^"POST \/api\/_x\/b\/:name" of high .+ and "POST \/api\/_x\/:id\/a" of low .+ which high answers: the higher priority wins\.$/,
+    );
+  });
+
+  it("stay quiet on routes that cannot match the same request", () => {
+    const { warnings } = resolved([
+      {
+        id: "one",
+        setup: (s) => {
+          s.registerRoute("GET", "/api/_x/:id", handler);
+          s.registerRoute("GET", "/api/_x/:id/items", handler);
+        },
+      },
+      {
+        id: "two",
+        setup: (s) => {
+          s.registerRoute("POST", "/api/_x/:id", handler);
+          s.registerRoute("GET", "/api/_y/:id", handler);
+          s.registerRoute("GET", "/api/_x/a/b/c", handler);
+        },
+      },
+      {
+        id: "same",
+        setup: (s) => {
+          s.registerRoute("GET", "/api/_same/:id", handler);
+          s.registerRoute("GET", "/api/_same/list", handler);
+        },
+      },
+    ]);
+    assert.deepEqual(warnings, []);
+  });
+
+  it("warn on a route whose first segment is a parameter", () => {
+    const { routes, warnings } = resolved([
+      { id: "pages", setup: (s) => s.registerRoute("GET", "/:slug", handler) },
+    ]);
+    assert.equal(routes.length, 1);
+    assert.deepEqual(warnings, [
+      'Frontend module pages serves "GET /:slug", whose first segment is a parameter: ' +
+        "it answers every path of that shape, the pages and other modules' routes " +
+        "included. Start the path with a literal segment.",
+    ]);
+  });
+
   it("warn when a route hides the backend's namespace, unless it says it means to", () => {
     const { warnings } = resolved([
       {
