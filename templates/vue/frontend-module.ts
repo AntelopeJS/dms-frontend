@@ -1660,6 +1660,23 @@ function transferredError(key: string, reason: unknown): DmsErrorData {
 }
 
 /**
+ * What a page's error page shows of an expected failure (a 4xx or 5xx): its
+ * status code, status text and message. A fetch error's message names the URL
+ * it requested, on a server the backend's own address: its status text
+ * stands for it.
+ */
+export function pageErrorData(failure: Error & DmsErrorData): DmsErrorData {
+  return {
+    statusCode: failure.statusCode,
+    message:
+      failure.name === FETCH_ERROR_NAME
+        ? failure.statusMessage
+        : failure.message,
+    statusMessage: failure.statusMessage,
+  };
+}
+
+/**
  * Everything a server render hands the browser: the data and the failures of
  * its keys, and the state keys opted into. Read as the HTML is complete.
  */

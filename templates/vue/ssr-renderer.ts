@@ -20,6 +20,7 @@ import {
   type DmsPayload,
   createDmsFrontendRuntime,
   hasDmsPage,
+  pageErrorData,
   preloadDmsPage,
   resolveDmsAccessRedirect,
   serializeDmsPayload,
@@ -209,13 +210,7 @@ async function renderDmsPageWithRuntime(
       // the DMS error page describes in the visitor's language; the technical
       // cause only reaches the server log.
       if (!expected) console.error("DMS page render failed", failure);
-      const error = expected
-        ? {
-            statusCode: failure.statusCode,
-            message: failure.message,
-            statusMessage: failure.statusMessage,
-          }
-        : { statusCode: 500 };
+      const error = expected ? pageErrorData(failure) : { statusCode: 500 };
       return renderDmsPage(
         { ...page, props: { ...page.props, error } },
         serverFetch,

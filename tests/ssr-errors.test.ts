@@ -81,6 +81,7 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('requires-onboarding-b',RequiresOnboarding);
  sdk.registerPage('onboarding',defineComponent({setup(){return()=>h('p','Onboarding')}}));
  sdk.registerPage('throws',defineComponent({setup(){throw createError({statusCode:400,message:'Missing required token parameter'})},render(){throw new Error('secondary render failure')}}));
+ sdk.registerPage('fetch-not-found',defineComponent({async setup(){await Promise.resolve();throw Object.assign(new Error('[GET] "http://10.0.0.5:5010/api/secret": 404 Not Found'),{name:'FetchError',statusCode:404,statusMessage:'Not Found'})}}));
  sdk.registerPage('async-throws',defineComponent({async setup(){await Promise.resolve();throw new Error('private database hostname')}}));
  sdk.registerPage('healthy',defineComponent({async setup(){await new Promise(r=>setTimeout(r,5));return()=>h('p','Healthy request')}}));
  sdk.registerPage('exact',defineComponent({setup(){return()=>h('p','Exact registered page:'+(exactPreloads>0)+':catch-all:'+catchAllPreloads)}}),async()=>{exactPreloads++});
@@ -245,6 +246,15 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     const unexpectedHtml = await unexpected.text();
     assert.match(unexpectedHtml, /500: no message \/ no status message/);
     assert.doesNotMatch(unexpectedHtml, /private database hostname/);
+    // A failed backend read names the backend's own address in its message:
+    // the error page shows its status text instead.
+    const fetchNotFound = await fetch(`${base}/fetch-not-found`, {
+      headers: { accept: "text/html" },
+    });
+    assert.equal(fetchNotFound.status, 404);
+    const fetchNotFoundHtml = await fetchNotFound.text();
+    assert.match(fetchNotFoundHtml, /404: Not Found \/ Not Found/);
+    assert.doesNotMatch(fetchNotFoundHtml, /10\.0\.0\.5|api\/secret/);
     const exact = await fetch(`${base}/exact`, {
       headers: { accept: "text/html" },
     });
