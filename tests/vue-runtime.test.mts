@@ -143,6 +143,61 @@ async function registerGlobalMiddleware(
 }
 
 describe("Vue request runtime", () => {
+  it("runs the middlewares registered as parallel together, the first result in order winning", async () => {
+    const { app } = application("server", {}, true);
+    const started: string[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((settle) => (release = settle));
+    await setupFrontendModules([
+      {
+        module: {
+          setup(sdk) {
+            sdk.registerMiddleware(
+              "session",
+              async (to) => {
+                started.push(`session ${to.path}`);
+                await gate;
+              },
+              { global: true, parallel: true },
+            );
+            sdk.registerMiddleware(
+              "flags",
+              async (to) => {
+                started.push(`flags ${to.path}`);
+                await gate;
+                return to.path === "/both" ? "/from-flags" : undefined;
+              },
+              { global: true, parallel: true },
+            );
+            sdk.registerMiddleware(
+              "after",
+              (to) => {
+                started.push(`after ${to.path}`);
+                return to.path === "/both" ? "/from-after" : undefined;
+              },
+              { global: true },
+            );
+          },
+        },
+        options: { public: {} },
+      },
+    ]);
+    const navigation = app.runWithContext(() => navigateDms("/both"));
+    await new Promise((settle) => setTimeout(settle, 0));
+    // Both parallel ones started before either settled; the next waits.
+    assert.deepEqual(started, ["session /both", "flags /both"]);
+    release();
+    await navigation;
+    // The parallel group's redirect wins over the middleware after it.
+    assert.deepEqual(started, [
+      "session /both",
+      "flags /both",
+      "session /from-flags",
+      "flags /from-flags",
+      "after /from-flags",
+    ]);
+  });
+
   it("keeps relative middleware redirects out of the browser router during SSR", async (context) => {
     const { app } = application("server", {}, true);
     await registerGlobalMiddleware((to) =>

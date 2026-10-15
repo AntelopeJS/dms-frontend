@@ -306,6 +306,13 @@ export type DmsI18n = Composer & {
 export type DmsPluginSetup = (context: DmsAppContext) => void | Promise<void>;
 export interface DmsMiddlewareRegistrationOptions {
   global?: boolean;
+  /**
+   * Runs at the same time as the parallel middlewares next to it, for one
+   * that reads nothing another middleware sets (a check against the backend,
+   * say). Their results still apply in registration order: the first that
+   * redirects or aborts wins, and the next middlewares wait for all of them.
+   */
+  parallel?: boolean;
 }
 export interface DmsPluginRegistrationOptions {
   clientOnly?: boolean;
@@ -429,6 +436,8 @@ interface DmsFrontendRegistry {
   pluginSetups: DmsPluginRegistration[];
   middleware: DmsMiddleware[];
   namedMiddleware: Map<string, DmsMiddleware>;
+  /** The middlewares registered with `parallel: true`. */
+  parallelMiddleware: WeakSet<DmsMiddleware>;
   accessRedirects: Map<string, string>;
   injections: Map<string | symbol, unknown>;
 }
@@ -501,6 +510,7 @@ function createDmsFrontendRegistry(): DmsFrontendRegistry {
     pluginSetups: [],
     middleware: [],
     namedMiddleware: new Map(),
+    parallelMiddleware: new WeakSet(),
     accessRedirects: new Map(),
     injections: new Map(),
   };
@@ -742,13 +752,35 @@ async function runMiddleware(
   const declaredHandlers = [...declared, ...metadataNames]
     .map((name) => registry.namedMiddleware.get(String(name)))
     .filter((handler): handler is DmsMiddleware => !!handler);
-  for (const handler of [...registry.middleware, ...declaredHandlers]) {
+  const run = (handler: DmsMiddleware) => {
     const runWithContext = runtimeContexts.get(runtime);
-    const result = await (runWithContext
+    return runWithContext
       ? runWithContext(() => handler(to, runtime.route))
-      : handler(to, runtime.route));
+      : handler(to, runtime.route);
+  };
+  for (const group of middlewareGroups([
+    ...registry.middleware,
+    ...declaredHandlers,
+  ])) {
+    // A group of parallel middlewares starts together; its results apply in
+    // order, as a sequence's would.
+    const results = await Promise.all(group.map(run));
+    const result = results.find((value) => value !== undefined);
     if (result !== undefined) return result;
   }
+}
+
+/** The middlewares in order, each run of parallel ones as one group. */
+function middlewareGroups(handlers: DmsMiddleware[]): DmsMiddleware[][] {
+  const groups: DmsMiddleware[][] = [];
+  for (const handler of handlers) {
+    const last = groups.at(-1);
+    const parallel = registry.parallelMiddleware.has(handler);
+    if (parallel && last && registry.parallelMiddleware.has(last[0]))
+      last.push(handler);
+    else groups.push([handler]);
+  }
+  return groups;
 }
 
 // What only a request to the server can honour: a client-side visit sends
@@ -2545,6 +2577,7 @@ function createSdk(
       if (!target.namedMiddleware.has(name))
         target.namedMiddleware.set(name, handler);
       if (options.global) target.middleware.push(handler);
+      if (options.parallel) target.parallelMiddleware.add(handler);
     },
     registerAccessRedirect: (code, path) => {
       if (!target.accessRedirects.has(code))

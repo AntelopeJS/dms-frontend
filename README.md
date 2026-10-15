@@ -680,7 +680,12 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
 - **A page renders once its middleware is done.** On a server, the page that
   calls `defineDmsPageMeta` waits for the middleware it starts, so what a
   middleware loads or sets (with `transfer: true`) is what the HTML shows and
-  the browser hydrates with; its redirect still answers the request.
+  the browser hydrates with; its redirect still answers the request. A
+  middleware that throws fails the page: the error page shows in its place,
+  and a server render answers with the error's status code. Middlewares run
+  in order; those registered with `{ parallel: true }` next to each other
+  start together (for checks that read nothing another middleware sets),
+  their results applying in registration order.
 - **The browser hydrates with what the HTML shows.** Data that settles once
   the HTML is complete is left to the browser. A component receives the server's data when the server's
   render did: once its setup awaits the call, or right before it renders. A
