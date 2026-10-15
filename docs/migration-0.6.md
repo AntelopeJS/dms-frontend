@@ -14,21 +14,23 @@ compatibility.
   (`/api/_auth/session`), sign-in (`/auth/*`), OAuth, e-mail render
   (`/api/html/render`) and API tester (`/api/_dms/tester`) routes, nor reports
   them at startup: the DMS and the DMS API serve them from their
-  `dms.server.ts`. Without a module that registers auth hooks, pages carry no
+  `dms.server.ts`, the tester under the DMS API's own namespace
+  (`/api/_dms-api/tester`). Without a module that registers auth hooks, pages carry no
   `user` and `session`, and a refused session is not renewed.
 - **An explicit backend proxy.** The server no longer proxies `/api/` and
   `/dms/` on its own, no longer sends every write to the backend, and no longer
   asks the backend first for a `GET` then falls back to the page on its `404`.
   Each path has one owner: the renderer's files, then the module routes, then
   the backend prefixes the modules declare (`registerBackendProxy` in
-  `dms.server.ts`, `backendProxies` in the manifest, `DMS_BACKEND_PROXIES`),
-  then the pages; a write to a page path is a `404`. A module route owns its
+  `dms.server.ts`, `backendProxies` in the manifest, `DMS_BACKEND_PROXIES`, a
+  JSON array of `{ path, auth? }`), then the pages; a write to a page path is a `404`. A module route owns its
   path for every method (`405` for a method it does not declare; `HEAD` reaches
   `GET`).
 - **`dms_*` sealed cookies** belong to the module that owns sign-in. Another
   module naming one gets an error, and its own sealed cookies are stored as
-  `<module id>.<name>`: a cookie a module wrote under its bare name before is
-  not read any more.
+  `<module id>.<name>`, each character of the id outside `A-Za-z0-9_-` turned
+  into `-`: a cookie a module wrote under its bare name before is not read any
+  more.
 - **`ajs dms dev` listens on `127.0.0.1`** unless `HOST` says otherwise
   (`HOST=0.0.0.0` opens it to the network). `ajs dms start` keeps `0.0.0.0`.
 - **Async data.** `data` is a shallow ref by default (`deep: true` to track
@@ -37,7 +39,8 @@ compatibility.
   `UseAsyncDataOptions`. A call without a key is left to the browser on a
   server. Data loaded before is read again on each mount (stale while
   revalidate), and `error` stays until the next answer.
-- **Removed aliases:** `getDmsComponent` (use `resolveDmsComponent`),
+- **Removed aliases:** `getDmsComponent` (use `resolveDmsComponent`, imported
+  from `#dms/frontend-module`),
   `prefetchComponents` (use `preloadDmsComponents`) and `useDmsLazyAsyncData`
   (use `useDmsAsyncData` with `lazy: true`).
 - **Every generic runtime export carries `Dms`.** Renamed, with no alias:
@@ -46,7 +49,8 @@ compatibility.
   `showError` → `showDmsError`, `abortNavigation` → `abortDmsNavigation`,
   `defineAppConfig` → `defineDmsAppConfig` (in every `app.config.ts`) and
   `preloadComponents` → `preloadDmsComponents`. The auto-imports follow.
-- A route rule header value with a control character is ignored.
+- A route rule with a header value that has a control character is rejected
+  as a whole, with a warning at startup.
 - The secrets the manifest publishes win over `DMS_HTML_RENDER_SECRET` and
   `DMS_OAUTH_RELAY_SECRET`, which only fill in a secret the manifest leaves
   out.
@@ -56,21 +60,57 @@ compatibility.
 
 ## Added
 
+- `dms.server.ts`: a module's server code, `defineDmsServer((server) => …)`
+  with `registerRoute`, `registerAuth` and `registerRouteRules` (a route rule
+  sets `ssr: false`, `cache` or headers for a page path). A module tests its
+  routes with `serveModuleRoutes`, from
+  `@antelopejs/dms-frontend/templates/vue/server/module-testing.mjs`.
 - `registerBackendProxy(pattern, { auth: "session" | "none" })`, the routing
-  report at startup and `x-dms-route-owner` in development.
+  report at startup and `x-dms-route-owner` in development. The pattern is
+  `/x`, `/x/*` or `/x/**`, with a literal first segment; `/api/_dms`, `/@`,
+  `/assets` and `/node_modules` are the renderer's and are refused.
 - `refreshDmsPageData()` and `refreshOnPageRefresh: false`;
   `setDmsAsyncDataScope()`; `refreshInterval`, which may be a ref or a getter
   (`0` or `null` stops the polling); `key` and `placeholder` on the result.
-- `useDmsPagedData(key, handler, { nextCursor })`: a list read page by page
-  under one key, with `loadMore()`, `pages`, `hasMore` and `loadingMore`; the
+- `useDmsPagedData(key, handler, { nextCursor, initialCursor? })`: a list read
+  page by page under one key (the handler receives `{ cursor, index, signal }`;
+  `nextCursor(page, pages)` returns the next cursor, `null` for none), with `loadMore()`, `pages`, `hasMore` and `loadingMore`; the
   server renders the first page, and a revalidation reads every loaded page.
 - A call to `useDmsAsyncData`, `useDmsFetch` or `useDmsPagedData` outside a
   component and outside any effect scope runs in the application's scope: a
   plugin's polling keeps going past its first `await`.
 - `useDmsFetch`'s `key` may be a ref or a getter.
+- `useDmsData(key)`: the `data` another caller loads under `key`, to update it
+  in place (an optimistic update, a realtime event) as Nuxt's `useNuxtData`
+  does. `refreshDmsData(keys?)` reads the given keys again, or all.
 - `dmsRequestKey(url, options)`, the key `useDmsFetch` gives a request.
-- `{ parallel: true }` for independent middlewares.
-- Icons rendered once per page, from a sprite.
+- `{ parallel: true }`, the third argument of
+  `registerMiddleware(name, handler, { global, parallel })` in the
+  `dms.frontend.ts` entry: consecutive parallel middlewares start together and
+  the next one waits for all of them. Their results apply in registration
+  order, the first that redirects or aborts winning. Use it for independent
+  checks only.
+- Every layer's `app/app.config.ts` is applied by the loader before the first
+  module is set up.
+- `ajs dms dev` follows the backend's frontend modules: when the set changes,
+  it rebuilds the workspace and restarts the server on the same port (#123).
+  Once ready, the server posts the modules it serves to the backend's
+  `POST /dms/frontend/ready` (best effort: a backend without the route
+  answers `404`); `ajs dms dev` posts again after each manifest read that
+  finds the set unchanged, so a restarted backend learns it within 3 s. From
+  0.6.1 the post also carries the dms-frontend `version` (#136).
+
+## Changed
+
+- The site layout (`shared`) is an Inertia once prop, kept for five minutes
+  per account and workspace; `router.reload({ only: ["shared"] })` refreshes
+  it.
+- A visit that changes only the query or the hash of the page makes no
+  request. Pass `only`, `data` or `headers` to force one.
+- Icons are drawn once per page, from a hidden sprite, as `<svg><use>`: CSS or
+  tests that rely on the icon's inline paths change.
+- The browser keeps the 50 most recently shown async data keys across
+  navigations.
 
 ## Fixed
 
@@ -108,6 +148,9 @@ compatibility.
    lazy: true })` instead of the removed aliases.
 9. Rename the calls to the runtime exports that gained `Dms`, auto-imported
    ones included, and `defineAppConfig` in `app.config.ts`.
+10. An entry that merged its own `app/app.config.ts` into `useDmsAppConfig()`
+    in its `setup` now has it merged twice, and `defu` concatenates arrays:
+    stop merging it in the `setup`.
 
 ## Migration for the DMS
 

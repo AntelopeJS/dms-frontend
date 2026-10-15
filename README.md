@@ -870,8 +870,9 @@ kept after a failure, the first `lazy` run started after the caller's turn):
   To render a read that depends on another one's answer, await the first one
   in the setup.
 - **`useDmsData(key)`** gives the `data` another caller loads under `key`,
-  as Nuxt's `useNuxtData`: assigning it, or changing it in place (unless the
-  key is `deep: false`), updates every component showing the key without
+  as Nuxt's `useNuxtData`: assigning it, or changing it in place (when the
+  key is `deep: true`; keys are shallow by default), updates every component
+  showing the key without
   reading it again. It is how a write's answer (an optimistic update, put
   back if the write fails) or a realtime event patches data, including the
   data of a key the component does not show. `data` is `undefined` until a
