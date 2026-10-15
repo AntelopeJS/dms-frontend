@@ -179,6 +179,12 @@ export interface DmsAsyncDataRefreshOptions {
 }
 export interface DmsAsyncData<T> {
   data: Ref<T | null>;
+  /**
+   * `true` while `data` is still the previous key's, shown in place of the
+   * default until the current key's first answer (a reactive key only).
+   */
+  placeholder: Readonly<Ref<boolean>>;
+  /** The last run's failure, kept while the next run is in flight. */
   error: Ref<unknown>;
   pending: Ref<boolean>;
   status: Ref<DmsAsyncDataStatus>;
@@ -201,6 +207,16 @@ export type DmsAsyncDataHandler<T> = (
 ) => Promise<T>;
 /** A key, or `null` (or `undefined`) while there is nothing to load. */
 export type DmsAsyncDataKey = string | null | undefined;
+/** What `transform` knows of the run it transforms the result of. */
+export interface DmsAsyncDataTransformContext {
+  /** The key the data is loaded under; none for a call without one. */
+  key: string | undefined;
+}
+/** What `useDmsFetch`'s `transform` knows of the request it answers. */
+export interface DmsFetchTransformContext extends DmsAsyncDataTransformContext {
+  /** The URL requested, as given (before the base URL and the query). */
+  url: string;
+}
 /**
  * The request options a ref or a getter may stand for: read again for each
  * request, and part of the key the response is shared under.
@@ -224,7 +240,10 @@ export interface UseFetchOptions<T> extends Omit<
   server?: boolean;
   watch?: false | unknown[];
   default?: () => T;
-  transform?: (value: unknown) => T | Promise<T>;
+  transform?: (
+    value: unknown,
+    context: DmsFetchTransformContext,
+  ) => T | Promise<T>;
   pick?: string[];
   deep?: boolean;
   dedupe?: DmsAsyncDataDedupe;
@@ -243,7 +262,10 @@ export interface UseAsyncDataOptions<T> {
   /** `false` leaves the data to the browser: the server renders the default. */
   server?: boolean;
   watch?: false | unknown[];
-  transform?: (value: unknown) => T | Promise<T>;
+  transform?: (
+    value: unknown,
+    context: DmsAsyncDataTransformContext,
+  ) => T | Promise<T>;
   pick?: string[];
   /** `false` tracks the replacement of the whole value only, not its content. */
   deep?: boolean;
@@ -975,19 +997,27 @@ export function useDmsFetch<T>(
       params: toValue(params),
       body: toValue(body),
     });
-  const handler: DmsAsyncDataHandler<T> = ({ signal }) =>
-    (fetcher ?? runtime.serverFetch ?? ofetch)(url() as string, {
-      ...sideRequestDefaults(runtime),
-      ...requestOptions(),
-      signal,
-    }) as Promise<T>;
+  // The transform is applied here, where the request a response answers is
+  // known: the URL may have changed since it was sent.
+  const handler: DmsAsyncDataHandler<T> = async ({ signal }) => {
+    const target = url() as string;
+    const sent = requestOptions();
+    const value: unknown = await (fetcher ?? runtime.serverFetch ?? ofetch)(
+      target,
+      { ...sideRequestDefaults(runtime), ...sent, signal },
+    );
+    if (!transform) return value as T;
+    return transform(value, {
+      key: key ?? requestKey(target, sent),
+      url: target,
+    });
+  };
   const asyncOptions: UseAsyncDataOptions<T> = {
     immediate,
     lazy,
     server,
     watch: sources,
     default: fallback,
-    transform,
     pick,
     deep,
     dedupe,
@@ -1056,6 +1086,8 @@ interface AsyncDataInitialState<T> {
 /** What the components showing one key share: its data and its runs. */
 interface AsyncDataEntry<T> {
   result: DmsAsyncData<T>;
+  /** Writable here: set when a reactive key carries the previous data in. */
+  placeholder: Ref<boolean>;
   /** Whether a server render hands its data, or its failure, to the browser. */
   transfer: boolean;
   bind(binding: AsyncDataBinding<T>): AsyncDataBindingHandle;
@@ -1085,6 +1117,7 @@ const asyncDataEntries = new WeakMap<
 
 function createAsyncDataEntry<T>(
   runtime: DmsFrontendRuntime,
+  key: string | undefined,
   initial: AsyncDataInitialState<T>,
   deep: boolean,
   transfer: boolean,
@@ -1092,6 +1125,7 @@ function createAsyncDataEntry<T>(
   const data = (
     deep ? ref(initial.data) : shallowRef(initial.data)
   ) as Ref<T | null>;
+  const placeholder = ref(false);
   const error = ref<unknown>(initial.error);
   const status = ref<DmsAsyncDataStatus>(initial.status);
   const pending = computed(() => status.value === "pending");
@@ -1104,6 +1138,7 @@ function createAsyncDataEntry<T>(
   const adoptNow = () => {
     if (!heldBack) return;
     data.value = heldBack.data;
+    placeholder.value = false;
     error.value = heldBack.error;
     status.value = heldBack.status;
     heldBack = undefined;
@@ -1115,18 +1150,20 @@ function createAsyncDataEntry<T>(
     const current: AsyncDataRun = { controller, promise: Promise.resolve() };
     run = current;
     runtime.asyncDataRuns.add(controller);
+    // The last failure stays until this run answers, as in Nuxt.
     status.value = "pending";
-    error.value = null;
     // A run another one replaced, or that nobody waits for any more, settles
     // nothing, even when its handler ignores the signal.
     current.promise = (async () => {
       try {
         const value = await binding.handler({ signal: controller.signal });
         const transformed = binding.options.transform
-          ? await binding.options.transform(value)
+          ? await binding.options.transform(value, { key })
           : value;
         if (run !== current) return;
         data.value = pickValue<T>(transformed, binding.options.pick);
+        placeholder.value = false;
+        error.value = null;
         status.value = "success";
       } catch (reason) {
         if (run !== current) return;
@@ -1152,6 +1189,7 @@ function createAsyncDataEntry<T>(
   };
   const result: DmsAsyncData<T> = {
     data,
+    placeholder,
     error,
     pending,
     status,
@@ -1162,12 +1200,14 @@ function createAsyncDataEntry<T>(
       run?.controller.abort();
       run = undefined;
       data.value = bindings.at(-1)?.options.default?.() ?? null;
+      placeholder.value = false;
       error.value = null;
       status.value = "idle";
     },
   };
   return {
     result,
+    placeholder,
     transfer,
     bind(binding) {
       // The last component showing the data left it on an earlier page: the
@@ -1184,7 +1224,13 @@ function createAsyncDataEntry<T>(
         if (bindings.length > 0 || !run) return;
         run.controller.abort();
         run = undefined;
-        status.value = data.value === null ? "idle" : "success";
+        // Back to what the last answer left.
+        status.value =
+          error.value != null
+            ? "error"
+            : data.value === null
+              ? "idle"
+              : "success";
       };
       return { stale, shownBefore, unbind };
     },
@@ -1252,6 +1298,7 @@ function asyncDataEntry<T>(
       : serverAsyncDataState<T>(runtime, key, fallback);
   const entry = createAsyncDataEntry<T>(
     runtime,
+    key,
     server && !inComponent ? server : fallback,
     options.deep !== false,
     options.transfer !== false,
@@ -1459,8 +1506,14 @@ function followAsyncDataKey<T>(
       // any, is taken over at once.
       const next = attachAsyncData(runtime, key, handler, options, false);
       const { entry } = next;
-      if (next.alone && entry.result.status.value === "idle" && shown !== null)
+      if (
+        next.alone &&
+        entry.result.status.value === "idle" &&
+        shown !== null
+      ) {
         entry.result.data.value = shown;
+        entry.placeholder.value = true;
+      }
       consumer.value.unbind();
       consumer.value = next;
       const wanted =
@@ -1481,6 +1534,7 @@ function followAsyncDataKey<T>(
     });
   return {
     data: through((result) => result.data),
+    placeholder: computed(() => current().placeholder.value),
     error: through((result) => result.error),
     pending: computed(() => current().pending.value),
     status: through((result) => result.status),

@@ -41,10 +41,12 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function serverRender(root: Component) {
@@ -610,6 +612,56 @@ describe("Async data in the browser", () => {
     assert.equal(runtime.pageLoading.value, false);
   });
 
+  it("keeps the last failure while the next run is in flight, as Nuxt does", async () => {
+    const runtime = createDmsFrontendRuntime();
+    const answers: Array<ReturnType<typeof deferred<string>>> = [];
+    const failure = new Error("down");
+    let entry: ReturnType<typeof useDmsAsyncData<string>> | undefined;
+    const visible = ref(true);
+    const Consumer = defineComponent({
+      setup() {
+        entry = useDmsAsyncData("kept-failure", () => {
+          const answer = deferred<string>();
+          answers.push(answer);
+          return answer.promise;
+        });
+        return () => h("p");
+      },
+    });
+    const app = mountRuntime(runtime, {
+      render: () => (visible.value ? h(Consumer) : null),
+    });
+    answers[0].resolve("rows");
+    await settle();
+    answers.length = 0;
+    void entry!.refresh();
+    answers[0].reject(failure);
+    await settle();
+    assert.equal(entry!.status.value, "error");
+    assert.equal(entry!.data.value, "rows", "a failed refresh keeps the data");
+
+    void entry!.refresh();
+    assert.equal(entry!.status.value, "pending");
+    assert.equal(entry!.error.value, failure, "kept while the retry runs");
+    answers[1].resolve("rows again");
+    await settle();
+    assert.equal(entry!.error.value, null, "cleared once it answers");
+    assert.equal(entry!.status.value, "success");
+
+    void entry!.refresh();
+    answers[2].reject(failure);
+    await settle();
+    void entry!.refresh();
+    visible.value = false;
+    await nextTick();
+    assert.equal(
+      runtime.asyncData.get("kept-failure")?.status.value,
+      "error",
+      "a run its last component left goes back to the last answer",
+    );
+    app.unmount();
+  });
+
   it("clears the data and aborts its run", async () => {
     const { app } = clientApp();
     let signal: AbortSignal | undefined;
@@ -969,6 +1021,93 @@ describe("useDmsFetch", () => {
       ["order 2"],
       "the first URL's data went with the key nobody shows",
     );
+    app.unmount();
+  });
+
+  it("hands transform the key, and the URL a response answers", async () => {
+    const runtime = createDmsFrontendRuntime();
+    const id = ref(1);
+    const answers = new Map<string, ReturnType<typeof deferred<string>>>();
+    const fetcher = ((url: string) => {
+      const answer = deferred<string>();
+      answers.set(url, answer);
+      return answer.promise;
+    }) as never;
+    const contexts: unknown[] = [];
+    let fetched:
+      | ReturnType<typeof runtimeModule.useDmsFetch<string>>
+      | undefined;
+    let loaded: ReturnType<typeof useDmsAsyncData<string>> | undefined;
+    const Consumer = defineComponent({
+      setup() {
+        fetched = runtimeModule.useDmsFetch<string>(
+          () => `/api/orders/${id.value}`,
+          {
+            key: "order",
+            watch: false,
+            $fetch: fetcher,
+            transform: (value, context) => {
+              contexts.push(context);
+              return `${context.url}=${String(value)}`;
+            },
+          },
+        );
+        loaded = useDmsAsyncData("totals", async () => 3, {
+          transform: (value, context) => `${context.key}:${String(value)}`,
+        });
+        return () => h("p");
+      },
+    });
+    const app = mountRuntime(runtime, { render: () => h(Consumer) });
+    // The URL changes while its request is in flight, without a new one.
+    id.value = 2;
+    answers.get("/api/orders/1")!.resolve("first");
+    await settle();
+
+    assert.deepEqual(contexts, [{ key: "order", url: "/api/orders/1" }]);
+    assert.equal(fetched!.data.value, "/api/orders/1=first");
+    assert.equal(loaded!.data.value, "totals:3");
+    app.unmount();
+  });
+
+  it("says when the data on screen is still the previous key's", async () => {
+    const runtime = createDmsFrontendRuntime();
+    const id = ref(1);
+    const answers = new Map<string, ReturnType<typeof deferred<string>>>();
+    const fetcher = ((url: string) => {
+      const answer = deferred<string>();
+      answers.set(url, answer);
+      return answer.promise;
+    }) as never;
+    let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
+    const Consumer = defineComponent({
+      setup() {
+        entry = runtimeModule.useDmsFetch<string>(
+          () => `/api/orders/${id.value}`,
+          { $fetch: fetcher },
+        );
+        return () => h("p");
+      },
+    });
+    const app = mountRuntime(runtime, { render: () => h(Consumer) });
+    answers.get("/api/orders/1")!.resolve("order 1");
+    await settle();
+    assert.equal(entry!.placeholder.value, false);
+
+    id.value = 2;
+    await nextTick();
+    assert.equal(entry!.data.value, "order 1");
+    assert.equal(entry!.placeholder.value, true, "order 1 stands in");
+    answers.get("/api/orders/2")!.reject(new Error("gone"));
+    await settle();
+    assert.equal(entry!.placeholder.value, true, "still order 1's data");
+
+    id.value = 3;
+    await nextTick();
+    answers.get("/api/orders/3")!.resolve("order 3");
+    await settle();
+    assert.equal(entry!.data.value, "order 3");
+    assert.equal(entry!.placeholder.value, false);
     app.unmount();
   });
 

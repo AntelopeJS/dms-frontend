@@ -607,6 +607,16 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
   answers: on a server, `useDmsFetch`, `$fetch` and the fetches created from
   it default to `retry: 0`. A caller's own `retry` still applies, and the
   browser keeps ofetch's default.
+- **A failed run's `error` stays while the next run is in flight,** as in
+  Nuxt: it goes back to `null` once a run answers, and becomes the new failure
+  when it fails. A failed refresh keeps the data on screen.
+- **`transform(value, context)`** receives the `key` the data is loaded
+  under and, from `useDmsFetch`, the `url` the response answers (as given,
+  before the base URL and the query), even when the URL changed since.
+- **A reactive key keeps the previous key's data on screen** until the new
+  key's first answer, rather than the default flashing in; `placeholder` is
+  `true` meanwhile (and after that answer failed), so a caller can show a
+  skeleton instead.
 - **A key that is `null` or `undefined`** (a ref or a getter for it) has
   nothing to load: the caller holds its default, and runs nothing until the
   key has a value.
