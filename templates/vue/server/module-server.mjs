@@ -12,9 +12,14 @@ import { answerModuleRoute } from "./module-event.mjs";
 import {
   matchModuleRoute,
   mayHaveModuleRoute,
+  moduleRouteMethods,
   resolveServerDeclarations,
 } from "./module-routes.mjs";
-import { allowedPublicEndpoints } from "./public-endpoints.mjs";
+import {
+  allowedPublicEndpoints,
+  environmentBackendProxies,
+  readDeclaredBackendProxies,
+} from "./public-endpoints.mjs";
 
 const WORKSPACE_ROOT = new URL("../", import.meta.url);
 const SOURCE_LOADER = "/server-modules.generated.ts";
@@ -110,9 +115,10 @@ async function currentDeclarations(devServer) {
  *
  * @param declarations `{ id, priority, setup }` per module with a dms.server.ts
  * @param deployment `{ publicOptions, privateOptions, authEstablishEndpoints,
- *   publicEndpoints, warn }`: each module's options by id, the session-opening
- *   endpoints as a function (the environment can change them), the public
- *   endpoints, and where declaration problems are reported
+ *   publicEndpoints, backendProxies, warn }`: each module's options by id,
+ *   the session-opening endpoints as a function (the environment can change
+ *   them), the public endpoints, the backend proxies the manifest declares
+ *   (`{ module, path, auth? }`), and where declaration problems are reported
  * @returns `{ routes, auth, context(id), serverAuth }`: `context` is what a
  *   handler of that module reads besides its request, `serverAuth` the
  *   session logic the module owning sign-in provides (see `auth-hooks.mjs`)
@@ -122,6 +128,7 @@ export function createServerModules(declarations, deployment) {
     declarations,
     deployment.warn,
     deployment.publicEndpoints ?? [],
+    deployment.backendProxies ?? [],
   );
   const context = (id) => ({
     module: {
@@ -149,6 +156,10 @@ function serverModules(declarations) {
       privateOptions: readPrivateOptions(),
       authEstablishEndpoints: () => allowedEstablishEndpoints(),
       publicEndpoints: allowedPublicEndpoints(),
+      backendProxies: [
+        ...readDeclaredBackendProxies(),
+        ...environmentBackendProxies(),
+      ],
       warn: (message) => console.warn(message),
     });
     resolved.set(declarations, modules);
@@ -166,7 +177,9 @@ export async function loadServerModules(devServer) {
 }
 
 /**
- * Answers `request` with the module route it reaches, if any.
+ * Answers `request` with the module route it reaches, if any. A path a
+ * module route serves is the module's for every method: another method is
+ * answered `405`.
  *
  * @param request The Node request
  * @param response The Node response
@@ -177,7 +190,16 @@ export async function loadServerModules(devServer) {
 export async function handleModuleRoute(request, response, pathname, modules) {
   if (!mayHaveModuleRoute(pathname)) return false;
   const reached = matchModuleRoute(modules.routes, request.method, pathname);
-  if (!reached) return false;
+  if (!reached) {
+    const allowed = moduleRouteMethods(modules.routes, pathname);
+    if (!allowed.length) return false;
+    response.writeHead(405, {
+      allow: allowed.join(", "),
+      "content-type": "application/json",
+    });
+    response.end(JSON.stringify({ message: "Method not allowed" }));
+    return true;
+  }
   await answerModuleRoute({
     request,
     response,

@@ -4,6 +4,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
 
 interface ServerTemplate {
   assetVersion: () => string;
@@ -18,7 +19,6 @@ interface ServerTemplate {
     location: string,
   ) => void;
   renderHtml: (page: unknown, requestUrl: string) => Promise<string>;
-  requestOwnership: (method: string, pathname: string) => string;
 }
 
 const server = import(
@@ -339,12 +339,21 @@ describe("Inertia HTTP protocol", () => {
         "public, max-age=31536000, immutable",
       );
       assert.deepEqual(backendPaths, []);
-      // A file the build does not have is still the backend's to serve.
+      // A file the build does not have is the backend's under a prefix a
+      // module declares, and the backend is asked for nothing else.
+      process.env.DMS_BACKEND_PROXIES = JSON.stringify([
+        { path: "/media/**", auth: "none" },
+      ]);
       const media = await fetch(`${base}/media/asset-1/photo.webp`);
       assert.equal(media.status, 200);
       assert.equal(await media.text(), "backend media");
       assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
+      const missing = await fetch(`${base}/assets/missing-${assetName}`);
+      assert.equal(missing.status, 404);
+      await missing.body?.cancel();
+      assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
     } finally {
+      process.env.DMS_BACKEND_PROXIES = DMS_BACKEND_PROXIES;
       await rm(created ?? join(assets, assetName), {
         recursive: true,
         force: true,
@@ -479,18 +488,16 @@ describe("Inertia HTTP protocol", () => {
         assert.equal(response.status, 404, `${method} ${path}`);
         assert.equal(reached.at(-1), `${method} ${path}`);
       }
-      // A sign-in action no module serves is the backend's, as any POST.
-      assert.equal(runtime.requestOwnership("POST", "/auth/login"), "server");
-      for (const path of [
-        "/auth/login",
-        "/auth/oauth/github/start",
-        "/auth/oauth/github/callback",
-      ])
-        assert.equal(
-          runtime.requestOwnership("GET", path),
-          "frontend",
-          `GET ${path}`,
-        );
+      // A path no module route and no backend proxy covers is a page: a
+      // sign-in action no module serves is a 404, never the backend's.
+      const signIn = await fetch(`${base}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: base },
+        body: "{}",
+      });
+      assert.equal(signIn.status, 404);
+      await signIn.body?.cancel();
+      assert.equal(reached.at(-1), "POST /api/_dms/tester");
     } finally {
       frontend.close();
       backend.close();

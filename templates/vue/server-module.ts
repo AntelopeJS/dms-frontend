@@ -1,7 +1,8 @@
 /// <reference types="node" />
 /**
  * What a frontend module's `dms.server.ts` declares: the routes it serves from
- * the frontend server. Imported as `#dms/server`.
+ * the frontend server, its auth hooks, its route rules and the backend paths
+ * the server proxies. Imported as `#dms/server`.
  *
  * The entry runs in the frontend server's Node.js process, next to the
  * session secret: it is the module's own trusted code, as its backend half
@@ -242,6 +243,33 @@ export interface DmsServer {
    * highest-priority module's rule wins.
    */
   registerRouteRules(rules: Readonly<Record<string, DmsRouteRule>>): void;
+  /**
+   * Proxies the paths `pattern` covers to the backend (`/x`, `/x/*` one
+   * segment below, `/x/**` the path and everything below; the first segment
+   * literal). The frontend server sends nothing else to the backend: a path no
+   * proxy covers is a page, or a `404` for a method other than `GET` and
+   * `HEAD`. Of two patterns covering a path, the more specific wins; for one
+   * pattern, the highest-priority module's.
+   *
+   * ```ts
+   * server.registerBackendProxy("/api/**");
+   * server.registerBackendProxy("/media/**", { auth: "none" });
+   * ```
+   */
+  registerBackendProxy(pattern: string, options?: DmsBackendProxyOptions): void;
+}
+
+/** How the frontend server authenticates a proxied request to the backend. */
+export interface DmsBackendProxyOptions {
+  /**
+   * `session` (the default): the server adds the session's access token
+   * (`Authorization: Bearer`), which never reaches the browser, and a request
+   * with a state-changing method needs the frontend's own `Origin`, except a
+   * public endpoint a backend module declares (`publicEndpoints`), sent
+   * without the session. `none`: never sends the session, so no `Origin` is
+   * needed.
+   */
+  auth?: "session" | "none";
 }
 
 export type DmsServerSetup = (server: DmsServer) => void;

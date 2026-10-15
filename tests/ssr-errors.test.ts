@@ -113,6 +113,16 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       "<html><head><title>Antelope DMS</title></head><body>__DMS_APP__</body></html>",
     );
     writeFileSync(join(workspace, "dist/client/.vite/manifest.json"), "{}");
+    // The module owning sign-in shows the session to pages, and proxies the
+    // one backend path the browser reads here outside a page.
+    mkdirSync(join(workspace, "dist/server-modules"), { recursive: true });
+    writeFileSync(
+      join(workspace, "dist/server-modules/server-modules.generated.js"),
+      `export const serverModules = [{ id: "fixture-auth", setup(server) {
+  server.registerAuth({ publicSession: (session) => ({ user: session.user, session: { accountId: session.accountId, activeTenantId: session.activeTenantId } }) });
+  server.registerBackendProxy(${JSON.stringify(unreadCountPath)});
+} }];\n`,
+    );
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );

@@ -30,7 +30,11 @@ import {
 } from "./derived-outputs";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
 import { MANIFEST_SECRET_ENV } from "./manifest-secrets";
-import { PublicEndpointDeclaration, ResolvedLayer } from "./workspace";
+import {
+  BackendProxyDeclaration,
+  PublicEndpointDeclaration,
+  ResolvedLayer,
+} from "./workspace";
 
 import {
   applyContent,
@@ -271,13 +275,36 @@ function collectPublicEndpoints(
   );
 }
 
+/**
+ * The backend prefixes the workspace's modules declared in the manifest, each
+ * with the module that declared it. The server checks each entry in full.
+ *
+ * @param layers Resolved layers, in workspace order
+ */
+function collectBackendProxies(
+  layers: ResolvedLayer[],
+): (BackendProxyDeclaration & { module: string })[] {
+  return layers.flatMap((layer) =>
+    (Array.isArray(layer.backendProxies) ? layer.backendProxies : [])
+      .filter((proxy) => typeof proxy === "object" && proxy !== null)
+      .map((proxy) => ({
+        ...proxy,
+        module: layer.name ?? layer.packageName ?? "unknown",
+      })),
+  );
+}
+
 function writePublicEndpoints(
   workspaceDir: string,
   layers: ResolvedLayer[],
 ): void {
+  const declared = {
+    endpoints: collectPublicEndpoints(layers),
+    proxies: collectBackendProxies(layers),
+  };
   writeFileSync(
     join(workspaceDir, PUBLIC_ENDPOINTS_FILE),
-    `${JSON.stringify({ endpoints: collectPublicEndpoints(layers) }, null, 2)}\n`,
+    `${JSON.stringify(declared, null, 2)}\n`,
   );
 }
 

@@ -3,6 +3,7 @@
 // request reaches. Pure: the server hands it the declarations it loaded, and
 // `module-event.mjs` runs the handler a request reaches.
 
+import { resolveBackendProxies } from "./backend-proxies.mjs";
 import { compilePathPattern } from "./path-patterns.mjs";
 import { matchPublicEndpoint } from "./public-endpoints.mjs";
 import { ruleRejection } from "./route-rules.mjs";
@@ -117,12 +118,14 @@ function compilePath(path) {
 
 /** What a module's setup declares, by kind, in declaration order. */
 function collectDeclarations(setup) {
-  const declared = { routes: [], auth: [], rules: [] };
+  const declared = { routes: [], auth: [], rules: [], proxies: [] };
   setup({
     registerRoute: (method, path, handler, options) =>
       declared.routes.push({ method, path, handler, options }),
     registerAuth: (auth) => declared.auth.push(auth),
     registerRouteRules: (rules) => declared.rules.push(rules),
+    registerBackendProxy: (pattern, options) =>
+      declared.proxies.push({ pattern, options }),
   });
   return declared;
 }
@@ -426,15 +429,21 @@ function resolveRules(modules, warn) {
  *
  * `rules`: the route rules, one per pattern.
  *
+ * `proxies`: the backend prefixes the modules and the manifest declare, the
+ * most specific first (see `backend-proxies.mjs`).
+ *
  * @param declarations `{ id, priority, setup }` per module with a dms.server.ts
  * @param warn Reports a declaration problem
  * @param publicEndpoints The deployment's public endpoints (#108), to report a
  *   module route answering one
+ * @param manifestProxies `{ module, path, auth? }`, the backend proxies the
+ *   backend modules declare in the manifest
  */
 export function resolveServerDeclarations(
   declarations,
   warn,
   publicEndpoints = [],
+  manifestProxies = [],
 ) {
   const modules = [...declarations].sort(byPriority).flatMap((declaration) => {
     const declared = declarationsOfModule(declaration, warn);
@@ -444,6 +453,13 @@ export function resolveServerDeclarations(
     routes: resolveRoutes(modules, warn, publicEndpoints),
     auth: resolveAuth(modules, warn),
     rules: resolveRules(modules, warn),
+    proxies: resolveBackendProxies(
+      modules.flatMap((module) =>
+        module.declared.proxies.map((proxy) => ({ id: module.id, ...proxy })),
+      ),
+      manifestProxies,
+      warn,
+    ),
   };
 }
 
@@ -467,6 +483,13 @@ function decodedParams(route, match) {
  * @param pathname The request's normalized path, without its query string
  */
 export function matchModuleRoute(routes, method, pathname) {
+  const reached = matchMethod(routes, method, pathname);
+  // A `HEAD` no route declares is the `GET`'s, without its body.
+  if (reached || method !== "HEAD") return reached;
+  return matchMethod(routes, "GET", pathname);
+}
+
+function matchMethod(routes, method, pathname) {
   for (const route of routes) {
     if (route.method !== method) continue;
     const match = route.matcher.exec(pathname);
@@ -475,4 +498,16 @@ export function matchModuleRoute(routes, method, pathname) {
     if (params) return { route, params };
   }
   return undefined;
+}
+
+/**
+ * The methods the module routes answer on `pathname`: a path a module route
+ * serves is that module's for every method, the others answered `405`.
+ */
+export function moduleRouteMethods(routes, pathname) {
+  const methods = new Set();
+  for (const route of routes)
+    if (route.matcher.test(pathname)) methods.add(route.method);
+  if (methods.has("GET")) methods.add("HEAD");
+  return [...methods];
 }

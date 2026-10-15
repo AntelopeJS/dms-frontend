@@ -147,6 +147,16 @@ describe("private files the development server refuses", () => {
     );
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") ?? "", /javascript/);
+    assert.equal(response.headers.get("x-dms-route-owner"), "renderer");
+  });
+
+  it("names the owner of what no module declares: a page, or a 404", async () => {
+    const page = await fetch(`${base}/api/items`, { method: "HEAD" });
+    assert.equal(page.headers.get("x-dms-route-owner"), "page");
+    const write = await fetch(`${base}/api/items`, { method: "POST" });
+    assert.equal(write.status, 404);
+    assert.equal(write.headers.get("x-dms-route-owner"), "not-found");
+    await write.body?.cancel();
   });
 
   it("still loads a module's server code for the server, never for the client", async () => {

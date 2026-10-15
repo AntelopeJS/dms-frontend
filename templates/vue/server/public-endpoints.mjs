@@ -35,6 +35,7 @@ const RESERVED_HEADER =
   /^x-(?:forwarded-|real-ip$|dms-|inertia|http-method|method-override|original-|rewrite-)/;
 
 let declaredEndpoints;
+let declaredProxies;
 
 /**
  * The public endpoints the modules of this deployment declared, unchecked.
@@ -49,6 +50,47 @@ export function readDeclaredPublicEndpoints(file = DECLARED_ENDPOINTS_FILE) {
   } catch {
     return [];
   }
+}
+
+/**
+ * The backend proxies the backend modules declared in the manifest, as
+ * `{ module, path, auth? }`, unchecked.
+ *
+ * @param file Generated file to read
+ */
+export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
+  if (file === DECLARED_ENDPOINTS_FILE && declaredProxies)
+    return declaredProxies;
+  let proxies = [];
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    if (Array.isArray(parsed?.proxies)) proxies = parsed.proxies;
+  } catch {
+    // No file, or a broken one: no proxy declared.
+  }
+  if (file === DECLARED_ENDPOINTS_FILE) declaredProxies = proxies;
+  return proxies;
+}
+
+/**
+ * The backend proxies `DMS_BACKEND_PROXIES` adds: a JSON array of
+ * `{ path, auth? }`, as the manifest's `backendProxies`, for an operator.
+ *
+ * @param declaration The variable's value
+ */
+export function environmentBackendProxies(
+  declaration = process.env.DMS_BACKEND_PROXIES,
+) {
+  if (!declaration?.trim()) return [];
+  try {
+    const parsed = JSON.parse(declaration);
+    if (Array.isArray(parsed))
+      return parsed.map((entry) => ({ ...entry, module: "DMS_BACKEND_PROXIES" }));
+  } catch {
+    // Reported below.
+  }
+  console.warn("Ignoring DMS_BACKEND_PROXIES: not a JSON array");
+  return [];
 }
 
 function environmentEndpoints(declaration) {
@@ -165,25 +207,38 @@ export function matchPublicEndpoint(
 }
 
 /**
- * How the proxy treats a request: the public endpoint it reaches, if any, and
- * whether it is refused for lacking a same-site Origin. A state-changing
- * request needs one, unless it reaches a public endpoint, which is why the
- * proxy never sends a public endpoint the session: a cross-site form posting
- * to it acts as nobody.
+ * How the proxy treats a request to a backend proxy: whether it sends the
+ * session, the extra headers it relays, and whether it refuses the request
+ * for lacking a same-site Origin.
+ *
+ * A proxy with `auth: "none"` never sends the session, so it needs no
+ * Origin. Under `auth: "session"`, a state-changing request needs one unless
+ * it reaches a public endpoint, which is why the proxy never sends a public
+ * endpoint the session: a cross-site form posting to it acts as nobody.
  *
  * @param request The incoming request
  * @param safeMethods Methods that change nothing and need no Origin
+ * @param proxy The backend proxy the request reached
+ * @returns `{ anonymous, headers, isRefused }`
  */
-export function proxyAccess(request, safeMethods) {
+export function proxyAccess(request, safeMethods, proxy) {
+  if (proxy.auth === "none")
+    return { anonymous: true, headers: [], isRefused: false };
   const publicEndpoint = matchPublicEndpoint(
     request.method,
     new URL(request.url, "http://frontend.local").pathname,
   );
-  const isRefused =
-    !publicEndpoint &&
-    !safeMethods.has(request.method) &&
-    !isSameOrigin(request);
-  return { publicEndpoint, isRefused };
+  if (publicEndpoint)
+    return {
+      anonymous: true,
+      headers: publicEndpoint.headers,
+      isRefused: false,
+    };
+  return {
+    anonymous: false,
+    headers: [],
+    isRefused: !safeMethods.has(request.method) && !isSameOrigin(request),
+  };
 }
 
 /** Answers the 403 of a request `proxyAccess` refused. */

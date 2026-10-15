@@ -516,6 +516,7 @@ export default defineDmsServer((server) => {
   server.registerRoute("GET", "/api/_fixture/empty", handlers.empty);
   server.registerRoute("GET", "/api/_auth/session", handlers.session);
   server.registerRoute("GET", "/assets/taken.js", handlers.empty);
+  server.registerBackendProxy("/api/**");
 });
 `;
 
@@ -733,32 +734,48 @@ describe("Module server routes in the production server", () => {
     assert.equal(response.status, 204);
   });
 
-  it("serves the session path only for the methods the module declares", async () => {
+  it("owns the paths of its routes for every method, the backend never asked", async () => {
     const declared = await fetch(`${frontendUrl}/api/_auth/session`);
     assert.deepEqual(await declared.json(), {
       shadowed: true,
       signedIn: false,
     });
     backendCalls.length = 0;
-    await fetch(`${frontendUrl}/api/_auth/session`, {
-      method: "DELETE",
-      headers: { origin: frontendUrl },
-    });
-    assert.deepEqual(
-      backendCalls.map(({ method, url }) => ({ method, url })),
-      [{ method: "DELETE", url: "/api/_auth/session" }],
-    );
+    for (const [method, path] of [
+      ["DELETE", "/api/_auth/session"],
+      ["PUT", "/api/_fixture/hello/ada"],
+    ]) {
+      const response = await fetch(`${frontendUrl}${path}`, {
+        method,
+        headers: { origin: frontendUrl },
+      });
+      assert.equal(response.status, 405, `${method} ${path}`);
+      assert.match(response.headers.get("allow") ?? "", /GET, HEAD/);
+      await response.body?.cancel();
+    }
+    assert.deepEqual(backendCalls, []);
   });
 
-  it("falls through to the proxy for a method no route declares", async () => {
+  it("answers a HEAD with the GET route, without its body", async () => {
+    const response = await fetch(`${frontendUrl}/api/_fixture/hello/ada`, {
+      method: "HEAD",
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "");
+  });
+
+  it("proxies the prefix the module declares, and nothing outside it", async () => {
     backendCalls.length = 0;
-    await fetch(`${frontendUrl}/api/_fixture/hello/ada`, {
-      method: "PUT",
+    await (await fetch(`${frontendUrl}/api/items?x=1`)).body?.cancel();
+    const outside = await fetch(`${frontendUrl}/dms/page`, {
+      method: "POST",
       headers: { origin: frontendUrl },
     });
+    assert.equal(outside.status, 404);
+    await outside.body?.cancel();
     assert.deepEqual(
       backendCalls.map(({ method, url }) => ({ method, url })),
-      [{ method: "PUT", url: "/api/_fixture/hello/ada" }],
+      [{ method: "GET", url: "/api/items?x=1" }],
     );
   });
 

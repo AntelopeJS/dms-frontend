@@ -97,6 +97,30 @@ describe("Vite frontend generation", () => {
       readFileSync(join(workspace, "generated-public-endpoints.json"), "utf8"),
     );
     assert.deepEqual(declared.endpoints, [webhook]);
+    assert.deepEqual(declared.proxies, []);
+  });
+
+  it("writes the backend proxies the modules declare, with the module that declared each", () => {
+    const source = temporaryDirectory("dms-proxies-module-");
+    const workspace = temporaryDirectory("dms-proxies-workspace-");
+    writeFrontendModuleRegistry(workspace, [
+      {
+        path: source,
+        name: "@dms/media",
+        packageName: "@dms/media",
+        priority: 0,
+        backendProxies: [
+          { path: "/media/**", auth: "none" },
+          "not-an-object" as never,
+        ],
+      },
+    ]);
+    const declared = JSON.parse(
+      readFileSync(join(workspace, "generated-public-endpoints.json"), "utf8"),
+    );
+    assert.deepEqual(declared.proxies, [
+      { path: "/media/**", auth: "none", module: "@dms/media" },
+    ]);
   });
 
   it("drops malformed declared endpoints instead of materializing them", () => {

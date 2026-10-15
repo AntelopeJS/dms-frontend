@@ -5,6 +5,7 @@ import { after, afterEach, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { backend } from "../templates/vue/server/auth/backend.mjs";
 import { clientCountryHeader } from "../templates/vue/server/auth/client-ip.mjs";
+import "./fixtures/dms-backend-proxies.mts";
 
 interface ServerTemplate {
   handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
@@ -130,22 +131,6 @@ describe("client country header", () => {
       { method: "POST", body: {} },
     );
     assert.equal(received[0]["x-forwarded-for"], "203.0.113.7");
-  });
-
-  it("forwards the country on a sign-in through the frontend server", async () => {
-    process.env.DMS_TRUSTED_PROXY_HOPS = "1";
-    const response = await fetch(`${base}/auth/login`, {
-      method: "POST",
-      headers: {
-        "cf-ipcountry": "BR",
-        "content-type": "application/json",
-        origin: base,
-      },
-      body: '{"email":"member@example.test","password":"secret"}',
-    });
-    assert.equal(response.status, 200);
-    assert.equal(received.length, 1);
-    assert.equal(received[0]["cf-ipcountry"], "BR");
   });
 
   it("forwards the country on a proxied API request", async () => {

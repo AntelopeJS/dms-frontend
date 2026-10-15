@@ -34,7 +34,8 @@ import {
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { watchEmailBundle } from "./server/email.mjs";
 import { DEV_FS_DENY, denyPrivateFiles } from "./server/dev-private-files.mjs";
-import { isRendererFilePath } from "./server/module-routes.mjs";
+import { ownerLabel, requestOwner } from "./server/request-routing.mjs";
+import { routingReport } from "./server/backend-proxies.mjs";
 import { routeRuleFor, ruleHeaders } from "./server/route-rules.mjs";
 import {
   handleModuleRoute,
@@ -67,7 +68,6 @@ const MIME_TYPES = {
   ".js": "text/javascript",
   ".svg": "image/svg+xml",
 };
-const PROXY_PREFIXES = ["/api/", "/dms/"];
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
@@ -111,7 +111,11 @@ async function developmentServer() {
   return vitePromise;
 }
 
-function backendHeaders(request, publicEndpoint) {
+/**
+ * The headers of a backend request: the relayed client headers, and the
+ * session's access token unless the request goes anonymously.
+ */
+function backendHeaders(request, access = { anonymous: false, headers: [] }) {
   const headers = relayedHeaders(request, [
     "accept",
     "content-type",
@@ -119,9 +123,9 @@ function backendHeaders(request, publicEndpoint) {
     "user-agent",
     "x-content-language",
     "x-realtime-session",
-    ...(publicEndpoint?.headers ?? []),
+    ...access.headers,
   ]);
-  const session = publicEndpoint ? undefined : readSession(request);
+  const session = access.anonymous ? undefined : readSession(request);
   if (session?.accessToken)
     headers.authorization = `Bearer ${session.accessToken}`;
   return headers;
@@ -188,15 +192,10 @@ function redirectSignedOutPrivatePage(request, response, props, auth) {
   return true;
 }
 
-export function requestOwnership(method, pathname) {
-  if (PROXY_PREFIXES.some((prefix) => pathname.startsWith(prefix)))
-    return "server";
-  return method === "GET" ? "frontend" : "server";
-}
-
-async function proxy(request, response, fallbackOnNotFound = false) {
-  const { publicEndpoint, isRefused } = proxyAccess(request, SAFE_METHODS);
-  if (isRefused) {
+/** Sends a request to the backend through the proxy it reached. */
+async function proxy(request, response, backendProxy) {
+  const access = proxyAccess(request, SAFE_METHODS, backendProxy);
+  if (access.isRefused) {
     refuseCrossOrigin(response);
     return true;
   }
@@ -207,18 +206,13 @@ async function proxy(request, response, fallbackOnNotFound = false) {
   const upstream = await fetch(backendUrl(request.url), {
     signal: abandoned.signal,
     method: request.method,
-    headers: backendHeaders(request, publicEndpoint),
+    headers: backendHeaders(request, access),
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
   });
-  if (fallbackOnNotFound && upstream.status === 404) {
-    await upstream.body?.cancel();
-    return false;
-  }
   writeProxyHeaders(response, upstream);
   if (!upstream.body || request.method === "HEAD") response.end();
   else await pipeline(Readable.fromWeb(upstream.body), response);
-  return true;
 }
 
 function acceptedAsset(pathname, request) {
@@ -385,26 +379,45 @@ async function answeredByVite(devServer, request, response) {
 }
 
 /**
- * Vite's own URLs (`/@vite/client`, `/@id/…`, `/@fs/…`) and paths with an
- * extension name files: modules, stylesheets, fonts, images, built assets.
- * The backend's routes outside `/api` and `/dms` are mostly the paths of the
- * pages they serve data for, which have none (`/<page>/pagelayout`).
+ * Whether the renderer has a file at `pathname`: a development source Vite
+ * serves (under the workspace or its `public/`), or a built asset. Only a
+ * path with an extension names one.
  */
-function isFilePath(pathname) {
-  return pathname.startsWith("/@") || extname(pathname) !== "";
+function hasRendererFile(devServer, requested) {
+  let pathname;
+  try {
+    // As Vite and the asset server read it: `%2E` is a dot.
+    pathname = decodeURIComponent(requested);
+  } catch {
+    return false;
+  }
+  if (extname(pathname) === "") return false;
+  const roots = devServer
+    ? [devServer.config.root, devServer.config.publicDir].filter(Boolean)
+    : [join(PROJECT_ROOT, "dist/client")];
+  return roots.some((root) => {
+    const file = resolve(root, `.${pathname}`);
+    return (
+      file.startsWith(`${resolve(root)}${sep}`) &&
+      existsSync(file) &&
+      statSync(file).isFile()
+    );
+  });
 }
 
-/** Vite's files in development, the build's in production. */
-async function answeredWithFile(devServer, request, response, pathname) {
-  if (!devServer) return serveAsset(pathname, request, response);
-  return pathname !== "/" && answeredByVite(devServer, request, response);
+/** Vite's files in development, the build's in production; else a 404. */
+async function serveRendererFile(devServer, request, response, pathname) {
+  const answered = devServer
+    ? await answeredByVite(devServer, request, response)
+    : serveAsset(pathname, request, response);
+  if (answered) return;
+  response.writeHead(404, { "content-type": "text/plain" });
+  response.end("Not found");
 }
 
-/** Answers the routes the modules declare in their `dms.server.ts`. */
-async function answeredByServerRoute(request, response, url, devServer) {
-  if (isRendererFilePath(url.pathname)) return false;
-  const modules = await loadServerModules(devServer);
-  return handleModuleRoute(request, response, url.pathname, modules);
+function writeNotFound(response) {
+  response.writeHead(404, { "content-type": JSON_TYPE });
+  response.end(JSON.stringify({ message: "Not found" }));
 }
 
 export async function handleRequest(request, response) {
@@ -413,25 +426,22 @@ export async function handleRequest(request, response) {
   const localRoute = LOCAL_ROUTES.find(([matches]) => matches(pathname));
   if (localRoute) return localRoute[1](request, response);
   const devServer = await developmentServer();
-  if (await answeredByServerRoute(request, response, url, devServer)) return;
-  if (requestOwnership(request.method, pathname) === "server")
-    return proxy(request, response);
+  const modules = await loadServerModules(devServer);
+  const owner = requestOwner(request.method, pathname, modules, (path) =>
+    hasRendererFile(devServer, path),
+  );
+  if (devServer) response.setHeader("x-dms-route-owner", ownerLabel(owner));
+  if (owner.kind === "renderer")
+    return serveRendererFile(devServer, request, response, pathname);
+  if (owner.kind === "module")
+    return handleModuleRoute(request, response, pathname, modules);
+  if (owner.kind === "backend") return proxy(request, response, owner.proxy);
+  if (owner.kind === "not-found") return writeNotFound(response);
   if (requestFailure.hasMalformedPath(request.url))
     return requestFailure.writeBadRequest(response);
-  const visit = isFrontendVisit(request);
-  // A file is looked for among the frontend's own before the backend is asked
-  // for it: asking first cost a backend round trip for each of the hundreds of
-  // modules a development page loads, and for each built asset. A file the
-  // frontend does not have, a media file, is still the backend's.
-  const fileFirst = !visit && isFilePath(pathname);
-  const serveFile = () =>
-    answeredWithFile(devServer, request, response, pathname);
-  if (fileFirst && (await serveFile())) return;
-  if (!visit && (await proxy(request, response, true))) return;
-  if (!fileFirst && (await serveFile())) return;
   if (handleAssetVersionMismatch(request, response)) return;
   if (redirectToHomepage(request, response, pathname)) return;
-  const { serverAuth: auth, rules } = await loadServerModules(devServer);
+  const { serverAuth: auth, rules } = modules;
   const { props, onceProps } = await pageProps(request, auth);
   if (redirectSignedOutPrivatePage(request, response, props, auth)) return;
   const page = createInertiaPage(request.url, props, undefined, onceProps);
@@ -509,6 +519,17 @@ if (
   });
 }
 
+/** Prints who owns which paths, once the server is up. */
+async function reportRouting() {
+  try {
+    const modules = await loadServerModules(await developmentServer());
+    for (const line of routingReport(modules.proxies, modules.routes.length))
+      console.log(line);
+  } catch (error) {
+    console.error("DMS server modules failed to load", error);
+  }
+}
+
 /**
  * Report the server ready. In development Vite would otherwise start with the
  * first request, so it is started here: "ready" then means the first page is
@@ -523,6 +544,7 @@ async function announceReady() {
   }
   const { address, port } = frontendHttpServer.address();
   await reportReady(address, port);
+  await reportRouting();
   // Only the production build produces the email bundle otherwise. Started
   // once the server answers, so it never delays the first page.
   if (process.env.DMS_DEV === "true") watchEmailBundle();
