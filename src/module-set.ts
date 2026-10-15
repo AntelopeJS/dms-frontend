@@ -16,7 +16,7 @@ const JSON_CONTENT_TYPE = "application/json";
 /** What a module set is compared on. */
 export type ModuleSetMember = Pick<
   ManifestModule,
-  "name" | "path" | "priority"
+  "name" | "path" | "priority" | "publicEndpoints" | "backendProxies"
 >;
 
 /**
@@ -44,16 +44,24 @@ export interface ModuleSetFollowOptions {
 
 /**
  * A stable identity of a module set: which modules, from which sources, in
- * which order. Option values are left out on purpose: they change with the
- * client origin on every dev run and are applied without a rebuild.
+ * which order, and the backend routes each one has the server let through
+ * (`publicEndpoints`, `backendProxies`), which the generated server reads
+ * once, when it starts. Option values are left out on purpose: they change
+ * with the client origin on every dev run and are applied without a rebuild.
  */
 export function moduleSetFingerprint(
   modules: readonly ModuleSetMember[],
 ): string {
   return JSON.stringify(
-    modules
-      .map((module) => [module.name, module.path ?? "", module.priority])
-      .sort(([left], [right]) => String(left).localeCompare(String(right))),
+    [...modules]
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((module) => [
+        module.name,
+        module.path ?? "",
+        module.priority,
+        module.publicEndpoints ?? [],
+        module.backendProxies ?? [],
+      ]),
   );
 }
 

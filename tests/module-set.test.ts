@@ -26,7 +26,12 @@ const langModule = {
   priority: 0,
 };
 
-function manifestOf(modules: Array<typeof dmsModule>) {
+type ServedModule = typeof dmsModule & {
+  publicEndpoints?: unknown[];
+  backendProxies?: unknown[];
+};
+
+function manifestOf(modules: ServedModule[]) {
   return {
     version: 1,
     archive: "/dms/frontend/modules",
@@ -41,7 +46,7 @@ function manifestOf(modules: Array<typeof dmsModule>) {
 describe("module set", () => {
   let server: Server;
   let backendUrl: string;
-  let served = [dmsModule];
+  let served: ServedModule[] = [dmsModule];
   let settling = false;
   const requests: RecordedRequest[] = [];
 
@@ -80,6 +85,56 @@ describe("module set", () => {
       moduleSetFingerprint([{ ...dmsModule, path: "/elsewhere" }]),
     );
   });
+
+  it("tells apart the endpoints and the backend proxies a module declares", () => {
+    const tracker = {
+      ...dmsModule,
+      publicEndpoints: [{ path: "/api/tracker/beacon" }],
+      backendProxies: [{ path: "/media/**", auth: "none" as const }],
+    };
+    assert.equal(
+      moduleSetFingerprint([tracker]),
+      moduleSetFingerprint([structuredClone(tracker)]),
+    );
+    assert.notEqual(
+      moduleSetFingerprint([tracker]),
+      moduleSetFingerprint([
+        { ...tracker, publicEndpoints: [{ path: "/api/tracker/*" }] },
+      ]),
+    );
+    assert.notEqual(
+      moduleSetFingerprint([tracker]),
+      moduleSetFingerprint([{ ...tracker, backendProxies: [] }]),
+    );
+    assert.notEqual(
+      moduleSetFingerprint([dmsModule]),
+      moduleSetFingerprint([tracker]),
+    );
+  });
+
+  it(
+    "calls back once a module declares other public endpoints",
+    { timeout: 2000 },
+    async () => {
+      served = [dmsModule];
+      const changed = new Promise<void>((resolve) => {
+        const stop = followModuleSet({
+          backendUrl,
+          fingerprint: moduleSetFingerprint([dmsModule]),
+          intervalMs: 20,
+          onChange: () => {
+            stop();
+            resolve();
+          },
+        });
+      });
+      served = [
+        { ...dmsModule, publicEndpoints: [{ path: "/api/tracker/beacon" }] },
+      ];
+      await changed;
+      served = [dmsModule];
+    },
+  );
 
   it("calls back once the backend serves another set", async () => {
     served = [dmsModule];
