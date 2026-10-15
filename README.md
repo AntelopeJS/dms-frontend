@@ -298,7 +298,7 @@ server.registerAuth({
 });
 ```
 
-`refreshSession` is called once when the backend answers `401` to a signed-in page visit, which is then retried with the session it wrote (`event.session.write`). `publicSession` gives the page props of a signed-in session; the server adds `session.updatedAt`, the stamp of its last write, which the browser compares to drop a page restored from its cache (see [Interface language](#interface-language)), and `event.session.view()` returns the same props to a route. `signInExempt` patterns are `/x`, `/x/*` (one segment below) or `/x/**` (the page and everything below). The highest-priority module that registers them provides all of them; another one is reported and ignored, and a part left out keeps the built-in one.
+`refreshSession` is called once when the backend answers `401` to a signed-in page visit, which is then retried with the session it wrote (`event.session.write`). `publicSession` gives the page props of a signed-in session; the server adds `session.updatedAt`, the stamp of its last write, which the browser compares to drop a page restored from its cache (see [Interface language](#interface-language)), and `event.session.view()` returns the same props to a route. `signInExempt` patterns are `/x`, `/x/*` (one segment below) or `/x/**` (the page and everything below); left out, they are `<signInPath>/**` and `/onboarding`, so a custom `signInPath` is exempt on its own. The highest-priority module that registers them provides all of them; another one is reported and ignored, and a part left out keeps the built-in one.
 
 #### Route rules
 
