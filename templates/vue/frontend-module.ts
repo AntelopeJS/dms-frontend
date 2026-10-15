@@ -1015,16 +1015,24 @@ export function defineDmsMiddleware(handler: DmsMiddleware): DmsMiddleware {
 export function defineDmsPageMeta(meta: Record<string, unknown>): void {
   const runtime = useDmsRuntime();
   Object.assign(runtime.route.meta, meta);
-  const navigation = runMiddleware(runtime, runtime.route).then(
-    async (result) => {
+  // A middleware that throws fails the page, as in Nuxt: the error page
+  // shows in its place with the error's status code, which a server render
+  // answers with. A redirect another navigation decided still wins.
+  const navigation = runMiddleware(runtime, runtime.route)
+    .then(async (result) => {
       if (result !== undefined && result !== false)
         await visit(runtime, result);
-    },
-  );
+    })
+    .catch((reason) => failPage(runtime, reason));
   runtime.pendingNavigation = runtime.pendingNavigation
     ? Promise.all([runtime.pendingNavigation, navigation]).then(() => undefined)
     : navigation;
   void runtime.pendingNavigation;
+}
+/** Shows the error page in place of the page, keeping the first failure. */
+function failPage(runtime: DmsFrontendRuntime, reason: unknown): void {
+  runtime.currentError.value ??=
+    reason instanceof Error ? reason : new Error(String(reason));
 }
 export function abortNavigation(): false {
   return false;
@@ -1769,10 +1777,7 @@ export async function installDmsPlugins(
       if (browserRuntime === runtime) browserRuntime = undefined;
     });
   }
-  app.config.errorHandler = (reason) => {
-    runtime.currentError.value ??=
-      reason instanceof Error ? reason : new Error(String(reason));
-  };
+  app.config.errorHandler = (reason) => failPage(runtime, reason);
   app.config.globalProperties.$dms = appContext;
   Reflect.set(app, "$dms", appContext);
   Reflect.set(app, "$i18n", i18n);

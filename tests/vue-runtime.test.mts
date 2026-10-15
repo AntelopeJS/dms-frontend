@@ -15,6 +15,7 @@ import {
 } from "vue";
 import {
   createDmsFrontendRuntime,
+  createError,
   defineDmsPageMeta,
   dmsPageSuspenseProps,
   hydrateDmsPageProps,
@@ -676,6 +677,24 @@ describe("Page meta", () => {
       hydrateDmsPageProps({ path: "/next", page: {} }, "/next"),
     );
     assert.deepEqual(runtime.route.meta, {});
+  });
+
+  it("shows the error a middleware throws in place of the page", async () => {
+    await registerGlobalMiddleware(async (to) => {
+      await Promise.resolve();
+      if (to.path === "/missing")
+        throw createError({ statusCode: 404, statusMessage: "Not here" });
+    });
+    const { app, runtime } = application("first");
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/missing", page: {} }, "/missing");
+      defineDmsPageMeta({ auth: true });
+    });
+    // Settles rather than rejects: nothing awaits it in the browser, and the
+    // server reads the failure from the error it set.
+    await runtime.pendingNavigation;
+    assert.equal(runtime.currentError.value?.statusCode, 404);
+    assert.equal(runtime.currentError.value?.message, "Not here");
   });
 
   it("drops a page's meta when an error page replaces it at the same path", async () => {
