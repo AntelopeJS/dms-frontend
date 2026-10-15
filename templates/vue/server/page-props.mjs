@@ -43,8 +43,24 @@ function holdsOnlyThisLayout(held, sharedKey) {
   );
 }
 
-function pagePath(pathname, withShared) {
-  const query = new URLSearchParams({ path: pathname });
+// The parameters of the page request itself, which a page query of the same
+// name cannot override.
+const PAGE_REQUEST_PARAMETERS = new Set(["path", SHARED_PROP]);
+
+/**
+ * The backend request of a page, with the query of the visit: a header
+ * button's availability reads it (`?workspace=` names the record a page acts
+ * on), so the layout is resolved for the query the browser shows and the
+ * browser does not ask it again. One value per name, the last, as the
+ * browser's own page layout request sends it.
+ */
+function pagePath(url, withShared) {
+  const query = new URLSearchParams({ path: url.pathname });
+  const pageQuery = new Map();
+  for (const [name, value] of url.searchParams) {
+    if (!PAGE_REQUEST_PARAMETERS.has(name)) pageQuery.set(name, value);
+  }
+  for (const [name, value] of pageQuery) query.set(name, value);
   if (!withShared) query.set(SHARED_PROP, "false");
   return `/dms/page?${query}`;
 }
@@ -64,13 +80,14 @@ function frontendOnlyPage(pathname, signInPath) {
 }
 
 async function loadPage(
-  pathname,
+  url,
   withShared,
   { fetchJson, isFrontendPage },
   signInPath,
 ) {
+  const { pathname } = url;
   try {
-    const { shared, ...page } = await fetchJson(pagePath(pathname, withShared));
+    const { shared, ...page } = await fetchJson(pagePath(url, withShared));
     return { page, shared };
   } catch (error) {
     if (!(error instanceof BackendResponseError) || error.status !== NOT_FOUND)
@@ -93,7 +110,8 @@ async function loadPage(
  * is not this session's.
  */
 export async function loadPageProps(request, backend, auth) {
-  const pathname = new URL(request.url, "http://frontend.local").pathname;
+  const url = new URL(request.url, "http://frontend.local");
+  const { pathname } = url;
   const sealed = readSession(request);
   const { user, session } = auth.view(sealed);
   const { partial, wants } = requestedProps(request);
@@ -110,12 +128,7 @@ export async function loadPageProps(request, backend, auth) {
   if (wants("session") && (session || partial)) props.session = session ?? null;
   let shared;
   if (wants("page")) {
-    const loaded = await loadPage(
-      pathname,
-      withShared,
-      backend,
-      auth.signInPath,
-    );
+    const loaded = await loadPage(url, withShared, backend, auth.signInPath);
     props.page = loaded.page;
     shared = loaded.shared;
   } else if (withShared) {

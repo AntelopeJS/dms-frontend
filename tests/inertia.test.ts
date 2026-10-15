@@ -1077,7 +1077,7 @@ describe("Site layout as an Inertia once prop", () => {
         "x-inertia-except-once-props": held,
       });
       assert.deepEqual(page.backendCalls, [
-        "/dms/page?path=%2Farticles&shared=false",
+        "/dms/page?path=%2Farticles&tab=b&shared=false",
       ]);
       assert.deepEqual(Object.keys(page.page.props).sort(), ["errors", "page"]);
 
@@ -1094,7 +1094,9 @@ describe("Site layout as an Inertia once prop", () => {
 
       // A browser without this session's layout gets it with any reload.
       const stale = await partial("page");
-      assert.deepEqual(stale.backendCalls, ["/dms/page?path=%2Farticles"]);
+      assert.deepEqual(stale.backendCalls, [
+        "/dms/page?path=%2Farticles&tab=b",
+      ]);
       assert.deepEqual(stale.page.props.shared, SHARED);
 
       const excepted = await visit("/articles", {
@@ -1115,6 +1117,29 @@ describe("Site layout as an Inertia once prop", () => {
         "/dms/page?path=%2Farticles&shared=false",
       ]);
       assert.equal(typeof other.page.props.path, "string");
+    } finally {
+      close();
+    }
+  });
+
+  it("asks the backend for the page with the query of the visit", async () => {
+    const { sharedOnceKey } = await pagePropsModule;
+    const { visit, close } = await frontendWithBackend();
+    try {
+      // A header button's availability reads the page query: the layout is
+      // asked for the query the browser shows, one value per name, the last.
+      const first = await visit(
+        "/articles?workspace=web&locale=fr&locale=de&path=%2Fother",
+      );
+      assert.deepEqual(first.backendCalls, [
+        "/dms/page?path=%2Farticles&workspace=web&locale=de",
+      ]);
+      const next = await visit("/articles?workspace=web&shared=true", {
+        "x-inertia-except-once-props": sharedOnceKey(undefined),
+      });
+      assert.deepEqual(next.backendCalls, [
+        "/dms/page?path=%2Farticles&workspace=web&shared=false",
+      ]);
     } finally {
       close();
     }
