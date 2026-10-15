@@ -5,6 +5,14 @@
 import { compilePathPattern } from "./path-patterns.mjs";
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
+/** Whether a header value holds a control character other than a tab: a CR
+ * or an LF would split the answer. */
+function hasControlCharacter(value) {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return (code < 0x20 && code !== 0x09) || code === 0x7f;
+  });
+}
 /** Set by the server itself: a rule's `cache` decides `cache-control`. */
 const RESERVED_HEADERS = new Set([
   "cache-control",
@@ -26,7 +34,11 @@ function headersRejection(headers) {
     return "headers is not an object";
   for (const [name, value] of Object.entries(headers)) {
     const lower = name.toLowerCase();
-    if (!HEADER_NAME.test(lower) || typeof value !== "string")
+    if (
+      !HEADER_NAME.test(lower) ||
+      typeof value !== "string" ||
+      hasControlCharacter(value)
+    )
       return `"${name}" is not a header with a text value`;
     if (RESERVED_HEADERS.has(lower))
       return `the server sets "${name}" itself (use cache for cache-control)`;

@@ -85,7 +85,10 @@ export function environmentBackendProxies(
   try {
     const parsed = JSON.parse(declaration);
     if (Array.isArray(parsed))
-      return parsed.map((entry) => ({ ...entry, module: "DMS_BACKEND_PROXIES" }));
+      return parsed.map((entry) => ({
+        ...entry,
+        module: "DMS_BACKEND_PROXIES",
+      }));
   } catch {
     // Reported below.
   }

@@ -127,6 +127,29 @@ describe("Route rule declarations", () => {
     assert.equal(warnings.length, 6);
     assert.match(warnings[2], /the server sets "cache-control" itself/);
   });
+
+  it("ignore a header value that would split the answer", () => {
+    const { rules, warnings } = resolved([
+      {
+        id: "site",
+        setup: (server) =>
+          server.registerRouteRules({
+            "/a": { headers: { "x-a": "ok\r\nset-cookie: stolen=1" } },
+            "/b": { headers: { "x-b": "line\nbreak" } },
+            "/c": { headers: { "x-c": "nul\u0000" } },
+            "/d": { headers: { "x-d": "tab\tkept" } },
+          }),
+      },
+    ]);
+    assert.deepEqual(
+      rules.map(
+        (rule: { pattern: { pattern: string } }) => rule.pattern.pattern,
+      ),
+      ["/d"],
+    );
+    assert.equal(warnings.length, 3);
+    assert.match(warnings[0], /"x-a" is not a header with a text value/);
+  });
 });
 
 describe("Route rule headers", () => {
