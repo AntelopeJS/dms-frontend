@@ -1,6 +1,5 @@
 import * as assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -11,11 +10,12 @@ import {
   writeDmsMainCss,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 describe("Vite frontend generation", () => {
   it("discovers Vue entries and the stable SDK alias", () => {
-    const source = mkdtempSync(join(tmpdir(), "dms-vue-module-"));
-    const workspace = mkdtempSync(join(tmpdir(), "dms-vue-workspace-"));
+    const source = temporaryDirectory("dms-vue-module-");
+    const workspace = temporaryDirectory("dms-vue-workspace-");
     writeFileSync(join(source, "dms.frontend.ts"), "export default {};");
     const registry = createFrontendModuleRegistry(workspace, [
       { path: source, packageName: "@dms/vue", priority: 7 },
@@ -37,8 +37,8 @@ describe("Vite frontend generation", () => {
   });
 
   it("writes the endpoints the modules declared for /auth/establish", () => {
-    const source = mkdtempSync(join(tmpdir(), "dms-establish-module-"));
-    const workspace = mkdtempSync(join(tmpdir(), "dms-establish-workspace-"));
+    const source = temporaryDirectory("dms-establish-module-");
+    const workspace = temporaryDirectory("dms-establish-workspace-");
     writeFrontendModuleRegistry(workspace, [
       {
         path: source,
@@ -66,8 +66,8 @@ describe("Vite frontend generation", () => {
   });
 
   it("writes an empty declaration for a manifest that carries none", () => {
-    const source = mkdtempSync(join(tmpdir(), "dms-establish-none-module-"));
-    const workspace = mkdtempSync(join(tmpdir(), "dms-establish-none-"));
+    const source = temporaryDirectory("dms-establish-none-module-");
+    const workspace = temporaryDirectory("dms-establish-none-");
     writeFrontendModuleRegistry(workspace, [
       { path: source, packageName: "@dms/legacy", priority: 0 },
     ]);
@@ -78,8 +78,8 @@ describe("Vite frontend generation", () => {
   });
 
   it("writes the public endpoints the modules declare for the server", () => {
-    const source = mkdtempSync(join(tmpdir(), "dms-public-module-"));
-    const workspace = mkdtempSync(join(tmpdir(), "dms-public-workspace-"));
+    const source = temporaryDirectory("dms-public-module-");
+    const workspace = temporaryDirectory("dms-public-workspace-");
     const webhook = {
       path: "/api/mailing/events/*/*",
       headers: ["x-mailing-webhook-secret"],
@@ -126,8 +126,8 @@ describe("Vite frontend generation", () => {
     assert.match(vuePackage, /@inertiajs\/vue3/);
   });
   it("preserves deterministic manifest priority in the module registry", () => {
-    const first = mkdtempSync(join(tmpdir(), "dms-module-"));
-    const second = mkdtempSync(join(tmpdir(), "dms-module-"));
+    const first = temporaryDirectory("dms-module-");
+    const second = temporaryDirectory("dms-module-");
     mkdirSync(first, { recursive: true });
     writeFileSync(join(first, "dms.frontend.ts"), "export default {};");
     const registry = createFrontendModuleRegistry("/workspace", [
@@ -157,9 +157,9 @@ describe("Vite frontend generation", () => {
   });
 
   it("gives higher-priority modules ownership of generated assets and aliases", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "dms-workspace-"));
-    const highSource = mkdtempSync(join(tmpdir(), "dms-module-"));
-    const lowSource = mkdtempSync(join(tmpdir(), "dms-module-"));
+    const workspace = temporaryDirectory("dms-workspace-");
+    const highSource = temporaryDirectory("dms-module-");
+    const lowSource = temporaryDirectory("dms-module-");
     const modulesRoot = join(workspace, "frontend-modules");
     const highRoot = join(modulesRoot, "dms__high", "layers", "shared");
     const lowRoot = join(modulesRoot, "dms__low", "layers", "shared");
@@ -196,7 +196,7 @@ describe("Vite frontend generation", () => {
   });
 
   it("keeps dev-rewritten declaration files, build output and translation catalogs out of Tailwind's source scan", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "dms-gitignore-workspace-"));
+    const workspace = temporaryDirectory("dms-gitignore-workspace-");
     copyStaticTemplates(workspace);
     const ignored = readFileSync(join(workspace, ".gitignore"), "utf8")
       .split("\n")
@@ -236,7 +236,7 @@ describe("Windows path separators in generated output", () => {
   });
 
   it("writes every Tailwind @source as a POSIX glob", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "dms-main-css-"));
+    const workspace = temporaryDirectory("dms-main-css-");
     writeDmsMainCss(workspace, [
       { path: "/src/ai", packageName: "@dms/ai", priority: 1 },
       { path: "/src/saas", packageName: "@dms/saas", priority: 0 },
