@@ -72,13 +72,14 @@ function symbolMarkup(id: string, viewBox: string, body: string): string {
 /** Adds a symbol to the page's sprite, which it creates the first time. */
 function addSymbolToDocument(id: string, viewBox: string, body: string): void {
   if (document.getElementById(id)) return;
-  let sprite = document.getElementById(ICON_SPRITE_ID);
+  let sprite: Element | null = document.getElementById(ICON_SPRITE_ID);
   if (!sprite) {
-    sprite = document.createElementNS(SVG_NAMESPACE, "svg");
-    sprite.id = ICON_SPRITE_ID;
-    sprite.setAttribute("aria-hidden", "true");
-    sprite.setAttribute("style", "display:none");
-    document.body.append(sprite);
+    const created = document.createElementNS(SVG_NAMESPACE, "svg");
+    created.id = ICON_SPRITE_ID;
+    created.setAttribute("aria-hidden", "true");
+    created.setAttribute("style", "display:none");
+    document.body.append(created);
+    sprite = created;
   }
   sprite.insertAdjacentHTML("beforeend", symbolMarkup(id, viewBox, body));
 }

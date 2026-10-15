@@ -351,18 +351,22 @@ describe("Vue request runtime", () => {
     }
   });
 
-  it("refreshes stable keyed data when its consumer returns after navigation", async () => {
+  it("shows keyed data at once when its consumer returns, and reads it again but on hydration", async () => {
     const runtime = createDmsFrontendRuntime(undefined, { table: "Live" });
     const visible = ref(true);
     let backendValue = "Live";
     let requests = 0;
+    const shown: string[] = [];
     const Consumer = defineComponent({
       setup() {
-        void useDmsAsyncData("table", async () => {
+        const { data } = useDmsAsyncData("table", async () => {
           requests++;
           return backendValue;
         });
-        return () => h("p");
+        return () => {
+          shown.push(String(data.value));
+          return h("p");
+        };
       },
     });
     const app = mountRuntime(runtime, {
@@ -375,18 +379,28 @@ describe("Vue request runtime", () => {
       await nextTick();
       visible.value = true;
       await nextTick();
-      assert.equal(requests, 0, "A local remount must retain the keyed result");
+      assert.equal(requests, 0, "A remount while the page hydrates neither");
+      app.runWithContext(() => dmsPageSuspenseProps()).onResolve();
+      await nextTick();
       visible.value = false;
       await nextTick();
       backendValue = "Draft";
       app.runWithContext(() =>
         hydrateDmsPageProps({ path: "/editor", page: {} }),
       );
+      shown.length = 0;
+      visible.value = true;
+      await nextTick();
+      assert.equal(shown[0], "Live", "the cached data shows at once");
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(requests, 1, "and is read again in the background");
+      assert.equal(runtime.asyncData.get("table")?.data.value, "Draft");
+      visible.value = false;
+      await nextTick();
       visible.value = true;
       await nextTick();
       await new Promise((resolve) => setImmediate(resolve));
-      assert.equal(requests, 1);
-      assert.equal(runtime.asyncData.get("table")?.data.value, "Draft");
+      assert.equal(requests, 2, "every mount reads it again");
     } finally {
       app.unmount();
     }

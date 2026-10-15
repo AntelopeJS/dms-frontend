@@ -456,33 +456,41 @@ describe("Async data in the browser", () => {
     app.unmount();
   });
 
-  it("drops, at the next navigation, the data no component shows any more", async () => {
+  it("keeps, past a navigation, the most recently shown data no component shows any more", async () => {
     const runtime = createDmsFrontendRuntime();
-    const visible = ref(true);
-    const Consumer = (key: string) =>
-      defineComponent({
-        setup() {
-          useDmsAsyncData(key, async () => key);
-          return () => h("p");
-        },
-      });
-    const Kept = Consumer("kept");
-    const Dropped = Consumer("dropped");
-    const app = mountRuntime(runtime, {
-      render: () => h("div", [h(Kept), visible.value ? h(Dropped) : null]),
+    const shownKeys = ref<string[]>([]);
+    const Consumer = defineComponent({
+      props: { name: { type: String, required: true } },
+      setup(props) {
+        useDmsAsyncData(props.name, async () => props.name);
+        return () => h("p");
+      },
     });
-    await settle();
-    visible.value = false;
+    const app = mountRuntime(runtime, {
+      render: () =>
+        h(
+          "div",
+          shownKeys.value.map((name) => h(Consumer, { name, key: name })),
+        ),
+    });
+    // 60 keys shown one after the other, then a page showing "kept".
+    for (let index = 0; index < 60; index++) {
+      shownKeys.value = [`key-${index}`];
+      await nextTick();
+    }
+    shownKeys.value = ["kept"];
     await nextTick();
-    assert.ok(
-      runtime.asyncData.has("dropped"),
-      "the page still on screen may show it again",
-    );
 
     app.runWithContext(() => hydrateDmsPageProps({ path: "/next", page: {} }));
 
-    assert.equal(runtime.asyncData.has("dropped"), false);
     assert.ok(runtime.asyncData.has("kept"));
+    assert.ok(
+      runtime.asyncData.has("key-59"),
+      "a return to it shows it at once",
+    );
+    assert.ok(runtime.asyncData.has("key-10"));
+    assert.equal(runtime.asyncData.has("key-9"), false, "the oldest go");
+    assert.equal(runtime.asyncData.size, 51);
     app.unmount();
   });
 
@@ -833,9 +841,18 @@ describe("useDmsFetch", () => {
     );
     assert.deepEqual(
       [...runtime.asyncData.values()].map((result) => result.data.value),
-      ["order 2"],
-      "the first URL's data went with the key nobody shows",
+      ["order 1", "order 2"],
+      "the first URL's data stays for a return to it",
     );
+    // Back to the first URL: its data at once, read again in the background.
+    id.value = 1;
+    await nextTick();
+    assert.equal(entry!.data.value, "order 1");
+    assert.equal(entry!.status.value, "pending");
+    assert.equal(signals.length, 3);
+    answers.get("/api/orders/1")!.resolve("order 1, again");
+    await settle();
+    assert.equal(entry!.data.value, "order 1, again");
     app.unmount();
   });
 
@@ -990,8 +1007,10 @@ describe("useDmsFetch", () => {
     assert.equal(entry().data.value, "order 1", "no flash while it loads");
     id.value = 1;
     await nextTick();
+    // Back on a key loaded before: its data at once, read again meanwhile.
     assert.equal(entry().data.value, "order 1");
-    assert.equal(entry().status.value, "success");
+    assert.equal(entry().placeholder.value, false);
+    assert.equal(entry().status.value, "pending");
     const second = [...runtime.asyncData.values()][1];
     assert.equal(second?.status.value, "idle", "the aborted key holds nothing");
     assert.equal(second?.data.value, null);
@@ -1000,9 +1019,11 @@ describe("useDmsFetch", () => {
     await nextTick();
     assert.equal(entry().status.value, "pending");
     assert.equal(entry().data.value, "order 1", "no flash while it loads");
+    assert.equal(entry().placeholder.value, true, "and it says so");
     assert.deepEqual(requests, [
       "/api/orders/1",
       "/api/orders/2",
+      "/api/orders/1",
       "/api/orders/2",
     ]);
     answers.get("/api/orders/2")!.resolve("order 2");

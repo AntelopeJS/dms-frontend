@@ -515,11 +515,61 @@ pair can be turned into a login by a request from the browser. An undeclared
 endpoint is answered `403` and never called. The route is `POST`-only and
 same-origin, like every other auth action.
 
+### Routing and the backend proxy
+
+The frontend server answers each path with one owner, whoever asks and
+whatever the method, in this order:
+
+1. **The renderer**: its icon endpoint (`/api/_dms/icons`), Vite's URLs, the
+   built assets, and any file it has (a development source, a built asset).
+2. **The module routes** of the modules' `dms.server.ts`, for every method: a
+   method the module does not declare on its path answers `405`, and a `HEAD`
+   reaches the `GET` route.
+3. **The backend proxies** the modules declare. The renderer proxies no path on
+   its own: the DMS declares `/api/**` and `/dms/**` in its `dms.server.ts`.
+4. **The pages**, for everything else; a method other than `GET` and `HEAD`
+   there is a `404`. A backend route outside every declared prefix (such as a
+   page's `<page>/pagelayout`) is never reached from the browser.
+
+A frontend module declares a prefix in its `dms.server.ts`:
+
+```ts
+server.registerBackendProxy("/api/**"); // auth: "session", the default
+server.registerBackendProxy("/media/**", { auth: "none" });
+```
+
+A backend module declares one in the manifest, next to its `publicEndpoints`:
+
+```ts
+await AddFrontendModule({
+  // …
+  backendProxies: [{ path: "/webhooks/acme/**", auth: "none" }],
+});
+```
+
+- `auth: "session"` adds the session's access token to the request
+  (`Authorization: Bearer`), server-side: the token never reaches the browser,
+  which only holds the sealed, `HttpOnly` session cookie. A request with a
+  state-changing method must carry the frontend's own `Origin`, except a
+  public endpoint (below).
+- `auth: "none"` never sends the session, so it needs no `Origin`: for media,
+  or a webhook that authenticates its caller itself.
+
+A pattern is `/x`, `/x/*` (one segment below) or `/x/**` (the path and
+everything below), its first segment literal, outside the renderer's own paths.
+Of two patterns covering a path, the more specific wins; for one pattern, the
+highest-priority frontend module's, then the manifest's, with a warning.
+`DMS_BACKEND_PROXIES` adds entries of the manifest's shape, as a JSON array,
+for an operator. The server lists the backend proxies, their owner and their
+auth when it starts, and the development server names the owner of each answer
+in an `x-dms-route-owner` header (`renderer`, `module:<id>`,
+`backend:<pattern>`, `page` or `not-found`).
+
 ### Public endpoints
 
-Every state-changing request the server proxies to `/api/` must carry an
-`Origin` matching the frontend's own, and goes out with the signed-in user's
-session. A route meant for callers outside the dashboard — a mail provider's
+Every state-changing request the server proxies with the session must carry
+an `Origin` matching the frontend's own, and goes out with the signed-in
+user's session. A route meant for callers outside the dashboard — a mail provider's
 delivery webhook, a payment provider's callback — fails both ways: the caller
 sends no `Origin`, and its secret header is not among the few the proxy
 relays.
@@ -660,7 +710,9 @@ signing out, drop the prefetched pages.
 ### Data loading
 
 `useDmsAsyncData(key, handler, options)` loads data once for every component
-that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
+that shows `key`, with the semantics of Nuxt 4's `useAsyncData` and the
+deviations listed below (calls of one key joined, the data of the last success
+kept after a failure, the first `lazy` run started after the caller's turn):
 
 - **A server render waits for it.** A component's data is awaited before the
   component renders, whether or not its setup awaits the call, and the browser
@@ -705,8 +757,42 @@ that shows `key`, with the semantics of Nuxt 4's `useAsyncData`:
   [devalue](https://github.com/sveltejs/devalue)'s format, which keeps a
   `Set`, a `Map` or a `Date`, escaped like Inertia's page object. A value it
   cannot write, such as a class instance, is left out and logged.
-- Data no component shows any more is dropped at the next navigation, and
-  `deep: false` makes `data` a shallow ref.
+- **Stale while revalidate.** In the browser, data loaded before shows at
+  once, and is read again in the background on each mount of a component
+  showing it and on each return of a reactive key to it; awaiting the call
+  does not wait for that read. The first mount after a server render does not
+  read again: its data is the server's, just read. Of the data no component
+  shows any more, the browser keeps the 50 most recently shown across
+  navigations, so a return to a page shows its data at once.
+- **`error` stays until the next answer.** A run in flight keeps the last
+  failure; a success clears it, a failure replaces it, and a failed refresh
+  keeps the data of the last success on screen.
+- **`key`** is the key the data is loaded under (a reactive key's current
+  one). `transform(value, { key })` receives it, and `useDmsFetch`'s
+  `transform(value, { key, url })` the URL the response answers too, even when
+  a reactive URL changed since. While a reactive key shows the previous key's
+  data, `placeholder` is `true`.
+- **`data` is a shallow ref** (`deep: false`, as in Nuxt 4): replace the value
+  to update it, or pass `deep: true` to track changes inside it.
+- **`immediate: false`** waits for `execute()` (a dialog, a drawer), and
+  **`refreshInterval: ms`** reads again on an interval in the browser, while a
+  component shows the data and the page is visible: every read of a module can
+  go through `useDmsAsyncData` or `useDmsFetch`.
+- **`refreshDmsPageData()`** reads again the data the components on screen
+  show, after a save or on a realtime event; a call opts out with
+  `refreshOnPageRefresh: false`, and data waiting for `execute()` is left
+  alone. `refreshDmsData(keys?)` reads given keys again.
+- **`setDmsAsyncDataScope(scope)`** puts the keys in a scope, such as a digest
+  of the account and the workspace: the same key in another scope is another
+  entry, and moving to another scope drops the data of every key. Set it on
+  both sides before the page renders, with the same value: the scope is
+  written in the page with each key.
+- **A call without a key** (`useDmsAsyncData(handler)`, or `useDmsFetch` with
+  a body it cannot key, such as a `FormData`) cannot be transferred: the
+  server leaves it to the browser, as `server: false` does, so the page
+  hydrates with what it shows. A development render warns about it, and about
+  a backend read made outside any handler on the server (an immediate
+  watcher, a setup's own `await $fetch`), which the browser makes again.
 - **`useDmsFetch(url, options)`** is `useDmsAsyncData` around a request,
   keyed on its method, base URL, URL, query and body (not its headers): the
   callers of one request share it, and a server render transfers it. The URL,

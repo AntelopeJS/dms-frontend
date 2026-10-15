@@ -74,6 +74,8 @@ const runtimeStorage = new AsyncLocalStorage<{
   runtime?: DmsFrontendRuntime;
 }>();
 setDmsServerRuntimeResolver(() => runtimeStorage.getStore()?.runtime);
+/** Set while an async data handler runs: its requests are transferred. */
+const asyncDataHandlerStorage = new AsyncLocalStorage<boolean>();
 
 /**
  * The payload in devalue's format, which keeps what JSON cannot (a Set, a
@@ -140,6 +142,10 @@ export async function renderDmsPage(
     true,
     requestCookies,
   );
+  runtime.runAsyncDataHandler = (run) => asyncDataHandlerStorage.run(true, run);
+  runtime.inAsyncDataHandler = () =>
+    asyncDataHandlerStorage.getStore() === true;
+  runtime.devWarnings = import.meta.env.DEV;
   // The page Inertia's app sets as it starts, held by the request's runtime.
   runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
   const store = { runtime };
