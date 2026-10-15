@@ -4,7 +4,6 @@
 // allows.
 
 import { createHash } from "node:crypto";
-import { publicSession } from "./auth/routes.mjs";
 import { readSession } from "./auth/session.mjs";
 import { BackendResponseError } from "./backend-response.mjs";
 import { heldOnceProps, requestedProps } from "./inertia.mjs";
@@ -39,20 +38,25 @@ function pagePath(pathname, withShared) {
 }
 
 /** A page only the frontend has: a custom page, with no backend data. */
-function frontendOnlyPage(pathname) {
+function frontendOnlyPage(pathname, signInPath) {
   return {
     componentName: pathname,
     isFrontendOnly: true,
     route: {
       fullId: pathname.slice(1).replaceAll("/", "."),
       fullSlug: pathname,
-      hasAccess: pathname.startsWith("/auth/"),
+      hasAccess: pathname.startsWith(`${signInPath}/`),
     },
     layout: { layout: { componentName: "DefaultLayout" } },
   };
 }
 
-async function loadPage(pathname, withShared, { fetchJson, isFrontendPage }) {
+async function loadPage(
+  pathname,
+  withShared,
+  { fetchJson, isFrontendPage },
+  signInPath,
+) {
   try {
     const { shared, ...page } = await fetchJson(pagePath(pathname, withShared));
     return { page, shared };
@@ -60,7 +64,10 @@ async function loadPage(pathname, withShared, { fetchJson, isFrontendPage }) {
     if (!(error instanceof BackendResponseError) || error.status !== NOT_FOUND)
       throw error;
     if (!(await isFrontendPage(pathname))) throw error;
-    return { page: frontendOnlyPage(pathname), shared: undefined };
+    return {
+      page: frontendOnlyPage(pathname, signInPath),
+      shared: undefined,
+    };
   }
 }
 
@@ -73,9 +80,9 @@ async function loadPage(pathname, withShared, { fetchJson, isFrontendPage }) {
  * reload gets the props it names, and the layout too when the browser's copy
  * is not this session's.
  */
-export async function loadPageProps(request, backend) {
+export async function loadPageProps(request, backend, auth) {
   const pathname = new URL(request.url, "http://frontend.local").pathname;
-  const { user, session } = publicSession(readSession(request));
+  const { user, session } = auth.view(readSession(request));
   const { partial, wants } = requestedProps(request);
   const sharedKey = sharedOnceKey(session);
   const holdsShared = heldOnceProps(request).has(sharedKey);
@@ -88,7 +95,12 @@ export async function loadPageProps(request, backend) {
   if (wants("session") && (session || partial)) props.session = session ?? null;
   let shared;
   if (wants("page")) {
-    const loaded = await loadPage(pathname, withShared, backend);
+    const loaded = await loadPage(
+      pathname,
+      withShared,
+      backend,
+      auth.signInPath,
+    );
     props.page = loaded.page;
     shared = loaded.shared;
   } else if (withShared) {

@@ -44,8 +44,20 @@ export function relayedHeaders(request, names) {
   };
 }
 
+/**
+ * Calls the backend for a server route, JSON in and out.
+ *
+ * `options.headers` adds request headers; the client's address and the
+ * relayed client headers are set after them, so no caller replaces those.
+ */
 export async function backend(path, request, options = {}) {
-  const headers = relayedHeaders(request, FORWARDED_HEADERS);
+  const headers = Object.fromEntries(
+    Object.entries(options.headers ?? {}).map(([name, value]) => [
+      name.toLowerCase(),
+      String(value),
+    ]),
+  );
+  Object.assign(headers, relayedHeaders(request, FORWARDED_HEADERS));
   headers["x-forwarded-for"] = clientIp(request);
   if (options.token) headers.authorization = `Bearer ${options.token}`;
   if (options.relay)

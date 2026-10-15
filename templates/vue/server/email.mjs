@@ -78,6 +78,19 @@ async function loadEmailRenderer() {
   return import(url.href);
 }
 
+/**
+ * Renders an email template of the application's email bundle, waiting for a
+ * development build in progress.
+ *
+ * @param template The template's name
+ * @param props The template's props
+ * @param options `locale`, the language to render in
+ */
+export async function renderEmailTemplate(template, props, options = {}) {
+  const { renderEmail } = await loadEmailRenderer();
+  return renderEmail(template, props, options);
+}
+
 /** Renders an email template for an authenticated backend request. */
 export async function handleEmailRender(request, response) {
   if (!validRenderToken(request.headers["x-dms-service-token"])) {
@@ -94,10 +107,13 @@ export async function handleEmailRender(request, response) {
     return response.end(JSON.stringify({ message: "Invalid request body" }));
   }
   try {
-    const { renderEmail } = await loadEmailRenderer();
-    const html = await renderEmail(input.templateName, input.props ?? {}, {
-      locale: request.headers["x-content-language"],
-    });
+    const html = await renderEmailTemplate(
+      input.templateName,
+      input.props ?? {},
+      {
+        locale: request.headers["x-content-language"],
+      },
+    );
     response.writeHead(200, { "content-type": JSON_TYPE });
     response.end(JSON.stringify({ html }));
   } catch {

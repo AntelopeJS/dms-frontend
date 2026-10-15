@@ -9,6 +9,7 @@ import {
   normalizePath,
   type Plugin,
 } from "vite";
+import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { autoImportDirectories } from "./frontend-build-loader";
 import { frontendBuilds } from "./frontend-builds.generated";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
@@ -140,6 +141,9 @@ const isNuxtUiFile = (id: string) =>
 export default defineConfig({
   logLevel,
   plugins: [
+    // Fails a client build that imports a dms.server.ts or a file under a
+    // module's server/ directory, however it is imported.
+    rejectServerSourcesInClient(moduleRoots),
     {
       name: "dms-ui-inertia-link",
       enforce: "pre",
@@ -226,6 +230,9 @@ export default defineConfig({
     dedupe: ["vue", "reka-ui", "@nuxt/ui", "@vueuse/core", "@iconify/vue"],
     alias: {
       "#dms/frontend-module": resolve(__dirname, "frontend-module.ts"),
+      // For the server's development loader only: no browser module imports
+      // a `dms.server.ts`.
+      "#dms/server": resolve(__dirname, "server-module.ts"),
       "#build/nuxt-icon-client-bundle": "virtual:nuxt-ui-icons",
       "#shortcuts-aggregated": resolve(
         __dirname,

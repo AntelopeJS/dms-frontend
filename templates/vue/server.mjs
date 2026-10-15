@@ -12,10 +12,10 @@ import {
 } from "./server/auth/backend.mjs";
 import { proxyAccess, refuseCrossOrigin } from "./server/public-endpoints.mjs";
 import {
-  handleAuth,
-  publicSession,
-  refreshSession,
-} from "./server/auth/routes.mjs";
+  builtInRoute,
+  isBuiltInAuthRoute,
+  reportBuiltInFallbacks,
+} from "./server/built-in-routes.mjs";
 import { readSession } from "./server/auth/session.mjs";
 import {
   BackendResponseError,
@@ -37,7 +37,13 @@ import {
   writeViteError,
 } from "./server/vite-errors.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
-import { handleEmailRender, watchEmailBundle } from "./server/email.mjs";
+import { watchEmailBundle } from "./server/email.mjs";
+import { isRendererFilePath } from "./server/module-routes.mjs";
+import { routeRuleFor, ruleHeaders } from "./server/route-rules.mjs";
+import {
+  handleModuleRoute,
+  loadServerModules,
+} from "./server/module-server.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { loadPageProps } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
@@ -45,7 +51,6 @@ import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
 import { writeProxyHeaders } from "./server/proxy-headers.mjs";
 import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
-import { handleTester } from "./server/tester.mjs";
 import {
   createInertiaPage,
   htmlHeaders,
@@ -67,25 +72,7 @@ const MIME_TYPES = {
 };
 const PROXY_PREFIXES = ["/api/", "/dms/"];
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const AUTH_SERVER_ROUTES = [
-  ["GET", /^\/api\/_auth\/session\/?$/],
-  ["POST", /^\/api\/_auth\/session\/?$/],
-  ["DELETE", /^\/api\/_auth\/session\/?$/],
-  [
-    "POST",
-    /^\/auth\/(?:login|signup|verify-2fa|establish|request-2fa-email|switch-account|switch-tenant|validate-account|remove-account)\/?$/,
-  ],
-  ["POST", /^\/auth\/oauth\/handoff\/?$/],
-  ["GET", /^\/auth\/oauth\/[^/]+\/(?:start|callback)\/?$/],
-];
-const HTML_RENDER_ROUTE = "/api/html/render";
-const TESTER_ROUTE = /^\/api\/_dms\/tester\/?$/;
-const LOCAL_ROUTES = [
-  [(pathname) => TESTER_ROUTE.test(pathname), handleTester],
-  [icons.isIconRequest, icons.handleIcons],
-];
-const AUTH_PAGE = "/auth";
-const ONBOARDING_PAGE = "/onboarding";
+const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
 const BUILT_SSR_RENDERER_PATH = join(PROJECT_ROOT, "dist/ssr/ssr-renderer.js");
 // The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
@@ -163,14 +150,23 @@ async function backendJson(path, request) {
   return response.json();
 }
 
-function pageProps(request) {
-  return loadPageProps(request, {
-    fetchJson: (path) => backendJson(path, request),
-    isFrontendPage: async (pathname) =>
-      (await ssrRenderer(await developmentServer())).isDmsFrontendPage(
-        pathname,
-      ),
-  });
+/** The session logic of the module that owns sign-in, or the built-in one. */
+async function currentAuth() {
+  return (await loadServerModules(await developmentServer())).serverAuth;
+}
+
+function pageProps(request, auth) {
+  return loadPageProps(
+    request,
+    {
+      fetchJson: (path) => backendJson(path, request),
+      isFrontendPage: async (pathname) =>
+        (await ssrRenderer(await developmentServer())).isDmsFrontendPage(
+          pathname,
+        ),
+    },
+    auth,
+  );
 }
 
 function redirectToHomepage(request, response, pathname) {
@@ -179,7 +175,7 @@ function redirectToHomepage(request, response, pathname) {
   return true;
 }
 
-function redirectSignedOutPrivatePage(request, response, props) {
+function redirectSignedOutPrivatePage(request, response, props, auth) {
   const route = props.page?.route;
   if (
     route?.publicAccess === true ||
@@ -187,21 +183,14 @@ function redirectSignedOutPrivatePage(request, response, props) {
     readSession(request)
   )
     return false;
-  const location = `${AUTH_PAGE}?redirect=${encodeURIComponent(request.url)}`;
-  redirectFrontendVisit(request, response, location);
+  redirectFrontendVisit(request, response, auth.signInLocation(request.url));
   return true;
 }
 
 export function requestOwnership(method, pathname) {
   if (PROXY_PREFIXES.some((prefix) => pathname.startsWith(prefix)))
     return "server";
-  if (
-    AUTH_SERVER_ROUTES.some(
-      ([routeMethod, pattern]) =>
-        routeMethod === method && pattern.test(pathname),
-    )
-  )
-    return "server";
+  if (isBuiltInAuthRoute(method, pathname)) return "server";
   return method === "GET" ? "frontend" : "server";
 }
 
@@ -276,11 +265,37 @@ async function ssrRenderer(devServer) {
   return renderer;
 }
 
+function clientRenderedShell(page) {
+  return {
+    body: inertiaAppHtml(page),
+    head: { headTags: "", htmlAttrs: "", bodyAttrs: "" },
+    overlays: "",
+  };
+}
+
+async function serverRendered(page, serverFetch, requestCookies, devServer) {
+  try {
+    const renderer = await ssrRenderer(devServer);
+    return await renderer.renderDmsPage(page, serverFetch, requestCookies);
+  } catch (error) {
+    console.error(
+      "DMS SSR render failed; falling back to client rendering",
+      error,
+    );
+    return { ...clientRenderedShell(page), error: { statusCode: 500 } };
+  }
+}
+
+/**
+ * Renders a page document. With `{ ssr: false }` (a route rule), the client
+ * renders the page from the shell instead.
+ */
 export async function renderHtml(
   page,
   requestUrl,
   serverFetch,
   requestCookies,
+  options = {},
 ) {
   const devServer = await developmentServer();
   const rawTemplate = devServer
@@ -289,22 +304,10 @@ export async function renderHtml(
   const template = devServer
     ? await devServer.transformIndexHtml(requestUrl, rawTemplate)
     : rawTemplate;
-  let rendered;
-  try {
-    const renderer = await ssrRenderer(devServer);
-    rendered = await renderer.renderDmsPage(page, serverFetch, requestCookies);
-  } catch (error) {
-    console.error(
-      "DMS SSR render failed; falling back to client rendering",
-      error,
-    );
-    rendered = {
-      body: inertiaAppHtml(page),
-      head: { headTags: "", htmlAttrs: "", bodyAttrs: "" },
-      overlays: "",
-      error: { statusCode: 500 },
-    };
-  }
+  const rendered =
+    options.ssr === false
+      ? clientRenderedShell(page)
+      : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
   const preloads = await documentStyleTags(devServer, page, template);
@@ -323,23 +326,24 @@ export async function renderHtml(
   return { html, status: rendered.error?.statusCode ?? 200 };
 }
 
-function renderRequestHtml(page, request) {
+function renderRequestHtml(page, request, rule = {}) {
   const fetch = serverComponentFetch(request);
-  return renderHtml(page, request.url, fetch, request.headers.cookie);
+  return renderHtml(page, request.url, fetch, request.headers.cookie, {
+    ssr: rule.ssr,
+  });
 }
 
 async function writeBackendError(error, request, response) {
+  const auth = await currentAuth();
   const status = Number.isInteger(error?.status) ? error.status : 502;
   const pathname = new URL(request.url, "http://frontend.local").pathname;
   if (
     error instanceof BackendResponseError &&
     [401, 403].includes(status) &&
     !readSession(request) &&
-    !pathname.startsWith(AUTH_PAGE) &&
-    pathname !== ONBOARDING_PAGE
+    !auth.isSignInExempt(pathname)
   ) {
-    const location = `${AUTH_PAGE}?redirect=${encodeURIComponent(request.url)}`;
-    redirectFrontendVisit(request, response, location);
+    redirectFrontendVisit(request, response, auth.signInLocation(request.url));
     return;
   }
   const loadRenderer = async () => ssrRenderer(await developmentServer());
@@ -350,7 +354,7 @@ async function writeBackendError(error, request, response) {
     const props = {
       path: pathname,
       page: {},
-      ...publicSession(readSession(request)),
+      ...auth.view(readSession(request)),
       error: { statusCode: status },
     };
     const page = createInertiaPage(request.url, props);
@@ -396,27 +400,33 @@ async function answeredWithFile(devServer, request, response, pathname) {
   return pathname !== "/" && answeredByVite(devServer, request, response);
 }
 
+/**
+ * Answers the routes the frontend server serves itself: those the modules
+ * declare in their `dms.server.ts` first, then the built-in ones, which a
+ * module route on the same method and path shadows.
+ */
+async function answeredByServerRoute(request, response, url, devServer) {
+  if (isRendererFilePath(url.pathname)) return false;
+  const modules = await loadServerModules(devServer);
+  if (await handleModuleRoute(request, response, url.pathname, modules))
+    return true;
+  const route = builtInRoute(request.method, url.pathname, modules.routes);
+  if (!route) return false;
+  await route(request, response, url);
+  return true;
+}
+
 export async function handleRequest(request, response) {
   const url = new URL(request.url, "http://frontend.local");
   const pathname = url.pathname;
   const localRoute = LOCAL_ROUTES.find(([matches]) => matches(pathname));
   if (localRoute) return localRoute[1](request, response);
-  if (pathname === "/api/_auth/session")
-    return handleAuth(request, response, url);
-  if (request.method === "POST" && pathname === HTML_RENDER_ROUTE)
-    return handleEmailRender(request, response);
-  if (
-    AUTH_SERVER_ROUTES.some(
-      ([method, pattern]) =>
-        method === request.method && pattern.test(pathname),
-    )
-  )
-    return handleAuth(request, response, url);
+  const devServer = await developmentServer();
+  if (await answeredByServerRoute(request, response, url, devServer)) return;
   if (requestOwnership(request.method, pathname) === "server")
     return proxy(request, response);
   if (requestFailure.hasMalformedPath(request.url))
     return requestFailure.writeBadRequest(response);
-  const devServer = await developmentServer();
   const visit = isFrontendVisit(request);
   // A file is looked for among the frontend's own before the backend is asked
   // for it: asking first cost a backend round trip for each of the hundreds of
@@ -430,19 +440,23 @@ export async function handleRequest(request, response) {
   if (!fileFirst && (await serveFile())) return;
   if (handleAssetVersionMismatch(request, response)) return;
   if (redirectToHomepage(request, response, pathname)) return;
-  const { props, onceProps } = await pageProps(request);
-  if (redirectSignedOutPrivatePage(request, response, props)) return;
+  const { serverAuth: auth, rules } = await loadServerModules(devServer);
+  const { props, onceProps } = await pageProps(request, auth);
+  if (redirectSignedOutPrivatePage(request, response, props, auth)) return;
   const page = createInertiaPage(request.url, props, undefined, onceProps);
+  const rule = routeRuleFor(rules, pathname);
+  const headersFor = (status) =>
+    ruleHeaders(rule, request, props.page?.route, status);
   if (request.headers[INERTIA_HEADER]) {
     return writeContent(
       request,
       response,
       200,
-      inertiaHeaders(page.version),
+      { ...inertiaHeaders(page.version), ...headersFor(200) },
       JSON.stringify(page),
     );
   }
-  const rendered = await renderRequestHtml(page, request);
+  const rendered = await renderRequestHtml(page, request, rule);
   if (rendered.redirect) {
     redirectFrontendVisit(request, response, rendered.redirect);
     return;
@@ -451,7 +465,7 @@ export async function handleRequest(request, response) {
     request,
     response,
     rendered.status,
-    htmlHeaders(),
+    { ...htmlHeaders(), ...headersFor(rendered.status) },
     rendered.html,
   );
 }
@@ -466,7 +480,7 @@ async function writeRequestFailure(error, request, response) {
     !request.dmsSessionRetry
   ) {
     request.dmsSessionRetry = true;
-    if (await refreshSession(request, response)) {
+    if (await (await currentAuth()).refresh(request, response)) {
       await handleRequestSafely(request, response);
       return;
     }
@@ -518,6 +532,9 @@ async function announceReady() {
   }
   const { address, port } = frontendHttpServer.address();
   await reportReady(address, port);
+  await reportBuiltInFallbacks(async () =>
+    loadServerModules(await developmentServer()),
+  );
   // Only the production build produces the email bundle otherwise. Started
   // once the server answers, so it never delays the first page.
   if (process.env.DMS_DEV === "true") watchEmailBundle();
