@@ -49,29 +49,40 @@ function readJsonFile(url, fallback) {
   }
 }
 
-function setPath(target, path, value) {
+/** Sets `value` at `path` when the object holding it exists but lacks it. */
+function fillPath(target, path, value) {
   let node = target;
   for (const key of path.slice(0, -1)) {
     if (typeof node[key] !== "object" || node[key] === null) return;
     node = node[key];
   }
-  if (path.at(-1) in node) node[path.at(-1)] = value;
+  const key = path.at(-1);
+  if (typeof node[key] !== "string" || node[key] === "") node[key] = value;
 }
 
 /**
- * Each module's private options, as the manifest published them. A secret the
- * environment sets (`DMS_HTML_RENDER_SECRET`, `DMS_OAUTH_RELAY_SECRET`)
- * replaces the published value where a module carries it.
+ * Each module's private options, the secrets the manifest publishes first:
+ * the environment variable of a secret (`DMS_HTML_RENDER_SECRET`,
+ * `DMS_OAUTH_RELAY_SECRET`) only fills in a section that carries none.
+ *
+ * @param modules The private options by module id, as the manifest published
+ *   them
+ * @param environment The variables by the path of the secret they stand for
+ * @param env The process environment
  */
+export function privateOptionsWithFallbacks(modules, environment, env) {
+  for (const options of Object.values(modules))
+    for (const [name, path] of Object.entries(environment))
+      if (env[name]) fillPath(options, path, env[name]);
+  return modules;
+}
+
 function readPrivateOptions(env = process.env) {
   const { modules = {}, environment = {} } = readJsonFile(
     SERVER_OPTIONS_FILE,
     {},
   );
-  for (const options of Object.values(modules))
-    for (const [name, path] of Object.entries(environment))
-      if (env[name]) setPath(options, path, env[name]);
-  return modules;
+  return privateOptionsWithFallbacks(modules, environment, env);
 }
 
 function readPublicOptions() {

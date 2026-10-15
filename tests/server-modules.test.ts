@@ -619,8 +619,8 @@ describe("Module server routes in the production server", () => {
       name: "ada",
       module: "acme__fixture-frontend",
       options: { greeting: "hi" },
-      // The environment's secret replaces the one the manifest published.
-      relaySecret: "relay-from-environment",
+      // The manifest's secret wins: the environment only fills a gap.
+      relaySecret: "relay-from-manifest",
       origin: frontendUrl,
       query: "1",
     });
@@ -1002,5 +1002,43 @@ describe("The module testing helper", () => {
     } finally {
       await served.close();
     }
+  });
+
+  it("takes a secret from the environment only where the manifest has none", async () => {
+    const { privateOptionsWithFallbacks } =
+      await import("../templates/vue/server/module-server.mjs");
+    const environment = {
+      DMS_OAUTH_RELAY_SECRET: ["oauth", "relaySecret"],
+      DMS_HTML_RENDER_SECRET: ["htmlRender", "serviceSecret"],
+    };
+    const env = {
+      DMS_OAUTH_RELAY_SECRET: "relay-env",
+      DMS_HTML_RENDER_SECRET: "render-env",
+    };
+    assert.deepEqual(
+      privateOptionsWithFallbacks(
+        {
+          published: {
+            oauth: { relaySecret: "relay-manifest" },
+            htmlRender: { serviceSecret: "render-manifest" },
+          },
+          missing: { oauth: {}, htmlRender: { serviceSecret: "" } },
+          unrelated: { other: true },
+        },
+        environment,
+        env,
+      ),
+      {
+        published: {
+          oauth: { relaySecret: "relay-manifest" },
+          htmlRender: { serviceSecret: "render-manifest" },
+        },
+        missing: {
+          oauth: { relaySecret: "relay-env" },
+          htmlRender: { serviceSecret: "render-env" },
+        },
+        unrelated: { other: true },
+      },
+    );
   });
 });
