@@ -9,6 +9,7 @@ import {
   normalizePath,
   type Plugin,
 } from "vite";
+import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { autoImportDirectories } from "./frontend-build-loader";
 import { frontendBuilds } from "./frontend-builds.generated";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
@@ -127,6 +128,9 @@ const uiInertiaLinkImport = resolve(
 export default defineConfig({
   logLevel,
   plugins: [
+    // Fails a client build that imports a dms.server.ts or a file under a
+    // module's server/ directory, however it is imported.
+    rejectServerSourcesInClient(moduleRoots),
     {
       name: "dms-ui-inertia-link",
       enforce: "pre",
