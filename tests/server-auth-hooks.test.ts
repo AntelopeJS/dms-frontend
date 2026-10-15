@@ -23,13 +23,11 @@ import {
   writeFrontendModuleRegistry,
 } from "../src/common";
 import { serverAuth } from "../templates/vue/server/auth-hooks.mjs";
-import { builtInFallbacks } from "../templates/vue/server/built-in-routes.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
 import type { DmsServerSetup } from "../templates/vue/server-module";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const ACCOUNT_ID = "0b5e7c2a-4d1f-4a8e-9c3b-2f6d8e1a7b40";
-const handler = () => null;
 
 function writeFixture(root: string, path: string, content: string): void {
   const destination = join(root, path);
@@ -88,7 +86,7 @@ describe("Auth hook declarations", () => {
     assert.match(warnings[1], /refreshSession is not a function/);
   });
 
-  it("keep the built-in session logic for a deployment where no module registers them", () => {
+  it("leave pages without a session where no module registers them", () => {
     const auth = serverAuth(undefined, () => ({}));
     assert.equal(auth.signInPath, "/auth");
     assert.equal(auth.signInLocation("/x?y=1"), "/auth?redirect=%2Fx%3Fy%3D1");
@@ -106,11 +104,13 @@ describe("Auth hook declarations", () => {
         updatedAt: 7,
         accessToken: "secret",
       }),
-      {
-        user: { name: "Ada" },
-        session: { accountId: "a", activeTenantId: "t", updatedAt: 7 },
-      },
+      {},
     );
+  });
+
+  it("renew no session where no module registers them", async () => {
+    const auth = serverAuth(undefined, () => ({}));
+    assert.equal(await auth.refresh({ headers: {} }, {}), undefined);
   });
 
   it("exempt the provider's sign-in path when it names no exempt pages", () => {
@@ -164,46 +164,6 @@ describe("Auth hook declarations", () => {
   });
 });
 
-describe("Built-in fallbacks", () => {
-  function fallbacks(setup?: DmsServerSetup) {
-    const { modules } = resolved(setup ? [{ id: "owner", setup }] : []);
-    return builtInFallbacks({
-      ...modules,
-      serverAuth: serverAuth(modules.auth, () => ({})),
-    });
-  }
-
-  it("are all reported while no module serves them", () => {
-    const [routes, hooks] = fallbacks();
-    assert.match(
-      routes,
-      /^Built-in routes the renderer still serves, until 0\.6\.0 \(no module serves them\): GET \/api\/_auth\/session, /,
-    );
-    assert.match(routes, /GET \/auth\/oauth\/:provider\/start/);
-    assert.match(routes, /POST \/api\/html\/render, POST \/api\/_dms\/tester$/);
-    assert.match(hooks, /^Built-in session hooks in use/);
-  });
-
-  it("are no longer reported once their owners serve them, the tester at its own path", () => {
-    const lines = fallbacks((server) => {
-      server.registerRoute(
-        ["GET", "POST", "DELETE"],
-        "/api/_auth/session",
-        handler,
-      );
-      server.registerRoute("POST", "/auth/:action", handler);
-      server.registerRoute("POST", "/auth/oauth/handoff", handler);
-      server.registerRoute("GET", "/auth/oauth/:provider/:step", handler);
-      server.registerRoute("POST", "/api/html/render", handler, {
-        overridesBackend: true,
-      });
-      server.registerRoute("POST", "/api/_dms-api/tester", handler);
-      server.registerAuth({});
-    });
-    assert.deepEqual(lines, []);
-  });
-});
-
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((settle) => server.listen(0, "127.0.0.1", settle));
   const address = server.address();
@@ -250,12 +210,7 @@ export default defineDmsServer((server) => {
 
 interface SessionTemplate {
   writeSession(response: unknown, session: Record<string, unknown>): void;
-  storeAccount(
-    request: unknown,
-    response: unknown,
-    session: Record<string, unknown>,
-    accountId: string,
-  ): void;
+  writeSealedCookie(response: unknown, name: string, value: unknown): void;
   readSession(request: unknown): Record<string, unknown> | undefined;
 }
 
@@ -390,7 +345,7 @@ describe("Auth hooks in the production server", () => {
     assert.equal(renewed?.updatedAt, page.props.session.updatedAt);
   });
 
-  it("reads the cookies the built-in code wrote, so sessions survive the move", async () => {
+  it("hands the module owning sign-in the session and its own dms_* cookies", async () => {
     const jar = cookieJar();
     const session = {
       accessToken: "a",
@@ -399,7 +354,11 @@ describe("Auth hooks in the production server", () => {
       user: { _id: "u1", name: "Ada" },
     };
     sessions.writeSession(jar, session);
-    sessions.storeAccount({ headers: {} }, jar, session, ACCOUNT_ID);
+    sessions.writeSealedCookie(
+      jar,
+      `dms_account_${ACCOUNT_ID.replaceAll("-", "")}`,
+      { refreshToken: "r", accountId: ACCOUNT_ID },
+    );
     const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
       headers: { cookie: jar.cookies().join("; ") },
     });
@@ -410,7 +369,7 @@ describe("Auth hooks in the production server", () => {
     assert.equal(body.account.accountId, ACCOUNT_ID);
   });
 
-  it("writes a session cookie the built-in code reads, ending with the browser when not persistent", async () => {
+  it("writes the session cookie, ending with the browser when not persistent", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
       method: "POST",
       headers: { origin: frontendUrl },

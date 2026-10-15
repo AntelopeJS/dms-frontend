@@ -733,16 +733,21 @@ describe("Module server routes in the production server", () => {
     assert.equal(response.status, 204);
   });
 
-  it("shadows the built-in route on the same method and path, and only that one", async () => {
-    const shadowed = await fetch(`${frontendUrl}/api/_auth/session`);
-    assert.deepEqual(await shadowed.json(), {
+  it("serves the session path only for the methods the module declares", async () => {
+    const declared = await fetch(`${frontendUrl}/api/_auth/session`);
+    assert.deepEqual(await declared.json(), {
       shadowed: true,
       signedIn: false,
     });
-    const builtIn = await fetch(`${frontendUrl}/api/_auth/session`, {
+    backendCalls.length = 0;
+    await fetch(`${frontendUrl}/api/_auth/session`, {
       method: "DELETE",
+      headers: { origin: frontendUrl },
     });
-    assert.equal(builtIn.status, 403);
+    assert.deepEqual(
+      backendCalls.map(({ method, url }) => ({ method, url })),
+      [{ method: "DELETE", url: "/api/_auth/session" }],
+    );
   });
 
   it("falls through to the proxy for a method no route declares", async () => {

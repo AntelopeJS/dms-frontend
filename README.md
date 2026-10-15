@@ -298,7 +298,7 @@ server.registerAuth({
 });
 ```
 
-`refreshSession` is called once when the backend answers `401` to a signed-in page visit, which is then retried with the session it wrote (`event.session.write`). `publicSession` gives the page props of a signed-in session; the server adds `session.updatedAt`, the stamp of its last write, which the browser compares to drop a page restored from its cache (see [Interface language](#interface-language)), and `event.session.view()` returns the same props to a route. `signInExempt` patterns are `/x`, `/x/*` (one segment below) or `/x/**` (the page and everything below); left out, they are `<signInPath>/**` and `/onboarding`, so a custom `signInPath` is exempt on its own. The highest-priority module that registers them provides all of them; another one is reported and ignored, and a part left out keeps the built-in one.
+`refreshSession` is called once when the backend answers `401` to a signed-in page visit, which is then retried with the session it wrote (`event.session.write`). `publicSession` gives the page props of a signed-in session; the server adds `session.updatedAt`, the stamp of its last write, which the browser compares to drop a page restored from its cache (see [Interface language](#interface-language)), and `event.session.view()` returns the same props to a route. `signInExempt` patterns are `/x`, `/x/*` (one segment below) or `/x/**` (the page and everything below); left out, they are `<signInPath>/**` and `/onboarding`, so a custom `signInPath` is exempt on its own. The highest-priority module that registers them provides all of them; another one is reported and ignored.
 
 #### Route rules
 
@@ -318,7 +318,7 @@ server.registerRouteRules({
 
 The rules matching a page merge from the least to the most specific pattern; for one pattern, the highest-priority module's rule wins, with a warning. A rule never changes who may see a page.
 
-Until 0.6.0 the renderer keeps serving the DMS's session, sign-in, OAuth and e-mail render routes and the API tester itself, for a DMS or DMS API release that predates its own `dms.server.ts`; a module route on the same method and path takes precedence, and the built-in tester stops once a module serves `/api/_dms-api/tester`. The server reports at startup which built-in routes and hooks are still in use.
+The renderer serves no route of its own besides its files and icons: the session, sign-in, OAuth and e-mail render routes are the DMS's (`dms.server.ts`), the API tester is the DMS API's. Without a module that registers auth hooks, pages carry no `user` and `session` and a refused session is not renewed.
 
 A module that ships `dms.server.ts` raises its [loader range](#declaring-the-loader-releases-a-module-supports) floor to the release that serves it: an older one never reads the file, so the routes would silently be missing.
 

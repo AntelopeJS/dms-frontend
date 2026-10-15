@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
@@ -26,13 +26,6 @@ const server = import(
 ) as Promise<ServerTemplate>;
 
 interface SessionTemplate {
-  readAccounts: (request: unknown) => Record<string, Record<string, unknown>>;
-  storeAccount: (
-    request: unknown,
-    response: unknown,
-    session: Record<string, unknown>,
-    accountId: string,
-  ) => void;
   writeSession: (response: unknown, session: Record<string, unknown>) => void;
 }
 
@@ -60,25 +53,29 @@ async function writeSsrRendererFixture(): Promise<void> {
   await writeFile(join(SSR_DIRECTORY, "ssr-renderer.js"), SSR_RENDERER_FIXTURE);
 }
 
-function serviceToken(secret: string): string {
-  const header = Buffer.from('{"alg":"HS256","typ":"JWT"}').toString(
-    "base64url",
+/**
+ * The session cookie of `session`, sealed as the module owning sign-in writes
+ * it, for the backend `DMS_API_BASE_URL` names.
+ */
+async function sessionCookie(
+  session: Record<string, unknown>,
+): Promise<string> {
+  process.env.DMS_SESSION_SECRET ??=
+    "test-secret-with-at-least-thirty-two-characters";
+  const sessionRuntime = await sessions;
+  const headers = new Map<string, string | string[]>();
+  sessionRuntime.writeSession(
+    {
+      getHeader: (name: string) => headers.get(name),
+      setHeader: (name: string, value: string | string[]) =>
+        headers.set(name, value),
+    },
+    session,
   );
-  const now = Math.floor(Date.now() / 1000);
-  const payload = Buffer.from(
-    JSON.stringify({
-      namespace: "html-render-service",
-      purpose: "html-render",
-      aud: "dms-frontend",
-      jti: randomUUID(),
-      iat: now,
-      exp: now + 300,
-    }),
-  ).toString("base64url");
-  const signature = createHmac("sha256", secret)
-    .update(`${header}.${payload}`)
-    .digest("base64url");
-  return `${header}.${payload}.${signature}`;
+  return [headers.get("set-cookie") ?? []]
+    .flat()
+    .map((value) => value.split(";")[0])
+    .join("; ");
 }
 
 describe("Inertia HTTP protocol", () => {
@@ -446,36 +443,19 @@ describe("Inertia HTTP protocol", () => {
     assert.match(source, /falling back to client rendering/);
   });
 
-  it("classifies every dms-auth server route without claiming browser pages", async () => {
-    const runtime = await server;
-    const routes = [
-      ["POST", "/auth/login"],
-      ["POST", "/auth/signup"],
-      ["POST", "/auth/verify-2fa"],
-      ["POST", "/auth/request-2fa-email"],
-      ["POST", "/auth/switch-account"],
-      ["POST", "/auth/switch-tenant"],
-      ["POST", "/auth/validate-account"],
-      ["POST", "/auth/oauth/handoff"],
-      ["GET", "/auth/oauth/github/start"],
-      ["GET", "/auth/oauth/github/callback"],
-    ];
-    routes.forEach(([method, path]) => {
-      assert.equal(
-        runtime.requestOwnership(method, path),
-        "server",
-        `${method} ${path}`,
-      );
+  it("leaves the session, sign-in, e-mail render and tester paths to the modules and the backend", async () => {
+    const reached: string[] = [];
+    const backend = createServer((request, response) => {
+      reached.push(`${request.method} ${request.url}`);
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end('{"message":"error.page_not_found"}');
     });
-    for (const path of ["/auth/login", "/auth/signup", "/auth/oauth/complete"])
-      assert.equal(
-        runtime.requestOwnership("GET", path),
-        "frontend",
-        `GET ${path}`,
-      );
-  });
-
-  it("routes every tester method and optional trailing slash to its handler", async () => {
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const backendAddress = backend.address();
+    assert.ok(backendAddress && typeof backendAddress === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
@@ -483,20 +463,37 @@ describe("Inertia HTTP protocol", () => {
     );
     const address = frontend.address();
     assert.ok(address && typeof address === "object");
+    const base = `http://127.0.0.1:${address.port}`;
     try {
-      for (const [method, suffix] of [
-        ["GET", ""],
-        ["PATCH", "/"],
+      for (const [method, path] of [
+        ["POST", "/api/_auth/session"],
+        ["DELETE", "/api/_auth/session"],
+        ["POST", "/api/html/render"],
+        ["POST", "/api/_dms/tester"],
       ]) {
-        const response = await fetch(
-          `http://127.0.0.1:${address.port}/api/_dms/tester${suffix}`,
-          { method },
-        );
-        assert.equal(response.status, 405);
-        assert.equal(response.headers.get("allow"), "POST");
+        const response = await fetch(`${base}${path}`, {
+          method,
+          headers: { "content-type": "application/json", origin: base },
+          body: "{}",
+        });
+        assert.equal(response.status, 404, `${method} ${path}`);
+        assert.equal(reached.at(-1), `${method} ${path}`);
       }
+      // A sign-in action no module serves is the backend's, as any POST.
+      assert.equal(runtime.requestOwnership("POST", "/auth/login"), "server");
+      for (const path of [
+        "/auth/login",
+        "/auth/oauth/github/start",
+        "/auth/oauth/github/callback",
+      ])
+        assert.equal(
+          runtime.requestOwnership("GET", path),
+          "frontend",
+          `GET ${path}`,
+        );
     } finally {
       frontend.close();
+      backend.close();
     }
   });
 
@@ -717,161 +714,7 @@ describe("Inertia HTTP protocol", () => {
   });
 });
 
-describe("frontend auth runtime", () => {
-  it("rotates the sealed account tokens when validating an account", async () => {
-    process.env.DMS_SESSION_SECRET =
-      "test-secret-with-at-least-thirty-two-characters";
-    const backend = createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(
-        '{"access_token":"access-new","refresh_token":"refresh-new"}',
-      );
-    });
-    await new Promise<void>((resolve) =>
-      backend.listen(0, "127.0.0.1", resolve),
-    );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
-    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    const runtime = await server;
-    const sessionRuntime = await sessions;
-    const cookieHeaders = new Map<string, string | string[]>();
-    const cookieResponse = {
-      getHeader: (name: string) => cookieHeaders.get(name),
-      setHeader: (name: string, value: string | string[]) =>
-        cookieHeaders.set(name, value),
-    };
-    const accountId = "00000000-0000-4000-8000-000000000001";
-    sessionRuntime.storeAccount(
-      { headers: {} },
-      cookieResponse,
-      {
-        accessToken: "access-old",
-        refreshToken: "refresh-old",
-        user: { id: "user-1", email: "a@example.com" },
-      },
-      accountId,
-    );
-    const storedCookie = cookieHeaders.get("set-cookie") ?? "";
-    const initialCookie = Array.isArray(storedCookie)
-      ? storedCookie.join("; ")
-      : storedCookie;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/auth/validate-account`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            cookie: initialCookie,
-            origin: `http://127.0.0.1:${address.port}`,
-          },
-          body: JSON.stringify({ accountId }),
-        },
-      );
-      assert.deepEqual(await response.json(), { valid: true });
-      const updatedCookie = response.headers.get("set-cookie") ?? "";
-      assert.match(updatedCookie, /dms_account_/);
-      assert.notEqual(updatedCookie, initialCookie);
-      assert.doesNotMatch(updatedCookie, /refresh-new/);
-    } finally {
-      frontend.close();
-      backend.close();
-    }
-  });
-
-  it("establishes, refreshes, and clears an HttpOnly session without exposing refresh tokens", async () => {
-    process.env.DMS_SESSION_SECRET =
-      "test-secret-with-at-least-thirty-two-characters";
-    const jwt = `x.${Buffer.from('{"tenantId":"tenant-1"}').toString("base64url")}.x`;
-    const backend = createServer(async (request, response) => {
-      const payloads: Record<string, unknown> = {
-        "/api/auth/login": {
-          user: { id: "user-1" },
-          access_token: jwt,
-          refresh_token: "refresh-1",
-        },
-        "/api/auth/refresh": { access_token: jwt, refresh_token: "refresh-2" },
-        "/api/auth/me": { id: "user-1", name: "Updated" },
-        "/api/auth/logout": {},
-      };
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify(payloads[request.url ?? ""]));
-    });
-    await new Promise<void>((resolve) =>
-      backend.listen(0, "127.0.0.1", resolve),
-    );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
-    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    const runtime = await server;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
-    const base = `http://127.0.0.1:${address.port}`;
-    try {
-      const login = await fetch(`${base}/auth/login`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: base },
-        body: '{"email":"a@example.com"}',
-      });
-      const cookie = login.headers.get("set-cookie") ?? "";
-      assert.match(cookie, /HttpOnly/i);
-      assert.match(cookie, /SameSite=Lax/i);
-      assert.doesNotMatch(await login.text(), /refresh-1/);
-      const session = await fetch(`${base}/api/_auth/session`, {
-        method: "POST",
-        headers: { cookie, origin: base },
-      });
-      const sessionBody = await session.text();
-      assert.match(sessionBody, /Updated/);
-      assert.doesNotMatch(
-        sessionBody,
-        /accessToken|access_token|x\.[A-Za-z0-9_-]+\.x/,
-      );
-      assert.doesNotMatch(sessionBody, /refresh-2/);
-      const logout = await fetch(`${base}/api/_auth/session`, {
-        method: "DELETE",
-        headers: { cookie, origin: base },
-      });
-      assert.match(logout.headers.get("set-cookie") ?? "", /Max-Age=0/);
-      const rejected = await fetch(`${base}/auth/login`, {
-        method: "POST",
-        headers: { origin: "https://evil.example" },
-        body: "{}",
-      });
-      assert.equal(rejected.status, 403);
-      assert.deepEqual(await rejected.json(), {
-        error: "Forbidden",
-        reason: "missing or untrusted Origin header",
-      });
-      // A client that sends no Origin at all (curl, a server-side
-      // integration) gets the same explicit refusal rather than a bare
-      // "Forbidden" indistinguishable from bad credentials.
-      const originless = await fetch(`${base}/auth/login`, {
-        method: "POST",
-        body: "{}",
-      });
-      assert.equal(originless.status, 403);
-      assert.deepEqual(await originless.json(), {
-        error: "Forbidden",
-        reason: "missing or untrusted Origin header",
-      });
-    } finally {
-      frontend.close();
-      backend.close();
-    }
-  });
-
+describe("proxied mutations", () => {
   it("protects proxied mutations and preserves backend validation errors", async () => {
     const backend = createServer((_request, response) => {
       response.writeHead(422, {
@@ -936,17 +779,6 @@ describe("public endpoints through the proxy", () => {
     const jwt = `x.${Buffer.from('{"tenantId":"tenant-1"}').toString("base64url")}.x`;
     const seen: Record<string, string | undefined>[] = [];
     const backend = createServer((request, response) => {
-      if (request.url === "/api/auth/login") {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(
-          JSON.stringify({
-            user: { id: "user-1" },
-            access_token: jwt,
-            refresh_token: "refresh-1",
-          }),
-        );
-        return;
-      }
       seen.push({
         url: request.url,
         authorization: request.headers.authorization,
@@ -972,13 +804,11 @@ describe("public endpoints through the proxy", () => {
     assert.ok(address && typeof address === "object");
     const base = `http://127.0.0.1:${address.port}`;
     try {
-      const login = await fetch(`${base}/auth/login`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: base },
-        body: '{"email":"a@example.com"}',
+      const cookie = await sessionCookie({
+        accessToken: jwt,
+        refreshToken: "refresh-1",
+        user: { id: "user-1" },
       });
-      const cookie = login.headers.get("set-cookie") ?? "";
-      assert.match(cookie, /dms_/);
 
       const hook = await fetch(`${base}/api/hooks/resend?tenant=acme`, {
         method: "POST",
@@ -1027,82 +857,6 @@ describe("public endpoints through the proxy", () => {
       delete process.env.DMS_PUBLIC_ENDPOINTS;
       frontend.close();
       backend.close();
-    }
-  });
-});
-
-describe("HTML render HTTP endpoint", () => {
-  it("rejects an empty template name with 400", async () => {
-    process.env.DMS_HTML_RENDER_SECRET = "render-secret";
-    const runtime = await server;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/api/html/render`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-dms-service-token": serviceToken("render-secret"),
-          },
-          body: '{"templateName":"","props":{}}',
-        },
-      );
-      assert.equal(response.status, 400);
-    } finally {
-      frontend.close();
-    }
-  });
-
-  it("uses the content language header as the rendered locale", async () => {
-    process.env.DMS_HTML_RENDER_SECRET = "render-secret";
-    const rendererDir = join(
-      process.cwd(),
-      "templates",
-      "vue",
-      "dist",
-      "server",
-    );
-    const rendererPath = join(rendererDir, "email-renderer.js");
-    await mkdir(rendererDir, { recursive: true });
-    await writeFile(
-      rendererPath,
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: The fixture must retain this interpolation.
-      "export async function renderEmail(_name, _props, options) { return `<p>${options.locale}</p>`; }\n",
-    );
-    const runtime = await server;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/api/html/render`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-dms-service-token": serviceToken("render-secret"),
-            "x-content-language": "fr-FR",
-          },
-          body: '{"templateName":"welcome","props":{}}',
-        },
-      );
-      assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), { html: "<p>fr-FR</p>" });
-    } finally {
-      frontend.close();
-      await rm(join(process.cwd(), "templates", "vue", "dist"), {
-        recursive: true,
-        force: true,
-      });
     }
   });
 });
@@ -1178,28 +932,13 @@ describe("Site layout as an Inertia once prop", () => {
     return { visit, close };
   }
 
-  async function accountCookie(accountId: string): Promise<string> {
-    process.env.DMS_SESSION_SECRET ??=
-      "test-secret-with-at-least-thirty-two-characters";
-    const sessionRuntime = await sessions;
-    const headers = new Map<string, string | string[]>();
-    sessionRuntime.writeSession(
-      {
-        getHeader: (name: string) => headers.get(name),
-        setHeader: (name: string, value: string | string[]) =>
-          headers.set(name, value),
-      },
-      {
-        accessToken: "access",
-        accountId,
-        activeTenantId: "tenant-1",
-        user: { id: accountId },
-      },
-    );
-    return [headers.get("set-cookie") ?? []]
-      .flat()
-      .map((value) => value.split(";")[0])
-      .join("; ");
+  function accountCookie(accountId: string): Promise<string> {
+    return sessionCookie({
+      accessToken: "access",
+      accountId,
+      activeTenantId: "tenant-1",
+      user: { id: accountId },
+    });
   }
 
   it("sends the site layout once per session, then the page alone", async () => {

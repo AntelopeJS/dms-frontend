@@ -11,11 +11,6 @@ import {
   UpstreamError,
 } from "./server/auth/backend.mjs";
 import { proxyAccess, refuseCrossOrigin } from "./server/public-endpoints.mjs";
-import {
-  builtInRoute,
-  isBuiltInAuthRoute,
-  reportBuiltInFallbacks,
-} from "./server/built-in-routes.mjs";
 import { readSession } from "./server/auth/session.mjs";
 import {
   BackendResponseError,
@@ -156,7 +151,7 @@ async function backendJson(path, request) {
   return response.json();
 }
 
-/** The session logic of the module that owns sign-in, or the built-in one. */
+/** The session logic of the module that owns sign-in. */
 async function currentAuth() {
   return (await loadServerModules(await developmentServer())).serverAuth;
 }
@@ -196,7 +191,6 @@ function redirectSignedOutPrivatePage(request, response, props, auth) {
 export function requestOwnership(method, pathname) {
   if (PROXY_PREFIXES.some((prefix) => pathname.startsWith(prefix)))
     return "server";
-  if (isBuiltInAuthRoute(method, pathname)) return "server";
   return method === "GET" ? "frontend" : "server";
 }
 
@@ -406,20 +400,11 @@ async function answeredWithFile(devServer, request, response, pathname) {
   return pathname !== "/" && answeredByVite(devServer, request, response);
 }
 
-/**
- * Answers the routes the frontend server serves itself: those the modules
- * declare in their `dms.server.ts` first, then the built-in ones, which a
- * module route on the same method and path shadows.
- */
+/** Answers the routes the modules declare in their `dms.server.ts`. */
 async function answeredByServerRoute(request, response, url, devServer) {
   if (isRendererFilePath(url.pathname)) return false;
   const modules = await loadServerModules(devServer);
-  if (await handleModuleRoute(request, response, url.pathname, modules))
-    return true;
-  const route = builtInRoute(request.method, url.pathname, modules.routes);
-  if (!route) return false;
-  await route(request, response, url);
-  return true;
+  return handleModuleRoute(request, response, url.pathname, modules);
 }
 
 export async function handleRequest(request, response) {
@@ -538,9 +523,6 @@ async function announceReady() {
   }
   const { address, port } = frontendHttpServer.address();
   await reportReady(address, port);
-  await reportBuiltInFallbacks(async () =>
-    loadServerModules(await developmentServer()),
-  );
   // Only the production build produces the email bundle otherwise. Started
   // once the server answers, so it never delays the first page.
   if (process.env.DMS_DEV === "true") watchEmailBundle();

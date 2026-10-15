@@ -1,10 +1,7 @@
 import { fork } from "node:child_process";
 import { constants, setPriority } from "node:os";
 import { fileURLToPath } from "node:url";
-import { body } from "./auth/backend.mjs";
-import { validRenderToken } from "./render-token.mjs";
 
-const JSON_TYPE = "application/json";
 const EMAIL_RENDERER_URL = new URL(
   "../dist/server/email-renderer.js",
   import.meta.url,
@@ -89,39 +86,4 @@ async function loadEmailRenderer() {
 export async function renderEmailTemplate(template, props, options = {}) {
   const { renderEmail } = await loadEmailRenderer();
   return renderEmail(template, props, options);
-}
-
-/** Renders an email template for an authenticated backend request. */
-export async function handleEmailRender(request, response) {
-  if (!validRenderToken(request.headers["x-dms-service-token"])) {
-    response.writeHead(401, { "content-type": JSON_TYPE });
-    return response.end(JSON.stringify({ message: "Invalid service token" }));
-  }
-  const input = await body(request);
-  if (
-    typeof input.templateName !== "string" ||
-    input.templateName.trim() === "" ||
-    typeof input.props !== "object"
-  ) {
-    response.writeHead(400, { "content-type": JSON_TYPE });
-    return response.end(JSON.stringify({ message: "Invalid request body" }));
-  }
-  try {
-    const html = await renderEmailTemplate(
-      input.templateName,
-      input.props ?? {},
-      {
-        locale: request.headers["x-content-language"],
-      },
-    );
-    response.writeHead(200, { "content-type": JSON_TYPE });
-    response.end(JSON.stringify({ html }));
-  } catch {
-    response.writeHead(404, { "content-type": JSON_TYPE });
-    response.end(
-      JSON.stringify({
-        message: `Template "${input.templateName}" not found or render failed`,
-      }),
-    );
-  }
 }

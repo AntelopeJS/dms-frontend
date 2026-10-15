@@ -3,16 +3,11 @@ import {
   createDecipheriv,
   createHash,
   randomBytes,
-  randomUUID,
 } from "node:crypto";
 
 export const SESSION_COOKIE = "dms_session";
-const ACCOUNT_INDEX_COOKIE = "dms_account_index";
-const ACCOUNT_COOKIE_PREFIX = "dms_account_";
 const REQUEST_SESSION = Symbol("dms-request-session");
 const MAX_AGE = 60 * 60 * 24 * 30;
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * A suffix that keeps this instance's cookies apart from another's on the same
@@ -98,11 +93,10 @@ function attributes(maxAge, path = "/") {
 }
 
 /**
- * Whether a session, or a stored account, outlives the browser. Only a login
- * that left "keep me signed in" unchecked says no; a cookie written before
- * the flag existed carries none, and keeps the lifetime it was given then.
+ * Whether a session outlives the browser. Only a session written with
+ * `persistent: false` says no.
  */
-export function isPersistent(session) {
+function isPersistent(session) {
   return session?.persistent !== false;
 }
 
@@ -119,22 +113,6 @@ function appendCookie(response, name, value, cookieAttributes) {
       ? [cookie, ...(Array.isArray(current) ? current : [current])]
       : cookie,
   );
-}
-
-function accountCookieName(accountId) {
-  if (!UUID.test(accountId)) throw new Error("Invalid account id");
-  return `${ACCOUNT_COOKIE_PREFIX}${accountId.replaceAll("-", "")}`;
-}
-
-function descriptor(session, accountId) {
-  return {
-    accountId,
-    userId: session.user?._id ?? session.user?.id,
-    email: session.user?.email,
-    name: session.user?.name,
-    activeTenantId: session.activeTenantId,
-    persistent: isPersistent(session),
-  };
 }
 
 export function readSession(request) {
@@ -160,84 +138,15 @@ export function clearSession(response) {
   appendCookie(response, SESSION_COOKIE, "", attributes(0));
 }
 
-export function readAccounts(request) {
-  const value = cookieValue(request, ACCOUNT_INDEX_COOKIE);
-  return value ? (decode(value) ?? {}) : {};
-}
-
-function writeAccountIndex(response, accounts) {
-  const persistent = Object.values(accounts).some(isPersistent);
-  appendCookie(
-    response,
-    ACCOUNT_INDEX_COOKIE,
-    encode(accounts),
-    attributes(lifetime(persistent)),
-  );
-}
-
-export function readAccount(request, accountId) {
-  if (!UUID.test(accountId ?? "")) return undefined;
-  const value = cookieValue(request, accountCookieName(accountId));
-  return value ? decode(value) : undefined;
-}
-
-export function storeAccount(request, response, session, accountId) {
-  const id = accountId ?? randomUUID();
-  const accountDescriptor = descriptor(session, id);
-  const accounts = { ...readAccounts(request), [id]: accountDescriptor };
-  writeAccountIndex(response, accounts);
-  appendCookie(
-    response,
-    accountCookieName(id),
-    encode({ refreshToken: session.refreshToken, ...accountDescriptor }),
-    attributes(lifetime(accountDescriptor.persistent)),
-  );
-  return accountDescriptor;
-}
-
-export function assertAccountInvariant(session, accountId) {
-  if (!accountId || session.accountId !== accountId)
-    throw new Error("Account session invariant violated");
-}
-
-/**
- * Write `session` as the current one, and as one of the stored accounts.
- * Stamps it with `updatedAt`, which lets the browser tell a page fetched
- * before this write, and restored from its cache, from a current one.
- */
-export function persistAccountSession(request, response, session, accountId) {
-  const id = accountId ?? session.accountId ?? randomUUID();
-  session.accountId = id;
-  session.updatedAt = Date.now();
-  const account = storeAccount(request, response, session, id);
-  assertAccountInvariant(session, account.accountId);
-  writeSession(response, session);
-  return account;
-}
-
-export function removeAccount(request, response, accountId) {
-  const accounts = { ...readAccounts(request) };
-  delete accounts[accountId];
-  writeAccountIndex(response, accounts);
-  if (UUID.test(accountId ?? ""))
-    appendCookie(response, accountCookieName(accountId), "", attributes(0));
-}
-
 export function readSealedCookie(request, name) {
   const value = cookieValue(request, name);
   return value ? decode(value) : undefined;
 }
 
-export function writeSealedCookie(
-  response,
-  name,
-  value,
-  maxAge,
-  path = "/auth/oauth",
-) {
+export function writeSealedCookie(response, name, value, maxAge, path = "/") {
   appendCookie(response, name, encode(value), attributes(maxAge, path));
 }
 
-export function clearSealedCookie(response, name, path = "/auth/oauth") {
+export function clearSealedCookie(response, name, path = "/") {
   appendCookie(response, name, "", attributes(0, path));
 }

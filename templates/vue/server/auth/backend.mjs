@@ -5,7 +5,6 @@ const FORWARDED_HEADERS = [
   "x-content-language",
   "x-realtime-session",
 ];
-const BODY_LIMIT = 64 * 1024;
 
 export class UpstreamError extends Error {
   constructor(status, message) {
@@ -84,23 +83,6 @@ export async function backend(path, request, options = {}) {
     throw new UpstreamError(response.status, message ?? GENERIC_ERROR_MESSAGE);
   }
   return data;
-}
-
-export async function body(request) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > BODY_LIMIT)
-      throw new RequestBodyError(413, "Request body too large");
-    chunks.push(chunk);
-  }
-  if (!chunks.length) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    throw new RequestBodyError(400, "Invalid request body");
-  }
 }
 
 export class RequestBodyError extends Error {

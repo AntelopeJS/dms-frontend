@@ -82,9 +82,12 @@ async function loadPage(
  */
 export async function loadPageProps(request, backend, auth) {
   const pathname = new URL(request.url, "http://frontend.local").pathname;
-  const { user, session } = auth.view(readSession(request));
+  const sealed = readSession(request);
+  const { user, session } = auth.view(sealed);
   const { partial, wants } = requestedProps(request);
-  const sharedKey = sharedOnceKey(session);
+  // The sealed session names the account and workspace, whatever the module
+  // owning sign-in shows a page of it.
+  const sharedKey = sharedOnceKey(sealed);
   const holdsShared = heldOnceProps(request).has(sharedKey);
   const withShared = (partial && wants(SHARED_PROP)) || !holdsShared;
   const props = {};

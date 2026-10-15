@@ -285,7 +285,7 @@ function writePublicEndpoints(
  * Write each module's private options where the generated server hands them
  * to that module's server routes, owner-readable only: they hold the backend's
  * secrets. `environment` names the variables that replace a published secret
- * when the environment sets them, as for the built-in routes.
+ * when the environment sets them.
  */
 function writeServerOptions(
   workspaceDir: string,

@@ -218,7 +218,7 @@ async function writeServerResponse(request, response, result) {
  * apply first: a request with a state-changing method needs the frontend's
  * own `Origin` unless the route says otherwise. An error the handler lets
  * through reaches the server's error handling with the cookies written so
- * far, as a built-in route's would.
+ * far.
  *
  * @param context See `createServerEvent`
  */

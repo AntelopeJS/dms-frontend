@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { allowedEstablishEndpoints } from "./auth/routes.mjs";
+import { allowedEstablishEndpoints } from "./auth/establish-endpoints.mjs";
 import { serverAuth } from "./auth-hooks.mjs";
 import { answerModuleRoute } from "./module-event.mjs";
 import {
@@ -56,8 +56,7 @@ function setPath(target, path, value) {
 /**
  * Each module's private options, as the manifest published them. A secret the
  * environment sets (`DMS_HTML_RENDER_SECRET`, `DMS_OAUTH_RELAY_SECRET`)
- * replaces the published value where a module carries it, as it does for the
- * built-in routes.
+ * replaces the published value where a module carries it.
  */
 function readPrivateOptions(env = process.env) {
   const { modules = {}, environment = {} } = readJsonFile(
