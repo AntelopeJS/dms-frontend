@@ -566,6 +566,16 @@ describe("CLI output", () => {
     assert.equal(formatReadyBlock(block, output.ui, false).length, 6);
   });
 
+  it("prints the loopback the dev server listens on as localhost, the host the backend is told", () => {
+    const local = (address: string) =>
+      readyLines({ address, port: 3001 }, [], {}).find(
+        (line) => line.label === "Local",
+      )?.value;
+    assert.equal(local("127.0.0.1"), "http://localhost:3001/");
+    assert.equal(local("::1"), "http://localhost:3001/");
+    assert.equal(local("192.168.1.20"), "http://192.168.1.20:3001/");
+  });
+
   it("lists LAN addresses only, a few at most", () => {
     const ipv4 = (address: string) =>
       [{ address, family: "IPv4", internal: false }] as never;
@@ -647,14 +657,14 @@ describe("CLI output", () => {
     assert.deepEqual(lines, [
       {
         label: "Local",
-        value: "http://127.0.0.1:3321/",
+        value: "http://localhost:3321/",
         isLink: true,
         isEssential: true,
       },
     ]);
     assert.equal(
       readyLines({ address: "::1", port: 3321 }, [])[0].value,
-      "http://[::1]:3321/",
+      "http://localhost:3321/",
     );
   });
 

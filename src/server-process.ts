@@ -226,8 +226,14 @@ export function describeListenError(error: ListenError): CliProblem {
   };
 }
 
+// The loopback the dev server listens on by default prints as `localhost`,
+// the host the backend is told (`clientUrl`): OAuth's state cookie and the
+// e-mail links only work on the host the browser started from.
+const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1"]);
+
 function urlHost(address: string): string {
-  if (WILDCARD_ADDRESSES.has(address)) return LOCAL_HOST;
+  if (WILDCARD_ADDRESSES.has(address) || LOOPBACK_ADDRESSES.has(address))
+    return LOCAL_HOST;
   return address.includes(":") ? `[${address}]` : address;
 }
 
