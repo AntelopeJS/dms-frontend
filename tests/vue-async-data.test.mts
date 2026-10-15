@@ -642,7 +642,37 @@ describe("Server payload", () => {
       statusCode: 503,
       statusMessage: "Service Unavailable",
       message: "Service Unavailable",
-      data: "error.backend",
+    });
+  });
+
+  it("keeps the body of a backend's 5xx out of the payload, and a 4xx's in", async () => {
+    const backendFailure = (statusCode: number, data: unknown) =>
+      Object.assign(new Error(`[GET] "/api/x": ${statusCode}`), {
+        name: "FetchError",
+        statusCode,
+        statusMessage: "Failure",
+        data,
+      });
+    const { payload } = await serverPayload(() => {
+      useDmsAsyncData("server-failure", async () => {
+        throw backendFailure(500, { stack: "at db.query (pg://secret)" });
+      });
+      useDmsAsyncData("client-failure", async () => {
+        throw backendFailure(422, { field: "email" });
+      });
+      return () => h("p");
+    });
+
+    assert.deepEqual(payload.errors["server-failure"], {
+      statusCode: 500,
+      statusMessage: "Failure",
+      message: "Failure",
+    });
+    assert.deepEqual(payload.errors["client-failure"], {
+      statusCode: 422,
+      statusMessage: "Failure",
+      message: "Failure",
+      data: { field: "email" },
     });
   });
 
@@ -911,5 +941,207 @@ describe("useDmsFetch", () => {
     assert.equal(entry!.data.value, "data:/api/orders/7", "kept on screen");
     assert.equal(browser.requests.length, 1);
     app.unmount();
+  });
+
+  function switchingFetcher() {
+    const requests: string[] = [];
+    const answers = new Map<
+      string,
+      { resolve: (value: string) => void; reject: (reason: unknown) => void }
+    >();
+    const fetcher = ((url: string) => {
+      requests.push(url);
+      return new Promise<string>((resolve, reject) => {
+        answers.set(url, { resolve, reject });
+      });
+    }) as never;
+    return { fetcher, requests, answers };
+  }
+
+  function followOrders(fetcher: never, id: ReturnType<typeof ref<number>>) {
+    const runtime = createDmsFrontendRuntime();
+    let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
+    const app = mountRuntime(runtime, {
+      render: () =>
+        h(
+          defineComponent({
+            setup() {
+              entry = runtimeModule.useDmsFetch<string>(
+                () => `/api/orders/${id.value}`,
+                { $fetch: fetcher },
+              );
+              return () => h("p");
+            },
+          }),
+        ),
+    });
+    return { runtime, app, entry: () => entry! };
+  }
+
+  it("refetches a key whose run a switch away aborted, never showing another key's data as its own", async () => {
+    const { fetcher, requests, answers } = switchingFetcher();
+    const id = ref(1);
+    const { runtime, app, entry } = followOrders(fetcher, id);
+    answers.get("/api/orders/1")!.resolve("order 1");
+    await settle();
+
+    id.value = 2;
+    await nextTick();
+    assert.equal(entry().data.value, "order 1", "no flash while it loads");
+    id.value = 1;
+    await nextTick();
+    assert.equal(entry().data.value, "order 1");
+    assert.equal(entry().status.value, "success");
+    const second = [...runtime.asyncData.values()][1];
+    assert.equal(second?.status.value, "idle", "the aborted key holds nothing");
+    assert.equal(second?.data.value, null);
+
+    id.value = 2;
+    await nextTick();
+    assert.equal(entry().status.value, "pending");
+    assert.equal(entry().data.value, "order 1", "no flash while it loads");
+    assert.deepEqual(requests, [
+      "/api/orders/1",
+      "/api/orders/2",
+      "/api/orders/2",
+    ]);
+    answers.get("/api/orders/2")!.resolve("order 2");
+    await settle();
+    assert.equal(entry().status.value, "success");
+    assert.equal(entry().data.value, "order 2");
+    app.unmount();
+  });
+
+  it("shows a failed key's own data and error, not the previous key's data", async () => {
+    const { fetcher, answers } = switchingFetcher();
+    const id = ref(1);
+    const { runtime, app, entry } = followOrders(fetcher, id);
+    answers.get("/api/orders/1")!.resolve("order 1");
+    await settle();
+
+    id.value = 2;
+    await nextTick();
+    assert.equal(entry().data.value, "order 1", "no flash while it loads");
+    const failure = new Error("not found");
+    answers.get("/api/orders/2")!.reject(failure);
+    await settle();
+
+    assert.equal(entry().status.value, "error");
+    assert.equal(entry().error.value, failure);
+    assert.equal(entry().data.value, null);
+    assert.deepEqual(
+      [...runtime.asyncData.values()].map((result) => result.data.value),
+      ["order 1", null],
+      "the failed key's entry never held the other key's data",
+    );
+
+    entry().data.value = "edited";
+    assert.equal(entry().data.value, "edited", "a write reaches the key");
+    app.unmount();
+  });
+
+  it("transfers its keys without the URL, query or body they request", async () => {
+    const { runtime, requests } = fetchingRuntime(true);
+    const app = createSSRApp(
+      defineComponent({
+        setup() {
+          runtimeModule.useDmsFetch("/api/orders/secret-path", {
+            query: { token: "query-secret" },
+          });
+          runtimeModule.useDmsFetch("/api/login", {
+            method: "POST",
+            body: { password: "body-secret" },
+          });
+          return () => h("p");
+        },
+      }),
+    );
+    provideDmsFrontendRuntime(app, runtime);
+    await renderToString(app);
+
+    assert.equal(requests.length, 2);
+    const payload = runtimeModule.serializeDmsPayload(runtime);
+    const keys = Object.keys(payload.data);
+    assert.equal(keys.length, 2);
+    for (const key of keys)
+      for (const secret of [
+        "secret-path",
+        "query-secret",
+        "body-secret",
+        "/api",
+        "POST",
+      ])
+        assert.ok(!key.includes(secret), `${key} leaks ${secret}`);
+
+    const browser = fetchingRuntime(false);
+    runtimeModule.restoreDmsPayload(browser.runtime, payload);
+    const { app: client } = clientApp(browser.runtime);
+    const hydrated = await client.runWithContext(() =>
+      runtimeModule.useDmsFetch<string>("/api/orders/secret-path", {
+        query: { token: "query-secret" },
+      }),
+    );
+    assert.equal(hydrated.data.value, "data:/api/orders/secret-path");
+    assert.deepEqual(browser.requests, [], "the browser finds the same key");
+  });
+
+  it("keys a request by its params as well as its query", async () => {
+    const { runtime, requests } = fetchingRuntime(false);
+    const { app } = clientApp(runtime);
+    const load = (params: Record<string, unknown>) =>
+      app.runWithContext(() =>
+        runtimeModule.useDmsFetch("/api/list", { query: { a: 1 }, params }),
+      );
+
+    await Promise.all([load({ b: 1 }), load({ b: 2 }), load({ b: 2 })]);
+
+    assert.deepEqual(
+      requests.map(({ options }) => options.params),
+      [{ b: 1 }, { b: 2 }],
+    );
+  });
+
+  it("does not retry a server read, unless asked to, and leaves the browser's retries alone", async () => {
+    const server = fetchingRuntime(true);
+    const ssr = createSSRApp(
+      defineComponent({
+        setup() {
+          runtimeModule.useDmsFetch("/api/default");
+          runtimeModule.useDmsFetch("/api/explicit", { retry: 2 });
+          return () => h("p");
+        },
+      }),
+    );
+    provideDmsFrontendRuntime(ssr, server.runtime);
+    await renderToString(ssr);
+    await ssr.runWithContext(() =>
+      Promise.all([
+        runtimeModule.$fetch("/api/direct"),
+        runtimeModule.$fetch.create({ retry: 3 })("/api/created"),
+      ]),
+    );
+
+    assert.deepEqual(
+      server.requests.map(({ url, options }) => [url, options.retry]),
+      [
+        ["/api/default", 0],
+        ["/api/explicit", 2],
+        ["/api/direct", 0],
+        ["/api/created", 3],
+      ],
+    );
+
+    const browser = fetchingRuntime(false);
+    const { app } = clientApp(browser.runtime);
+    await app.runWithContext(() =>
+      Promise.all([
+        runtimeModule.useDmsFetch("/api/default"),
+        runtimeModule.$fetch("/api/direct"),
+      ]),
+    );
+    assert.deepEqual(
+      browser.requests.map(({ options }) => "retry" in options),
+      [false, false],
+    );
   });
 });
