@@ -31,6 +31,8 @@ import {
 import { frontendModules } from "./frontend-modules.generated";
 import {
   SSR_ICONS_ID,
+  collectDmsIconSymbols,
+  dmsIconSprite,
   serializeDmsIcons,
   trackDmsIcons,
 } from "./icon-hydration";
@@ -162,6 +164,7 @@ async function renderDmsPageWithRuntime(
     const ssrContext: DmsSsrContext = {};
     let asyncComponents = new Set<string>();
     let icons = new Set<string>();
+    let iconSymbols = new Map<string, string>();
     let payload: DmsPayload = { data: {}, errors: {}, state: {} };
     const inertiaResult = await createInertiaApp({
       page,
@@ -177,6 +180,7 @@ async function renderDmsPageWithRuntime(
         const app = createSSRApp({ render: () => h(App, props) });
         asyncComponents = trackDmsAsyncComponents(app);
         icons = trackDmsIcons(app);
+        iconSymbols = collectDmsIconSymbols(app);
         stopScopes = trackDmsServerScopes(app);
         const configured = await configureDmsApp({
           app,
@@ -220,7 +224,7 @@ async function renderDmsPageWithRuntime(
     const renderedHead = await renderSSRHead(head);
     return {
       error: page.props.error,
-      body: `${inertiaResult.body}${payloadScript(payload)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
+      body: `${inertiaResult.body}${dmsIconSprite(iconSymbols)}${payloadScript(payload)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
       head: {
         bodyAttrs: renderedHead.bodyAttrs,
         headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,

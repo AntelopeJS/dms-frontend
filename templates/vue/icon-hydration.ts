@@ -7,10 +7,29 @@ import {
   type IconifyJSON,
   iconLoaded,
 } from "@iconify/vue";
-import type { App, Component, ComponentPublicInstance } from "vue";
+import {
+  type App,
+  type Component,
+  type ComponentPublicInstance,
+  cloneVNode,
+  inject,
+  type InjectionKey,
+  type VNode,
+} from "vue";
 
 /** The element a server render writes the data of the icons it drew to. */
 export const SSR_ICONS_ID = "dms-ssr-icons";
+/** The hidden `<svg>` that holds each drawn icon once, as a `<symbol>`. */
+export const ICON_SPRITE_ID = "dms-icon-sprite";
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+const SYMBOL_PREFIX = "dms-icon-";
+const HASH_OFFSET = 0x811c9dc5;
+const HASH_PRIME = 0x01000193;
+const HASH_RADIX = 36;
+
+/** The symbols of one server render, by id. */
+type IconSymbols = Map<string, string>;
+const SERVER_SYMBOLS: InjectionKey<IconSymbols> = Symbol("dms-icon-symbols");
 
 interface IconProps {
   icon?: unknown;
@@ -33,6 +52,91 @@ export function drawLoadedIconsAtOnce(): void {
     default: ({ icon }: IconProps) =>
       typeof icon !== "string" || iconLoaded(icon),
   };
+  drawIconsFromSprite();
+}
+
+/** FNV-1a: the same short digest in a server and in a browser. */
+function digest(text: string): string {
+  let hash = HASH_OFFSET;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, HASH_PRIME);
+  }
+  return (hash >>> 0).toString(HASH_RADIX);
+}
+
+function symbolMarkup(id: string, viewBox: string, body: string): string {
+  return `<symbol id="${id}" viewBox="${viewBox}">${body}</symbol>`;
+}
+
+/** Adds a symbol to the page's sprite, which it creates the first time. */
+function addSymbolToDocument(id: string, viewBox: string, body: string): void {
+  if (document.getElementById(id)) return;
+  let sprite = document.getElementById(ICON_SPRITE_ID);
+  if (!sprite) {
+    sprite = document.createElementNS(SVG_NAMESPACE, "svg");
+    sprite.id = ICON_SPRITE_ID;
+    sprite.setAttribute("aria-hidden", "true");
+    sprite.setAttribute("style", "display:none");
+    document.body.append(sprite);
+  }
+  sprite.insertAdjacentHTML("beforeend", symbolMarkup(id, viewBox, body));
+}
+
+/**
+ * The icon drawn as a `<use>` of its symbol in the page's sprite, rather than
+ * with its whole body: an icon shown on every row of a table is sent once.
+ * The symbol is keyed by the drawn body and view box, so a flipped or rotated
+ * icon is a symbol of its own. Left inline on a server render that collects no
+ * symbols, and for an empty icon.
+ */
+function spriteIcon(vnode: VNode, symbols: IconSymbols | null): VNode {
+  const props = vnode.props as Record<string, unknown> | null;
+  const body = props?.innerHTML;
+  const viewBox = props?.viewBox;
+  if (
+    vnode.type !== "svg" ||
+    typeof body !== "string" ||
+    body === "" ||
+    typeof viewBox !== "string"
+  )
+    return vnode;
+  const id = `${SYMBOL_PREFIX}${digest(`${viewBox}\n${body}`)}`;
+  if (symbols) symbols.set(id, symbolMarkup(id, viewBox, body));
+  else if (typeof document !== "undefined")
+    addSymbolToDocument(id, viewBox, body);
+  else return vnode;
+  return cloneVNode(vnode, { innerHTML: `<use href="#${id}"></use>` });
+}
+
+let drawingFromSprite = false;
+
+/** Makes every Iconify icon draw itself from the page's sprite. */
+function drawIconsFromSprite(): void {
+  if (drawingFromSprite) return;
+  drawingFromSprite = true;
+  const component = Icon as unknown as {
+    setup: (props: unknown, context: unknown) => () => VNode;
+  };
+  const setup = component.setup;
+  component.setup = (props, context) => {
+    const symbols = inject(SERVER_SYMBOLS, null);
+    const draw = setup(props, context);
+    return () => spriteIcon(draw(), symbols);
+  };
+}
+
+/** Collects the symbols of the icons a server render draws. */
+export function collectDmsIconSymbols(app: App): IconSymbols {
+  const symbols: IconSymbols = new Map();
+  app.provide(SERVER_SYMBOLS, symbols);
+  return symbols;
+}
+
+/** The sprite of a server render, each icon it drew once. */
+export function dmsIconSprite(symbols: IconSymbols): string {
+  if (!symbols.size) return "";
+  return `<svg id="${ICON_SPRITE_ID}" aria-hidden="true" style="display:none">${[...symbols.values()].join("")}</svg>`;
 }
 
 /**

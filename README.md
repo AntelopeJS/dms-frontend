@@ -747,6 +747,12 @@ the page, so the browser draws the same icons as it hydrates; an icon no
 installed collection holds stays empty on the server and is fetched in the
 browser as before.
 
+Each icon is drawn once per page: a hidden `<svg id="dms-icon-sprite">` holds
+one `<symbol>` per icon (and per flip or rotation), and every occurrence is an
+`<svg>` with a `<use>` of it, so an icon on each row of a table is sent once.
+The browser draws the same way, adding the symbols of the icons it draws later
+to the same sprite.
+
 ## Options
 
 | Option | Environment | Purpose |
