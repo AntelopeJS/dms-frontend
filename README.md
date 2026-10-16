@@ -61,7 +61,7 @@ pnpm exec ajs dms start -b https://dms.example.com -p 3001
 | 0.9.0 | `>=0.6.0 <0.7.0` |
 | 0.6.0 – 0.8.3 | 0.5 (exact floor per release in the full table) |
 
-The 0.6 line needs Node.js 20.12 or later and `@antelopejs/core` `>=1.13.2 <2`. The [compatibility table](https://dms.antelopejs.com/docs/frontend/introduction#compatibility) lists every release; moving a module to 0.6 is covered in [Migrating to 0.6.0](https://dms.antelopejs.com/docs/frontend/upgrading/migrating-to-0-6).
+The 0.6 line needs Node.js 20.12 or later and `@antelopejs/core` `>=1.13.2 <2`. The [compatibility table](https://dms.antelopejs.com/docs/frontend/introduction#compatibility) lists every release.
 
 ## Documentation
 
