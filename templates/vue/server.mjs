@@ -220,7 +220,7 @@ async function proxy(request, response, backendProxy) {
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
   });
-  await relayAnswer(request, response, upstream);
+  await relayAnswer(request, response, upstream, { fetched: true });
 }
 
 function acceptedAsset(pathname, request) {

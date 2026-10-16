@@ -51,9 +51,49 @@ function proxyEncoder(request, upstream) {
 }
 
 /** Relays a backend answer to the client, compressed when it should be. */
-export async function relayAnswer(request, response, upstream) {
+export async function relayAnswer(
+  request,
+  response,
+  upstream,
+  { fetched = false } = {},
+) {
+  // Only native fetch bodies are decoded. Synthetic/opaque responses may
+  // still contain the encoded bytes, and unknown coding chains stay opaque.
+  const codings = (upstream.headers.get("content-encoding") ?? "")
+    .toLowerCase()
+    .split(",")
+    .map((coding) => coding.trim());
+  if (
+    fetched &&
+    request.method !== "HEAD" &&
+    upstream.body &&
+    !BODILESS_STATUSES.has(upstream.status) &&
+    codings.every((coding) =>
+      ["gzip", "x-gzip", "deflate", "br"].includes(coding),
+    )
+  ) {
+    // A decoded partial representation cannot retain the encoded byte offsets.
+    // Do not manufacture a complete 200 response from a partial 206 either.
+    if (upstream.status === 206 || upstream.headers.has("content-range")) {
+      await upstream.body.cancel();
+      response.writeHead(502);
+      response.end();
+      return;
+    }
+    const headers = new Headers(upstream.headers);
+    headers.delete("content-encoding");
+    headers.delete("content-length");
+    const etag = headers.get("etag");
+    if (etag && !etag.startsWith("W/")) headers.set("etag", `W/${etag}`);
+    upstream = { status: upstream.status, headers, body: upstream.body };
+  }
   const encoder = proxyEncoder(request, upstream);
-  writeProxyHeaders(response, upstream, encoder?.encoding);
+  writeProxyHeaders(
+    response,
+    upstream,
+    encoder?.encoding,
+    isCompressible(request, upstream),
+  );
   if (!upstream.body || request.method === "HEAD") return response.end();
   const body = Readable.fromWeb(upstream.body);
   if (encoder) await pipeline(body, encoder.stream, response);

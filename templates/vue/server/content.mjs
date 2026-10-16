@@ -18,7 +18,30 @@ const DYNAMIC_BROTLI_QUALITY = 4;
  */
 export function acceptedEncoder(request, { streaming = false } = {}) {
   const accepted = request.headers["accept-encoding"] ?? "";
-  if (accepted.includes("br"))
+  const qualities = new Map();
+  for (const entry of accepted.split(",")) {
+    const [token, ...parameters] = entry.trim().toLowerCase().split(";");
+    if (!token) continue;
+    const parameter = parameters.find((value) => /^\s*q\s*=/.test(value));
+    const value = parameter?.split("=")[1].trim();
+    const quality =
+      value === undefined
+        ? 1
+        : /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/.test(value)
+          ? Number(value)
+          : 0;
+    qualities.set(
+      token.trim(),
+      Math.min(qualities.get(token.trim()) ?? 1, quality),
+    );
+  }
+  const quality = (token) => qualities.get(token) ?? qualities.get("*") ?? 0;
+  const br = quality("br");
+  const gzip = quality("gzip");
+  // Implicit identity is a fallback, not a preference over compression.
+  const identity = qualities.get("identity") ?? 0;
+  if (identity > Math.max(br, gzip)) return undefined;
+  if (br > 0 && br >= gzip)
     return {
       encoding: "br",
       stream: createBrotliCompress({
@@ -28,7 +51,7 @@ export function acceptedEncoder(request, { streaming = false } = {}) {
         },
       }),
     };
-  if (accepted.includes("gzip"))
+  if (gzip > 0)
     return {
       encoding: "gzip",
       stream: createGzip(

@@ -27,7 +27,12 @@ function varyWithEncoding(vary) {
  * `encoding`, the proxy compresses the body itself: its length is no longer
  * known, and a strong validator no longer names these bytes.
  */
-export function writeProxyHeaders(response, upstream, encoding) {
+export function writeProxyHeaders(
+  response,
+  upstream,
+  encoding,
+  varies = false,
+) {
   const headers = Object.fromEntries(upstream.headers);
   const named = (headers.connection ?? "")
     .split(",")
@@ -36,10 +41,10 @@ export function writeProxyHeaders(response, upstream, encoding) {
   delete headers["set-cookie"];
   const cookies = upstream.headers.getSetCookie?.() ?? [];
   if (cookies.length) headers["set-cookie"] = cookies;
+  if (encoding || varies) headers.vary = varyWithEncoding(headers.vary);
   if (encoding) {
     delete headers["content-length"];
     headers["content-encoding"] = encoding;
-    headers.vary = varyWithEncoding(headers.vary);
     if (headers.etag && !headers.etag.startsWith("W/"))
       headers.etag = `W/${headers.etag}`;
   }
