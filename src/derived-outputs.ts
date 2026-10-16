@@ -1,6 +1,7 @@
 // The workspace files derived from the frontend-module sources rather than
 // copied from them: the module registry and loader, the type paths, the public
-// assets, the locale catalogs and the aggregated shortcuts.
+// assets, the locale catalogs, the aggregated shortcuts and the layers' app
+// configs.
 //
 // Materialization writes all of them. In development the layer watcher
 // rewrites those a change can affect (`DERIVED_OUTPUTS`), from the same
@@ -20,8 +21,15 @@ import {
   FRONTEND_BUILD_ENTRY,
   FRONTEND_MODULE_ENTRY,
   LAYERS_SUBDIR,
+  SERVER_MODULE_ENTRY,
 } from "./config";
-import { frontendLayerTypePaths, MODULE_LAYERS_DIRNAME } from "./layer-aliases";
+import { affectsAppConfigs, writeAppConfigs } from "./app-configs";
+import {
+  affectsAssetDirectory,
+  isLayerDirectory,
+  moduleAssetRoots,
+} from "./asset-roots";
+import { frontendLayerTypePaths } from "./layer-aliases";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
 import { FrontendModuleOptions, ResolvedLayer } from "./workspace";
 
@@ -41,6 +49,7 @@ export interface FrontendModuleRegistryEntry {
   priority: number;
   entry?: string;
   build?: string;
+  server?: string;
   options: FrontendModuleOptions;
 }
 
@@ -65,6 +74,8 @@ function validateFrontendModuleRegistry(
       throw new Error(`Invalid frontend module entry: ${module.id}`);
     if (module.build !== undefined && module.build !== FRONTEND_BUILD_ENTRY)
       throw new Error(`Invalid frontend module build entry: ${module.id}`);
+    if (module.server !== undefined && module.server !== SERVER_MODULE_ENTRY)
+      throw new Error(`Invalid frontend module server entry: ${module.id}`);
     if (!resolve(module.root).startsWith(moduleRoot))
       throw new Error(
         `Frontend module root escapes the workspace: ${module.id}`,
@@ -81,6 +92,7 @@ export function createFrontendModuleRegistry(
   const modules = layers.map((layer) => {
     const sourceEntry = join(layer.path, FRONTEND_MODULE_ENTRY);
     const buildEntry = join(layer.path, FRONTEND_BUILD_ENTRY);
+    const serverEntry = join(layer.path, SERVER_MODULE_ENTRY);
     const options = layer.options ?? {};
     return {
       id: getLayerSafeName(layer),
@@ -90,6 +102,7 @@ export function createFrontendModuleRegistry(
       priority: layer.priority ?? 0,
       entry: existsSync(sourceEntry) ? FRONTEND_MODULE_ENTRY : undefined,
       build: existsSync(buildEntry) ? FRONTEND_BUILD_ENTRY : undefined,
+      server: existsSync(serverEntry) ? SERVER_MODULE_ENTRY : undefined,
       options: layer.configKey ? { [layer.configKey]: options } : options,
     };
   });
@@ -118,6 +131,7 @@ function writeFrontendTypePaths(
   const paths: Record<string, string[]> = {
     "#dms/frontend-module": ["./frontend-module.ts"],
     "#dms/frontend-build": ["./frontend-build.ts"],
+    "#dms/server": ["./server-module.ts"],
     "@frontend/*": ["./frontend-modules/*"],
     ...frontendLayerTypePaths(
       [...registry.modules].reverse().map((module) => module.root),
@@ -186,9 +200,39 @@ function writeFrontendBuildLoader(
 }
 
 /**
+ * The module through which the generated server imports each module's
+ * `dms.server.ts`: through Vite in development, from its own bundle in
+ * production. The browser bundle never imports it.
+ */
+function writeServerModuleLoader(
+  workspaceDir: string,
+  registry: FrontendModuleRegistry,
+): boolean {
+  const modules = registry.modules.filter((module) => module.server);
+  const imports = modules
+    .map(
+      (module, index) =>
+        `import server${index} from "./${LAYERS_SUBDIR}/${module.id}/${module.server}";`,
+    )
+    .join("\n");
+  const declarations = modules
+    .map(
+      (module, index) =>
+        `{ id: ${JSON.stringify(module.id)}, priority: ${module.priority}, setup: server${index} }`,
+    )
+    .join(", ");
+  const content = `${imports}\n\nimport type { DmsServerSetup } from "./server-module";\n\nexport const serverModules: { id: string; priority: number; setup: DmsServerSetup }[] = [${declarations}];\n`;
+  return applyContent(
+    content,
+    join(workspaceDir, "server-modules.generated.ts"),
+  );
+}
+
+/**
  * The registry itself, which the generated configs and server read, and the
- * loaders through which the application imports each module's entry and the
- * Vite config each module's build declarations.
+ * loaders through which the application imports each module's entry, the
+ * Vite config each module's build declarations and the server each module's
+ * server entry.
  */
 function writeModuleRegistry(
   workspaceDir: string,
@@ -200,28 +244,13 @@ function writeModuleRegistry(
   );
   const wroteModules = writeFrontendModuleLoader(workspaceDir, registry);
   const wroteBuilds = writeFrontendBuildLoader(workspaceDir, registry);
-  return wroteRegistry || wroteModules || wroteBuilds;
+  const wroteServer = writeServerModuleLoader(workspaceDir, registry);
+  return wroteRegistry || wroteModules || wroteBuilds || wroteServer;
 }
 
 interface DiscoveredAsset {
   moduleId: string;
   relativePath: string;
-}
-
-interface AssetRoot {
-  absolutePath: string;
-  relativePrefix: string;
-}
-
-function moduleAssetRoots(moduleRoot: string): AssetRoot[] {
-  const layersRoot = join(moduleRoot, "layers");
-  if (!existsSync(layersRoot)) {
-    return [{ absolutePath: moduleRoot, relativePrefix: "" }];
-  }
-  return readdirSync(layersRoot).map((name) => ({
-    absolutePath: join(layersRoot, name),
-    relativePrefix: `layers/${name}/`,
-  }));
 }
 
 /** Where each asset root keeps the files served as they are. */
@@ -334,38 +363,6 @@ function readLocaleMessages(
     messages[locale] = mergeLocaleMessages(value, messages[locale] ?? {});
   }
   return messages;
-}
-
-/**
- * Whether `relativePath`, relative to a module root, names its `layers/`
- * directory or one of the layers in it, whose creation or removal adds or
- * removes an asset root with everything in it.
- */
-function isLayerDirectory(relativePath: string): boolean {
-  const segments = toPosixPath(relativePath).split("/");
-  return segments[0] === MODULE_LAYERS_DIRNAME && segments.length <= 2;
-}
-
-/**
- * Whether a change at `relativePath`, relative to a module root, can change
- * what its asset roots hold under `directory`: anything under it, or a
- * directory on the way to it, whose creation or removal brings or takes a
- * whole set of files at once.
- */
-function affectsAssetDirectory(
-  directory: string,
-  relativePath: string,
-): boolean {
-  if (isLayerDirectory(relativePath)) return true;
-  const segments = toPosixPath(relativePath).split("/");
-  const withinRoot =
-    segments[0] === MODULE_LAYERS_DIRNAME ? segments.slice(2) : segments;
-  return directory
-    .split("/")
-    .every(
-      (segment, index) =>
-        index >= withinRoot.length || withinRoot[index] === segment,
-    );
 }
 
 /** Whether a change at `relativePath` can change the generated catalogs. */
@@ -553,6 +550,15 @@ export interface DerivedOutput {
    */
   write(workspaceDir: string, registry: FrontendModuleRegistry): boolean;
   /**
+   * Whether the output reads its sources as data, a public file or a
+   * catalog, rather than importing them. The dev layer watcher then writes it
+   * before it copies the other sources of the same pass, which may refer to
+   * it: a component or an app config naming a public file or a translation
+   * saved with it finds it already there. An output that imports its sources
+   * comes after the copies it imports.
+   */
+  readsSourcesAsData?: boolean;
+  /**
    * For an output the running dev server cannot apply: what the watcher
    * tells the user to do when a change rewrites it.
    */
@@ -560,7 +566,8 @@ export interface DerivedOutput {
 }
 
 /**
- * Every derived output, in the order they are written.
+ * Every derived output, in the order they are written: the dev layer watcher
+ * only puts those that read their sources as data ahead of the others.
  *
  * The dev server serves `public/` from disk, and Vite follows the generated
  * modules through its own watcher. The type paths are the exception: they list
@@ -572,7 +579,11 @@ export const DERIVED_OUTPUTS: readonly DerivedOutput[] = [
   {
     name: "module registry",
     affects: (path) =>
-      [FRONTEND_MODULE_ENTRY, FRONTEND_BUILD_ENTRY].includes(toPosixPath(path)),
+      [
+        FRONTEND_MODULE_ENTRY,
+        FRONTEND_BUILD_ENTRY,
+        SERVER_MODULE_ENTRY,
+      ].includes(toPosixPath(path)),
     write: writeModuleRegistry,
   },
   {
@@ -586,6 +597,7 @@ export const DERIVED_OUTPUTS: readonly DerivedOutput[] = [
     name: "locale catalogs",
     affects: affectsLocaleMessages,
     write: writeLocaleMessages,
+    readsSourcesAsData: true,
   },
   {
     name: "aggregated shortcuts",
@@ -596,5 +608,11 @@ export const DERIVED_OUTPUTS: readonly DerivedOutput[] = [
     name: "public assets",
     affects: (path) => affectsAssetDirectory(PUBLIC_DIRECTORY, path),
     write: writePublicAssets,
+    readsSourcesAsData: true,
+  },
+  {
+    name: "app configs",
+    affects: affectsAppConfigs,
+    write: writeAppConfigs,
   },
 ];

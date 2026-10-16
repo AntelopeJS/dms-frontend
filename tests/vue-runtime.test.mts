@@ -12,12 +12,15 @@ import {
   onScopeDispose,
   ref,
   Suspense,
+  useId,
 } from "vue";
 import {
   createDmsFrontendRuntime,
+  createDmsError,
   defineDmsPageMeta,
   dmsPageSuspenseProps,
   hydrateDmsPageProps,
+  keepSharedOverHistory,
   navigateDms,
   provideDmsFrontendRuntime,
   registerDmsComponent,
@@ -26,7 +29,7 @@ import {
   trackDmsAsyncComponents,
   trackDmsServerScopes,
   useDmsAsyncData,
-  useError,
+  useDmsError,
   useDmsRuntimeHooks,
   useDmsCookie,
   useDmsState,
@@ -34,10 +37,46 @@ import {
   useDmsRoute,
   useDmsRouter,
   useDmsPageLoading,
-  useUserSession,
+  useDmsUserSession,
   setupFrontendModules,
   type DmsMiddleware,
 } from "../templates/vue/frontend-module.ts";
+
+/**
+ * Records every navigation Inertia is asked for: a server visit (a request)
+ * or a client-side `push`/`replace` (none). Each one finishes at once.
+ */
+interface RecordedVisit {
+  kind: "server" | "push" | "replace";
+  url: string;
+  preserveState?: unknown;
+  preserveScroll?: unknown;
+}
+
+function recordVisits(context) {
+  const visits: RecordedVisit[] = [];
+  context.mock.method(router, "visit", (url, options = {}) => {
+    visits.push({
+      kind: "server",
+      url,
+      preserveState: options.preserveState,
+      preserveScroll: options.preserveScroll,
+    });
+    options.onFinish?.({});
+  });
+  for (const kind of ["push", "replace"] as const) {
+    context.mock.method(router, kind, (params) => {
+      visits.push({
+        kind,
+        url: params.url,
+        preserveState: params.preserveState,
+        preserveScroll: params.preserveScroll,
+      });
+      params.onFinish?.(params);
+    });
+  }
+  return visits;
+}
 
 function application(label: string, hydrated = {}, isServer = false) {
   const app = createSSRApp({ render: () => null });
@@ -104,6 +143,61 @@ async function registerGlobalMiddleware(
 }
 
 describe("Vue request runtime", () => {
+  it("runs the middlewares registered as parallel together, the first result in order winning", async () => {
+    const { app } = application("server", {}, true);
+    const started: string[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((settle) => (release = settle));
+    await setupFrontendModules([
+      {
+        module: {
+          setup(sdk) {
+            sdk.registerMiddleware(
+              "session",
+              async (to) => {
+                started.push(`session ${to.path}`);
+                await gate;
+              },
+              { global: true, parallel: true },
+            );
+            sdk.registerMiddleware(
+              "flags",
+              async (to) => {
+                started.push(`flags ${to.path}`);
+                await gate;
+                return to.path === "/both" ? "/from-flags" : undefined;
+              },
+              { global: true, parallel: true },
+            );
+            sdk.registerMiddleware(
+              "after",
+              (to) => {
+                started.push(`after ${to.path}`);
+                return to.path === "/both" ? "/from-after" : undefined;
+              },
+              { global: true },
+            );
+          },
+        },
+        options: { public: {} },
+      },
+    ]);
+    const navigation = app.runWithContext(() => navigateDms("/both"));
+    await new Promise((settle) => setTimeout(settle, 0));
+    // Both parallel ones started before either settled; the next waits.
+    assert.deepEqual(started, ["session /both", "flags /both"]);
+    release();
+    await navigation;
+    // The parallel group's redirect wins over the middleware after it.
+    assert.deepEqual(started, [
+      "session /both",
+      "flags /both",
+      "session /from-flags",
+      "flags /from-flags",
+      "after /from-flags",
+    ]);
+  });
+
   it("keeps relative middleware redirects out of the browser router during SSR", async (context) => {
     const { app } = application("server", {}, true);
     await registerGlobalMiddleware((to) =>
@@ -125,24 +219,21 @@ describe("Vue request runtime", () => {
       fullPath: "/dashboard?tab=failed#section",
       query: { tab: "failed" },
     });
-    const calls: string[] = [];
-    context.mock.method(router, "visit", (url, options) => {
-      calls.push(url);
-      options?.onFinish?.({});
-    });
+    const visits = recordVisits(context);
+    const calls = () => visits.map(({ kind, url }) => `${kind} ${url}`);
     const navigation = app.runWithContext(useDmsRouter);
     await navigation.push("/dashboard?tab=failed#section");
     await navigation.replace({ query: { tab: "failed" }, hash: "#section" });
-    assert.deepEqual(calls, []);
+    assert.deepEqual(calls(), []);
     await navigation.push({ query: { tab: "failed" }, hash: "#other" });
     await navigation.replace({ query: { tab: "success" }, hash: "#section" });
     await app.runWithContext(() => navigateDms(runtime.route.fullPath));
     router.visit(runtime.route.fullPath);
-    assert.deepEqual(calls, [
-      "/dashboard?tab=failed#other",
-      "/dashboard?tab=success#section",
-      "/dashboard?tab=failed#section",
-      "/dashboard?tab=failed#section",
+    assert.deepEqual(calls(), [
+      "push /dashboard?tab=failed#other",
+      "replace /dashboard?tab=success#section",
+      "push /dashboard?tab=failed#section",
+      "server /dashboard?tab=failed#section",
     ]);
   });
 
@@ -260,18 +351,22 @@ describe("Vue request runtime", () => {
     }
   });
 
-  it("refreshes stable keyed data when its consumer returns after navigation", async () => {
+  it("shows keyed data at once when its consumer returns, and reads it again but on hydration", async () => {
     const runtime = createDmsFrontendRuntime(undefined, { table: "Live" });
     const visible = ref(true);
     let backendValue = "Live";
     let requests = 0;
+    const shown: string[] = [];
     const Consumer = defineComponent({
       setup() {
-        void useDmsAsyncData("table", async () => {
+        const { data } = useDmsAsyncData("table", async () => {
           requests++;
           return backendValue;
         });
-        return () => h("p");
+        return () => {
+          shown.push(String(data.value));
+          return h("p");
+        };
       },
     });
     const app = mountRuntime(runtime, {
@@ -284,18 +379,28 @@ describe("Vue request runtime", () => {
       await nextTick();
       visible.value = true;
       await nextTick();
-      assert.equal(requests, 0, "A local remount must retain the keyed result");
+      assert.equal(requests, 0, "A remount while the page hydrates neither");
+      app.runWithContext(() => dmsPageSuspenseProps()).onResolve();
+      await nextTick();
       visible.value = false;
       await nextTick();
       backendValue = "Draft";
       app.runWithContext(() =>
         hydrateDmsPageProps({ path: "/editor", page: {} }),
       );
+      shown.length = 0;
+      visible.value = true;
+      await nextTick();
+      assert.equal(shown[0], "Live", "the cached data shows at once");
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(requests, 1, "and is read again in the background");
+      assert.equal(runtime.asyncData.get("table")?.data.value, "Draft");
+      visible.value = false;
+      await nextTick();
       visible.value = true;
       await nextTick();
       await new Promise((resolve) => setImmediate(resolve));
-      assert.equal(requests, 1);
-      assert.equal(runtime.asyncData.get("table")?.data.value, "Draft");
+      assert.equal(requests, 2, "every mount reads it again");
     } finally {
       app.unmount();
     }
@@ -305,11 +410,7 @@ describe("Vue request runtime", () => {
     const { app, runtime } = application("first");
     runtime.route.path = "/dashboard";
     runtime.route.query = { tab: "archived", keep: "old" };
-    const urls: string[] = [];
-    context.mock.method(router, "visit", (url, options) => {
-      urls.push(url);
-      options.onFinish({});
-    });
+    const visits = recordVisits(context);
     const navigation = app.runWithContext(useDmsRouter);
     await navigation.replace({ query: { keep: "new" } });
     await navigation.replace({ query: {} });
@@ -317,12 +418,15 @@ describe("Vue request runtime", () => {
     await navigation.push({
       query: { tags: ["a b", "c"], flag: null, omit: undefined },
     });
-    assert.deepEqual(urls, [
-      "/dashboard?keep=new",
-      "/dashboard",
-      "/elsewhere",
-      "/dashboard?tags=a%20b&tags=c&flag",
-    ]);
+    assert.deepEqual(
+      visits.map(({ url }) => url),
+      [
+        "/dashboard?keep=new",
+        "/dashboard",
+        "/elsewhere",
+        "/dashboard?tags=a%20b&tags=c&flag",
+      ],
+    );
   });
 
   it("keeps the page mounted when a navigation only changes the query or hash", async (context) => {
@@ -330,19 +434,7 @@ describe("Vue request runtime", () => {
     runtime.route.path = "/data";
     runtime.route.fullPath = "/data";
     runtime.route.query = {};
-    const visits: Array<{
-      url: string;
-      preserveState?: unknown;
-      preserveScroll?: unknown;
-    }> = [];
-    context.mock.method(router, "visit", (url, options) => {
-      visits.push({
-        url,
-        preserveState: options.preserveState,
-        preserveScroll: options.preserveScroll,
-      });
-      options.onFinish({});
-    });
+    const visits = recordVisits(context);
     const navigation = app.runWithContext(useDmsRouter);
     await navigation.replace({ query: { table: "tags" } });
     await navigation.push("/data#rows");
@@ -352,11 +444,186 @@ describe("Vue request runtime", () => {
       { preserveState: false },
     );
     assert.deepEqual(visits, [
-      { url: "/data?table=tags", preserveState: true, preserveScroll: true },
-      { url: "/data#rows", preserveState: true, preserveScroll: true },
-      { url: "/schemas", preserveState: false, preserveScroll: false },
-      { url: "/data?table=posts", preserveState: false, preserveScroll: true },
+      {
+        kind: "replace",
+        url: "/data?table=tags",
+        preserveState: true,
+        preserveScroll: true,
+      },
+      {
+        kind: "push",
+        url: "/data#rows",
+        preserveState: true,
+        preserveScroll: true,
+      },
+      {
+        kind: "server",
+        url: "/schemas",
+        preserveState: false,
+        preserveScroll: false,
+      },
+      {
+        kind: "push",
+        url: "/data?table=posts",
+        preserveState: false,
+        preserveScroll: true,
+      },
     ]);
+  });
+
+  it("asks the server for a query-only navigation it alone can honour", async (context) => {
+    const { app, runtime } = application("first");
+    Object.assign(runtime.route, { path: "/data", fullPath: "/data" });
+    const visits = recordVisits(context);
+    const navigation = app.runWithContext(useDmsRouter);
+    await navigation.push({ query: { a: "1" } }, { only: ["page"] });
+    await navigation.push({ query: { a: "2" } }, { onStart: () => {} });
+    await navigation.push({ query: { a: "3" } }, { headers: { x: "y" } });
+    runtime.currentError.value = new Error("shown");
+    await navigation.push({ query: { a: "4" } });
+    runtime.currentError.value = null;
+    runtime.pageKey = "error:/data";
+    await navigation.push({ query: { a: "5" } });
+    assert.deepEqual(
+      visits.map(({ kind, url }) => `${kind} ${url}`),
+      [
+        "server /data?a=1",
+        "server /data?a=2",
+        "server /data?a=3",
+        "server /data?a=4",
+        "server /data?a=5",
+      ],
+    );
+  });
+
+  it("keeps the callbacks of a query-only navigation that stays in the browser", async (context) => {
+    const { app, runtime } = application("first");
+    Object.assign(runtime.route, { path: "/data", fullPath: "/data" });
+    recordVisits(context);
+    const seen: string[] = [];
+    context.mock.method(router, "push", (params) => {
+      params.onSuccess?.({ url: params.url });
+      params.onFinish?.(params);
+    });
+    await app.runWithContext(() =>
+      navigateDms(
+        { query: { tab: "b" } },
+        {
+          onSuccess: (page) => seen.push(`success ${page.url}`),
+          onFinish: () => seen.push("finish"),
+        },
+      ),
+    );
+    assert.deepEqual(seen, ["success /data?tab=b", "finish"]);
+  });
+
+  it("copies a site layout into the state once, whatever the pages that carry it", () => {
+    const { app, runtime } = application("first");
+    const shared = { isOwner: true, modules: ["first"], quickActions: [] };
+    const state = (key: string) => runtime.sharedState.get(key)?.value;
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/one", page: {}, shared });
+      // A refresh wrote a newer layout; the next page carries the same copy
+      // over (a once prop) and must not bring the older one back.
+      useDmsState("dms-modules").value = ["refreshed"];
+      useDmsState("dms-lastRefreshTime").value = 1;
+      hydrateDmsPageProps({ path: "/two", page: {}, shared });
+      hydrateDmsPageProps({ path: "/three", page: {} });
+    });
+    assert.deepEqual(state("dms-modules"), ["refreshed"]);
+    assert.equal(state("dms-lastRefreshTime"), 1);
+    app.runWithContext(() =>
+      hydrateDmsPageProps({
+        path: "/four",
+        page: {},
+        shared: { isOwner: false, modules: ["second"], quickActions: [] },
+      }),
+    );
+    assert.deepEqual(state("dms-modules"), ["second"]);
+    assert.equal(state("dms-isOwner"), false);
+    assert.notEqual(state("dms-lastRefreshTime"), 1);
+  });
+
+  it("keeps the newest site layout when Back puts an older page back", (context) => {
+    const { app, runtime } = application("first");
+    const listeners = new Map<string, (event: unknown) => void>();
+    const hadWindow = "window" in globalThis;
+    Reflect.set(globalThis, "window", {
+      addEventListener: (type: string, listener: (event: unknown) => void) =>
+        listeners.set(type, listener),
+      removeEventListener: (type: string) => listeners.delete(type),
+    });
+    let onNavigate: ((event: unknown) => void) | undefined;
+    context.mock.method(router, "on", (type: string, callback) => {
+      if (type === "navigate") onNavigate = callback;
+      return () => {};
+    });
+    const replaced: unknown[] = [];
+    context.mock.method(router, "replaceProp", (name: string, value) =>
+      replaced.push([name, value]),
+    );
+    try {
+      const older = { isOwner: false, modules: ["older"], quickActions: [] };
+      const newer = { isOwner: false, modules: ["newer"], quickActions: [] };
+      app.runWithContext(() => {
+        keepSharedOverHistory();
+        hydrateDmsPageProps({ path: "/one", page: {}, shared: newer });
+      });
+      // Back: Inertia puts back a page written before the reload.
+      listeners.get("popstate")?.({ state: { page: {} } });
+      app.runWithContext(() =>
+        hydrateDmsPageProps({ path: "/zero", page: {}, shared: older }),
+      );
+      onNavigate?.({
+        detail: { page: { props: { path: "/zero", shared: older } } },
+      });
+      assert.deepEqual(runtime.sharedState.get("dms-modules")?.value, [
+        "newer",
+      ]);
+      assert.deepEqual(replaced, [["shared", newer]]);
+      // A visit after it copies the layout it brings again.
+      const fresh = { isOwner: true, modules: ["fresh"], quickActions: [] };
+      app.runWithContext(() =>
+        hydrateDmsPageProps({ path: "/two", page: {}, shared: fresh }),
+      );
+      assert.deepEqual(runtime.sharedState.get("dms-modules")?.value, [
+        "fresh",
+      ]);
+    } finally {
+      if (!hadWindow) Reflect.deleteProperty(globalThis, "window");
+    }
+  });
+
+  it("forgets prefetched pages when the session becomes another one", async (context) => {
+    const { app } = application("first");
+    const flushes = context.mock.method(router, "flushAll", () => {});
+    const sessions = [
+      { session: { accountId: "a", activeTenantId: "t1" } },
+      { session: { accountId: "a", activeTenantId: "t1", updatedAt: 2 } },
+      { session: { accountId: "a", activeTenantId: "t2" } },
+      { session: { accountId: "b", activeTenantId: "t2" } },
+    ];
+    context.mock.method(globalThis, "fetch", async () =>
+      Response.json(sessions.shift() ?? {}),
+    );
+    // The session forgets prefetched pages in a browser only.
+    const hadWindow = "window" in globalThis;
+    Reflect.set(globalThis, "window", globalThis);
+    try {
+      const session = app.runWithContext(useDmsUserSession);
+      const counts: number[] = [];
+      for (let index = 0; index < 4; index++) {
+        await session.fetch();
+        counts.push(flushes.mock.callCount());
+      }
+      await session.clear();
+      counts.push(flushes.mock.callCount());
+      // Signed in, refreshed (same account and workspace), another workspace,
+      // another account, signed out.
+      assert.deepEqual(counts, [1, 1, 2, 3, 4]);
+    } finally {
+      if (!hadWindow) Reflect.deleteProperty(globalThis, "window");
+    }
   });
 
   it("isolates overlapping transport, state, async data and hooks", async () => {
@@ -388,9 +655,10 @@ describe("Vue request runtime", () => {
     assert.deepEqual(second.requests, ["/request/1"]);
     assert.equal(first.runtime.sharedState.get("identity")?.value, 0);
     assert.equal(second.runtime.sharedState.get("identity")?.value, 1);
-    assert.deepEqual(serializeDmsAsyncData(first.runtime), {
-      "same-key": "first",
-    });
+    // The fetch each one ran is transferred too, from its own runtime only.
+    const transferred = serializeDmsAsyncData(first.runtime);
+    assert.equal(transferred["same-key"], "first");
+    assert.deepEqual(new Set(Object.values(transferred)), new Set(["first"]));
     assert.throws(() => useDmsState("identity"), /outside a Vue application/);
   });
 
@@ -442,11 +710,11 @@ describe("Vue request runtime", () => {
         page: {
           route: { layoutUrl: "/private-layout" },
           layout: { componentName: "PrivateLayout" },
-          shared: {
-            isOwner: true,
-            modules: ["private"],
-            quickActions: ["delete"],
-          },
+        },
+        shared: {
+          isOwner: true,
+          modules: ["private"],
+          quickActions: ["delete"],
         },
       });
       hydrateDmsPageProps({
@@ -454,8 +722,8 @@ describe("Vue request runtime", () => {
         page: {
           route: { layoutUrl: "/public-layout" },
           layout: { componentName: "PublicLayout" },
-          shared: { isOwner: false, modules: [], quickActions: [] },
         },
+        shared: { isOwner: false, modules: [], quickActions: [] },
       });
     });
     assert.equal(runtime.sharedState.get("dms-isOwner")?.value, false);
@@ -469,13 +737,13 @@ describe("Vue request runtime", () => {
   it("restores isolated application contexts between asynchronous middleware", async () => {
     const first = application("first");
     const second = application("second");
-    const capturedErrors = new Map<string, ReturnType<typeof useError>>();
+    const capturedErrors = new Map<string, ReturnType<typeof useDmsError>>();
     await registerGlobalMiddleware(
       async () => {
         await Promise.resolve();
       },
       (to) => {
-        capturedErrors.set(to.path, useError());
+        capturedErrors.set(to.path, useDmsError());
         return false;
       },
     );
@@ -662,6 +930,44 @@ describe("Page meta", () => {
     assert.deepEqual(seen, [true, true]);
   });
 
+  it("renders a page once its middleware is done, with the same ids in the browser", async () => {
+    await registerGlobalMiddleware(async () => {
+      const guard = useDmsState("guard", () => "");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      guard.value = "ready";
+    });
+    const ids = new Map<string, string>();
+    const Child = defineComponent({
+      props: { label: { type: String, required: true } },
+      setup(props) {
+        const id = useId();
+        ids.set(props.label, id);
+        return () => h("i", id);
+      },
+    });
+    const Page = defineComponent({
+      setup() {
+        defineDmsPageMeta({});
+        const guard = useDmsState("guard", () => "");
+        return () =>
+          h("p", [`guard:${guard.value}`, h(Child, { label: "inside" })]);
+      },
+    });
+    const Root = {
+      render: () => h("div", [h(Page), h(Child, { label: "after" })]),
+    };
+    const runtime = createDmsFrontendRuntime(undefined, {}, true);
+    const app = createSSRApp(Root);
+    provideDmsFrontendRuntime(app, runtime);
+    assert.match(await renderToString(app), /guard:ready/);
+    const serverIds = Object.fromEntries(ids);
+    ids.clear();
+
+    const browser = mountRuntime(createDmsFrontendRuntime(), Root);
+    browser.unmount();
+    assert.deepEqual(Object.fromEntries(ids), serverIds);
+  });
+
   it("keeps a page's meta while it stays on screen and drops it for the next page", async () => {
     await setupFrontendModules([]);
     const { app, runtime } = application("first");
@@ -676,6 +982,24 @@ describe("Page meta", () => {
       hydrateDmsPageProps({ path: "/next", page: {} }, "/next"),
     );
     assert.deepEqual(runtime.route.meta, {});
+  });
+
+  it("shows the error a middleware throws in place of the page", async () => {
+    await registerGlobalMiddleware(async (to) => {
+      await Promise.resolve();
+      if (to.path === "/missing")
+        throw createDmsError({ statusCode: 404, statusMessage: "Not here" });
+    });
+    const { app, runtime } = application("first");
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/missing", page: {} }, "/missing");
+      defineDmsPageMeta({ auth: true });
+    });
+    // Settles rather than rejects: nothing awaits it in the browser, and the
+    // server reads the failure from the error it set.
+    await runtime.pendingNavigation;
+    assert.equal(runtime.currentError.value?.statusCode, 404);
+    assert.equal(runtime.currentError.value?.message, "Not here");
   });
 
   it("drops a page's meta when an error page replaces it at the same path", async () => {
@@ -767,7 +1091,7 @@ describe("Session hydration", () => {
   }
 
   function currentLanguage(app): unknown {
-    return app.runWithContext(() => useUserSession().user.value?.language);
+    return app.runWithContext(() => useDmsUserSession().user.value?.language);
   }
 
   it("keeps a newer session over the one a restored page carries", () => {

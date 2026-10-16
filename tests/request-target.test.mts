@@ -6,6 +6,7 @@ import {
   backendUrl,
   isOriginForm,
 } from "../templates/vue/server/request-target.mjs";
+import "./fixtures/dms-backend-proxies.mts";
 
 const BACKEND = "http://127.0.0.1:8080";
 // A request the server dropped would otherwise wait forever.
@@ -175,14 +176,16 @@ describe("the proxy with a target naming another host", () => {
     assert.deepEqual(backendUrls, [`/api/%2f%2f${attackerHost}/x`]);
   });
 
-  it("proxies a path normalizing to a double slash to the backend", async () => {
-    const response = await rawRequest(
+  it("never proxies a path normalizing out of the backend's prefixes", async () => {
+    await rawRequest(
       frontendPort,
       "GET",
       `/api/../x/..//${attackerHost}/api/x`,
     );
-    assert.equal(response.status, 200);
     assert.deepEqual(attackerUrls, []);
-    assert.equal(backendUrls.at(-1), `//${attackerHost}/api/x`);
+    assert.ok(
+      !backendUrls.includes(`//${attackerHost}/api/x`),
+      backendUrls.join(),
+    );
   });
 });

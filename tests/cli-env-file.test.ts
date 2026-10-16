@@ -1,12 +1,12 @@
 import * as assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { ENV_FILE_NAMES, loadProjectEnv } from "../src/env-file";
+import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 function project(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "dms-env-file-"));
+  const dir = temporaryDirectory("dms-env-file-");
   for (const [name, content] of Object.entries(files)) {
     writeFileSync(join(dir, name), content);
   }

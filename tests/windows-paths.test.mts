@@ -24,7 +24,10 @@ const WINDOWS_MODULE_PATH =
  */
 async function injectedSpecifier(moduleKey: string): Promise<string> {
   const [plugin] = [
-    AutoImport({ dts: false, imports: [{ [moduleKey]: ["useUserSession"] }] }),
+    AutoImport({
+      dts: false,
+      imports: [{ [moduleKey]: ["useDmsUserSession"] }],
+    }),
   ].flat() as Plugin[];
   const transform = plugin.transform;
   const handler =
@@ -32,7 +35,7 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
   assert.ok(handler, "the auto-importer exposes a transform hook");
   const result = await handler.call(
     { error: () => {}, warn: () => {} } as never,
-    "const session = useUserSession();",
+    "const session = useDmsUserSession();",
     "/workspace/frontend-modules/dms__ai/app/plugins/ai.client.ts",
   );
   const emitted = (typeof result === "string" ? result : result?.code) ?? "";

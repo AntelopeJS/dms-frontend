@@ -19,15 +19,22 @@ import {
   AUTH_ESTABLISH_FILE,
   PUBLIC_ENDPOINTS_FILE,
   LAYERS_SUBDIR,
+  SERVER_OPTIONS_FILE,
   TAILWIND_SOURCE_GLOB,
   TEMPLATE_FILES,
+  writeSecretBearingFile,
 } from "./config";
 import {
   createFrontendModuleRegistry,
   DERIVED_OUTPUTS,
 } from "./derived-outputs";
-import { getLayerWorkspacePath } from "./layers";
-import { PublicEndpointDeclaration, ResolvedLayer } from "./workspace";
+import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
+import { MANIFEST_SECRET_ENV } from "./manifest-secrets";
+import {
+  BackendProxyDeclaration,
+  PublicEndpointDeclaration,
+  ResolvedLayer,
+} from "./workspace";
 
 import {
   applyContent,
@@ -268,13 +275,59 @@ function collectPublicEndpoints(
   );
 }
 
+/**
+ * The backend prefixes the workspace's modules declared in the manifest, each
+ * with the module that declared it. The server checks each entry in full.
+ *
+ * @param layers Resolved layers, in workspace order
+ */
+function collectBackendProxies(
+  layers: ResolvedLayer[],
+): (BackendProxyDeclaration & { module: string })[] {
+  return layers.flatMap((layer) =>
+    (Array.isArray(layer.backendProxies) ? layer.backendProxies : [])
+      .filter((proxy) => typeof proxy === "object" && proxy !== null)
+      .map((proxy) => ({
+        ...proxy,
+        module: layer.name ?? layer.packageName ?? "unknown",
+      })),
+  );
+}
+
 function writePublicEndpoints(
   workspaceDir: string,
   layers: ResolvedLayer[],
 ): void {
+  const declared = {
+    endpoints: collectPublicEndpoints(layers),
+    proxies: collectBackendProxies(layers),
+  };
   writeFileSync(
     join(workspaceDir, PUBLIC_ENDPOINTS_FILE),
-    `${JSON.stringify({ endpoints: collectPublicEndpoints(layers) }, null, 2)}\n`,
+    `${JSON.stringify(declared, null, 2)}\n`,
+  );
+}
+
+/**
+ * Write each module's private options where the generated server hands them
+ * to that module's server routes, owner-readable only: they hold the backend's
+ * secrets. `environment` names the variables that stand for a secret the
+ * manifest leaves out: the published value always wins.
+ */
+function writeServerOptions(
+  workspaceDir: string,
+  layers: ResolvedLayer[],
+): void {
+  const modules = Object.fromEntries(
+    layers.flatMap((layer) =>
+      layer.privateOptions
+        ? [[getLayerSafeName(layer), layer.privateOptions]]
+        : [],
+    ),
+  );
+  writeSecretBearingFile(
+    join(workspaceDir, SERVER_OPTIONS_FILE),
+    `${JSON.stringify({ modules, environment: MANIFEST_SECRET_ENV }, null, 2)}\n`,
   );
 }
 
@@ -285,6 +338,7 @@ export function writeFrontendModuleRegistry(
   const registry = createFrontendModuleRegistry(workspaceDir, layers);
   writeAuthEstablishEndpoints(workspaceDir, layers);
   writePublicEndpoints(workspaceDir, layers);
+  writeServerOptions(workspaceDir, layers);
   for (const output of DERIVED_OUTPUTS) output.write(workspaceDir, registry);
 }
 

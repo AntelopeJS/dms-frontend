@@ -155,17 +155,20 @@ attempt. The throttle stamp lives at
 
 Manifest negotiation and module materialization are the renderer contract described in [Renderers](#renderers).
 
-The generated Vue application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router: "inertia" }`, and `@nuxt/ui/vue-plugin`. The Node server resolves each Inertia visit through `/dms/page?path=…`, including fresh shared data so account, tenant, and permission changes update navigation state. It proxies backend routes and manages authentication through server-side sessions. `DMS_BOOTSTRAP_SECRET` is used only by the CLI's server-to-server frontend manifest and module archive requests and is never sent by, or exposed to, browser traffic.
+The generated Vue application uses `@inertiajs/vue3`, `@nuxt/ui/vite` with `{ router: "inertia" }`, and `@nuxt/ui/vue-plugin`. The Node server resolves each Inertia visit through `/dms/page?path=…`; the site layout it returns comes as a once prop the browser reuses for five minutes per account and workspace (see [Navigation and the site layout](#navigation-and-the-site-layout)). It proxies backend routes and manages authentication through server-side sessions. `DMS_BOOTSTRAP_SECRET` is used only by the CLI's server-to-server frontend manifest and module archive requests and is never sent by, or exposed to, browser traffic.
 
 Vue modules register through `dms.frontend.ts` and import the SDK from the `#dms/frontend-module` alias, which the loader resolves to the generated `frontend-module.ts`: `defineDmsPlugin`, `useDmsRouter`, the page and session types, and everything else a module needs from the host. Email templates register separately through `dms.email.ts`.
 
-An email entry exports `serverEmailTemplates` and may export a plain `appConfig` object, such as shared branding defaults. Email rendering merges these configurations in manifest-priority order and provides them to `useDmsAppConfig` per render. Public runtime options come from the module manifest; `DMS_CLIENT_BASE_URL` overrides `public.dms.clientBaseUrl`. Email entries must not import the browser frontend module. The rendered HTML carries no Vue hydration comments (`<!--[-->`, `<!---->`, teleport anchors): an email is never hydrated, so the renderer strips them, and keeps every other comment, Outlook's conditional comments included.
+An email entry exports `serverEmailTemplates` and may export a plain `appConfig` object, such as shared branding defaults. Email rendering merges these configurations with the layers' [app configs](#app-config-appappconfigts) and provides the result to `useDmsAppConfig` per render: module by module, in manifest-priority order, a module's email `appConfig` first, then its layers' `app/app.config.ts`. A higher-priority module's layers thus override a lower one's email `appConfig`, and a module's email `appConfig`, the more specific of its two, keeps the values it gives emails over its own layers. Public runtime options come from the module manifest; `DMS_CLIENT_BASE_URL` overrides `public.dms.clientBaseUrl`. Email entries must not import the browser frontend module. The rendered HTML carries no Vue hydration comments (`<!--[-->`, `<!---->`, teleport anchors): an email is never hydrated, so the renderer strips them, and keeps every other comment, Outlook's conditional comments included.
 
 Email builds ship complete merged translation catalogs as JSON under `dist/server/locales/`, separate from executable JavaScript. Deploy the entire `dist/server` directory. Each render loads only its requested language and the English fallback; arbitrary translation keys and module overrides remain available. Unknown languages fall back to English, while missing or corrupt files for a supported language fail rendering rather than silently dropping translations. The source harness keeps the 256 KiB JavaScript ceiling and reports locale-data bytes separately.
 
 `ajs-dms dev` builds the email bundle too, once the dev server is ready, and rebuilds it whenever an email template changes. The build runs in a separate low-priority process, so page reloads and HMR never wait on it; a render requested while a build is running waits for that build to finish.
 
 ## Frontend modules
+
+Moving a module, or the DMS, from 0.5 to 0.6: see
+[Migrating to 0.6.0](docs/migration-0.6.md).
 
 A materialized module opts into the Vue adapter with a root `dms.frontend.ts`:
 
@@ -187,6 +190,23 @@ export default frontendModule;
 The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
 
 Within one setup, the first module to register a name keeps it. `ajs-dms dev` sets every module up again each time a change to a layer reaches the server renderer, into empty registries, so the next server render uses the edited component without a restart. A `setup` may therefore run more than once in a process: it should only register, and keep no state of its own between runs.
+
+### App config (`app/app.config.ts`)
+
+Each layer of a module, or the module root when it has no `layers/` directory, may hold an `app/app.config.ts` whose default export is a plain object: branding, Nuxt UI's `ui` (colors, icons, component themes), anything the modules read through `useDmsAppConfig()`.
+
+```ts
+export default defineDmsAppConfig({
+  branding: { logo: { light: "/branding/logo.svg" } },
+  ui: { colors: { primary: "emerald" } },
+});
+```
+
+The loader merges every one of them with `defu` (records key by key, arrays concatenated) before the first module is set up, so `useDmsAppConfig()` already holds the result when a `setup` runs: modules in manifest-priority order, and within a module its layers from the last by name to the first, the order in which a contested `public/` file is resolved. A project's layer therefore overrides the DMS's, and the DMS fills in everything the project leaves out. A `setup` may still read and extend the config. Nuxt UI's own app config is merged from the result, and so are emails' (see above). The file is TypeScript only, and is imported in Node.js by the server renderer and the email bundle as well as in the browser: it must not touch browser globals when it loads.
+
+`ajs-dms dev` applies an edit at once: the next server render uses it, and the open page updates `useDmsAppConfig()` and Nuxt UI's app config in place, colors included, without a reload. What the modules' `setup` changed in the config stays on top of the edited values; adding or removing a config file is applied the same way.
+
+Up to 0.5.6, the loader applied none of these files: an entry merged its own into `useDmsAppConfig()` in its `setup`, as the DMS up to 0.8 does (`Object.assign(useDmsAppConfig(), defu(useDmsAppConfig(), appConfig))`). Such an entry keeps working, its values unchanged, but its config is now merged twice, and `defu` concatenates arrays: every array it declares, Nuxt UI's `compoundVariants` among them, holds its entries twice. Nuxt UI resolves the repeated classes through `tailwind-merge` to the same ones, so nothing changes on screen, but an entry should stop merging its own config once it requires a release of the loader that applies it. The DMS does so in a release coordinated with this one. Until then, an edit to a config its entry imports reloads the page instead of updating it in place, since the entry imports it too.
 
 ### Component prefix
 
@@ -233,6 +253,95 @@ The file runs in Node.js when Vite starts, under `ajs dms dev` and `ajs dms buil
 
 Up to 0.3, every module's `app/composables`, `app/types`, `app/utils`, `app/build/composables` and `app/build/types` were auto-imported. A module that relies on auto-imports declares its public directories in `dms.frontend.build.ts`, and imports its `app/build/` code by path.
 
+### Server routes (`dms.server.ts`)
+
+A module serves routes from the frontend server, next to the session, in an optional `dms.server.ts` beside its `dms.frontend.ts`: a sign-in flow that writes cookies, a provider redirect, a render a backend asks for.
+
+```ts
+import { defineDmsServer } from "#dms/server";
+import { ping, startExport } from "./server/routes";
+
+export default defineDmsServer((server) => {
+  server.registerRoute("GET", "/api/_acme/ping", ping);
+  server.registerRoute("POST", "/api/_acme/exports/:kind", startExport);
+});
+```
+
+```ts
+// server/routes.ts
+import type { DmsServerEvent } from "#dms/server";
+
+export function ping() {
+  return { ok: true };
+}
+
+export async function startExport(event: DmsServerEvent) {
+  const input = await event.readJson<{ from: string }>();
+  return event.backend(`/api/acme/exports/${event.params.kind}`, {
+    method: "POST",
+    body: input,
+    token: event.session.read()?.accessToken,
+  });
+}
+```
+
+A handler takes the request and answers with a Web-standard `Response`, or with a value sent as JSON (`null` or nothing is an empty `204`). The event it receives carries:
+
+- `request`, `url`, `params` (the `:name` segments, decoded) and `readJson()`;
+- `session`: `read()`, `write()` (stamped with `updatedAt`, ends with the browser unless `persistent`), `clear()`, `useForRequest()`;
+- `cookies`: sealed cookies by logical name (`readSealed`, `writeSealed` with an optional `maxAge` and `path`, `clear`). The server scopes the name to its backend and sets `HttpOnly`, `SameSite=Lax` and `Secure`, so a module never depends on how cookies are named; the session cookie is only reachable through `session`. The `dms_*` names belong to the module that owns sign-in (the one whose `registerAuth` is used): another module naming one gets an error, and its own cookies are stored as `<module id>.<name>`, so no module reads or overwrites another's;
+- `backend(path, init)`: a JSON call to the backend that always carries the client's address and the headers the proxy relays; a refusal throws an error with the status and the backend's public `error.*` message, which reaches the client as is when the handler lets it through;
+- `backendUrl(path)`: the backend URL of a path, always on the backend's origin, for a call `backend` cannot make (a raw response);
+- `clientIp()`, `renderEmail(template, props, { locale })`, and `module`: this module's id, its options and its own `privateOptions`, never another module's.
+
+Every route gets the same defaults: a request with a state-changing method must carry the frontend's own `Origin` (`{ sameOrigin: false }` only for a route authenticated otherwise, such as by a service token), its body stops at 64 KiB (`bodyLimit`) with a `413`, and the answer is `Cache-Control: no-store` unless the handler sets its own. An error the handler lets through is answered like a backend failure: its status, and only a public `error.*` message.
+
+Paths are literal segments and `:name` parameters. Module routes are tried after the renderer's own (`/api/_dms/`, `/@…`, `/assets/`, which no module can declare) and before the backend proxy, literal paths before parameters. A route under `/api/` or `/dms/` outside a module namespace (`/api/_<module>/`) hides what the backend serves there, so the server warns unless the route passes `{ overridesBackend: true }`. When two modules declare the same method and path, the module of higher priority keeps it and a warning names both, the module id settling a tie; a module route answering a [public endpoint](#public-endpoints) is reported too. A malformed declaration is ignored with a warning naming its module.
+
+`dms.server.ts` runs in the frontend server's Node.js process, next to the session secret: it is trusted code, as the module's backend half is, not a sandbox. Every route reads the session (`event.session.read()`, access and refresh tokens included) and may write it; only install a module whose `dms.server.ts` you trust as much as the DMS's own. It may import `#dms/server`, Node.js built-ins, npm dependencies and the module's own server files (a `server/` directory is copied into the workspace for that), never the application's code (`.vue` files, `dms.frontend.ts`); nothing it imports reaches the browser bundle, and `verify-source` checks both. Under `ajs dms dev` the server loads it through Vite, so an edited handler answers on the next request; `ajs dms build` bundles it into `dist/server-modules`, and a workspace built without that bundle simply serves no module route. Import what a handler uses: auto-imports do not apply to server code.
+
+A module tests its routes through the same router, event and cookie jar with `serveModuleRoutes` from `@antelopejs/dms-frontend/templates/vue/server/module-testing.mjs`, which serves the default export of its `dms.server.ts` on a local port.
+
+#### Session hooks
+
+The server also runs session logic outside any route: it renews a session the backend refused on a page visit, puts the `user` and `session` page props together, and sends a signed-out visit to sign in. The module that owns sign-in provides it:
+
+```ts
+server.registerAuth({
+  signInPath: "/auth",
+  signInExempt: ["/auth/**", "/onboarding"],
+  refreshSession: renewSession, // (event, session) => the new session, or undefined
+  publicSession: (session) => ({
+    user: session.user,
+    session: { accountId: session.accountId, activeTenantId: session.activeTenantId },
+  }),
+});
+```
+
+`refreshSession` is called once when the backend answers `401` to a signed-in page visit, which is then retried with the session it wrote (`event.session.write`). `publicSession` gives the page props of a signed-in session; the server adds `session.updatedAt`, the stamp of its last write, which the browser compares to drop a page restored from its cache (see [Interface language](#interface-language)), and `event.session.view()` returns the same props to a route. `signInExempt` patterns are `/x`, `/x/*` (one segment below) or `/x/**` (the page and everything below); left out, they are `<signInPath>/**` and `/onboarding`, so a custom `signInPath` is exempt on its own. The highest-priority module that registers them provides all of them; another one is reported and ignored.
+
+#### Route rules
+
+A module also declares how its pages are rendered and cached, by page pattern (`/x`, `/x/*` one segment below, `/x/**` the page and everything below):
+
+```ts
+server.registerRouteRules({
+  "/terms-of-use": { cache: { public: true, maxAge: 300, staleWhileRevalidate: 3600 } },
+  "/builder/**": { ssr: false },
+  "/reports/**": { headers: { "x-robots-tag": "noindex" } },
+});
+```
+
+- `cache`: page documents and Inertia answers default to `private, no-cache`, since they carry the visitor's session. A public `cache` replaces it, with `Vary: Cookie`, only for a `GET` of a page the backend serves to anyone (`publicAccess`), answered `200` to a request without any cookie and without `x-content-language`: such an answer holds nobody's data. Any other request keeps the private default. The frontend server itself stores nothing; the rule is for a shared cache or a CDN in front of it. `cache: false` keeps the default under a broader rule.
+- `ssr: false`: a document request gets the client-rendered shell instead of a server render; Inertia visits are unchanged.
+- `headers`: added to the page's document and Inertia answers; `cache-control`, `vary`, `set-cookie` and the content and Inertia headers stay the server's.
+
+The rules matching a page merge from the least to the most specific pattern; for one pattern, the highest-priority module's rule wins, with a warning. A rule never changes who may see a page.
+
+The renderer serves no route of its own besides its files and icons: the session, sign-in, OAuth and e-mail render routes are the DMS's (`dms.server.ts`), the API tester is the DMS API's. Without a module that registers auth hooks, pages carry no `user` and `session` and a refused session is not renewed.
+
+A module that ships `dms.server.ts` raises its [loader range](#declaring-the-loader-releases-a-module-supports) floor to the release that serves it: an older one never reads the file, so the routes would silently be missing.
+
 ### Page loading state
 
 After a client navigation, the page renders under a `<Suspense>` until its chunk and any async `setup` resolve. `useDmsPageLoading()` (auto-imported) is `true` meanwhile, so a layout can show its own placeholder instead of an empty page body:
@@ -252,7 +361,7 @@ It stays `false` on the server and during hydration, which render the page resol
 
 ### Interface language
 
-The interface language follows the session (`useUserSession().user.language`), not the props of the page on screen: the first render takes it from the session the page arrived with, and it changes when the session's language does, after `useUserSession().fetch()` or a visit with a newer session. A page Inertia restores from history or serves from its prefetch cache carries the session it was fetched with: the frontend server stamps every session it writes (`session.updatedAt`), and a page carrying an older stamp of the same account updates neither the session nor the language. A session without a language, such as a signed-out one, keeps the language on screen; `$i18n.setLocale()` still switches it at any time. It also remembers a language the application offers in the `dms_locale` cookie (one year, `SameSite=Lax`), and a page without a signed-in user's language, such as a public sign-in page, first renders in that one: a visitor's choice survives a reload, while a signed-in user's own language still comes first.
+The interface language follows the session (`useDmsUserSession().user.language`), not the props of the page on screen: the first render takes it from the session the page arrived with, and it changes when the session's language does, after `useDmsUserSession().fetch()` or a visit with a newer session. A page Inertia restores from history or serves from its prefetch cache carries the session it was fetched with: the frontend server stamps every session it writes (`session.updatedAt`), and a page carrying an older stamp of the same account updates neither the session nor the language. A session without a language, such as a signed-out one, keeps the language on screen; `$i18n.setLocale()` still switches it at any time. It also remembers a language the application offers in the `dms_locale` cookie (one year, `SameSite=Lax`), and a page without a signed-in user's language, such as a public sign-in page, first renders in that one: a visitor's choice survives a reload, while a signed-in user's own language still comes first.
 
 ### Declaring the loader releases a module supports
 
@@ -262,7 +371,7 @@ A frontend module names the `@antelopejs/dms-frontend` releases it runs on in it
 {
   "name": "@acme/dms-billing-frontend-vue",
   "engines": {
-    "@antelopejs/dms-frontend": ">=0.3.2 <0.4.0"
+    "@antelopejs/dms-frontend": ">=0.6.0 <0.7.0"
   }
 }
 ```
@@ -426,11 +535,61 @@ pair can be turned into a login by a request from the browser. An undeclared
 endpoint is answered `403` and never called. The route is `POST`-only and
 same-origin, like every other auth action.
 
+### Routing and the backend proxy
+
+The frontend server answers each path with one owner, whoever asks and
+whatever the method, in this order:
+
+1. **The renderer**: its icon endpoint (`/api/_dms/icons`), Vite's URLs, the
+   built assets, and any file it has (a development source, a built asset).
+2. **The module routes** of the modules' `dms.server.ts`, for every method: a
+   method the module does not declare on its path answers `405`, and a `HEAD`
+   reaches the `GET` route.
+3. **The backend proxies** the modules declare. The renderer proxies no path on
+   its own: the DMS declares `/api/**` and `/dms/**` in its `dms.server.ts`.
+4. **The pages**, for everything else; a method other than `GET` and `HEAD`
+   there is a `404`. A backend route outside every declared prefix (such as a
+   page's `<page>/pagelayout`) is never reached from the browser.
+
+A frontend module declares a prefix in its `dms.server.ts`:
+
+```ts
+server.registerBackendProxy("/api/**"); // auth: "session", the default
+server.registerBackendProxy("/media/**", { auth: "none" });
+```
+
+A backend module declares one in the manifest, next to its `publicEndpoints`:
+
+```ts
+await AddFrontendModule({
+  // …
+  backendProxies: [{ path: "/webhooks/acme/**", auth: "none" }],
+});
+```
+
+- `auth: "session"` adds the session's access token to the request
+  (`Authorization: Bearer`), server-side: the token never reaches the browser,
+  which only holds the sealed, `HttpOnly` session cookie. A request with a
+  state-changing method must carry the frontend's own `Origin`, except a
+  public endpoint (below).
+- `auth: "none"` never sends the session, so it needs no `Origin`: for media,
+  or a webhook that authenticates its caller itself.
+
+A pattern is `/x`, `/x/*` (one segment below) or `/x/**` (the path and
+everything below), its first segment literal, outside the renderer's own paths.
+Of two patterns covering a path, the more specific wins; for one pattern, the
+highest-priority frontend module's, then the manifest's, with a warning.
+`DMS_BACKEND_PROXIES` adds entries of the manifest's shape, as a JSON array,
+for an operator. The server lists the backend proxies, their owner and their
+auth when it starts, and the development server names the owner of each answer
+in an `x-dms-route-owner` header (`renderer`, `module:<id>`,
+`backend:<pattern>`, `page` or `not-found`).
+
 ### Public endpoints
 
-Every state-changing request the server proxies to `/api/` must carry an
-`Origin` matching the frontend's own, and goes out with the signed-in user's
-session. A route meant for callers outside the dashboard — a mail provider's
+Every state-changing request the server proxies with the session must carry
+an `Origin` matching the frontend's own, and goes out with the signed-in
+user's session. A route meant for callers outside the dashboard — a mail provider's
 delivery webhook, a payment provider's callback — fails both ways: the caller
 sends no `Origin`, and its secret header is not among the few the proxy
 relays.
@@ -475,7 +634,12 @@ widened. `DMS_PUBLIC_ENDPOINTS` adds entries of the same shape, as a JSON
 array, for a route no module declares.
 
 Every proxied request also relays `If-Match`, so a backend route can refuse a
-write made from a stale copy (`412` or `409`).
+write made from a stale copy (`412` or `409`), and the client's `Origin` and
+`Referer` as received, so a public route can check where a beacon comes from.
+The proxy sets `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host`
+itself, so a route can limit each client: the client's own `X-Forwarded-For`
+is extended with the socket's address only behind `DMS_TRUSTED_PROXY_HOPS`
+trusted proxies, and replaced by it otherwise.
 
 ### Workspaces
 
@@ -525,15 +689,202 @@ merged catalogs the application imports: the next server render uses them, and
 the open page applies them in place, without a reload. Adding or removing a
 locale reloads the page instead.
 
+An edit to a layer's `app/app.config.ts` reaches the page the same way (see
+[App config](#app-config-appappconfigts)).
+
 The other files the workspace derives from every module follow their sources
 the same way. A file added to, changed in or removed from a module's `public/`
-is served, or no longer served, at once. Adding or removing an
-`app/config/shortcuts-registry.ts` or a `dms.frontend.ts` regenerates the
-aggregated shortcuts or the module loader, and the page reloads. Adding,
-changing or removing a `dms.frontend.build.ts` restarts Vite. A layer
-directory added to or removed from `layers/` is the exception: Vite reads the
-`#<layer>` aliases and the auto-imported directories at startup only, so the
-dev server says it needs a restart.
+is served, or no longer served, at once. Public files and catalogs are written
+before the other files saved with them, so an app config or a component that
+names a new logo or a new translation, saved at the same time, never finds it
+missing. Adding or removing an `app/config/shortcuts-registry.ts` or a
+`dms.frontend.ts` regenerates the aggregated shortcuts or the module loader,
+and the page reloads. Adding, changing or removing a `dms.frontend.build.ts`
+restarts Vite. A layer directory added to or removed from `layers/` is the
+exception: Vite reads the `#<layer>` aliases and the auto-imported directories
+at startup only, so the dev server says it needs a restart.
+
+A page whose render declares no icon, through `useHead`, gets an empty
+`<link rel="icon" href="data:,">`, which keeps the browser from asking for
+`/favicon.ico`. A page that declares its icons, one per color scheme for
+instance, gets only those.
+
+### Navigation and the site layout
+
+Every visit's page object carries the page (`page`: its route and layout), the
+session (`user`, `session`) and the site layout (`shared`: the menu with each
+entry's access, quick actions, modules). The site layout is most of that
+object, and the same from page to page, so it is an Inertia once prop:
+
+- The server sends it when the browser does not hold it for the session's
+  account and workspace, then asks the backend for the page alone
+  (`/dms/page?path=…&shared=false`) while the browser's copy is less than five
+  minutes old. Signing in, signing out, or switching account or workspace
+  changes the key the copy is held under, so the next visit brings the new
+  session's layout.
+- `router.reload({ only: ["shared"] })` reloads it at once, and `only` /
+  `except` name any of `page`, `shared`, `user` and `session`: the server
+  fetches only what is named. The DMS reloads the menu this way when the
+  backend announces a change.
+- The access a menu entry shows is for display: the backend checks access on
+  every request, whatever the menu says.
+
+A navigation that changes only the query or the hash of the page on screen
+(`useDmsRouter().push({ query })`, `navigateDms`, `DmsLink`) is an Inertia
+client-side visit: the URL and the history entry change, the page stays
+mounted with its props, and no request is made, since the page props depend
+on the path alone. Pass a server-only option (`only`, `data`, `headers`,
+`onStart`…) to make the request anyway; an error page is always left through
+the server.
+
+`DmsLink` prefetches the page it points to on hover; once Inertia has the
+props, the page, its layout and its block components start loading, so
+following the link waits for neither. A change of account or workspace, and
+signing out, drop the prefetched pages.
+
+### Data loading
+
+`useDmsAsyncData(key, handler, options)` loads data once for every component
+that shows `key`, with the semantics of Nuxt 4's `useAsyncData` and the
+deviations listed below (calls of one key joined, the data of the last success
+kept after a failure, the first `lazy` run started after the caller's turn):
+
+- **A server render waits for it.** A component's data is awaited before the
+  component renders, whether or not its setup awaits the call, and the browser
+  takes the result over while it hydrates instead of fetching it again. Keys a
+  setup does not await load in parallel. Data a plugin starts is awaited
+  before the page renders.
+- **The result works with or without `await`.** Its refs are there at once;
+  awaiting it waits for the data.
+- **`lazy: true`** spares client navigations the wait; a server render still
+  waits.
+- **`server: false`** leaves the data to the browser: the server renders the
+  default, and the browser fetches the data once the page is mounted.
+- **The handler receives `{ signal }`.** It is aborted when a newer run
+  replaces this one (`dedupe: "cancel"`, the default; `"defer"` waits for the
+  run in flight instead), when `clear()` resets the data, or when the last
+  component showing the key unmounts.
+- **A page renders once its middleware is done.** On a server, the page that
+  calls `defineDmsPageMeta` waits for the middleware it starts, so what a
+  middleware loads or sets (with `transfer: true`) is what the HTML shows and
+  the browser hydrates with; its redirect still answers the request. A
+  middleware that throws fails the page: the error page shows in its place,
+  and a server render answers with the error's status code. Middlewares run
+  in order; those registered with `{ parallel: true }` next to each other
+  start together (for checks that read nothing another middleware sets),
+  their results applying in registration order.
+- **The browser hydrates with what the HTML shows.** Data that settles once
+  the HTML is complete is left to the browser. A component receives the server's data when the server's
+  render did: once its setup awaits the call, or right before it renders. A
+  value its setup derives from data it did not await, in an immediate
+  watcher for instance, is then the one the server rendered.
+- **A failure is transferred too,** so hydration does not run the handler
+  again: an HTTP failure keeps its `statusCode`, `statusMessage`, `message`
+  and `data`, any other failure becomes a `500` whose cause only the server
+  logs. A fetch error's message names the backend's address on a server, so
+  its status text replaces it.
+- **`useDmsState(key, init, { transfer: true })`** hands the server's value
+  to the browser, which then starts from it instead of calling `init`. State
+  is never transferred unless a key opts in, and must never hold a token or
+  a secret: the value is written into the page.
+- One `<script id="dms-payload" type="application/json">` carries the data,
+  the failures and the transferred state, in
+  [devalue](https://github.com/sveltejs/devalue)'s format, which keeps a
+  `Set`, a `Map` or a `Date`, escaped like Inertia's page object. A value it
+  cannot write, such as a class instance, is left out and logged.
+- **Stale while revalidate.** In the browser, data loaded before shows at
+  once, and is read again in the background on each mount of a component
+  showing it and on each return of a reactive key to it; awaiting the call
+  does not wait for that read. The first mount after a server render does not
+  read again: its data is the server's, just read. Of the data no component
+  shows any more, the browser keeps the 50 most recently shown across
+  navigations, so a return to a page shows its data at once.
+- **`error` stays until the next answer.** A run in flight keeps the last
+  failure; a success clears it, a failure replaces it, and a failed refresh
+  keeps the data of the last success on screen.
+- **`key`** is the key the data is loaded under (a reactive key's current
+  one). `transform(value, { key })` receives it, and `useDmsFetch`'s
+  `transform(value, { key, url })` the URL the response answers too, even when
+  a reactive URL changed since. While a reactive key shows the previous key's
+  data, `placeholder` is `true`.
+- **`data` is a shallow ref** (`deep: false`, as in Nuxt 4): replace the value
+  to update it, or pass `deep: true` to track changes inside it.
+- **`immediate: false`** waits for `execute()` (a dialog, a drawer), and
+  **`refreshInterval: ms`** reads again on an interval in the browser, while a
+  component shows the data and the page is visible: every read of a module can
+  go through `useDmsAsyncData` or `useDmsFetch`. The interval may be a ref or
+  a getter: the polling follows it, and `0`, `null` or `undefined` stops it.
+- **A call outside a component** (a plugin, also past its first `await`, a
+  callback) belongs to the application: its watchers and its polling run for
+  as long as the application does, so a plugin can poll a status with
+  `refreshInterval` and stop it through a reactive interval.
+- **`useDmsPagedData(key, handler, { nextCursor, initialCursor })`** reads a
+  list page by page under one key ("load more", an infinite list). The
+  handler receives `{ cursor, index, signal }` and returns a page;
+  `nextCursor(page, pages)` gives the next page's cursor, or `null` at the
+  end. The first page loads like any data (a server render waits for it and
+  transfers it); `loadMore()` appends the next one, `pages`, `hasMore` and
+  `loadingMore` follow it, and a failure lands in `error` with the pages
+  kept. A revalidation (a mount, `refresh()`, `refreshDmsPageData()`, the
+  polling) reads every page loaded so far again and replaces them once all
+  are in. Put what filters the list in the key: a new key starts again from
+  its first page.
+- **`refreshDmsPageData()`** reads again the data the components on screen
+  show, after a save or on a realtime event; a call opts out with
+  `refreshOnPageRefresh: false`, and data waiting for `execute()` is left
+  alone. `refreshDmsData(keys?)` reads given keys again.
+- **`setDmsAsyncDataScope(scope)`** puts the keys in a scope, such as a digest
+  of the account and the workspace: the same key in another scope is another
+  entry, and moving to another scope drops the data of every key. Set it on
+  both sides before the page renders, with the same value: the scope is
+  written in the page with each key.
+- **A call without a key** (`useDmsAsyncData(handler)`, or `useDmsFetch` with
+  a body it cannot key, such as a `FormData`) cannot be transferred: the
+  server leaves it to the browser, as `server: false` does, so the page
+  hydrates with what it shows. A development render warns about it, and about
+  a backend read made outside any handler on the server (an immediate
+  watcher, a setup's own `await $fetch`), which the browser makes again.
+- **`useDmsFetch(url, options)`** is `useDmsAsyncData` around a request,
+  keyed on its method, base URL, URL, query and body (not its headers): the
+  callers of one request share it, and a server render transfers it. The URL,
+  `method`, `query`, `params` and `body` may each be a ref or a getter, read
+  again for each request: the caller moves to the key of each request, as in
+  Nuxt's `useFetch`. A URL that is `null` or `undefined` requests nothing
+  until it has a value, on the server as in the browser. `key` names a key
+  instead (a ref or a getter too: `null` requests nothing), and `$fetch`
+  replaces the fetch function, which receives the signal.
+- **`dmsRequestKey(url, { method, baseURL, query, params, body })`** is the
+  key `useDmsFetch` gives a request, without the scope: for
+  `refreshDmsData(keys)`, and for a test that looks for a response's entry
+  instead of computing the digest itself.
+- **A key that is `null` or `undefined`** (a ref or a getter for it) has
+  nothing to load: the caller holds its default, and runs nothing until the
+  key has a value.
+- **A new key is read where the first one would have been.** On a server,
+  `server: false` and `immediate: false` read nothing, whatever key the
+  render gives them. Another read follows a key its setup sets: the
+  component's render waits for it and transfers it, `lazy` or not. A key that
+  changes once that wait has started (the answer of another read of the
+  same component, a later component) is not read on the server: the HTML
+  shows the default, and the browser reads it once the component is mounted.
+  To render a read that depends on another one's answer, await the first one
+  in the setup.
+- **`useDmsData(key)`** gives the `data` another caller loads under `key`,
+  as Nuxt's `useNuxtData`: assigning it, or changing it in place (unless the
+  key is `deep: false`), updates every component showing the key without
+  reading it again. It is how a write's answer (an optimistic update, put
+  back if the write fails) or a realtime event patches data, including the
+  data of a key the component does not show. `data` is `undefined` until a
+  caller loads the key, while a reactive key still shows the previous key's
+  data, and once the browser lets the key go (past the 50 most recent keys
+  it keeps) or the account or workspace changes; a write to a key
+  nobody loaded is ignored. The key may be a ref or a getter, and a key
+  loaded by `useDmsFetch` is the `key` option it was given. It loads
+  nothing and keeps nothing alive: a component showing the data calls
+  `useDmsAsyncData` with the key. A run in flight still writes its answer
+  over an update, so a writer refreshes the key once the write is done.
+  In a server render, a component called after the caller's call waits for
+  its data, so it renders what the browser hydrates it with.
 
 ### Icons
 
@@ -562,6 +913,12 @@ the page, so the browser draws the same icons as it hydrates; an icon no
 installed collection holds stays empty on the server and is fetched in the
 browser as before.
 
+Each icon is drawn once per page: a hidden `<svg id="dms-icon-sprite">` holds
+one `<symbol>` per icon (and per flip or rotation), and every occurrence is an
+`<svg>` with a `<use>` of it, so an icon on each row of a table is sent once.
+The browser draws the same way, adding the symbols of the icons it draws later
+to the same sprite.
+
 ## Options
 
 | Option | Environment | Purpose |
@@ -572,14 +929,15 @@ browser as before.
 | `--offline` | `DMS_OFFLINE` | Reuse cached manifest and archives; the only way `build` uses them |
 | `--strict` | `DMS_PREPARE_STRICT` | Make `prepare` fail instead of warning; see [Commands](#commands) |
 | `--bootstrap-secret` | `DMS_BOOTSTRAP_SECRET` | Backend bootstrap credential |
-| | `HOST` | Address the frontend server binds to (default `0.0.0.0`) |
+| | `HOST` | Address the frontend server binds to: `127.0.0.1` by default for `ajs dms dev`, so only this machine reaches the development server (set `HOST=0.0.0.0` to open it to the network); `0.0.0.0` for `ajs dms start` |
 | | `DMS_COOKIE_SECURE` | Secure cookies (`true` by default; `ajs dms dev` defaults to `false`) |
 | | `DMS_TRUSTED_PROXY_HOPS` | Number of trusted, rightmost reverse-proxy hops (default `0`) |
 | | `DMS_COUNTRY_HEADER` | Client country header the server relays to the backend, set by a trusted reverse proxy (default `CF-IPCountry`; empty relays none). Name the same header in the backend's `auth.signInCountry.header`. Relayed only when `DMS_TRUSTED_PROXY_HOPS` is above `0`, like the client address |
 | | `DMS_SESSION_SECRET` | Session cookie encryption key, 32 characters or more (required for login) |
-| | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests; without it, e-mail renders are refused. Defaults to the `htmlRender.serviceSecret` the backend publishes in the frontend manifest |
-| | `DMS_OAUTH_RELAY_SECRET` | Secret the server presents to the backend's OAuth endpoints; without it, the backend refuses OAuth sign-in. Defaults to the `oauth.relaySecret` the backend publishes in the frontend manifest |
+| | `DMS_HTML_RENDER_SECRET` | Secret that verifies the backend's signed HTML/email render requests; without it, e-mail renders are refused. The `htmlRender.serviceSecret` the backend publishes in the frontend manifest wins; the variable is the fallback for a manifest without one |
+| | `DMS_OAUTH_RELAY_SECRET` | Secret the server presents to the backend's OAuth endpoints; without it, the backend refuses OAuth sign-in. The `oauth.relaySecret` the backend publishes in the frontend manifest wins; the variable is the fallback for a manifest without one |
 | | `DMS_AUTH_ESTABLISH_ENDPOINTS` | Extra backend endpoints `/auth/establish` may open a session from, on top of those the backend's modules declare (comma-separated, empty by default) |
+| | `DMS_BACKEND_PROXIES` | Extra backend prefixes the server proxies, on top of those the modules declare: a JSON array of `{ path, auth? }` (see [Routing and the backend proxy](#routing-and-the-backend-proxy)) |
 | | `DMS_PUBLIC_ENDPOINTS` | Extra backend routes the proxy serves to anyone, on top of those the backend's modules declare: a JSON array of `{ path, methods?, headers? }` (see [Public endpoints](#public-endpoints)) |
 | | `DMS_CLIENT_BASE_URL` | Public frontend URL used in generated links and emails |
 

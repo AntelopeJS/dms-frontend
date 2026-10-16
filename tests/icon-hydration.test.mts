@@ -5,6 +5,8 @@ import { renderToString } from "@vue/server-renderer";
 import { createSSRApp, h } from "vue";
 import {
   addDmsIcons,
+  collectDmsIconSymbols,
+  dmsIconSprite,
   drawLoadedIconsAtOnce,
   registerDmsIconCollections,
   serializeDmsIcons,
@@ -65,5 +67,38 @@ describe("Icons in a server render", () => {
     addDmsIcons({ "handed-over": { body: CHECK_PATH } });
     assert.equal(iconLoaded("handed-over"), true);
     assert.match(await renderToString(page("handed-over")), /M1 1h2/);
+  });
+
+  it("draws each icon once in the page's sprite, every occurrence using it", async () => {
+    const app = createSSRApp({
+      render: () => [
+        h(Icon, { icon: "demo-check" }),
+        h(Icon, { icon: "demo-check" }),
+        h(Icon, { icon: "demo-check", hFlip: true }),
+      ],
+    });
+    const symbols = collectDmsIconSymbols(app);
+    const html = await renderToString(app);
+    assert.doesNotMatch(html, /M1 1h2/);
+    const uses = [
+      ...html.matchAll(/<use href="#(dms-icon-[a-z0-9]+)"><\/use>/g),
+    ];
+    assert.equal(uses.length, 3);
+    assert.equal(uses[0][1], uses[1][1]);
+    assert.notEqual(uses[0][1], uses[2][1]);
+    assert.match(html, /viewBox="0 0 24 24"/);
+    const sprite = dmsIconSprite(symbols);
+    assert.equal(sprite.match(/<symbol /g)?.length, 2);
+    assert.match(
+      sprite,
+      new RegExp(
+        `<symbol id="${uses[0][1]}" viewBox="0 0 24 24"><path d="M1 1h2"/></symbol>`,
+      ),
+    );
+    assert.match(
+      sprite,
+      /^<svg id="dms-icon-sprite" aria-hidden="true" style="display:none">/,
+    );
+    assert.equal(dmsIconSprite(new Map()), "");
   });
 });

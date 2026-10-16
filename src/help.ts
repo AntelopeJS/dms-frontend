@@ -26,7 +26,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ["DMS_OFFLINE", "Same as --offline, unless 0, false, no or off"],
   ["DMS_PREPARE_STRICT", "Same as prepare --strict, read like DMS_OFFLINE"],
   ["PORT", "Same as -p"],
-  ["HOST", "Address the server binds to (default: 0.0.0.0)"],
+  [
+    "HOST",
+    "Address the server binds to (default: 127.0.0.1 for dev, 0.0.0.0 for start)",
+  ],
   [
     "DMS_COOKIE_SECURE",
     "Secure cookies unless false (default: false in dev, true in start)",
@@ -41,11 +44,11 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ],
   [
     "DMS_HTML_RENDER_SECRET",
-    "Overrides the e-mail render secret the backend publishes",
+    "E-mail render secret, used when the backend publishes none in the manifest",
   ],
   [
     "DMS_OAUTH_RELAY_SECRET",
-    "Overrides the OAuth relay secret the backend publishes",
+    "OAuth relay secret, used when the backend publishes none in the manifest",
   ],
   [
     "DMS_AUTH_ESTABLISH_ENDPOINTS",
@@ -54,6 +57,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   [
     "DMS_PUBLIC_ENDPOINTS",
     "More backend routes the proxy serves to anyone, as a JSON array",
+  ],
+  [
+    "DMS_BACKEND_PROXIES",
+    "More backend prefixes the server proxies, as a JSON array of { path, auth? }",
   ],
   ["DMS_CLIENT_BASE_URL", "Public frontend URL used in links and e-mails"],
   ["NO_COLOR", "Same as --no-color"],

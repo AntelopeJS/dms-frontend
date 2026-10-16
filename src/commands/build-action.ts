@@ -96,6 +96,15 @@ export const BUILD_STEPS: BuildStep[] = [
     failed: "E-mail bundle failed",
     stopped: "E-mail bundle stopped",
   },
+  {
+    script: "build:server",
+    name: "server",
+    subject: "server modules bundle",
+    running: "Building the server modules",
+    done: "Built the server modules",
+    failed: "Server modules bundle failed",
+    stopped: "Server modules bundle stopped",
+  },
 ];
 
 interface BuildContext {

@@ -2,6 +2,7 @@
 // IPC once it answers, or why it could not listen; the CLI words both, and
 // the line a stopped run ends on.
 
+import type { ChildProcess } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
@@ -73,6 +74,34 @@ export interface RunServerOptions {
   mapPath?: PathMapper;
   /** Called once the server answers. */
   onReady: (address: ServerAddress) => void;
+  /**
+   * Stops the server when aborted, as a signal would, without stopping the
+   * CLI: `dev` restarts it on a rebuilt workspace.
+   */
+  stopSignal?: AbortSignal;
+}
+
+/** Ends the server's process group once `signal` aborts. */
+function stopOnAbort(child: ChildProcess, signal: AbortSignal | undefined) {
+  if (!signal) return;
+  const stop = () => {
+    if (child.pid === undefined || child.exitCode !== null) return;
+    try {
+      if (process.platform === "win32") {
+        child.kill();
+      } else {
+        process.kill(-child.pid, "SIGTERM");
+      }
+    } catch {
+      // The server already exited.
+    }
+  };
+  if (signal.aborted) {
+    stop();
+    return;
+  }
+  signal.addEventListener("abort", stop, { once: true });
+  child.once("exit", () => signal.removeEventListener("abort", stop));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -197,8 +226,14 @@ export function describeListenError(error: ListenError): CliProblem {
   };
 }
 
+// The loopback the dev server listens on by default prints as `localhost`,
+// the host the backend is told (`clientUrl`): OAuth's state cookie and the
+// e-mail links only work on the host the browser started from.
+const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1"]);
+
 function urlHost(address: string): string {
-  if (WILDCARD_ADDRESSES.has(address)) return LOCAL_HOST;
+  if (WILDCARD_ADDRESSES.has(address) || LOOPBACK_ADDRESSES.has(address))
+    return LOCAL_HOST;
   return address.includes(":") ? `[${address}]` : address;
 }
 
@@ -295,7 +330,7 @@ export function readyLines(
  * stopped it.
  */
 export async function runServer(options: RunServerOptions): Promise<number> {
-  const { name, script, cwd, env, mapPath, onReady } = options;
+  const { name, script, cwd, env, mapPath, onReady, stopSignal } = options;
   let readyAt: number | undefined;
   let listenError: ListenError | undefined;
   let startError: StartError | undefined;
@@ -311,6 +346,7 @@ export async function runServer(options: RunServerOptions): Promise<number> {
         stdio: ["inherit", "inherit", "inherit", "ipc"],
       },
       (child) => {
+        stopOnAbort(child, stopSignal);
         child.on("message", (message) => {
           const ready = readReady(message);
           if (ready && readyAt === undefined) {

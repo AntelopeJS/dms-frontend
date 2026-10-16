@@ -27,18 +27,34 @@ import {
   hasInjectionContext,
   type InjectionKey,
   inject,
+  isRef,
+  type MaybeRefOrGetter,
+  nextTick,
+  onBeforeMount,
   onMounted,
   onScopeDispose,
+  onServerPrefetch,
   type Plugin,
   type PropType,
   type Ref,
   reactive,
   readonly,
   ref,
+  type ShallowRef,
+  shallowReactive,
+  shallowRef,
+  toRaw,
+  toValue,
   watch,
 } from "vue";
 import type { Composer } from "vue-i18n";
 import { useI18n as useVueI18n } from "vue-i18n";
+import {
+  appConfigChanges,
+  assignInPlace,
+  mergeLayerAppConfigs,
+  withAppConfigChanges,
+} from "./layer-app-config";
 
 export interface DmsPageRoute {
   displayName?: string;
@@ -52,7 +68,6 @@ export interface DmsPagePayload {
   componentName?: string;
   layoutUrl?: string;
   layout?: DmsPageLayout;
-  shared?: DmsSharedPagePayload;
   [key: string]: unknown;
 }
 export interface DmsSharedPagePayload {
@@ -74,6 +89,11 @@ export interface DmsPageLayout {
 export interface DmsPageProps {
   path: string;
   page: DmsPagePayload;
+  /**
+   * The site layout. An Inertia once prop: a visit carries it over from the
+   * previous page until it expires, unless the server sends a newer one.
+   */
+  shared?: DmsSharedPagePayload;
   user?: DmsUser;
   session?: DmsSession;
   error?: DmsErrorData;
@@ -159,30 +179,145 @@ export interface DmsRouter {
   replace(to: RouteLocationRaw, options?: DmsNavigationOptions): Promise<void>;
   back(): void;
 }
+export type DmsAsyncDataStatus = "idle" | "pending" | "success" | "error";
+/**
+ * What a new run does with the one still in flight: `cancel` aborts it and
+ * starts over, `defer` waits for it instead.
+ */
+export type DmsAsyncDataDedupe = "cancel" | "defer";
+export interface DmsAsyncDataRefreshOptions {
+  dedupe?: DmsAsyncDataDedupe;
+}
 export interface DmsAsyncData<T> {
   data: Ref<T | null>;
+  /**
+   * The key the data is loaded under, a reactive key's current one; none for
+   * a call without a key.
+   */
+  key: Readonly<Ref<string | undefined>>;
+  /**
+   * `true` while `data` is still the previous key's, shown in place of the
+   * default until the current key's first answer (a reactive key only).
+   */
+  placeholder: Readonly<Ref<boolean>>;
+  /**
+   * The last run's failure. It stays while the next run is in flight, and
+   * goes back to `null` once a run answers.
+   */
   error: Ref<unknown>;
   pending: Ref<boolean>;
-  status: Ref<"idle" | "pending" | "success" | "error">;
-  execute(): Promise<void>;
-  refresh(): Promise<void>;
+  status: Ref<DmsAsyncDataStatus>;
+  execute(options?: DmsAsyncDataRefreshOptions): Promise<void>;
+  refresh(options?: DmsAsyncDataRefreshOptions): Promise<void>;
+  /** Aborts the run in flight and puts the data back to its default. */
+  clear(): void;
 }
-export interface UseFetchOptions<T> extends FetchOptions {
-  immediate?: boolean;
-  watch?: false | unknown[];
-  default?: () => T;
-  transform?: (value: unknown) => T | Promise<T>;
-  pick?: string[];
-  $fetch?: typeof ofetch;
+/** Usable at once, or awaited until its data is there. */
+export type DmsAsyncDataResult<T> = DmsAsyncData<T> & Promise<DmsAsyncData<T>>;
+export interface DmsAsyncDataContext {
+  /**
+   * Aborted once the result is no longer wanted: a newer run replaced it, it
+   * was cleared, or no component shows its key any more.
+   */
+  signal: AbortSignal;
 }
+export type DmsAsyncDataHandler<T> = (
+  context: DmsAsyncDataContext,
+) => Promise<T>;
+/** A key, or `null` (or `undefined`) while there is nothing to load. */
+export type DmsAsyncDataKey = string | null | undefined;
+/** What `useDmsData` gives of a key's data. */
+export interface DmsData<T> {
+  /**
+   * The data loaded under the key, shared with every caller showing it:
+   * `undefined` while the key has none of its own (no caller loaded it yet,
+   * or it shows the previous key's data meanwhile). Assigning it replaces the
+   * key's data; a key nobody loaded keeps none.
+   */
+  data: Ref<T | undefined>;
+}
+/** What `transform` knows of the run whose result it transforms. */
+export interface DmsAsyncDataTransformContext {
+  /** The key the data is loaded under; none for a call without a key. */
+  key: string | undefined;
+}
+/** What `useDmsFetch`'s `transform` knows of the request it answers. */
+export interface DmsFetchTransformContext extends DmsAsyncDataTransformContext {
+  /**
+   * The URL requested, as given (before the base URL and the query), even
+   * when a reactive URL changed since.
+   */
+  url: string;
+}
+/**
+ * The request options a ref or a getter may stand for: read again for each
+ * request, and part of the key the response is shared under.
+ */
+type DmsFetchRequestSources = "method" | "query" | "params" | "body";
 export interface UseAsyncDataOptions<T> {
   default?: () => T;
+  /** `false` waits for `execute()` (a dialog, a drawer) before the first run. */
   immediate?: boolean;
+  /**
+   * A client navigation does not wait for the data. A server render still
+   * does: its HTML shows the data, and the browser takes it over.
+   */
   lazy?: boolean;
+  /** `false` leaves the data to the browser: the server renders the default. */
   server?: boolean;
   watch?: false | unknown[];
-  transform?: (value: unknown) => T | Promise<T>;
+  transform?: (
+    value: unknown,
+    context: DmsAsyncDataTransformContext,
+  ) => T | Promise<T>;
   pick?: string[];
+  /**
+   * `true` tracks changes inside the value too. By default only the
+   * replacement of the whole value triggers, as in Nuxt 4.
+   */
+  deep?: boolean;
+  dedupe?: DmsAsyncDataDedupe;
+  /**
+   * `false` leaves the data out of `refreshDmsPageData()`, which reads again
+   * the data of the components on screen once the page changed (a save, a
+   * realtime event).
+   */
+  refreshOnPageRefresh?: boolean;
+  /**
+   * Reads again every this many milliseconds, in the browser, while the
+   * caller shows the data and the page is visible. A ref or a getter changes
+   * the interval as it changes; `0`, `null` or `undefined` stops the polling
+   * until it has a value again. A call outside a component (a plugin, a
+   * callback) polls for as long as the application runs.
+   */
+  refreshInterval?: MaybeRefOrGetter<number | null | undefined>;
+}
+/**
+ * `useDmsFetch`'s options: ofetch's request options, of which the method, the
+ * query, the params and the body may be refs or getters, and the async data
+ * options.
+ */
+export interface UseFetchOptions<T>
+  extends
+    Omit<FetchOptions, DmsFetchRequestSources>,
+    Omit<UseAsyncDataOptions<T>, "transform"> {
+  /**
+   * The key the response is shared and transferred under, in place of the
+   * one the request gives: its method, base URL, URL, query and body. A ref
+   * or a getter moves the caller to the data of each key it takes; `null` or
+   * `undefined` requests nothing until it has a value.
+   */
+  key?: MaybeRefOrGetter<DmsAsyncDataKey>;
+  method?: MaybeRefOrGetter<FetchOptions["method"]>;
+  query?: MaybeRefOrGetter<FetchOptions["query"]>;
+  params?: MaybeRefOrGetter<FetchOptions["params"]>;
+  body?: MaybeRefOrGetter<FetchOptions["body"]>;
+  transform?: (
+    value: unknown,
+    context: DmsFetchTransformContext,
+  ) => T | Promise<T>;
+  /** Replaces the fetch function; it receives the run's signal. */
+  $fetch?: typeof ofetch;
 }
 export interface DmsErrorData {
   statusCode?: number;
@@ -190,6 +325,20 @@ export interface DmsErrorData {
   message?: string;
   data?: unknown;
   fatal?: boolean;
+}
+/** What a server render hands the browser along with its HTML. */
+export interface DmsPayload {
+  data: Record<string, unknown>;
+  errors: Record<string, DmsErrorData>;
+  state: Record<string, unknown>;
+}
+export interface DmsStateOptions {
+  /**
+   * Hands the server's value to the browser, which then starts from it
+   * instead of calling `init` again. Never for tokens or secrets: the value
+   * is written into the page.
+   */
+  transfer?: boolean;
 }
 export interface DmsUserSession<TUser = DmsUser, TSession = DmsSession> {
   user: Ref<TUser | null>;
@@ -225,6 +374,13 @@ export type DmsI18n = Composer & {
 export type DmsPluginSetup = (context: DmsAppContext) => void | Promise<void>;
 export interface DmsMiddlewareRegistrationOptions {
   global?: boolean;
+  /**
+   * Runs at the same time as the parallel middlewares next to it, for one
+   * that reads nothing another middleware sets (a check against the backend,
+   * say). Their results still apply in registration order: the first that
+   * redirects or aborts wins, and the next middlewares wait for all of them.
+   */
+  parallel?: boolean;
 }
 export interface DmsPluginRegistrationOptions {
   clientOnly?: boolean;
@@ -298,6 +454,12 @@ export interface DmsFrontendModuleRegistration {
   module: DmsFrontendModule;
   options: DmsModuleOptions;
 }
+/** A layer's `app/app.config.ts`, as `app-configs.generated.ts` lists them. */
+export interface DmsLayerAppConfig {
+  /** The id of the frontend module the layer belongs to. */
+  module: string;
+  config: Record<string, unknown>;
+}
 // Async middleware without a redirect naturally infers Promise<void>.
 // biome-ignore lint/suspicious/noConfusingVoidType: preserve that valid handler signature.
 export type DmsMiddlewareResult = void | false | RouteLocationRaw;
@@ -348,15 +510,52 @@ interface DmsFrontendRegistry {
   pluginSetups: DmsPluginRegistration[];
   middleware: DmsMiddleware[];
   namedMiddleware: Map<string, DmsMiddleware>;
+  /** The middlewares registered with `parallel: true`. */
+  parallelMiddleware: WeakSet<DmsMiddleware>;
   accessRedirects: Map<string, string>;
   injections: Map<string | symbol, unknown>;
 }
 
 export interface DmsFrontendRuntime {
   sharedState: Map<string, Ref<unknown>>;
+  /** Reactive: `useDmsData` follows a key as it appears and is dropped. */
   asyncData: Map<string, DmsAsyncData<unknown>>;
-  asyncDataPromises: Map<string, Promise<void>>;
+  /** The server's data, which the browser takes over once per key. */
   hydratedAsyncData: Map<string, unknown>;
+  /** The server's failures, which the browser takes over once per key. */
+  hydratedAsyncErrors: Map<string, DmsErrorData>;
+  /** The state keys a server render hands to the browser. */
+  transferredState: Set<string>;
+  /**
+   * Whether the browser is still hydrating the page the server rendered,
+   * whose first render must match the server's HTML.
+   */
+  hydrating: boolean;
+  /**
+   * The runs a server render started outside any component, which no
+   * `onServerPrefetch` waits for.
+   */
+  serverPrefetches: Set<Promise<void>>;
+  /** The runs in flight, which a server render aborts once it is over. */
+  asyncDataRuns: Set<AbortController>;
+  /** The data some component or caller shows: `refreshDmsPageData`'s. */
+  boundAsyncData: Set<{ pageRefresh(): Promise<void> | undefined }>;
+  /** Orders the data no caller shows, the least recently shown first. */
+  asyncDataClock: number;
+  /**
+   * The account and workspace the keys belong to (`setDmsAsyncDataScope`):
+   * the same key of another scope is another entry.
+   */
+  asyncDataScope?: string;
+  /**
+   * Runs an async data handler; a server render marks the requests it makes
+   * as transferred (see `inAsyncDataHandler`).
+   */
+  runAsyncDataHandler?: <R>(run: () => R) => R;
+  /** Whether the code running is an async data handler's. */
+  inAsyncDataHandler?: () => boolean;
+  /** Whether to warn about what a development render does wrong. */
+  devWarnings?: boolean;
   runtimeHooks: Map<string, DmsRuntimeHook[]>;
   serverFetch?: typeof ofetch;
   currentError: Ref<Error | null>;
@@ -367,9 +566,12 @@ export interface DmsFrontendRuntime {
   serverRedirect?: string;
   pendingNavigation?: Promise<void>;
   hasNavigationListener: boolean;
-  pageVersion: number;
   /** Whether the page `<Suspense>` waits on the page being navigated to. */
   pageLoading: Ref<boolean>;
+  /** The site layout last copied into the state, as the page props hold it. */
+  appliedShared?: DmsSharedPagePayload;
+  /** Whether Inertia is putting back a page from the browser history. */
+  restoringHistory?: boolean;
   /**
    * Identifies the page on screen (its path, or the error page shown at that
    * path), whose meta `route.meta` holds.
@@ -382,7 +584,12 @@ export interface DmsFrontendRuntime {
    * it once done: nothing else would, since a server app is never unmounted.
    */
   scope: EffectScope;
+  /** The Inertia page a server runtime renders: see `useDmsInertiaPage`. */
+  inertiaPage?: DmsInertiaPage;
 }
+
+/** Inertia's page, as `usePage()` returns it. */
+export type DmsInertiaPage = ReturnType<typeof usePage>;
 
 /** Creates the empty registry one setup of the frontend modules fills. */
 function createDmsFrontendRegistry(): DmsFrontendRegistry {
@@ -395,6 +602,7 @@ function createDmsFrontendRegistry(): DmsFrontendRegistry {
     pluginSetups: [],
     middleware: [],
     namedMiddleware: new Map(),
+    parallelMiddleware: new WeakSet(),
     accessRedirects: new Map(),
     injections: new Map(),
   };
@@ -407,6 +615,9 @@ const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
 const appConfig = ref<Record<string, unknown>>({});
+// What the last setup of the modules changed in the layers' app configs, which
+// a development update of those configs keeps: see `updateDmsAppConfig`.
+let appConfigSetupChanges: Record<string, unknown> = {};
 const DMS_RUNTIME_KEY: InjectionKey<DmsFrontendRuntime> = Symbol("dms-runtime");
 type DmsRuntimeContext = DmsAppContext["runWithContext"];
 const runtimeContexts = new WeakMap<DmsFrontendRuntime, DmsRuntimeContext>();
@@ -416,16 +627,23 @@ let browserRuntime: DmsFrontendRuntime | undefined;
 /** Creates mutable runtime state owned by one Vue application. */
 export function createDmsFrontendRuntime(
   serverFetch?: typeof ofetch,
-  hydratedAsyncData: Record<string, unknown> = {},
+  hydratedAsyncData?: Record<string, unknown>,
   isServer = false,
   requestCookies?: string,
 ): DmsFrontendRuntime {
-  return {
+  const runtime: DmsFrontendRuntime = {
     requestCookies,
     sharedState: new Map(),
-    asyncData: new Map(),
-    asyncDataPromises: new Map(),
-    hydratedAsyncData: new Map(Object.entries(hydratedAsyncData)),
+    asyncData: shallowReactive(new Map()),
+    hydratedAsyncData: new Map(Object.entries(hydratedAsyncData ?? {})),
+    hydratedAsyncErrors: new Map(),
+    transferredState: new Set(),
+    // A browser handed the server's data, even none, hydrates its HTML.
+    hydrating: !isServer && hydratedAsyncData !== undefined,
+    serverPrefetches: new Set(),
+    asyncDataRuns: new Set(),
+    boundAsyncData: new Set(),
+    asyncDataClock: 0,
     runtimeHooks: new Map(),
     serverFetch,
     isServer,
@@ -439,10 +657,17 @@ export function createDmsFrontendRuntime(
       matched: [],
     }),
     hasNavigationListener: false,
-    pageVersion: 0,
     pageLoading: ref(false),
     scope: effectScope(true),
   };
+  // A server render stops its scope once it has answered: whatever it still
+  // fetches then would reach nobody.
+  runtime.scope.run(() =>
+    onScopeDispose(() => {
+      for (const run of runtime.asyncDataRuns) run.abort();
+    }),
+  );
+  return runtime;
 }
 
 /** Makes a runtime available before application plugins are installed. */
@@ -623,13 +848,102 @@ async function runMiddleware(
   const declaredHandlers = [...declared, ...metadataNames]
     .map((name) => registry.namedMiddleware.get(String(name)))
     .filter((handler): handler is DmsMiddleware => !!handler);
-  for (const handler of [...registry.middleware, ...declaredHandlers]) {
+  const run = (handler: DmsMiddleware) => {
     const runWithContext = runtimeContexts.get(runtime);
-    const result = await (runWithContext
+    return runWithContext
       ? runWithContext(() => handler(to, runtime.route))
-      : handler(to, runtime.route));
+      : handler(to, runtime.route);
+  };
+  for (const group of middlewareGroups([
+    ...registry.middleware,
+    ...declaredHandlers,
+  ])) {
+    // A group of parallel middlewares starts together; its results apply in
+    // order, as a sequence's would.
+    const results = await Promise.all(group.map(run));
+    const result = results.find((value) => value !== undefined);
     if (result !== undefined) return result;
   }
+}
+
+/** The middlewares in order, each run of parallel ones as one group. */
+function middlewareGroups(handlers: DmsMiddleware[]): DmsMiddleware[][] {
+  const groups: DmsMiddleware[][] = [];
+  for (const handler of handlers) {
+    const last = groups.at(-1);
+    const parallel = registry.parallelMiddleware.has(handler);
+    if (parallel && last && registry.parallelMiddleware.has(last[0]))
+      last.push(handler);
+    else groups.push([handler]);
+  }
+  return groups;
+}
+
+// What only a request to the server can honour: a client-side visit sends
+// none and has none of these events.
+const SERVER_VISIT_OPTIONS = [
+  "async",
+  "component",
+  "data",
+  "except",
+  "headers",
+  "method",
+  "onBefore",
+  "onCancel",
+  "onCancelToken",
+  "onProgress",
+  "onStart",
+  "only",
+  "preserveUrl",
+  "queryStringArrayFormat",
+] as const satisfies readonly (keyof DmsNavigationOptions)[];
+
+/**
+ * Whether a visit to another query or hash of the page on screen can stay in
+ * the browser. The page props depend on the path alone: the server would
+ * answer with the same page, the site layout included. An error page is left
+ * through the server, which renders the page in its place, and so is the
+ * same path on another site.
+ */
+function staysOnPage(
+  runtime: DmsFrontendRuntime,
+  url: string,
+  options: DmsNavigationOptions,
+): boolean {
+  return (
+    new URL(url, currentUrl(runtime)).origin ===
+      new URL(currentUrl(runtime)).origin &&
+    !runtime.pageKey?.startsWith("error:") &&
+    runtime.currentError.value === null &&
+    SERVER_VISIT_OPTIONS.every((name) => options[name] === undefined)
+  );
+}
+
+/**
+ * An Inertia client-side visit: the URL and the history entry change, the
+ * page keeps its props, and no request is made.
+ */
+function visitInBrowser(
+  url: string,
+  options: DmsNavigationOptions,
+): Promise<void> {
+  const clientVisit = options.replace
+    ? inertiaRouter.replace
+    : inertiaRouter.push;
+  return new Promise<void>((resolve) => {
+    clientVisit.call(inertiaRouter, {
+      url,
+      preserveScroll: options.preserveScroll ?? true,
+      preserveState: options.preserveState ?? true,
+      viewTransition: options.viewTransition,
+      onSuccess: options.onSuccess,
+      onError: options.onError,
+      onFinish: (visit) => {
+        (options.onFinish as ((visit: unknown) => void) | undefined)?.(visit);
+        resolve();
+      },
+    } as Parameters<typeof inertiaRouter.push>[0]);
+  });
 }
 
 async function visit(
@@ -651,6 +965,10 @@ async function visit(
   // component on every visit and its local state (open tabs, selection,
   // inputs) is lost.
   const samePath = target.path === runtime.route.path;
+  if (samePath && staysOnPage(runtime, url, options)) {
+    await visitInBrowser(url, options);
+    return;
+  }
   await new Promise<void>((resolve) =>
     inertiaRouter.visit(url, {
       ...options,
@@ -686,6 +1004,18 @@ export function useDmsRoute(pattern?: string): DmsRoute {
   return runtime.route;
 }
 
+/**
+ * Inertia's page, as `usePage()` returns it, for the request being rendered.
+ * Inertia keeps a single page for the whole process, written by each server
+ * render as it starts: read after an await, it may be another request's. Nuxt
+ * UI's Link and route stub read this one instead (see `vite.config.ts`).
+ */
+export function useDmsInertiaPage(): DmsInertiaPage {
+  const runtime = useDmsRuntime();
+  if (runtime.isServer && runtime.inertiaPage) return runtime.inertiaPage;
+  return usePage();
+}
+
 export function useDmsRouter(): DmsRouter {
   const runtime = useDmsRuntime();
   const navigate = (to: RouteLocationRaw, options?: DmsNavigationOptions) => {
@@ -710,13 +1040,58 @@ export function navigateDms(
   return visit(useDmsRuntime(), to, options);
 }
 
+/**
+ * The options of a request a runtime makes. A server render does not retry a
+ * failed read, as ofetch would once: the page waits for it, and a backend
+ * failing once mostly fails twice. A browser keeps ofetch's retries, and a
+ * caller that names its own keeps them everywhere.
+ */
+function runtimeFetchOptions(
+  runtime: DmsFrontendRuntime,
+  options: FetchOptions,
+): FetchOptions {
+  return runtime.isServer && options.retry === undefined
+    ? { ...options, retry: 0 }
+    : options;
+}
+
+const warnedServerReads = new Set<string>();
+
+/**
+ * Warns, in a development server render, about a backend read no async data
+ * handler makes: an immediate watcher's, a setup's own `await $fetch`. The
+ * server waits for it, but the page carries none of it, so the browser reads
+ * it again and may hydrate with other data.
+ */
+function warnUntransferredRead(
+  runtime: DmsFrontendRuntime,
+  request: string,
+): void {
+  if (
+    !runtime.isServer ||
+    !runtime.devWarnings ||
+    !runtime.inAsyncDataHandler ||
+    runtime.inAsyncDataHandler() ||
+    warnedServerReads.has(request)
+  )
+    return;
+  warnedServerReads.add(request);
+  console.warn(
+    `DMS: ${request} was read during a server render outside useDmsFetch and useDmsAsyncData ` +
+      "(an immediate watcher, a setup's own await): the page does not carry the answer, " +
+      "so the browser reads it again. Load it with useDmsFetch or useDmsAsyncData, " +
+      "or leave it to the browser (server: false, onMounted).",
+  );
+}
+
 function createDmsFetch(defaults: FetchOptions = {}): typeof ofetch {
   const execute = (request: string, options?: FetchOptions) => {
     const runtime = useDmsRuntime();
-    return (runtime.serverFetch ?? ofetch)(request, {
-      ...defaults,
-      ...options,
-    });
+    warnUntransferredRead(runtime, request);
+    return (runtime.serverFetch ?? ofetch)(
+      request,
+      runtimeFetchOptions(runtime, { ...defaults, ...options }),
+    );
   };
   return Object.assign(execute, {
     create: (options: FetchOptions) =>
@@ -737,249 +1112,1181 @@ function pickValue<T>(value: unknown, keys?: string[]): T {
   ) as T;
 }
 
-function fetchOptions<T>(options: UseFetchOptions<T>): FetchOptions {
-  const {
-    immediate: _immediate,
-    watch: _watch,
-    default: _default,
-    transform: _transform,
-    pick: _pick,
-    $fetch: _fetch,
-    ...requestOptions
-  } = options;
-  return requestOptions;
+/** JSON with sorted keys, or nothing for a value JSON cannot stand for. */
+function stableJson(value: unknown): string | undefined {
+  if (value === undefined || value === null) return "null";
+  if (value instanceof Date) return JSON.stringify(value);
+  if (typeof value !== "object")
+    return ["string", "number", "boolean"].includes(typeof value)
+      ? JSON.stringify(value)
+      : undefined;
+  if (Array.isArray(value)) {
+    const items = value.map(stableJson);
+    return items.includes(undefined) ? undefined : `[${items.join(",")}]`;
+  }
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  if (prototype !== Object.prototype && prototype !== null) return undefined;
+  const record = value as Record<string, unknown>;
+  const members = Object.keys(record)
+    .filter((name) => record[name] !== undefined)
+    .sort()
+    .map((name) => {
+      const member = stableJson(record[name]);
+      return member === undefined
+        ? undefined
+        : `${JSON.stringify(name)}:${member}`;
+    });
+  return members.includes(undefined) ? undefined : `{${members.join(",")}}`;
 }
 
-export function useDmsFetch<T>(
-  request: string | (() => string),
-  options: UseFetchOptions<T> = {},
-): DmsAsyncData<T> {
-  const runtime = useDmsRuntime();
-  const data = ref<T | null>(options.default?.() ?? null) as Ref<T | null>;
-  const error = ref<unknown>(null);
-  const pending = ref(false);
-  const status = ref<"idle" | "pending" | "success" | "error">("idle");
-  const refresh = async (): Promise<void> => {
-    pending.value = true;
-    status.value = "pending";
-    error.value = null;
-    try {
-      const value = await (options.$fetch ?? runtime.serverFetch ?? ofetch)(
-        typeof request === "function" ? request() : request,
-        fetchOptions(options),
-      );
-      const transformed = options.transform
-        ? await options.transform(value)
-        : value;
-      data.value = pickValue<T>(transformed, options.pick);
-      status.value = "success";
-    } catch (reason) {
-      error.value = reason;
-      status.value = "error";
-    } finally {
-      pending.value = false;
-    }
-  };
-  if (options.watch !== false) {
-    const sources = [
-      ...(typeof request === "function" ? [request] : []),
-      ...(options.watch ?? []),
-    ] as never[];
-    if (sources.length) watch(sources, refresh);
+const FETCH_KEY_PREFIX = "$dmsfetch:";
+const DEFAULT_FETCH_METHOD = "GET";
+
+// cyrb53's mixing constants, with its two 32-bit lanes both kept: a 64-bit
+// digest, as short as Nuxt's keys and as unlikely to collide within a page.
+const HASH_SEEDS = [0xdeadbeef, 0x41c6ce57];
+const HASH_MULTIPLIERS = [2654435761, 1597334677];
+const HASH_FINALIZERS = [2246822507, 3266489909];
+const HASH_SHIFTS = [16, 13];
+const HASH_RADIX = 36;
+const HASH_LANE_LENGTH = 7;
+
+/**
+ * A short digest of a text, the same in a server and in a browser: pure
+ * JavaScript, so no `node:crypto` reaches a browser bundle.
+ */
+function hashText(text: string): string {
+  let [first, second] = HASH_SEEDS;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    first = Math.imul(first ^ code, HASH_MULTIPLIERS[0]);
+    second = Math.imul(second ^ code, HASH_MULTIPLIERS[1]);
   }
-  if (options.immediate !== false) void refresh();
-  return { data, error, pending, status, execute: refresh, refresh };
+  first = Math.imul(first ^ (first >>> HASH_SHIFTS[0]), HASH_FINALIZERS[0]);
+  first ^= Math.imul(second ^ (second >>> HASH_SHIFTS[1]), HASH_FINALIZERS[1]);
+  second = Math.imul(second ^ (second >>> HASH_SHIFTS[0]), HASH_FINALIZERS[0]);
+  second ^= Math.imul(first ^ (first >>> HASH_SHIFTS[1]), HASH_FINALIZERS[1]);
+  return [second, first]
+    .map((lane) =>
+      (lane >>> 0).toString(HASH_RADIX).padStart(HASH_LANE_LENGTH, "0"),
+    )
+    .join("");
+}
+
+/**
+ * The key a request's response is shared and transferred under: a digest of
+ * its method, base URL, URL, query and params, and body, the headers aside. A
+ * server render writes the key into its HTML, which must not show the URL, a
+ * token in its query or a body. A body only a request can read, such as a
+ * FormData, gives none.
+ */
+function requestKey(url: string, options: FetchOptions): string | undefined {
+  // ofetch sends the params and the query together, the query winning.
+  const query =
+    options.query || options.params
+      ? { ...options.params, ...options.query }
+      : null;
+  const request = stableJson([
+    (options.method ?? DEFAULT_FETCH_METHOD).toUpperCase(),
+    options.baseURL ?? "",
+    url,
+    query,
+    options.body ?? null,
+  ]);
+  return request === undefined
+    ? undefined
+    : `${FETCH_KEY_PREFIX}${hashText(request)}`;
+}
+
+/** The parts of a request its key is computed from. */
+export type DmsRequestKeyOptions = Pick<
+  FetchOptions,
+  "method" | "baseURL" | "query" | "params" | "body"
+>;
+
+/**
+ * The key `useDmsFetch` loads a request's response under, without the scope
+ * (`setDmsAsyncDataScope`): what `refreshDmsData(keys)` takes, and what a
+ * test compares with the keys it finds. `undefined` for a body only a
+ * request can read, such as a FormData.
+ *
+ * @param url The URL as given to `useDmsFetch`, before the base URL and the query
+ * @param options The method, base URL, query, params and body of the request
+ */
+export function dmsRequestKey(
+  url: string,
+  options: DmsRequestKeyOptions = {},
+): string | undefined {
+  return requestKey(url, options);
+}
+
+/** A URL to request, or nothing to request while it is null or undefined. */
+type DmsFetchRequest = string | null | undefined;
+
+function isReactiveSource(value: unknown): boolean {
+  return isRef(value) || typeof value === "function";
+}
+
+/** The options given, without the ones left undefined. */
+function definedOptions(options: FetchOptions): FetchOptions {
+  return Object.fromEntries(
+    Object.entries(options).filter(([, value]) => value !== undefined),
+  ) as FetchOptions;
+}
+
+/**
+ * Fetches a URL as `useDmsAsyncData` loads its data, under the key of the
+ * request, so that the callers of one request share it and a server render
+ * transfers it. A ref or a getter for the URL, the method, the query, the
+ * params or the body moves the caller to the key of each request; a URL that
+ * is null or undefined requests nothing.
+ */
+export function useDmsFetch<T>(
+  request: MaybeRefOrGetter<DmsFetchRequest>,
+  options: UseFetchOptions<T> = {},
+): DmsAsyncDataResult<T> {
+  const runtime = useDmsRuntime();
+  const {
+    key,
+    immediate,
+    lazy,
+    server,
+    watch: sources,
+    default: fallback,
+    transform,
+    pick,
+    deep,
+    dedupe,
+    refreshOnPageRefresh,
+    refreshInterval,
+    $fetch: fetcher,
+    method,
+    query,
+    params,
+    body,
+    ...fixedOptions
+  } = options;
+  const url = () => toValue(request);
+  const requestOptions = (): FetchOptions =>
+    definedOptions({
+      ...fixedOptions,
+      method: toValue(method),
+      query: toValue(query),
+      params: toValue(params),
+      body: toValue(body),
+    });
+  // A `$fetch` of the caller's own applies its own retries. The transform
+  // runs here, where the request a response answers is known: a reactive URL
+  // may have changed since it was sent.
+  const handler: DmsAsyncDataHandler<T> = async ({ signal }) => {
+    const target = url() as string;
+    const sent = requestOptions();
+    const runKey =
+      key === undefined
+        ? requestKey(target, sent)
+        : (toValue(key) ?? undefined);
+    const value: unknown = await (fetcher
+      ? fetcher(target, { ...sent, signal })
+      : (runtime.serverFetch ?? ofetch)(
+          target,
+          runtimeFetchOptions(runtime, { ...sent, signal }),
+        ));
+    if (!transform) return value as T;
+    return transform(value, { key: runKey, url: target });
+  };
+  const asyncOptions: UseAsyncDataOptions<T> = {
+    immediate,
+    lazy,
+    server,
+    watch: sources,
+    default: fallback,
+    pick,
+    deep,
+    dedupe,
+    refreshOnPageRefresh,
+    refreshInterval,
+  };
+  const reactiveSources = [request, method, query, params, body].filter(
+    isReactiveSource,
+  );
+  const isReactive = reactiveSources.length > 0;
+  // The request gives its key, which follows the request as it changes.
+  const derived = (): string | null | undefined => {
+    const target = url();
+    return target == null ? null : requestKey(target, requestOptions());
+  };
+  if (key === undefined && derived() !== undefined)
+    return useDmsAsyncData(
+      isReactive ? derived : derived(),
+      handler,
+      asyncOptions,
+    );
+  // The key the caller names, or none for a body without one, stays put while
+  // the request changes: the request is watched instead.
+  const watched =
+    isReactive && sources !== false
+      ? [...reactiveSources, ...(sources ?? [])]
+      : sources;
+  if (key === undefined)
+    return useDmsAsyncData(handler, undefined, {
+      ...asyncOptions,
+      watch: watched,
+    });
+  const named = () => (url() == null ? null : toValue(key));
+  const followsKey = isReactiveSource(request) || isReactiveSource(key);
+  return useDmsAsyncData(followsKey ? named : named(), handler, {
+    ...asyncOptions,
+    watch: watched,
+  });
 }
 
 interface AsyncDataBinding<T> {
-  execute: () => Promise<T>;
+  handler: DmsAsyncDataHandler<T>;
   options: UseAsyncDataOptions<T>;
-  active: boolean;
-  pageVersion: number;
 }
 
-interface BoundAsyncData<T> extends DmsAsyncData<T> {
-  bind(binding: AsyncDataBinding<T>): boolean;
+interface AsyncDataRun {
+  promise: Promise<void>;
+  controller: AbortController;
 }
 
-interface AsyncDataRegistration<T> {
-  entry: BoundAsyncData<T>;
-  shouldRefresh: boolean;
+interface AsyncDataBindingHandle {
+  unbind(): void;
 }
 
-function createBoundAsyncData<T>(
-  initial: T | null,
-  hydrated: boolean,
-): BoundAsyncData<T> {
-  const data = ref(initial) as Ref<T | null>;
-  const error = ref<unknown>(null);
-  const pending = ref(false);
-  const status = ref<DmsAsyncData<T>["status"]["value"]>(
-    hydrated ? "success" : "idle",
-  );
+/** What a key holds before any run of the browser's own. */
+interface AsyncDataInitialState<T> {
+  data: T | null;
+  error: unknown;
+  status: DmsAsyncDataStatus;
+}
+
+/** What the components showing one key share: its data and its runs. */
+interface AsyncDataEntry<T> {
+  result: DmsAsyncData<T>;
+  bind(binding: AsyncDataBinding<T>): AsyncDataBindingHandle;
+  /** A run: the one in flight, or a new one. */
+  load(): Promise<void>;
+  /** The first run, once the current turn is over. */
+  schedule(): void;
+  /** Resolves once no run is in flight, including the runs that replace it. */
+  settled(): Promise<void>;
+  unused(): boolean;
+  /** When a caller last stopped showing the data (`asyncDataClock`). */
+  lastShown(): number;
+  /**
+   * Whether another caller shows the data and its last run answered within
+   * `JOIN_WITHOUT_READ_MS`: a caller joining it then reads nothing again.
+   */
+  justReadForAnother(): boolean;
+  running(): boolean;
+  /** `refreshDmsPageData`'s run, for data a caller shows and opted into. */
+  pageRefresh(): Promise<void> | undefined;
+  /**
+   * Holds the server's state back, as pending, until the next turn or
+   * `adoptNow`, whichever comes first.
+   */
+  adoptLater(state: AsyncDataInitialState<T>): void;
+  adoptNow(): void;
+  /** Resolves once the state held back is adopted; nothing when none is. */
+  adoption(): Promise<void> | undefined;
+}
+
+const DEFAULT_DEDUPE: DmsAsyncDataDedupe = "cancel";
+/**
+ * How many keys no component shows any more a browser keeps, the most
+ * recently shown, for a return to them to show their data at once.
+ */
+const MAX_UNUSED_ASYNC_DATA = 50;
+/**
+ * How long after a run answered a caller that joins a key another caller
+ * shows takes the data as it is, instead of reading it again: two components
+ * of one page sharing a read mount a moment apart.
+ */
+const JOIN_WITHOUT_READ_MS = 2000;
+
+const asyncDataEntries = new WeakMap<
+  DmsAsyncData<unknown>,
+  AsyncDataEntry<unknown>
+>();
+
+function createAsyncDataEntry<T>(
+  runtime: DmsFrontendRuntime,
+  key: string | undefined,
+  initial: AsyncDataInitialState<T>,
+  deep: boolean,
+): AsyncDataEntry<T> {
+  const data = (
+    deep ? ref(initial.data) : shallowRef(initial.data)
+  ) as Ref<T | null>;
+  const error = ref<unknown>(initial.error);
+  const status = ref<DmsAsyncDataStatus>(initial.status);
+  const pending = computed(() => status.value === "pending");
   const bindings: AsyncDataBinding<T>[] = [];
-  let generation = 0;
-  let lastBindingPageVersion: number | undefined;
-  let pendingBinding: AsyncDataBinding<T> | undefined;
-  const refresh = async () => {
-    const binding = bindings.at(-1);
-    if (!binding) return;
-    const request = ++generation;
-    pendingBinding = binding;
-    pending.value = true;
-    status.value = "pending";
-    error.value = null;
-    const current = () => binding.active && request === generation;
-    try {
-      const value = await binding.execute();
-      const transformed = binding.options.transform
-        ? await binding.options.transform(value)
-        : value;
-      if (!current()) return;
-      data.value = pickValue<T>(transformed, binding.options.pick);
-      status.value = "success";
-    } catch (reason) {
-      if (!current()) return;
-      error.value = reason;
-      status.value = "error";
-    } finally {
-      if (current()) pending.value = false;
-    }
+  let run: AsyncDataRun | undefined;
+  let scheduled: Promise<void> | undefined;
+  let heldBack: AsyncDataInitialState<T> | undefined;
+  let adoption: Promise<void> | undefined;
+  let lastShown = 0;
+  // When the last run answered, to spare a caller joining at once a second read.
+  let answeredAt = 0;
+  const adoptNow = () => {
+    if (!heldBack) return;
+    data.value = heldBack.data;
+    error.value = heldBack.error;
+    status.value = heldBack.status;
+    heldBack = undefined;
   };
-  return {
+  const handle = (binding: AsyncDataBinding<T>, signal: AbortSignal) => {
+    const call = () => binding.handler({ signal });
+    return runtime.runAsyncDataHandler
+      ? runtime.runAsyncDataHandler(call)
+      : call();
+  };
+  const start = (binding: AsyncDataBinding<T>): Promise<void> => {
+    heldBack = undefined;
+    run?.controller.abort();
+    const controller = new AbortController();
+    const current: AsyncDataRun = { controller, promise: Promise.resolve() };
+    run = current;
+    runtime.asyncDataRuns.add(controller);
+    // The last failure stays until this run answers, as in Nuxt.
+    status.value = "pending";
+    // A run another one replaced, or that nobody waits for any more, settles
+    // nothing, even when its handler ignores the signal.
+    current.promise = (async () => {
+      try {
+        const value = await handle(binding, controller.signal);
+        const transformed = binding.options.transform
+          ? await binding.options.transform(value, { key })
+          : value;
+        if (run !== current) return;
+        data.value = pickValue<T>(transformed, binding.options.pick);
+        error.value = null;
+        status.value = "success";
+        answeredAt = Date.now();
+      } catch (reason) {
+        if (run !== current) return;
+        // The data of the last success stays on screen next to the failure.
+        error.value = reason;
+        status.value = "error";
+      } finally {
+        runtime.asyncDataRuns.delete(controller);
+        if (run === current) run = undefined;
+      }
+    })();
+    return current.promise;
+  };
+  const refresh = (options: DmsAsyncDataRefreshOptions = {}) => {
+    const binding = bindings.at(-1);
+    if (!binding) return Promise.resolve();
+    const dedupe = options.dedupe ?? binding.options.dedupe ?? DEFAULT_DEDUPE;
+    return run && dedupe === "defer" ? run.promise : start(binding);
+  };
+  const load = (): Promise<void> => {
+    if (run) return run.promise;
+    const binding = bindings.at(-1);
+    return binding ? start(binding) : Promise.resolve();
+  };
+  const result: DmsAsyncData<T> = {
     data,
+    key: computed(() => key),
+    placeholder: computed(() => false),
     error,
     pending,
     status,
     execute: refresh,
     refresh,
+    clear() {
+      heldBack = undefined;
+      run?.controller.abort();
+      run = undefined;
+      data.value = bindings.at(-1)?.options.default?.() ?? null;
+      error.value = null;
+      status.value = "idle";
+    },
+  };
+  const entry: AsyncDataEntry<T> = {
+    result,
     bind(binding) {
-      const shouldRefresh =
-        bindings.length === 0 &&
-        lastBindingPageVersion !== undefined &&
-        lastBindingPageVersion !== binding.pageVersion;
-      lastBindingPageVersion = binding.pageVersion;
       bindings.push(binding);
-      if (binding.options.watch && binding.options.watch.length)
-        watch(binding.options.watch as never[], refresh);
-      if (getCurrentScope())
-        onScopeDispose(() => {
-          binding.active = false;
-          bindings.splice(bindings.indexOf(binding), 1);
-          if (pendingBinding === binding && pending.value) {
-            generation++;
-            pending.value = false;
-            status.value = data.value === null ? "idle" : "success";
-          }
-        });
-      return shouldRefresh;
+      runtime.boundAsyncData.add(entry);
+      const unbind = () => {
+        const index = bindings.indexOf(binding);
+        if (index === -1) return;
+        bindings.splice(index, 1);
+        if (bindings.length > 0) return;
+        lastShown = ++runtime.asyncDataClock;
+        runtime.boundAsyncData.delete(entry);
+        if (!run) return;
+        run.controller.abort();
+        run = undefined;
+        // Back to what the last answer left.
+        status.value =
+          error.value != null
+            ? "error"
+            : data.value === null
+              ? "idle"
+              : "success";
+      };
+      return { unbind };
+    },
+    load,
+    schedule() {
+      // Started after the caller's turn, an explicit refresh in that turn
+      // replaces this first run instead of cancelling it mid-request.
+      scheduled ??= Promise.resolve().then(() => {
+        scheduled = undefined;
+        return load();
+      });
+    },
+    async settled() {
+      await scheduled;
+      await adoption;
+      while (run) await run.promise;
+    },
+    unused: () => bindings.length === 0,
+    lastShown: () => lastShown,
+    justReadForAnother: () =>
+      bindings.length > 1 && Date.now() - answeredAt < JOIN_WITHOUT_READ_MS,
+    running: () => run !== undefined,
+    pageRefresh() {
+      const wanted = bindings.some(
+        (binding) => binding.options.refreshOnPageRefresh !== false,
+      );
+      // Data a caller waits to `execute()` stays unread.
+      if (!wanted || (status.value === "idle" && !run)) return undefined;
+      return refresh();
+    },
+    adoptLater(state) {
+      heldBack = state;
+      status.value = "pending";
+      adoption = Promise.resolve().then(adoptNow);
+    },
+    adoptNow,
+    adoption: () => (heldBack ? adoption : undefined),
+  };
+  return entry;
+}
+
+/**
+ * The state the server's render left a key in, if it rendered the key: its
+ * data, or its failure next to the default it rendered.
+ */
+function serverAsyncDataState<T>(
+  runtime: DmsFrontendRuntime,
+  key: string,
+  fallback: AsyncDataInitialState<T>,
+): AsyncDataInitialState<T> | undefined {
+  if (runtime.hydratedAsyncData.has(key))
+    return {
+      data: runtime.hydratedAsyncData.get(key) as T,
+      error: null,
+      status: "success",
+    };
+  const failure = runtime.hydratedAsyncErrors.get(key);
+  if (!failure) return undefined;
+  return {
+    data: fallback.data,
+    error: createDmsError(failure),
+    status: "error",
+  };
+}
+
+/**
+ * The key an entry is stored and transferred under: the caller's key, in
+ * the runtime's scope (`setDmsAsyncDataScope`).
+ */
+function scopedKey(runtime: DmsFrontendRuntime, key: string): string {
+  return runtime.asyncDataScope === undefined
+    ? key
+    : `${runtime.asyncDataScope}|${key}`;
+}
+
+function asyncDataEntry<T>(
+  runtime: DmsFrontendRuntime,
+  key: string | undefined,
+  options: UseAsyncDataOptions<T>,
+  inComponent: boolean,
+): AsyncDataEntry<T> {
+  const stored = key === undefined ? undefined : scopedKey(runtime, key);
+  const shared =
+    stored === undefined ? undefined : runtime.asyncData.get(stored);
+  if (shared) return asyncDataEntries.get(shared) as AsyncDataEntry<T>;
+  const fallback: AsyncDataInitialState<T> = {
+    data: options.default?.() ?? null,
+    error: null,
+    status: "idle",
+  };
+  const server =
+    stored === undefined
+      ? undefined
+      : serverAsyncDataState<T>(runtime, stored, fallback);
+  const entry = createAsyncDataEntry<T>(
+    runtime,
+    key,
+    server && !inComponent ? server : fallback,
+    options.deep === true,
+  );
+  // A component's setup saw the server's run in flight, not its result: the
+  // browser holds the result back as long, see `startAsyncData`.
+  if (server && inComponent) entry.adoptLater(server);
+  if (stored === undefined) return entry;
+  runtime.hydratedAsyncData.delete(stored);
+  runtime.hydratedAsyncErrors.delete(stored);
+  const result = entry.result as DmsAsyncData<unknown>;
+  runtime.asyncData.set(stored, result);
+  asyncDataEntries.set(result, entry as AsyncDataEntry<unknown>);
+  return entry;
+}
+
+/**
+ * Loads data once for every component that shows the same key, with Nuxt's
+ * semantics: a server render waits for it before rendering, and transfers it,
+ * whether or not the caller awaits it; `lazy` only spares client navigations
+ * the wait; `server: false` leaves it to the browser.
+ *
+ * In the browser, data loaded before is shown at once and read again in the
+ * background on each mount and each return to its key (stale while
+ * revalidate), except while the page the server rendered hydrates: its data
+ * is the server's, just read.
+ *
+ * A call without a key cannot be transferred: the server leaves it to the
+ * browser, as `server: false` does, so the page hydrates with what it shows.
+ */
+export function useDmsAsyncData<T>(
+  keyOrHandler: MaybeRefOrGetter<DmsAsyncDataKey> | DmsAsyncDataHandler<T>,
+  handler?: DmsAsyncDataHandler<T>,
+  callerOptions: UseAsyncDataOptions<T> = {},
+): DmsAsyncDataResult<T> {
+  const runtime = useDmsRuntime();
+  // A call outside any scope (a plugin past its first await, a callback)
+  // belongs to the application: its watchers and its polling live as long.
+  if (getCurrentScope() || !runtime.scope.active)
+    return createAsyncDataCall(runtime, keyOrHandler, handler, callerOptions);
+  return runtime.scope.run(() =>
+    createAsyncDataCall(runtime, keyOrHandler, handler, callerOptions),
+  )!;
+}
+
+function createAsyncDataCall<T>(
+  runtime: DmsFrontendRuntime,
+  keyOrHandler: MaybeRefOrGetter<DmsAsyncDataKey> | DmsAsyncDataHandler<T>,
+  handler: DmsAsyncDataHandler<T> | undefined,
+  callerOptions: UseAsyncDataOptions<T>,
+): DmsAsyncDataResult<T> {
+  // With a handler second, the first argument is the key: a string, or a ref
+  // or getter whose changes move the caller to the data of another key.
+  const keySource = handler
+    ? (keyOrHandler as MaybeRefOrGetter<DmsAsyncDataKey>)
+    : undefined;
+  const execute = handler ?? keyOrHandler;
+  if (typeof execute !== "function")
+    throw new Error("useDmsAsyncData requires a handler");
+  const keyless = keySource === undefined;
+  if (keyless && runtime.isServer && runtime.devWarnings)
+    console.warn(
+      "DMS: useDmsAsyncData without a key, or useDmsFetch with a body it cannot key, " +
+        "is left to the browser: give it a key for the server to render it.",
+    );
+  const options: UseAsyncDataOptions<T> = keyless
+    ? { ...callerOptions, server: false }
+    : callerOptions;
+  const inComponent = getCurrentInstance() !== null;
+  const consumer = shallowRef(
+    attachAsyncData(
+      runtime,
+      keyless ? undefined : (toValue(keySource) ?? null),
+      execute as DmsAsyncDataHandler<T>,
+      options,
+      inComponent,
+    ),
+  );
+  if (getCurrentScope()) onScopeDispose(() => consumer.value.unbind());
+  if (options.watch && options.watch.length)
+    refreshOnWatchedChange(consumer, options.watch);
+  // Registered in the browser too, though only a server calls it: Vue makes
+  // a component that prefetches an async boundary, which shifts the ids
+  // `useId()` gives the components after it, and both sides must agree. It
+  // waits for the key the caller is on by then, which its setup may have set.
+  let prefetched = false;
+  if (inComponent && options.immediate !== false && options.server !== false)
+    onServerPrefetch(() => {
+      prefetched = true;
+      return consumer.value.entry.settled();
+    });
+  pollAsyncData(runtime, consumer, options);
+  const { entry } = consumer.value;
+  const waited = startAsyncData(runtime, entry, options, inComponent);
+  const result =
+    keySource == null || typeof keySource === "string"
+      ? entry.result
+      : followAsyncDataKey(
+          runtime,
+          consumer,
+          keySource,
+          execute as DmsAsyncDataHandler<T>,
+          options,
+          inComponent,
+          () => !prefetched,
+        );
+  return Object.assign(
+    Promise.resolve(waited).then(() => result),
+    result,
+  );
+}
+
+/**
+ * Reads the data again when a watched source changes, but when the caller's
+ * key moved in the same turn: the new key's own read already has the change.
+ */
+function refreshOnWatchedChange<T>(
+  consumer: ShallowRef<AsyncDataConsumer<T>>,
+  sources: unknown[],
+): void {
+  let moved = false;
+  watch(
+    () => consumer.value.entry,
+    () => {
+      moved = true;
+      void nextTick(() => {
+        moved = false;
+      });
+    },
+    { flush: "sync" },
+  );
+  watch(sources as never[], () => {
+    if (!moved) void consumer.value.entry.result.refresh();
+  });
+}
+
+/**
+ * Reads the data again every `refreshInterval`, in the browser, following
+ * the interval as it changes: none, `0` or `null` stops it.
+ */
+function pollAsyncData<T>(
+  runtime: DmsFrontendRuntime,
+  consumer: ShallowRef<AsyncDataConsumer<T>>,
+  options: UseAsyncDataOptions<T>,
+): void {
+  const interval = options.refreshInterval;
+  if (runtime.isServer || interval === undefined) return;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const stop = () => {
+    clearInterval(timer);
+    timer = undefined;
+  };
+  watch(
+    () => toValue(interval),
+    (period) => {
+      stop();
+      if (period && period > 0)
+        timer = setInterval(() => pollOnce(consumer, options), period);
+    },
+    { immediate: true },
+  );
+  if (getCurrentScope()) onScopeDispose(stop);
+}
+
+function pollOnce<T>(
+  consumer: ShallowRef<AsyncDataConsumer<T>>,
+  options: UseAsyncDataOptions<T>,
+): void {
+  if (typeof document !== "undefined" && document.visibilityState === "hidden")
+    return;
+  const result = consumer.value.entry.result;
+  // Data a caller waits to `execute()` is not read before it is.
+  if (result.status.value === "idle" && options.immediate === false) return;
+  void result.refresh({ dedupe: "defer" });
+}
+
+/**
+ * Starts the run a caller needs, where its side needs it, and returns what
+ * awaiting the call waits for.
+ */
+function startAsyncData<T>(
+  runtime: DmsFrontendRuntime,
+  entry: AsyncDataEntry<T>,
+  options: UseAsyncDataOptions<T>,
+  inComponent: boolean,
+): Promise<void> | undefined {
+  const immediate = options.immediate !== false;
+  const onServer = options.server !== false;
+  const idle = entry.result.status.value === "idle";
+  if (runtime.isServer) {
+    if (!immediate || !onServer) return undefined;
+    if (idle && options.lazy) entry.schedule();
+    else if (idle) void entry.load();
+    const settled = entry.settled();
+    if (!inComponent) runtime.serverPrefetches.add(settled);
+    return settled;
+  }
+  // The server's render had the data once the setup awaited it, and before
+  // the component rendered: handed over at the same points, it gives what
+  // the setup derives from it, and so the HTML, the same values.
+  const adoption = entry.adoption();
+  if (adoption) {
+    if (inComponent) onBeforeMount(entry.adoptNow);
+    return adoption;
+  }
+  if (!immediate) return undefined;
+  const waitForData = () =>
+    !options.lazy && entry.result.data.value === null
+      ? entry.settled()
+      : undefined;
+  if (entry.running()) return waitForData();
+  if (!idle) {
+    // Loaded before: shown at once and read again in the background, except
+    // while the page the server rendered hydrates with the server's data, or
+    // when another caller of the page has just read it.
+    if (!runtime.hydrating && !entry.justReadForAnother()) void entry.load();
+    return waitForData();
+  }
+  // The server rendered the default in place of this data: the browser's
+  // first render must show it too, before the request leaves.
+  if (runtime.hydrating && (options.lazy || !onServer)) {
+    if (inComponent) onMounted(() => void entry.load());
+    else entry.schedule();
+  } else if (options.lazy) entry.schedule();
+  else void entry.load();
+  return !options.lazy && entry.result.pending.value
+    ? entry.settled()
+    : undefined;
+}
+
+interface AsyncDataConsumer<T> extends AsyncDataBindingHandle {
+  entry: AsyncDataEntry<T>;
+  /** Whether no other component showed the key when this one came. */
+  alone: boolean;
+}
+
+/**
+ * Binds a caller to the data of its key. A `null` key has no data to load:
+ * the caller holds its default, and nothing runs until it has a key.
+ */
+function attachAsyncData<T>(
+  runtime: DmsFrontendRuntime,
+  key: string | null | undefined,
+  handler: DmsAsyncDataHandler<T>,
+  options: UseAsyncDataOptions<T>,
+  inComponent: boolean,
+): AsyncDataConsumer<T> {
+  const entry = asyncDataEntry(runtime, key ?? undefined, options, inComponent);
+  const alone = entry.unused();
+  if (key === null) return { entry, alone, unbind() {} };
+  return { entry, alone, ...entry.bind({ handler, options }) };
+}
+
+/**
+ * Moves a caller to the data of each key its reactive key takes, and returns
+ * refs that follow it there. Until the new key's data is in, the previous
+ * data stays on screen rather than the default flashing in its place: the
+ * caller's refs show it, and `placeholder` says so, while the new key's own
+ * data stays its own, so a run that fails or that a switch away aborts never
+ * leaves it another key's data. A key loaded before shows its own data at
+ * once, and is read again in the background.
+ *
+ * A new key is read where the first one would have been. A server reads it
+ * neither for `server: false` nor for `immediate: false`, and otherwise only
+ * while its render still waits for the caller: until the prefetch of the
+ * caller's component, or, outside a component, as a call made then. Past
+ * that point the server renders the default and the browser reads the key. A
+ * browser hydrating the server's HTML reads a key the server did not render
+ * once the component is mounted, so that its first render matches the HTML.
+ */
+function followAsyncDataKey<T>(
+  runtime: DmsFrontendRuntime,
+  consumer: ShallowRef<AsyncDataConsumer<T>>,
+  keySource: MaybeRefOrGetter<DmsAsyncDataKey>,
+  handler: DmsAsyncDataHandler<T>,
+  options: UseAsyncDataOptions<T>,
+  inComponent: boolean,
+  serverWaits: () => boolean,
+): DmsAsyncData<T> {
+  // A read held back until the hydrating component is mounted.
+  let held = false;
+  let mounted = !(inComponent && runtime.hydrating);
+  if (!mounted)
+    onMounted(() => {
+      mounted = true;
+      const { entry } = consumer.value;
+      if (held && entry.result.status.value === "idle") void entry.load();
+      held = false;
+    });
+  const startOnServer = (entry: AsyncDataEntry<T>) => {
+    if (
+      options.server === false ||
+      options.immediate === false ||
+      !serverWaits()
+    )
+      return;
+    void entry.load();
+    if (!inComponent) runtime.serverPrefetches.add(entry.settled());
+  };
+  const current = () => consumer.value.entry.result;
+  // The previous key's data, shown until the current key settles.
+  const carried = shallowRef<{ value: T | null } | undefined>();
+  const settled = (result: DmsAsyncData<T>) =>
+    result.status.value === "success" || result.status.value === "error";
+  const shownData = (): T | null => {
+    const result = current();
+    return carried.value && !settled(result)
+      ? carried.value.value
+      : result.data.value;
+  };
+  watch(
+    () => settled(current()),
+    (done) => {
+      if (done) carried.value = undefined;
+    },
+    { flush: "sync" },
+  );
+  // Data written to the current key from elsewhere (`useDmsData`, another
+  // caller of the key) is its own: it replaces what is carried.
+  watch(
+    () => [current(), current().data.value] as const,
+    ([result], [previous]) => {
+      if (result === previous) carried.value = undefined;
+    },
+    { flush: "sync" },
+  );
+  watch(
+    () => toValue(keySource) ?? null,
+    (key) => {
+      const previous = current();
+      const shown = shownData();
+      const wasRunning = previous.pending.value;
+      // Past the setup, the server's data for the new key, if it rendered
+      // any, is taken over at once.
+      const next = attachAsyncData(runtime, key, handler, options, false);
+      const { entry } = next;
+      const carry =
+        next.alone && entry.result.status.value === "idle" && shown !== null;
+      // Unbound first: the previous key's run, aborted, settles it, which
+      // must not drop what is carried to the next key.
+      consumer.value.unbind();
+      consumer.value = next;
+      carried.value = carry ? { value: shown } : undefined;
+      held = false;
+      // `watch: false` keeps the caller on the key it names, without a run.
+      if (key === null || options.watch === false) return;
+      if (runtime.isServer) return startOnServer(entry);
+      const wanted =
+        options.immediate !== false || shown !== null || wasRunning;
+      if (!wanted) return;
+      if (!mounted) held = true;
+      else if (!inComponent && runtime.hydrating) entry.schedule();
+      else void entry.load();
+    },
+    { flush: "sync" },
+  );
+  const through = <V>(read: (result: DmsAsyncData<T>) => Ref<V>): Ref<V> =>
+    computed({
+      get: () => read(current()).value,
+      set: (value) => {
+        read(current()).value = value;
+      },
+    });
+  return {
+    data: computed({
+      get: shownData,
+      set: (value) => {
+        carried.value = undefined;
+        current().data.value = value;
+      },
+    }),
+    key: computed(() => current().key.value),
+    placeholder: computed(
+      () => carried.value !== undefined && !settled(current()),
+    ),
+    error: through((result) => result.error),
+    pending: computed(() => current().pending.value),
+    status: through((result) => result.status),
+    execute: (refreshOptions) => current().refresh(refreshOptions),
+    refresh: (refreshOptions) => current().refresh(refreshOptions),
+    clear: () => {
+      carried.value = undefined;
+      current().clear();
     },
   };
 }
 
-function createAsyncData<T>(
-  runtime: DmsFrontendRuntime,
-  keyOrHandler: string | (() => Promise<T>),
-  handler?: () => Promise<T>,
-  options: UseAsyncDataOptions<T> = {},
-): AsyncDataRegistration<T> {
-  const execute =
-    handler ?? (typeof keyOrHandler === "function" ? keyOrHandler : undefined);
-  if (!execute) throw new Error("useDmsAsyncData requires a handler");
-  const key = typeof keyOrHandler === "string" ? keyOrHandler : undefined;
-  const hasHydratedData = key ? runtime.hydratedAsyncData.has(key) : false;
-  const hydratedData = key ? runtime.hydratedAsyncData.get(key) : undefined;
-  const cached = key
-    ? (runtime.asyncData.get(key) as BoundAsyncData<T> | undefined)
-    : undefined;
-  const entry =
-    cached ??
-    createBoundAsyncData<T>(
-      hasHydratedData ? (hydratedData as T) : (options.default?.() ?? null),
-      hasHydratedData,
-    );
-  const shouldRefresh = entry.bind({
-    execute,
-    options,
-    active: true,
-    pageVersion: runtime.pageVersion,
-  });
-  if (key) runtime.asyncData.set(key, entry as DmsAsyncData<unknown>);
-  return { entry, shouldRefresh };
+/** What a paged read keeps under its key: the pages loaded, in order. */
+export interface DmsPagedDataValue<TPage, TCursor> {
+  pages: TPage[];
+  /** The cursor of the page after the last one; `null` once there is none. */
+  next: TCursor | null;
 }
+/** What a paged read's handler receives. */
+export interface DmsPagedDataContext<TCursor> extends DmsAsyncDataContext {
+  /** The page to read: `initialCursor` for the first one. */
+  cursor: TCursor | undefined;
+  /** Its position, from `0`. */
+  index: number;
+}
+export type DmsPagedDataHandler<TPage, TCursor> = (
+  context: DmsPagedDataContext<TCursor>,
+) => Promise<TPage>;
+export interface UseDmsPagedDataOptions<TPage, TCursor> extends Omit<
+  UseAsyncDataOptions<DmsPagedDataValue<TPage, TCursor>>,
+  "default" | "transform" | "pick"
+> {
+  /** The cursor of the page after `page`, or `null` (or `undefined`) for none. */
+  nextCursor(page: TPage, pages: TPage[]): TCursor | null | undefined;
+  /** The first page's cursor; none by default. */
+  initialCursor?: TCursor;
+}
+export interface DmsPagedData<TPage, TCursor> extends DmsAsyncData<
+  DmsPagedDataValue<TPage, TCursor>
+> {
+  /** The pages loaded so far, in order; none before the first answer. */
+  pages: Readonly<Ref<TPage[]>>;
+  /** Whether `loadMore()` has a page to read. */
+  hasMore: Readonly<Ref<boolean>>;
+  /** `true` while `loadMore()` reads its page. */
+  loadingMore: Readonly<Ref<boolean>>;
+  /**
+   * Reads the next page and appends it under the same key. It waits for a
+   * read in flight first, does nothing once there is no next page, and puts
+   * a failure in `error`, keeping the pages loaded.
+   */
+  loadMore(): Promise<void>;
+}
+export type DmsPagedDataResult<TPage, TCursor> = DmsPagedData<TPage, TCursor> &
+  Promise<DmsPagedData<TPage, TCursor>>;
 
-export async function useDmsAsyncData<T>(
-  keyOrHandler: string | (() => Promise<T>),
-  handler?: () => Promise<T>,
-  options: UseAsyncDataOptions<T> = {},
-): Promise<DmsAsyncData<T>> {
-  const runtime = useDmsRuntime();
-  const key = typeof keyOrHandler === "string" ? keyOrHandler : undefined;
-  const cached = key ? runtime.asyncData.get(key) : undefined;
-  const isHydrated = key ? runtime.hydratedAsyncData.has(key) : false;
-  const { entry, shouldRefresh } = createAsyncData(
-    runtime,
-    keyOrHandler,
-    handler,
-    options,
-  );
-  if (key) runtime.hydratedAsyncData.delete(key);
-  const pending =
-    key && entry.pending.value ? runtime.asyncDataPromises.get(key) : undefined;
-  if (pending) await pending;
-  if (
-    (!cached || entry.status.value === "idle" || shouldRefresh) &&
-    !isHydrated &&
-    !pending &&
-    options.immediate !== false
-  ) {
-    const execution = entry.execute();
-    if (key) runtime.asyncDataPromises.set(key, execution);
-    await execution;
-    if (key && runtime.asyncDataPromises.get(key) === execution)
-      runtime.asyncDataPromises.delete(key);
+type PagedValue<TPage, TCursor> = DmsPagedDataValue<TPage, TCursor>;
+
+/** Reads `count` pages from the first, as long as each has a next one. */
+async function readPages<TPage, TCursor>(
+  handler: DmsPagedDataHandler<TPage, TCursor>,
+  options: UseDmsPagedDataOptions<TPage, TCursor>,
+  count: number,
+  signal: AbortSignal,
+): Promise<PagedValue<TPage, TCursor>> {
+  const pages: TPage[] = [];
+  let cursor: TCursor | undefined = options.initialCursor;
+  for (let index = 0; index < count; index++) {
+    const page = await handler({ cursor, index, signal });
+    pages.push(page);
+    const next = options.nextCursor(page, pages);
+    if (next == null) return { pages, next: null };
+    cursor = next;
   }
-  return entry;
+  return { pages, next: cursor ?? null };
 }
 
-export function useDmsLazyAsyncData<T>(
-  keyOrHandler: string | (() => Promise<T>),
-  handler?: () => Promise<T>,
-  options: UseAsyncDataOptions<T> = {},
-): DmsAsyncData<T> {
-  const runtime = useDmsRuntime();
-  const key = typeof keyOrHandler === "string" ? keyOrHandler : undefined;
-  const { entry, shouldRefresh } = createAsyncData(
-    runtime,
-    keyOrHandler,
-    handler,
-    options,
-  );
-  if (key) runtime.hydratedAsyncData.delete(key);
-  if (
-    options.immediate !== false &&
-    (entry.status.value === "idle" || shouldRefresh)
-  )
-    queueMicrotask(() => {
-      if (
-        entry.status.value === "idle" ||
-        (shouldRefresh && !entry.pending.value)
-      )
-        void entry.execute();
+/** Resolves once `result` has no run in flight. */
+function untilSettled<T>(result: DmsAsyncData<T>): Promise<void> {
+  if (!result.pending.value) return Promise.resolve();
+  return new Promise((resolve) => {
+    const stop = watch(result.pending, (pending) => {
+      if (pending) return;
+      stop();
+      resolve();
     });
-  return entry;
+  });
 }
 
+/**
+ * A list read page by page under one key: "load more", an infinite list.
+ * The first page loads as `useDmsAsyncData` loads its data (a server render
+ * waits for it and transfers it), and `loadMore()` appends the next one to
+ * the same key, so the pages a component loaded show at once on a return to
+ * it. A revalidation (a mount, `refresh()`, `refreshDmsPageData()`, the
+ * polling) reads every page loaded so far again, from the first, and
+ * replaces them once all are in. Put what filters the list in the key: a new
+ * key starts again from its first page.
+ *
+ * @param key The key, or a ref or getter for it
+ * @param handler Reads one page, from the cursor it receives
+ * @param options `nextCursor`, `initialCursor` and the async data options
+ */
+export function useDmsPagedData<TPage, TCursor = unknown>(
+  key: MaybeRefOrGetter<DmsAsyncDataKey>,
+  handler: DmsPagedDataHandler<TPage, TCursor>,
+  options: UseDmsPagedDataOptions<TPage, TCursor>,
+): DmsPagedDataResult<TPage, TCursor> {
+  const {
+    nextCursor: _next,
+    initialCursor: _initial,
+    ...asyncOptions
+  } = options;
+  let shown: DmsAsyncData<PagedValue<TPage, TCursor>> | undefined;
+  const loadedCount = () =>
+    shown && !shown.placeholder.value
+      ? Math.max(1, shown.data.value?.pages.length ?? 0)
+      : 1;
+  const call = useDmsAsyncData<PagedValue<TPage, TCursor>>(
+    key,
+    ({ signal }) => readPages(handler, options, loadedCount(), signal),
+    asyncOptions,
+  );
+  shown = call;
+  const result: DmsPagedData<TPage, TCursor> = Object.assign(
+    {},
+    call as DmsAsyncData<PagedValue<TPage, TCursor>>,
+    pagedControls(call, handler, options),
+  );
+  return Object.assign(
+    call.then(() => result),
+    result,
+  );
+}
+
+function pagedControls<TPage, TCursor>(
+  call: DmsAsyncData<PagedValue<TPage, TCursor>>,
+  handler: DmsPagedDataHandler<TPage, TCursor>,
+  options: UseDmsPagedDataOptions<TPage, TCursor>,
+) {
+  const loadingMore = ref(false);
+  let controller: AbortController | undefined;
+  const abort = () => {
+    controller?.abort();
+    controller = undefined;
+    loadingMore.value = false;
+  };
+  watch(call.key, abort);
+  if (getCurrentScope()) onScopeDispose(abort);
+  const hasMore = computed(
+    () => !call.placeholder.value && (call.data.value?.next ?? null) !== null,
+  );
+  const loadMore = async (): Promise<void> => {
+    if (call.pending.value) await untilSettled(call);
+    const before = call.data.value;
+    if (!before) return call.execute();
+    if (before.next === null || controller) return;
+    const current = new AbortController();
+    controller = current;
+    loadingMore.value = true;
+    try {
+      const page = await handler({
+        cursor: before.next,
+        index: before.pages.length,
+        signal: current.signal,
+      });
+      if (controller !== current || call.data.value !== before) return;
+      const pages = [...before.pages, page];
+      call.data.value = {
+        pages,
+        next: options.nextCursor(page, pages) ?? null,
+      };
+    } catch (reason) {
+      if (controller === current) call.error.value = reason;
+    } finally {
+      if (controller === current) abort();
+    }
+  };
+  return {
+    pages: computed(() => call.data.value?.pages ?? []),
+    hasMore,
+    loadingMore: readonly(loadingMore),
+    loadMore,
+  };
+}
+
+/**
+ * The data another caller loads under `key`, as Nuxt's `useNuxtData`: to
+ * update it in place without reading it again, from what a write answered
+ * (an optimistic update) or what a realtime event says changed. It follows
+ * the key in the runtime's scope (`setDmsAsyncDataScope`): `undefined` until
+ * a caller loads the key, its data once there, `undefined` again once the
+ * browser lets the key go (past the most recent keys it keeps) or the scope
+ * changes. It does not load the key, nor keep it.
+ */
+export function useDmsData<T>(
+  key: MaybeRefOrGetter<DmsAsyncDataKey>,
+): DmsData<T> {
+  const runtime = useDmsRuntime();
+  const entry = () => {
+    const name = toValue(key);
+    const result =
+      name == null
+        ? undefined
+        : runtime.asyncData.get(scopedKey(runtime, String(name)));
+    return result && asyncDataEntries.get(result);
+  };
+  // A component after the caller, in the page or in its subtree, renders the
+  // data the browser hydrates it with: the server waits for the caller's run
+  // too. One before it has none on either side. Whether the key is there as
+  // the setup runs is the same on both sides, and so are the async
+  // boundaries `useId()` counts.
+  const loaded = entry();
+  if (loaded && getCurrentInstance()) onServerPrefetch(() => loaded.settled());
+  return {
+    data: computed({
+      get() {
+        // An entry only ever holds its own key's data: a caller showing the
+        // previous key's data meanwhile keeps it in its own refs.
+        return (entry()?.result.data.value ?? undefined) as T | undefined;
+      },
+      set(value) {
+        const current = entry();
+        if (!current) return;
+        current.result.data.value = value ?? null;
+      },
+    }),
+  };
+}
+
+/** Reads the data of the keys given, or of every key, again. */
 export async function refreshDmsData(keys?: string | string[]): Promise<void> {
   const runtime = useDmsRuntime();
   const selected = keys
-    ? Array.isArray(keys)
-      ? keys
-      : [keys]
+    ? (Array.isArray(keys) ? keys : [keys]).map((key) =>
+        scopedKey(runtime, key),
+      )
     : [...runtime.asyncData.keys()];
   await Promise.all(
     selected.map((key) => runtime.asyncData.get(key)?.refresh()),
   );
+}
+
+/**
+ * Reads again the data the components on screen show, but those that opted
+ * out (`refreshOnPageRefresh: false`) and those waiting for `execute()`:
+ * what a page calls once something changed what it shows, after a save or
+ * on a realtime event, instead of each component refreshing its own.
+ */
+export async function refreshDmsPageData(): Promise<void> {
+  const runtime = useDmsRuntime();
+  await Promise.all(
+    [...runtime.boundAsyncData].map((entry) => entry.pageRefresh()),
+  );
+}
+
+/**
+ * Puts the keys of the async data in a scope, such as a digest of the
+ * account and the workspace: the same key in another scope is another
+ * entry, never the data of the previous one. Moving to another scope drops
+ * the data of every key, aborting its runs; the components on screen then
+ * show their default until they load again. Call it on both sides before
+ * the page renders, with the same value, so the browser finds the data the
+ * server transferred; the scope is written in the page with each key, so a
+ * digest rather than an identifier.
+ *
+ * @param scope The scope, or `undefined` for none
+ */
+export function setDmsAsyncDataScope(scope: string | undefined): void {
+  const runtime = useDmsRuntime();
+  if (runtime.asyncDataScope === scope) return;
+  runtime.asyncDataScope = scope;
+  for (const result of runtime.asyncData.values()) result.clear();
+  runtime.asyncData.clear();
+}
+
+/**
+ * Drops the data no component shows any more, but the most recently shown:
+ * a return to a key shows its data at once, and the data does not pile up
+ * over a session.
+ */
+function dropUnusedAsyncData(runtime: DmsFrontendRuntime): void {
+  const unused = [...runtime.asyncData]
+    .map(([key, result]) => ({ key, entry: asyncDataEntries.get(result) }))
+    .filter(({ entry }) => entry?.unused())
+    .sort((left, right) => right.entry!.lastShown() - left.entry!.lastShown());
+  for (const { key } of unused.slice(MAX_UNUSED_ASYNC_DATA))
+    runtime.asyncData.delete(key);
 }
 
 export function serializeDmsAsyncData(
@@ -988,12 +2295,116 @@ export function serializeDmsAsyncData(
   return Object.fromEntries(
     [...runtime.asyncData.entries()]
       .filter(([, entry]) => entry.status.value === "success")
-      .map(([key, entry]) => [key, entry.data.value]),
+      .map(([key, entry]) => [key, toRaw(entry.data.value)]),
   );
 }
 
-export function useDmsState<T>(key: string, init?: () => T): Ref<T> {
+const HTTP_ERROR_STATUS = { min: 400, max: 599 };
+const SERVER_FAILURE_STATUS = 500;
+const FETCH_ERROR_NAME = "FetchError";
+
+/** The fields of a failure, under the names `createDmsError` and ofetch use. */
+interface DmsFailure extends DmsErrorData {
+  name?: string;
+  status?: number;
+  statusText?: string;
+}
+
+/**
+ * What of a failure a page may carry, by the rule the error page follows: an
+ * HTTP failure keeps its status, status text and message, and its body if it
+ * is a 4xx, anything else
+ * is a server failure whose cause only reaches the server log. A fetch error
+ * names the URL it requested, which on a server is the backend's own address:
+ * its status text stands for it.
+ */
+function transferredError(key: string, reason: unknown): DmsErrorData {
+  const failure = (reason ?? {}) as DmsFailure;
+  const statusCode = failure.statusCode ?? failure.status;
+  if (
+    statusCode === undefined ||
+    !Number.isInteger(statusCode) ||
+    statusCode < HTTP_ERROR_STATUS.min ||
+    statusCode > HTTP_ERROR_STATUS.max
+  ) {
+    console.error(`DMS async data "${key}" failed`, reason);
+    return { statusCode: SERVER_FAILURE_STATUS };
+  }
+  const statusMessage = failure.statusMessage ?? failure.statusText;
+  const transferred: DmsErrorData = {
+    statusCode,
+    statusMessage,
+    message:
+      failure.name === FETCH_ERROR_NAME ? statusMessage : failure.message,
+  };
+  // A 5xx body is the backend's own account of its failure, a stack or a
+  // query at times: only a 4xx body, written for the client, is transferred.
+  if (statusCode < SERVER_FAILURE_STATUS) transferred.data = failure.data;
+  return transferred;
+}
+
+/**
+ * What a page's error page shows of an expected failure (a 4xx or 5xx): its
+ * status code, status text and message. A fetch error's message names the URL
+ * it requested, on a server the backend's own address: its status text
+ * stands for it.
+ */
+export function pageErrorData(failure: Error & DmsErrorData): DmsErrorData {
+  return {
+    statusCode: failure.statusCode,
+    message:
+      failure.name === FETCH_ERROR_NAME
+        ? failure.statusMessage
+        : failure.message,
+    statusMessage: failure.statusMessage,
+  };
+}
+
+/**
+ * Everything a server render hands the browser: the data and the failures of
+ * its keys, and the state keys opted into. Read as the HTML is complete.
+ */
+export function serializeDmsPayload(runtime: DmsFrontendRuntime): DmsPayload {
+  const errors = [...runtime.asyncData.entries()]
+    .filter(([, entry]) => entry.status.value === "error")
+    .map(([key, entry]): [string, DmsErrorData] => [
+      key,
+      transferredError(key, entry.error.value),
+    ]);
+  const state = [...runtime.transferredState]
+    .map((key): [string, unknown] => [
+      key,
+      toRaw(runtime.sharedState.get(key)?.value),
+    ])
+    .filter(([, value]) => value !== undefined);
+  return {
+    data: serializeDmsAsyncData(runtime),
+    errors: Object.fromEntries(errors),
+    state: Object.fromEntries(state),
+  };
+}
+
+/** Starts a browser runtime from what the server rendered. */
+export function restoreDmsPayload(
+  runtime: DmsFrontendRuntime,
+  payload: Partial<DmsPayload>,
+): void {
+  runtime.hydrating = true;
+  for (const [key, value] of Object.entries(payload.data ?? {}))
+    runtime.hydratedAsyncData.set(key, value);
+  for (const [key, failure] of Object.entries(payload.errors ?? {}))
+    runtime.hydratedAsyncErrors.set(key, failure);
+  for (const [key, value] of Object.entries(payload.state ?? {}))
+    runtime.sharedState.set(key, ref(value));
+}
+
+export function useDmsState<T>(
+  key: string,
+  init?: () => T,
+  options: DmsStateOptions = {},
+): Ref<T> {
   const runtime = useDmsRuntime();
+  if (options.transfer) runtime.transferredState.add(key);
   if (!runtime.sharedState.has(key))
     runtime.sharedState.set(key, ref(init?.()));
   return runtime.sharedState.get(key) as Ref<T>;
@@ -1004,7 +2415,7 @@ export function useDmsRuntimeConfig(): DmsRuntimeConfig {
 export function useDmsAppConfig(): DmsAppConfig {
   return appConfig.value as DmsAppConfig;
 }
-export function defineAppConfig<T extends Record<string, unknown>>(
+export function defineDmsAppConfig<T extends Record<string, unknown>>(
   config: T,
 ): T {
   return config;
@@ -1015,18 +2426,34 @@ export function defineDmsMiddleware(handler: DmsMiddleware): DmsMiddleware {
 export function defineDmsPageMeta(meta: Record<string, unknown>): void {
   const runtime = useDmsRuntime();
   Object.assign(runtime.route.meta, meta);
-  const navigation = runMiddleware(runtime, runtime.route).then(
-    async (result) => {
+  // A middleware that throws fails the page, as in Nuxt: the error page
+  // shows in its place with the error's status code, which a server render
+  // answers with. A redirect another navigation decided still wins.
+  const navigation = runMiddleware(runtime, runtime.route)
+    .then(async (result) => {
       if (result !== undefined && result !== false)
         await visit(runtime, result);
-    },
-  );
+    })
+    .catch((reason) => failPage(runtime, reason));
   runtime.pendingNavigation = runtime.pendingNavigation
     ? Promise.all([runtime.pendingNavigation, navigation]).then(() => undefined)
     : navigation;
   void runtime.pendingNavigation;
+  // A server renders the page's subtree once its middleware is done, so the
+  // state a middleware sets is the one the HTML shows and the payload carries.
+  // A failure shows the error page in its place (`failPage`). Registered
+  // in the browser too, where only a server calls it: both sides must agree
+  // on the async boundaries `useId()` counts.
+  if (getCurrentInstance())
+    onServerPrefetch(() => navigation.then(ignoreSettlement, ignoreSettlement));
 }
-export function abortNavigation(): false {
+function ignoreSettlement(): void {}
+/** Shows the error page in place of the page, keeping the first failure. */
+function failPage(runtime: DmsFrontendRuntime, reason: unknown): void {
+  runtime.currentError.value ??=
+    reason instanceof Error ? reason : new Error(String(reason));
+}
+export function abortDmsNavigation(): false {
   return false;
 }
 export const useHead = useUnhead;
@@ -1250,7 +2677,7 @@ export function useDmsCookie<T = string | null>(
   return runtime.sharedState.get(key) as Ref<T>;
 }
 
-export function createError(
+export function createDmsError(
   input: string | DmsErrorData,
 ): Error & DmsErrorData {
   const details = typeof input === "string" ? { message: input } : input;
@@ -1259,22 +2686,59 @@ export function createError(
     details,
   );
 }
-export function showError(input: string | DmsErrorData): Error & DmsErrorData {
-  const error = createError(input);
+export function showDmsError(
+  input: string | DmsErrorData,
+): Error & DmsErrorData {
+  const error = createDmsError(input);
   useDmsRuntime().currentError.value = error;
   return error;
 }
-export function useError(): Ref<(Error & DmsErrorData) | null> {
+export function useDmsError(): Ref<(Error & DmsErrorData) | null> {
   return useDmsRuntime().currentError as Ref<(Error & DmsErrorData) | null>;
 }
-export async function clearError(options?: {
+export async function clearDmsError(options?: {
   redirect?: string;
 }): Promise<void> {
   useDmsRuntime().currentError.value = null;
   if (options?.redirect) await navigateDms(options.redirect);
 }
 
-export function useUserSession<
+function sessionIdentity(session: unknown): string {
+  const { accountId, activeTenantId } = (session ?? {}) as Partial<DmsSession>;
+  return `${accountId ?? ""}\n${activeTenantId ?? ""}`;
+}
+
+/**
+ * Drops the pages Inertia prefetched (a hovered link) once the session is
+ * another account's or workspace's, or none: each carries the user, the page
+ * and the site layout of the session it was fetched with, and a visit would
+ * show them as current.
+ */
+function forgetPrefetchedPages(): void {
+  if (typeof window !== "undefined") inertiaRouter.flushAll();
+}
+
+/**
+ * Warms what a prefetched page renders (its page, layout and block
+ * components) once Inertia has its props, so following the link does not wait
+ * for those chunks after the props.
+ */
+export function preloadPrefetchedDmsPages(): () => void {
+  return inertiaRouter.on("prefetched", (event) => {
+    const data = event.detail.response.data as unknown;
+    let page: { props?: DmsPageProps } | undefined;
+    try {
+      page = (typeof data === "string" ? JSON.parse(data) : data) as
+        | { props?: DmsPageProps }
+        | undefined;
+    } catch {
+      return;
+    }
+    if (page?.props?.page) void preloadDmsPage(page.props).catch(() => {});
+  });
+}
+
+export function useDmsUserSession<
   TUser = DmsUser,
   TSession = DmsSession,
 >(): DmsUserSession<TUser, TSession> {
@@ -1285,17 +2749,20 @@ export function useUserSession<
     session,
     loggedIn: computed(() => user.value !== null),
     fetch: async () => {
+      const before = sessionIdentity(session.value);
       const value = await ofetch<{
         user?: TUser;
         session?: TSession;
       }>("/api/_auth/session", { method: "POST" });
       user.value = value.user ?? null;
       session.value = value.session ?? null;
+      if (sessionIdentity(session.value) !== before) forgetPrefetchedPages();
     },
     clear: async () => {
       await ofetch("/api/_auth/session", { method: "DELETE" });
       user.value = null;
       session.value = null;
+      forgetPrefetchedPages();
     },
   };
 }
@@ -1314,9 +2781,15 @@ export function useDmsPageLoading(): Readonly<Ref<boolean>> {
  * The props of the `<Suspense>` around the page that keep `useDmsPageLoading`
  * in step with it. Cleared before the boundary unmounts, so a page left while
  * pending never leaves the state set.
+ *
+ * They also end the hydration: the page is on screen once its suspense
+ * resolves, and the components after it once the tick is over, so the
+ * browser has then hydrated what the server rendered. A hydrating suspense
+ * never reports itself pending: the server rendered the page resolved.
  */
 export function dmsPageSuspenseProps(): Record<string, () => void> {
-  const loading = useDmsRuntime().pageLoading;
+  const runtime = useDmsRuntime();
+  const loading = runtime.pageLoading;
   const settle = () => {
     loading.value = false;
   };
@@ -1324,7 +2797,10 @@ export function dmsPageSuspenseProps(): Record<string, () => void> {
     onPending: () => {
       loading.value = true;
     },
-    onResolve: settle,
+    onResolve: () => {
+      settle();
+      if (runtime.hydrating) void nextTick(() => endHydration(runtime));
+    },
     onVnodeBeforeUnmount: settle,
   };
 }
@@ -1381,7 +2857,6 @@ export function registerDmsComponent(name: string, component: Component): void {
 export function resolveDmsComponent(name: string): Component | undefined {
   return registry.components.get(normalizeDmsComponentName(name))?.component;
 }
-export const getDmsComponent = resolveDmsComponent;
 
 /**
  * Records, by registered name, every registered async component a server
@@ -1445,7 +2920,7 @@ export async function resolveDmsAsyncComponents(
     ),
   );
 }
-export async function preloadComponents(names: string[]): Promise<void> {
+export async function preloadDmsComponents(names: string[]): Promise<void> {
   const registry = useDmsRuntime().appContext?.vueApp._context.components ?? {};
   await Promise.all(
     names.map((name) =>
@@ -1453,7 +2928,6 @@ export async function preloadComponents(names: string[]): Promise<void> {
     ),
   );
 }
-export const prefetchComponents = preloadComponents;
 export function normalizeDmsName(name: string): string {
   return name
     .replace(/^lazy/i, "")
@@ -1477,6 +2951,9 @@ function collectRenderedComponentNames(
   for (const key of ["component", "componentName"]) {
     if (typeof definition[key] === "string") names.add(definition[key]);
   }
+  // A child places a component definition: `{ id, component: { … } }`.
+  if (typeof definition.component === "object")
+    collectRenderedComponentNames(definition.component, names);
   collectRenderedComponentNames(definition.children, names);
 }
 
@@ -1554,7 +3031,7 @@ export function getDmsLayoutProps(
  * Whether a page carries an older session of the same account than the one
  * the app holds: Inertia restores a page from history, or serves it from the
  * prefetch cache, with the props it was fetched with, and those must not undo
- * a later `useUserSession().fetch()`.
+ * a later `useDmsUserSession().fetch()`.
  */
 function isStaleSession(
   incoming: DmsSession | undefined,
@@ -1568,6 +3045,61 @@ function isStaleSession(
   );
 }
 
+/**
+ * Copies the site layout of the page props into the state. A visit carries
+ * the layout it was sent over from page to page (a once prop): the same copy
+ * is applied once, so the state keeps what a later refresh wrote into it, and
+ * `dms-lastRefreshTime` tells when the layout was last received.
+ */
+export function hydrateDmsSharedProps(
+  shared: DmsSharedPagePayload | undefined,
+): void {
+  const runtime = useDmsRuntime();
+  if (!shared || shared === runtime.appliedShared) return;
+  // A page from the history carries the layout it was shown with, which the
+  // state has replaced since: see `keepSharedOverHistory`.
+  if (runtime.restoringHistory) return;
+  runtime.appliedShared = shared;
+  useDmsState<unknown>("dms-siteLayout", () => undefined).value =
+    shared.siteLayout;
+  useDmsState<unknown>("dms-pageTree", () => undefined).value =
+    shared.siteLayoutTree;
+  useDmsState<unknown>("dms-quickActions", () => undefined).value =
+    shared.quickActions;
+  useDmsState<unknown>("dms-modules", () => undefined).value = shared.modules;
+  useDmsState("dms-isOwner", () => false).value = shared.isOwner ?? false;
+  useDmsState("dms-lastRefreshTime", () => 0).value = Date.now();
+}
+
+/**
+ * Keeps the newest site layout when Back or Forward puts a page back. The
+ * page carries the layout it was shown with, which a later reload replaced
+ * (a menu change the backend announced); it is not copied into the state, and
+ * the page is given the current one, so the next visit carries that over
+ * rather than the older one.
+ */
+export function keepSharedOverHistory(): () => void {
+  const runtime = useDmsRuntime();
+  const onPopstate = (event: PopStateEvent) => {
+    // Inertia restores only the entries it wrote, which hold a page.
+    if ((event.state as { page?: unknown } | null)?.page)
+      runtime.restoringHistory = true;
+  };
+  window.addEventListener("popstate", onPopstate);
+  const stopListening = inertiaRouter.on("navigate", (event) => {
+    if (!runtime.restoringHistory) return;
+    runtime.restoringHistory = false;
+    const current = runtime.appliedShared;
+    const restored = (event.detail.page.props as Partial<DmsPageProps>).shared;
+    if (current && restored !== current)
+      inertiaRouter.replaceProp("shared", current);
+  });
+  return () => {
+    window.removeEventListener("popstate", onPopstate);
+    stopListening();
+  };
+}
+
 export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
   const runtime = useDmsRuntime();
   if (url) updateRoute(runtime, url);
@@ -1579,7 +3111,7 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
     runtime.pageKey = pageKey;
     runtime.route.meta = {};
   }
-  runtime.pageVersion++;
+  dropUnusedAsyncData(runtime);
   runtime.currentError.value = null;
   const session = useDmsState<DmsSession | null>("dms-session", () => null);
   if (!isStaleSession(props.session, session.value)) {
@@ -1587,18 +3119,7 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
       props.user ?? null;
     session.value = props.session ?? null;
   }
-  const shared = props.page.shared;
-  if (shared) {
-    useDmsState<unknown>("dms-siteLayout", () => undefined).value =
-      shared.siteLayout;
-    useDmsState<unknown>("dms-pageTree", () => undefined).value =
-      shared.siteLayoutTree;
-    useDmsState<unknown>("dms-quickActions", () => undefined).value =
-      shared.quickActions;
-    useDmsState<unknown>("dms-modules", () => undefined).value = shared.modules;
-    useDmsState("dms-isOwner", () => false).value = shared.isOwner ?? false;
-    useDmsState("dms-lastRefreshTime", () => 0).value = Date.now();
-  }
+  hydrateDmsSharedProps(props.shared);
   const layoutUrl = props.page.route?.layoutUrl ?? props.page.layoutUrl;
   const pageLayouts = useDmsState<Record<string, DmsPageLayout>>(
     "dms-pageLayouts",
@@ -1609,6 +3130,16 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
   pageLayouts.value =
     layoutUrl && props.page.layout ? { [layoutUrl]: props.page.layout } : {};
 }
+/**
+ * Ends the hydration of the page the server rendered. The server's data no
+ * component took over is dropped: a later page must not show it as current.
+ */
+function endHydration(runtime: DmsFrontendRuntime): void {
+  runtime.hydrating = false;
+  runtime.hydratedAsyncData.clear();
+  runtime.hydratedAsyncErrors.clear();
+}
+
 export function getDmsErrorPage(): Component | undefined {
   return registry.errorPage?.component;
 }
@@ -1694,6 +3225,7 @@ function createSdk(
       if (!target.namedMiddleware.has(name))
         target.namedMiddleware.set(name, handler);
       if (options.global) target.middleware.push(handler);
+      if (options.parallel) target.parallelMiddleware.add(handler);
     },
     registerAccessRedirect: (code, path) => {
       if (!target.accessRedirects.has(code))
@@ -1717,16 +3249,22 @@ function createSdk(
  * replace, so the server kept rendering the old ones, and every list gained the
  * same entries once more. A render still in progress keeps reading a complete
  * registry: the new one is only published once every module is set up.
+ *
+ * `useDmsAppConfig()` holds the layers' app configs merged, highest precedence
+ * first, before the first module is set up: a project's layer overrides the
+ * DMS's, which fills in the rest. A setup may still read and extend it.
  */
 export async function setupFrontendModules(
   registrations: DmsFrontendModuleRegistration[],
+  layerAppConfigs: DmsLayerAppConfig[] = [],
 ): Promise<void> {
   const next = createDmsFrontendRegistry();
-  // Modules read and extend these two while they are set up (the DMS layout
-  // merges its app config into `useDmsAppConfig()`), so they restart empty
-  // here rather than being published with the registry.
+  const configs = layerAppConfigs.map(({ config }) => config);
+  // Modules read and extend these two while they are set up, so they restart
+  // here rather than being published with the registry: the public options
+  // empty, the app config from the layers alone.
   runtimeConfig.value.public = {} as PublicRuntimeConfig;
-  appConfig.value = {};
+  appConfig.value = mergeLayerAppConfigs(configs);
   for (const registration of registrations) {
     runtimeConfig.value.public = defu(
       runtimeConfig.value.public,
@@ -1734,7 +3272,27 @@ export async function setupFrontendModules(
     );
     await registration.module.setup(createSdk(next, registration));
   }
+  appConfigSetupChanges = appConfigChanges(
+    mergeLayerAppConfigs(configs),
+    appConfig.value,
+  );
   registry = next;
+}
+
+/**
+ * Development only: applies the layers' app configs, edited while the page
+ * is open, to `useDmsAppConfig()`, with what the setup of the modules changed
+ * in the previous ones still on top. The object is updated in place, records
+ * included, since components hold it: the modules are not set up again.
+ */
+export function updateDmsAppConfig(layerAppConfigs: DmsLayerAppConfig[]): void {
+  const layered = mergeLayerAppConfigs(
+    layerAppConfigs.map(({ config }) => config),
+  );
+  assignInPlace(
+    appConfig.value,
+    withAppConfigChanges(layered, appConfigSetupChanges),
+  );
 }
 
 export async function installDmsPlugins(
@@ -1769,10 +3327,7 @@ export async function installDmsPlugins(
       if (browserRuntime === runtime) browserRuntime = undefined;
     });
   }
-  app.config.errorHandler = (reason) => {
-    runtime.currentError.value ??=
-      reason instanceof Error ? reason : new Error(String(reason));
-  };
+  app.config.errorHandler = (reason) => failPage(runtime, reason);
   app.config.globalProperties.$dms = appContext;
   Reflect.set(app, "$dms", appContext);
   Reflect.set(app, "$i18n", i18n);
@@ -1812,6 +3367,9 @@ export async function installDmsPlugins(
       app.runWithContext(() => registration.setup(appContext)),
     );
   }
+  // What plugins start without awaiting it is still part of the page a
+  // server renders: its HTML shows it, so the render waits for it.
+  if (runtime.isServer) await Promise.all(runtime.serverPrefetches);
   return async () => {
     for (const callback of hooks.get("app:mounted") ?? []) await callback();
   };

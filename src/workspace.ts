@@ -77,6 +77,23 @@ export interface ManifestModule {
    * field.
    */
   publicEndpoints?: PublicEndpointDeclaration[];
+  /**
+   * Backend paths outside the prefixes the frontend modules proxy (a media
+   * or a webhook prefix) that the generated server proxies too, with how it
+   * authenticates them. Extends `publicEndpoints` to whole prefixes.
+   */
+  backendProxies?: BackendProxyDeclaration[];
+}
+
+/** A backend prefix the frontend server proxies, as the manifest names it. */
+export interface BackendProxyDeclaration {
+  /** `/x`, `/x/*` or `/x/**`, its first segment literal. */
+  path: string;
+  /**
+   * `session` (the default) sends the session's access token and needs the
+   * frontend's `Origin` on a state-changing request; `none` sends neither.
+   */
+  auth?: "session" | "none";
 }
 
 /** A backend route a module serves to anyone, as the manifest names it. */
@@ -92,12 +109,18 @@ export interface PublicEndpointDeclaration {
 export interface Manifest {
   pack: string;
   modules: ManifestModule[];
+  /**
+   * The backend is changing its set of modules (its module store runs an
+   * operation): a follower waits for the set to settle.
+   */
+  settling?: boolean;
 }
 
 export interface FrontendManifest {
   version: number;
   archive: string;
   modules: ManifestModule[];
+  settling?: boolean;
 }
 
 /**
@@ -125,8 +148,14 @@ export interface ResolvedLayer {
   priority?: number;
   configKey?: string;
   options?: FrontendModuleOptions;
+  /**
+   * The private options the manifest served, which the module's server
+   * routes read. Absent without an authenticated manifest.
+   */
+  privateOptions?: FrontendModuleOptions;
   authEstablishEndpoints?: string[];
   publicEndpoints?: PublicEndpointDeclaration[];
+  backendProxies?: BackendProxyDeclaration[];
 }
 
 // ============================================================================

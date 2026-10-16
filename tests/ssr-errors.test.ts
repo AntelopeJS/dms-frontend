@@ -42,6 +42,10 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
       '{"modules":[]}',
     );
     writeFileSync(
+      join(workspace, "app-configs.generated.ts"),
+      "export const appConfigs = [];\n",
+    );
+    writeFileSync(
       join(workspace, "locales.generated.ts"),
       'export const localeMessages={en:{},fr:{}};export const supportedLocales=["en","fr"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );
@@ -53,16 +57,26 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
       join(workspace, "frontend-modules.generated.ts"),
       `
 import {defineComponent,h} from 'vue';
-import {createError,defineDmsPageMeta,useUserSession,useI18n,useDmsState} from './frontend-module';
+import {createDmsError,defineDmsPageMeta,navigateDms,useDmsUserSession,useI18n,useDmsState} from './frontend-module';
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 let exactPreloads=0;
 let catchAllPreloads=0;
 let initialMiddlewarePath='unset';
 export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerMiddleware('capture-initial-route',to=>{initialMiddlewarePath=to.fullPath},{global:true});
  sdk.registerMiddleware('async-runtime',async to=>{if(!to.path.startsWith('/async-runtime'))return;await Promise.resolve();useDmsState('async-runtime',()=>undefined).value=to.path},{global:true});
+ sdk.registerMiddleware('slow-guard',async to=>{if(!to.path.startsWith('/slow-guard-'))return;await sleep(20);if(to.path!=='/slow-guard-page-redirect')return '/onboarding?source=guard'},{global:true});
+ sdk.registerPage('slow-guard-redirect',defineComponent({setup(){defineDmsPageMeta({auth:true});return()=>h('p','Guarded page')}}));
+ sdk.registerPage('slow-guard-page-redirect',defineComponent({async setup(){defineDmsPageMeta({auth:true});await navigateDms('/onboarding?source=page');return()=>h('p','Leaving page')}}));
+ sdk.registerPage('slow-guard-both',defineComponent({async setup(){defineDmsPageMeta({auth:true});await navigateDms('/onboarding?source=page');return()=>h('p','Leaving page')}}));
+ sdk.registerMiddleware('failing-guard',async to=>{if(!to.path.startsWith('/guard-'))return;await Promise.resolve();if(to.path==='/guard-not-found')throw createDmsError({statusCode:404,statusMessage:'Module not found'});if(to.path==='/guard-broken')throw new Error('private middleware detail');return '/onboarding?source=guard'},{global:true});
+ const Guarded=defineComponent({async setup(){defineDmsPageMeta({auth:true});await new Promise(r=>setTimeout(r,20));return()=>h('p','Guarded content')}});
+ sdk.registerPage('guard-not-found',Guarded);
+ sdk.registerPage('guard-broken',Guarded);
+ sdk.registerPage('guard-redirect',Guarded);
  sdk.registerMiddleware('onboarding-redirect',to=>to.path.startsWith('/requires-onboarding-')?'/onboarding?source='+to.path.slice(-1):undefined,{global:true});
- sdk.registerPlugin(()=>{const {user}=useUserSession();useDmsState('plugin-user',()=>user.value?._id??'anonymous')});
- sdk.registerPage('session',defineComponent({setup(){const {user}=useUserSession();const {locale}=useI18n();const pluginUser=useDmsState('plugin-user');return()=>h('p',(user.value?._id??'anonymous')+':'+locale.value+':'+pluginUser.value)}}));
+ sdk.registerPlugin(()=>{const {user}=useDmsUserSession();useDmsState('plugin-user',()=>user.value?._id??'anonymous')});
+ sdk.registerPage('session',defineComponent({setup(){const {user}=useDmsUserSession();const {locale}=useI18n();const pluginUser=useDmsState('plugin-user');return()=>h('p',(user.value?._id??'anonymous')+':'+locale.value+':'+pluginUser.value)}}));
  sdk.registerPage('async-runtime-a',defineComponent({async setup(){defineDmsPageMeta({auth:true});await Promise.resolve();const value=useDmsState('async-runtime');return()=>h('p','Async runtime A:'+value.value)}}));
  sdk.registerPage('async-runtime-b',defineComponent({async setup(){defineDmsPageMeta({auth:true});await Promise.resolve();const value=useDmsState('async-runtime');return()=>h('p','Async runtime B:'+value.value)}}));
  sdk.registerPage('initial-route',defineComponent({setup(){defineDmsPageMeta({auth:true});return()=>h('p','Initial route:'+initialMiddlewarePath)}}));
@@ -70,7 +84,8 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('requires-onboarding-a',RequiresOnboarding);
  sdk.registerPage('requires-onboarding-b',RequiresOnboarding);
  sdk.registerPage('onboarding',defineComponent({setup(){return()=>h('p','Onboarding')}}));
- sdk.registerPage('throws',defineComponent({setup(){throw createError({statusCode:400,message:'Missing required token parameter'})},render(){throw new Error('secondary render failure')}}));
+ sdk.registerPage('throws',defineComponent({setup(){throw createDmsError({statusCode:400,message:'Missing required token parameter'})},render(){throw new Error('secondary render failure')}}));
+ sdk.registerPage('fetch-not-found',defineComponent({async setup(){await Promise.resolve();throw Object.assign(new Error('[GET] "http://10.0.0.5:5010/api/secret": 404 Not Found'),{name:'FetchError',statusCode:404,statusMessage:'Not Found'})}}));
  sdk.registerPage('async-throws',defineComponent({async setup(){await Promise.resolve();throw new Error('private database hostname')}}));
  sdk.registerPage('healthy',defineComponent({async setup(){await new Promise(r=>setTimeout(r,5));return()=>h('p','Healthy request')}}));
  sdk.registerPage('exact',defineComponent({setup(){return()=>h('p','Exact registered page:'+(exactPreloads>0)+':catch-all:'+catchAllPreloads)}}),async()=>{exactPreloads++});
@@ -103,6 +118,16 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       "<html><head><title>Antelope DMS</title></head><body>__DMS_APP__</body></html>",
     );
     writeFileSync(join(workspace, "dist/client/.vite/manifest.json"), "{}");
+    // The module owning sign-in shows the session to pages, and proxies the
+    // one backend path the browser reads here outside a page.
+    mkdirSync(join(workspace, "dist/server-modules"), { recursive: true });
+    writeFileSync(
+      join(workspace, "dist/server-modules/server-modules.generated.js"),
+      `export const serverModules = [{ id: "fixture-auth", setup(server) {
+  server.registerAuth({ publicSession: (session) => ({ user: session.user, session: { accountId: session.accountId, activeTenantId: session.activeTenantId } }) });
+  server.registerBackendProxy(${JSON.stringify(unreadCountPath)});
+} }];\n`,
+    );
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
@@ -157,6 +182,56 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.equal(redirectB.headers.get("location"), "/onboarding?source=b");
     assert.equal(isolatedHealthy.status, 200);
     assert.match(await isolatedHealthy.text(), /Healthy request/);
+    // The page renders once its middleware is done, and a redirect still wins
+    // over the page: the middleware's, the one the page issues while its
+    // middleware still runs, and the middleware's over the page's.
+    for (const [path, location] of [
+      ["/slow-guard-redirect", "/onboarding?source=guard"],
+      ["/slow-guard-page-redirect", "/onboarding?source=page"],
+      ["/slow-guard-both", "/onboarding?source=guard"],
+    ]) {
+      const response = await fetch(`${base}${path}`, {
+        headers: { accept: "text/html" },
+        redirect: "manual",
+      });
+      assert.equal(response.status, 302, path);
+      assert.equal(response.headers.get("location"), location, path);
+    }
+    // A middleware that throws fails the page as a page setup does: the
+    // server renders the error page with the error's status, and a redirect
+    // a middleware decides still answers with a redirect. The pages take
+    // longer than their middleware: a failure that nothing handled yet then
+    // took the whole server down as an unhandled rejection.
+    const [guardNotFound, guardBroken, guardRedirect] = await Promise.all(
+      ["/guard-not-found", "/guard-broken", "/guard-redirect"].map((path) =>
+        fetch(`${base}${path}`, {
+          headers: { accept: "text/html" },
+          redirect: "manual",
+        }),
+      ),
+    );
+    assert.equal(guardNotFound.status, 404);
+    const guardNotFoundHtml = await guardNotFound.text();
+    assert.match(
+      guardNotFoundHtml,
+      /<main id="error"[^>]*>404: Module not found \/ Module not found<\/main>/,
+    );
+    assert.doesNotMatch(guardNotFoundHtml, /Guarded content/);
+    assert.equal(guardBroken.status, 500);
+    const guardBrokenHtml = await guardBroken.text();
+    assert.match(
+      guardBrokenHtml,
+      /<main id="error"[^>]*>500: no message \/ no status message<\/main>/,
+    );
+    assert.doesNotMatch(
+      guardBrokenHtml,
+      /Guarded content|private middleware detail/,
+    );
+    assert.equal(guardRedirect.status, 302);
+    assert.equal(
+      guardRedirect.headers.get("location"),
+      "/onboarding?source=guard",
+    );
     const asyncRuntimeResponses = await Promise.all([
       fetch(`${base}/async-runtime-a`, { headers: { accept: "text/html" } }),
       fetch(`${base}/async-runtime-b`, { headers: { accept: "text/html" } }),
@@ -175,6 +250,15 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     const unexpectedHtml = await unexpected.text();
     assert.match(unexpectedHtml, /500: no message \/ no status message/);
     assert.doesNotMatch(unexpectedHtml, /private database hostname/);
+    // A failed backend read names the backend's own address in its message:
+    // the error page shows its status text instead.
+    const fetchNotFound = await fetch(`${base}/fetch-not-found`, {
+      headers: { accept: "text/html" },
+    });
+    assert.equal(fetchNotFound.status, 404);
+    const fetchNotFoundHtml = await fetchNotFound.text();
+    assert.match(fetchNotFoundHtml, /404: Not Found \/ Not Found/);
+    assert.doesNotMatch(fetchNotFoundHtml, /10\.0\.0\.5|api\/secret/);
     const exact = await fetch(`${base}/exact`, {
       headers: { accept: "text/html" },
     });

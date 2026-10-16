@@ -2,23 +2,29 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { createHead, renderSSRHead } from "@unhead/vue/server";
 import { renderToString } from "@vue/server-renderer";
-import { createSSRApp, h } from "vue";
+import { stringify } from "devalue";
+import { createSSRApp, h, readonly } from "vue";
+import { appConfigs } from "./app-configs.generated";
 import {
+  DMS_PAYLOAD_ID,
   type DmsServerFetch,
   SSR_ASYNC_COMPONENTS_ID,
   configureDmsApp,
   resolveDmsInertiaPage,
-  serializeDmsAsyncData,
   trackDmsAsyncComponents,
 } from "./app-runtime";
 import {
   type DmsErrorData,
   type DmsFrontendRuntime,
+  type DmsInertiaPage,
   type DmsPageProps,
+  type DmsPayload,
   createDmsFrontendRuntime,
   hasDmsPage,
+  pageErrorData,
   preloadDmsPage,
   resolveDmsAccessRedirect,
+  serializeDmsPayload,
   setDmsServerRuntimeResolver,
   setupFrontendModules,
   trackDmsServerScopes,
@@ -26,6 +32,8 @@ import {
 import { frontendModules } from "./frontend-modules.generated";
 import {
   SSR_ICONS_ID,
+  collectDmsIconSymbols,
+  dmsIconSprite,
   serializeDmsIcons,
   trackDmsIcons,
 } from "./icon-hydration";
@@ -59,7 +67,6 @@ interface DmsSsrContext {
   teleports?: Record<string, string>;
 }
 
-const SSR_ASYNC_DATA_ID = "dms-ssr-async-data";
 // Holds the runtime rather than being it: every socket, timer and promise a
 // render starts keeps this store for its whole life, and a pooled backend
 // connection then serving an SSE stream lives for hours. Emptied once the
@@ -68,13 +75,38 @@ const runtimeStorage = new AsyncLocalStorage<{
   runtime?: DmsFrontendRuntime;
 }>();
 setDmsServerRuntimeResolver(() => runtimeStorage.getStore()?.runtime);
+/** Set while an async data handler runs: its requests are transferred. */
+const asyncDataHandlerStorage = new AsyncLocalStorage<boolean>();
 
-function asyncDataScript(runtime: DmsFrontendRuntime): string {
-  const value = JSON.stringify(serializeDmsAsyncData(runtime)).replaceAll(
-    "<",
-    "\\u003c",
-  );
-  return `<script id="${SSR_ASYNC_DATA_ID}" type="application/json">${value}</script>`;
+/**
+ * The payload in devalue's format, which keeps what JSON cannot (a Set, a
+ * Date). A value it cannot write, such as a class instance a transform
+ * returned, is left out rather than failing the page: the browser starts over
+ * for that key, as it did before the key was transferred.
+ */
+function stringifyPayload(payload: DmsPayload): string {
+  try {
+    return stringify(payload);
+  } catch {
+    const kept: DmsPayload = { data: {}, errors: {}, state: {} };
+    for (const part of ["data", "errors", "state"] as const)
+      for (const [key, value] of Object.entries(payload[part]))
+        try {
+          stringify(value);
+          kept[part][key] = value as never;
+        } catch (error) {
+          console.error(`DMS payload: "${key}" cannot be serialized`, error);
+        }
+    return stringify(kept);
+  }
+}
+
+function payloadScript(payload: DmsPayload): string {
+  // Escaped like Inertia's page object, so that no value can end the script.
+  const value = stringifyPayload(payload)
+    .replaceAll("/", "\\/")
+    .replaceAll("<", "\\u003c");
+  return `<script id="${DMS_PAYLOAD_ID}" type="application/json">${value}</script>`;
 }
 
 function asyncComponentsScript(names: Set<string>): string {
@@ -90,7 +122,7 @@ function iconsScript(names: Set<string>): string {
   return `<script id="${SSR_ICONS_ID}" type="application/json">${value}</script>`;
 }
 
-await setupFrontendModules(frontendModules);
+await setupFrontendModules(frontendModules, appConfigs);
 
 export function isDmsFrontendPage(path: string): boolean {
   return hasDmsPage(path);
@@ -111,6 +143,12 @@ export async function renderDmsPage(
     true,
     requestCookies,
   );
+  runtime.runAsyncDataHandler = (run) => asyncDataHandlerStorage.run(true, run);
+  runtime.inAsyncDataHandler = () =>
+    asyncDataHandlerStorage.getStore() === true;
+  runtime.devWarnings = import.meta.env.DEV;
+  // The page Inertia's app sets as it starts, held by the request's runtime.
+  runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
   const store = { runtime };
   try {
     return await runtimeStorage.run(store, () =>
@@ -133,14 +171,23 @@ async function renderDmsPageWithRuntime(
     const ssrContext: DmsSsrContext = {};
     let asyncComponents = new Set<string>();
     let icons = new Set<string>();
+    let iconSymbols = new Map<string, string>();
+    let payload: DmsPayload = { data: {}, errors: {}, state: {} };
     const inertiaResult = await createInertiaApp({
       page,
-      render: (app) => renderToString(app, ssrContext),
+      // Read as the HTML is complete: data a run settles afterwards was never
+      // rendered, and the browser must not hydrate the page with it.
+      render: async (app) => {
+        const html = await renderToString(app, ssrContext);
+        payload = serializeDmsPayload(runtime);
+        return html;
+      },
       resolve: resolveDmsInertiaPage,
       async setup({ App, props, plugin }) {
         const app = createSSRApp({ render: () => h(App, props) });
         asyncComponents = trackDmsAsyncComponents(app);
         icons = trackDmsIcons(app);
+        iconSymbols = collectDmsIconSymbols(app);
         stopScopes = trackDmsServerScopes(app);
         const configured = await configureDmsApp({
           app,
@@ -174,13 +221,7 @@ async function renderDmsPageWithRuntime(
       // the DMS error page describes in the visitor's language; the technical
       // cause only reaches the server log.
       if (!expected) console.error("DMS page render failed", failure);
-      const error = expected
-        ? {
-            statusCode: failure.statusCode,
-            message: failure.message,
-            statusMessage: failure.statusMessage,
-          }
-        : { statusCode: 500 };
+      const error = expected ? pageErrorData(failure) : { statusCode: 500 };
       return renderDmsPage(
         { ...page, props: { ...page.props, error } },
         serverFetch,
@@ -190,7 +231,7 @@ async function renderDmsPageWithRuntime(
     const renderedHead = await renderSSRHead(head);
     return {
       error: page.props.error,
-      body: `${inertiaResult.body}${asyncDataScript(runtime)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
+      body: `${inertiaResult.body}${dmsIconSprite(iconSymbols)}${payloadScript(payload)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
       head: {
         bodyAttrs: renderedHead.bodyAttrs,
         headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,

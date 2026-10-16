@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { connect } from "node:net";
 import { after, before, describe, it } from "node:test";
+import "./fixtures/dms-backend-proxies.mts";
 
 // A socket the proxy kept open would otherwise hang the test until Node's
 // keep-alive idle timeout.

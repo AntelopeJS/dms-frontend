@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, type TestContext } from "node:test";
+import { listenHost } from "../templates/vue/server/listen-host.mjs";
 
 const SERVER = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -24,6 +25,8 @@ interface StartOptions {
   cwd?: string;
   /** Starts Vite with the server, as `ajs dms dev` does. */
   isDev?: boolean;
+  /** `HOST`, `127.0.0.1` by default; `null` leaves it unset. */
+  host?: string | null;
 }
 
 /** Starts the server as the CLI does when `ipc` is set, on its own otherwise. */
@@ -31,16 +34,18 @@ function startServer(
   context: TestContext,
   port: number,
   ipc: boolean,
-  { cwd, isDev = false }: StartOptions = {},
+  { cwd, isDev = false, host = "127.0.0.1" }: StartOptions = {},
 ): Started {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PORT: String(port),
+    DMS_DEV: isDev ? "true" : "",
+  };
+  if (host === null) delete env.HOST;
+  else env.HOST = host;
   const server = spawn(process.execPath, [SERVER], {
     cwd,
-    env: {
-      ...process.env,
-      PORT: String(port),
-      HOST: "127.0.0.1",
-      DMS_DEV: isDev ? "true" : "",
-    },
+    env,
     stdio: ["ignore", "pipe", "pipe", ...(ipc ? ["ipc" as const] : [])],
   });
   context.after(() => server.kill());
@@ -87,6 +92,37 @@ function occupiedPort(context: TestContext): Promise<number> {
     });
   });
 }
+
+describe("Frontend server address", () => {
+  it("listens on the loopback address in development unless HOST says otherwise", () => {
+    assert.equal(listenHost({ DMS_DEV: "true" }), "127.0.0.1");
+    assert.equal(listenHost({ DMS_DEV: "true", HOST: "0.0.0.0" }), "0.0.0.0");
+    assert.equal(listenHost({ DMS_DEV: "true", HOST: " " }), "127.0.0.1");
+  });
+
+  it("listens on every interface in production unless HOST says otherwise", () => {
+    assert.equal(listenHost({}), "0.0.0.0");
+    assert.equal(listenHost({ HOST: "10.0.0.2" }), "10.0.0.2");
+  });
+
+  it(
+    "starts the development server on the loopback address without HOST",
+    { timeout: 30_000 },
+    async (context) => {
+      const root = mkdtempSync(join(tmpdir(), "dms-dev-host-"));
+      context.after(() => rmSync(root, { recursive: true, force: true }));
+      writeFileSync(join(root, "vite.config.mjs"), "export default {};\n");
+      const started = startServer(context, 0, true, {
+        cwd: root,
+        isDev: true,
+        host: null,
+      });
+      const message = await firstMessage(started);
+      assert.equal(message.type, "dms:ready");
+      assert.equal(message.address, "127.0.0.1");
+    },
+  );
+});
 
 describe("Frontend server startup", () => {
   it(

@@ -26,6 +26,33 @@ function requestHost(request) {
   );
 }
 
+/**
+ * The `X-Forwarded-*` headers of a backend request, which tell the backend
+ * the client a request comes from: its address, to limit each client, and
+ * the scheme and host it asked, to check an Origin against.
+ *
+ * The client's own `X-Forwarded-For` is extended only when a trusted reverse
+ * proxy wrote it (`DMS_TRUSTED_PROXY_HOPS` above `0`): otherwise any caller
+ * could have, and the socket's address replaces it. The scheme and the host
+ * are read the same way as the CSRF origin check reads them.
+ */
+export function forwardedHeaders(request) {
+  const socketIp = request.socket?.remoteAddress || "unknown";
+  const incoming = trustedHops()
+    ? String(request.headers["x-forwarded-for"] ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : [];
+  const headers = {
+    "x-forwarded-for": [...incoming, socketIp].join(", "),
+    "x-forwarded-proto": requestScheme(request),
+  };
+  const host = requestHost(request);
+  if (host) headers["x-forwarded-host"] = host;
+  return headers;
+}
+
 export function isSameOrigin(request) {
   const origin = request.headers.origin;
   if (!origin) return false;

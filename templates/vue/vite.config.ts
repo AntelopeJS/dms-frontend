@@ -9,6 +9,8 @@ import {
   normalizePath,
   type Plugin,
 } from "vite";
+import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
+import { uiInertiaPage } from "./ui-inertia-page.mjs";
 import { autoImportDirectories } from "./frontend-build-loader";
 import { frontendBuilds } from "./frontend-builds.generated";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
@@ -123,10 +125,22 @@ const uiInertiaLinkImport = resolve(
   __dirname,
   "node_modules/@nuxt/ui/dist/runtime/vue/overrides/inertia/Link.vue",
 );
+/**
+ * Nuxt UI's Link and route stub read Inertia's page to know the current URL.
+ * Inertia keeps a single page for the whole process, written by each server
+ * render as it starts: a link rendered after an await could take another
+ * request's URL to set its active state. Their `usePage()` is the DMS one,
+ * which gives the page of the request being rendered.
+ */
+const isNuxtUiFile = (id: string) =>
+  normalizePath(id).includes("/node_modules/@nuxt/ui/");
 
 export default defineConfig({
   logLevel,
   plugins: [
+    // Fails a client build that imports a dms.server.ts or a file under a
+    // module's server/ directory, however it is imported.
+    rejectServerSourcesInClient(moduleRoots),
     {
       name: "dms-ui-inertia-link",
       enforce: "pre",
@@ -134,6 +148,7 @@ export default defineConfig({
         return id === uiLinkImport ? uiInertiaLinkImport : null;
       },
     },
+    uiInertiaPage(isNuxtUiFile),
     vue(),
     ui({
       router: "inertia",
@@ -157,25 +172,28 @@ export default defineConfig({
             // path that cannot exist. Keep it POSIX.
             [normalizePath(resolve(__dirname, "frontend-module.ts"))]: [
               "$fetch",
-              "abortNavigation",
-              "clearError",
-              "createError",
-              "defineAppConfig",
+              "abortDmsNavigation",
+              "clearDmsError",
+              "createDmsError",
+              "dmsRequestKey",
+              "defineDmsAppConfig",
               "defineDmsPlugin",
               "defineDmsMiddleware",
               "defineDmsPageMeta",
               "navigateDms",
-              "prefetchComponents",
-              "preloadComponents",
+              "preloadDmsComponents",
               "refreshDmsData",
-              "showError",
+              "refreshDmsPageData",
+              "setDmsAsyncDataScope",
+              "showDmsError",
               "useDmsAsyncData",
+              "useDmsData",
               "useDmsCookie",
               "useDmsFetch",
               "useHead",
               "useI18n",
-              "useError",
-              "useDmsLazyAsyncData",
+              "useDmsError",
+              "useDmsPagedData",
               "useDmsPageLoading",
               "useDmsApp",
               "useDmsRoute",
@@ -186,7 +204,7 @@ export default defineConfig({
               "useDmsAppConfig",
               "DmsClientOnly",
               "DmsLink",
-              "useUserSession",
+              "useDmsUserSession",
             ],
           },
         ],
@@ -202,6 +220,9 @@ export default defineConfig({
     dedupe: ["vue", "reka-ui", "@nuxt/ui", "@vueuse/core", "@iconify/vue"],
     alias: {
       "#dms/frontend-module": resolve(__dirname, "frontend-module.ts"),
+      // For the server's development loader only: no browser module imports
+      // a `dms.server.ts`.
+      "#dms/server": resolve(__dirname, "server-module.ts"),
       "#build/nuxt-icon-client-bundle": "virtual:nuxt-ui-icons",
       "#shortcuts-aggregated": resolve(
         __dirname,

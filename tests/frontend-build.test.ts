@@ -7,7 +7,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -17,6 +16,7 @@ import {
 } from "../src/common";
 import { defineDmsFrontendBuild } from "../templates/vue/frontend-build";
 import { autoImportDirectories } from "../templates/vue/frontend-build-loader";
+import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 const BUILD_FILE = "dms.frontend.build.ts";
 
@@ -43,7 +43,7 @@ function scanned(root: string, declarations: ReturnType<typeof declaring>[]) {
 }
 
 describe("Module build declarations", () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-build-module-"));
+  const root = temporaryDirectory("dms-build-module-");
 
   it("auto-import nothing for a module that declares nothing", () => {
     assert.deepEqual(scanned(root, []), { dirs: [], warnings: [] });
@@ -85,7 +85,7 @@ describe("Module build declarations", () => {
   });
 
   it("leave app/build out of what a broader declaration covers", async () => {
-    const module = mkdtempSync(join(tmpdir(), "dms-build-scan-"));
+    const module = temporaryDirectory("dms-build-scan-");
     writeFixture(
       module,
       "layers/ui/app/composables/usePublic.ts",
@@ -113,8 +113,8 @@ describe("Module build declarations", () => {
 
 describe("The generated build declarations loader", () => {
   function sources() {
-    const billing = mkdtempSync(join(tmpdir(), "dms-build-billing-"));
-    const crm = mkdtempSync(join(tmpdir(), "dms-build-crm-"));
+    const billing = temporaryDirectory("dms-build-billing-");
+    const crm = temporaryDirectory("dms-build-crm-");
     writeFixture(
       billing,
       BUILD_FILE,
@@ -134,7 +134,7 @@ describe("The generated build declarations loader", () => {
   }
 
   it("lists the modules that have a declaration, under their manifest names", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "dms-build-workspace-"));
+    const workspace = temporaryDirectory("dms-build-workspace-");
     const layers = sources();
     const registry = createFrontendModuleRegistry(workspace, layers);
     assert.deepEqual(
@@ -171,7 +171,7 @@ describe("The generated build declarations loader", () => {
   });
 
   it("hands each module's manifest name to the application's module loader", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "dms-build-workspace-"));
+    const workspace = temporaryDirectory("dms-build-workspace-");
     const layers = sources();
     writeFixture(layers[0].path, "dms.frontend.ts", "export default {};");
     writeFrontendModuleRegistry(workspace, layers);

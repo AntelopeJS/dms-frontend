@@ -1,10 +1,10 @@
 import * as assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(REPOSITORY, "dist/index.js");
@@ -12,7 +12,7 @@ const LOADED_MODULES = import.meta.resolve("./fixtures/loaded-modules.mjs");
 
 /** Every module a run of the built CLI loaded. */
 function loadedModules(args: string[]): string[] {
-  const sandbox = mkdtempSync(join(tmpdir(), "dms-startup-"));
+  const sandbox = temporaryDirectory("dms-startup-");
   const record = join(sandbox, "modules.json");
   const result = spawnSync(
     process.execPath,

@@ -78,19 +78,24 @@ export function writeSecretBearingFile(file: string, content: string): void {
 export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["vite.config.ts", "vite.config.ts"],
   ["vite.email.config.ts", "vite.email.config.ts"],
+  ["vite.server.config.ts", "vite.server.config.ts"],
   ["index.html", "index.html"],
   ["main.ts", "main.ts"],
   ["app-runtime.ts", "app-runtime.ts"],
   ["network-error.ts", "network-error.ts"],
   ["ui-app-config.ts", "ui-app-config.ts"],
+  ["layer-app-config.ts", "layer-app-config.ts"],
   ["ssr-renderer.ts", "ssr-renderer.ts"],
   ["frontend-module.ts", "frontend-module.ts"],
   ["frontend-build.ts", "frontend-build.ts"],
   ["frontend-build-loader.ts", "frontend-build-loader.ts"],
+  ["server-module.ts", "server-module.ts"],
   ["icon-hydration.ts", "icon-hydration.ts"],
   ["globals.d.ts", "globals.d.ts"],
   ["compress-assets.mjs", "compress-assets.mjs"],
   ["head-order.mjs", "head-order.mjs"],
+  ["client-server-guard.mjs", "client-server-guard.mjs"],
+  ["ui-inertia-page.mjs", "ui-inertia-page.mjs"],
   ["icon-api.mjs", "icon-api.mjs"],
   ["icon-scan.mjs", "icon-scan.mjs"],
   ["email-renderer.ts", "email-renderer.ts"],
@@ -117,6 +122,18 @@ export const FRONTEND_MODULE_ENTRY = "dms.frontend.ts";
  * read by the generated Vite config through `frontend-builds.generated.ts`.
  */
 export const FRONTEND_BUILD_ENTRY = "dms.frontend.build.ts";
+/**
+ * A module's optional server entry (its server routes), loaded by the
+ * generated server through `server-modules.generated.ts`.
+ */
+export const SERVER_MODULE_ENTRY = "dms.server.ts";
+
+/**
+ * Generated file holding the private options of each module with a server
+ * entry, which its route handlers read. Written owner-readable only, next to
+ * the module registry, and never imported by a bundle.
+ */
+export const SERVER_OPTIONS_FILE = "generated-server-options.json";
 
 /**
  * Generated file naming the backend endpoints `/auth/establish` may open a
@@ -142,6 +159,8 @@ export const PUBLIC_ENDPOINTS_FILE = "generated-public-endpoints.json";
  *
  * TypeScript configs are excluded because the generated workspace owns its
  * compiler configuration. Generic build and tool caches are also omitted.
+ * A module's `server/` directories are copied: its `dms.server.ts` imports
+ * them, and the dev server never serves them to the browser.
  */
 export const LAYER_COPY_BLOCKLIST: readonly string[] = [
   "node_modules",
@@ -150,8 +169,6 @@ export const LAYER_COPY_BLOCKLIST: readonly string[] = [
   "coverage",
   ".cache",
   ".turbo",
-  "server",
-  "**/server",
   "tsconfig.json",
   "tsconfig.*.json",
 ];

@@ -5,7 +5,7 @@
 // before the helper existed -- that file feeds every generated workspace.
 
 import * as assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -15,9 +15,10 @@ import {
   resolveFrontendLayers,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 function moduleWithLayers(prefix: string, layers: string[]): string {
-  const root = mkdtempSync(join(tmpdir(), prefix));
+  const root = temporaryDirectory(prefix);
   for (const layer of layers) {
     mkdirSync(join(root, "layers", layer), { recursive: true });
   }
@@ -41,7 +42,7 @@ describe("layer aliases", () => {
   });
 
   it("returns nothing for a module that has no layers directory", () => {
-    const flat = mkdtempSync(join(tmpdir(), "dms-flat-module-"));
+    const flat = temporaryDirectory("dms-flat-module-");
     writeFileSync(join(flat, "dms.frontend.ts"), "export default {};");
     assert.deepEqual(resolveFrontendLayers(flat), []);
     assert.deepEqual(frontendLayerAliases(flat), {});
@@ -125,6 +126,9 @@ describe("generated workspace type paths", () => {
       "#dms/frontend-build": [
         "./frontend-build.ts"
       ],
+      "#dms/server": [
+        "./server-module.ts"
+      ],
       "@frontend/*": [
         "./frontend-modules/*"
       ],
@@ -146,7 +150,7 @@ describe("generated workspace type paths", () => {
 `;
 
   it("writes exactly what it wrote before the helper existed", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "dms-paths-workspace-"));
+    const workspace = temporaryDirectory("dms-paths-workspace-");
     const modules = join(workspace, "frontend-modules");
     const materialized: [string, string[]][] = [
       ["dms__high", ["dms-core", "dms-ui", "shared"]],
@@ -161,17 +165,17 @@ describe("generated workspace type paths", () => {
 
     writeFrontendModuleRegistry(workspace, [
       {
-        path: mkdtempSync(join(tmpdir(), "dms-src-low-")),
+        path: temporaryDirectory("dms-src-low-"),
         packageName: "@dms/low",
         priority: 1,
       },
       {
-        path: mkdtempSync(join(tmpdir(), "dms-src-high-")),
+        path: temporaryDirectory("dms-src-high-"),
         packageName: "@dms/high",
         priority: 10,
       },
       {
-        path: mkdtempSync(join(tmpdir(), "dms-src-flat-")),
+        path: temporaryDirectory("dms-src-flat-"),
         packageName: "@dms/flat",
         priority: 5,
       },

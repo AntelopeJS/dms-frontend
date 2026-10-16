@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { writeAppConfigs } from "../src/common";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templateTsconfig = join(repoRoot, "templates", "vue", "tsconfig.json");
@@ -26,8 +27,8 @@ after(() => {
 
 /**
  * Build the part of a generated workspace the typecheck reads: the shipped
- * tsconfig, stubs for the three roots it lists in `files`, and one
- * materialized frontend module.
+ * tsconfig, stubs for the roots it lists in `files`, and one materialized
+ * frontend module.
  *
  * `node_modules` is linked to this repository's so `types: ["vite/client"]`
  * resolves; the config excludes it from the check either way.
@@ -48,6 +49,10 @@ function generatedWorkspace(moduleFiles: Record<string, string>): string {
     join(workspace, "frontend-modules.generated.ts"),
     "export const frontendModules: unknown[] = [];\n",
   );
+  writeFileSync(
+    join(workspace, "app-configs.generated.ts"),
+    "export const appConfigs: unknown[] = [];\n",
+  );
 
   for (const [relativePath, content] of Object.entries(moduleFiles)) {
     const file = join(workspace, "frontend-modules", "fixture", relativePath);
@@ -59,22 +64,33 @@ function generatedWorkspace(moduleFiles: Record<string, string>): string {
 
 /**
  * A generated workspace wired to the shipped runtime the way `materialize`
- * wires it: the registry imports `./frontend-module`, and modules reach it
- * through `#dms/frontend-module`.
+ * wires it: the registry and the app configs import `./frontend-module`,
+ * modules reach it through `#dms/frontend-module`, and the app configs import
+ * the module's through `@frontend/<id>`.
  */
 function shippedRuntimeWorkspace(moduleFiles: Record<string, string>): string {
   const workspace = generatedWorkspace(moduleFiles);
-  for (const file of ["frontend-module.ts", "globals.d.ts"]) {
+  for (const file of [
+    "frontend-module.ts",
+    "layer-app-config.ts",
+    "ui-app-config.ts",
+    "globals.d.ts",
+  ]) {
     cpSync(join(repoRoot, "templates", "vue", file), join(workspace, file));
   }
   writeFileSync(
     join(workspace, "frontend-paths.generated.json"),
-    '{ "compilerOptions": { "paths": { "#dms/frontend-module": ["./frontend-module.ts"] } } }\n',
+    '{ "compilerOptions": { "paths": { "#dms/frontend-module": ["./frontend-module.ts"], "@frontend/*": ["./frontend-modules/*"] } } }\n',
   );
   writeFileSync(
     join(workspace, "frontend-modules.generated.ts"),
     'import type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [];\n',
   );
+  writeAppConfigs(workspace, {
+    modules: [
+      { id: "fixture", root: join(workspace, "frontend-modules", "fixture") },
+    ],
+  });
   return workspace;
 }
 
@@ -157,6 +173,40 @@ describe("generated workspace typecheck", () => {
     const workspace = shippedRuntimeWorkspace({
       "runtime-config.d.ts":
         'declare module "#dms/frontend-module" {\n  interface PublicRuntimeConfig {\n    dms: { baseURL: string };\n  }\n}\n\nexport {};\n',
+    });
+
+    const result = typecheck(workspace);
+    assert.equal(result.code, 0, result.output);
+  });
+
+  it("checks a module's server entry and server files against Node.js and #dms/server", () => {
+    // A server entry imports Node.js built-ins, which the browser-only
+    // `types` of the workspace leave out: `#dms/server` brings them in.
+    const workspace = generatedWorkspace({
+      "dms.server.ts":
+        'import { defineDmsServer } from "#dms/server";\nimport { digest } from "./server/digest";\n\nexport default defineDmsServer((server) => {\n  server.registerRoute("POST", "/api/_fixture/digest", digest);\n});\n',
+      "server/digest.ts":
+        'import { createHash } from "node:crypto";\nimport type { DmsServerEvent } from "#dms/server";\n\nexport async function digest(event: DmsServerEvent): Promise<Response> {\n  const { text } = await event.readJson<{ text: string }>();\n  return Response.json({ digest: createHash("sha256").update(text).digest("hex"), id: event.module.id });\n}\n',
+    });
+    cpSync(
+      join(repoRoot, "templates", "vue", "server-module.ts"),
+      join(workspace, "server-module.ts"),
+    );
+    writeFileSync(
+      join(workspace, "frontend-paths.generated.json"),
+      '{ "compilerOptions": { "paths": { "#dms/server": ["./server-module.ts"] } } }\n',
+    );
+
+    const result = typecheck(workspace);
+    assert.equal(result.code, 0, result.output);
+  });
+
+  it("checks the generated app configs against the shipped runtime", () => {
+    // Listed in `files`, so every workspace checks the module importing each
+    // layer's `app/app.config.ts`, and its development hot update.
+    const workspace = shippedRuntimeWorkspace({
+      "app/app.config.ts":
+        'export default defineDmsAppConfig({\n  branding: { logo: "/logo.svg" },\n  ui: { colors: { primary: "green" } },\n});\n',
     });
 
     const result = typecheck(workspace);

@@ -298,7 +298,12 @@ export async function fetchManifest(
       `Frontend manifest contains incompatible renderer modules: ${incompatible.map((module) => module.name).join(", ")}`,
     );
   }
-  return { pack: manifest.archive, modules: manifest.modules };
+  const resolved: Manifest = {
+    pack: manifest.archive,
+    modules: manifest.modules,
+  };
+  if (manifest.settling) resolved.settling = true;
+  return resolved;
 }
 
 // ============================================================================

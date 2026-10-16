@@ -1,9 +1,10 @@
 import * as assert from "node:assert/strict";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
 
 interface ServerTemplate {
   assetVersion: () => string;
@@ -17,8 +18,10 @@ interface ServerTemplate {
     response: unknown,
     location: string,
   ) => void;
-  renderHtml: (page: unknown, requestUrl: string) => Promise<string>;
-  requestOwnership: (method: string, pathname: string) => string;
+  renderHtml: (
+    page: unknown,
+    requestUrl: string,
+  ) => Promise<{ html: string; status: number }>;
 }
 
 const server = import(
@@ -26,13 +29,6 @@ const server = import(
 ) as Promise<ServerTemplate>;
 
 interface SessionTemplate {
-  readAccounts: (request: unknown) => Record<string, Record<string, unknown>>;
-  storeAccount: (
-    request: unknown,
-    response: unknown,
-    session: Record<string, unknown>,
-    accountId: string,
-  ) => void;
   writeSession: (response: unknown, session: Record<string, unknown>) => void;
 }
 
@@ -48,6 +44,9 @@ const SSR_RENDERER_FIXTURE = `export async function renderDmsPage(page) {
   const serialized = JSON.stringify(page).replaceAll("/", "\\\\/");
   return { body: \`<script data-page="app" type="application/json">\${serialized}</script><div data-server-rendered="true" id="app"></div>\`, head: { headTags: "", htmlAttrs: "", bodyAttrs: "" }, overlays: "" };
 }
+export function isDmsFrontendPage(path) {
+  return path === "/auth/custom";
+}
 export function accessRedirect(code) {
   return code === "${ACCESS_BLOCKED_CODE}" ? "/workspace-suspended" : undefined;
 }\n`;
@@ -57,25 +56,29 @@ async function writeSsrRendererFixture(): Promise<void> {
   await writeFile(join(SSR_DIRECTORY, "ssr-renderer.js"), SSR_RENDERER_FIXTURE);
 }
 
-function serviceToken(secret: string): string {
-  const header = Buffer.from('{"alg":"HS256","typ":"JWT"}').toString(
-    "base64url",
+/**
+ * The session cookie of `session`, sealed as the module owning sign-in writes
+ * it, for the backend `DMS_API_BASE_URL` names.
+ */
+async function sessionCookie(
+  session: Record<string, unknown>,
+): Promise<string> {
+  process.env.DMS_SESSION_SECRET ??=
+    "test-secret-with-at-least-thirty-two-characters";
+  const sessionRuntime = await sessions;
+  const headers = new Map<string, string | string[]>();
+  sessionRuntime.writeSession(
+    {
+      getHeader: (name: string) => headers.get(name),
+      setHeader: (name: string, value: string | string[]) =>
+        headers.set(name, value),
+    },
+    session,
   );
-  const now = Math.floor(Date.now() / 1000);
-  const payload = Buffer.from(
-    JSON.stringify({
-      namespace: "html-render-service",
-      purpose: "html-render",
-      aud: "dms-frontend",
-      jti: randomUUID(),
-      iat: now,
-      exp: now + 300,
-    }),
-  ).toString("base64url");
-  const signature = createHmac("sha256", secret)
-    .update(`${header}.${payload}`)
-    .digest("base64url");
-  return `${header}.${payload}.${signature}`;
+  return [headers.get("set-cookie") ?? []]
+    .flat()
+    .map((value) => value.split(";")[0])
+    .join("; ");
 }
 
 describe("Inertia HTTP protocol", () => {
@@ -339,12 +342,21 @@ describe("Inertia HTTP protocol", () => {
         "public, max-age=31536000, immutable",
       );
       assert.deepEqual(backendPaths, []);
-      // A file the build does not have is still the backend's to serve.
+      // A file the build does not have is the backend's under a prefix a
+      // module declares, and the backend is asked for nothing else.
+      process.env.DMS_BACKEND_PROXIES = JSON.stringify([
+        { path: "/media/**", auth: "none" },
+      ]);
       const media = await fetch(`${base}/media/asset-1/photo.webp`);
       assert.equal(media.status, 200);
       assert.equal(await media.text(), "backend media");
       assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
+      const missing = await fetch(`${base}/assets/missing-${assetName}`);
+      assert.equal(missing.status, 404);
+      await missing.body?.cancel();
+      assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
     } finally {
+      process.env.DMS_BACKEND_PROXIES = DMS_BACKEND_PROXIES;
       await rm(created ?? join(assets, assetName), {
         recursive: true,
         force: true,
@@ -433,6 +445,31 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
+  it("puts a favicon placeholder in a page whose render declares no icon", async () => {
+    // The template no longer carries one: a page declaring its own icons
+    // would compete with it (see server/favicon.mjs).
+    await writeSsrRendererFixture();
+    const runtime = await server;
+    try {
+      const page = runtime.createInertiaPage("/articles", {
+        path: "/articles",
+      });
+      const { html } = await runtime.renderHtml(page, "/articles");
+      assert.deepEqual(html.match(/<link rel="icon"[^>]*>/g), [
+        '<link rel="icon" href="data:," />',
+      ]);
+      assert.match(
+        html,
+        /<head>[^]*<link rel="icon" href="data:," \/>[^]*<\/head>/,
+      );
+    } finally {
+      await rm(join(process.cwd(), "templates", "vue", "dist"), {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
   it("injects the SSR body without replacement-token expansion", async () => {
     const source = await import("node:fs/promises").then(({ readFile }) =>
       readFile(join(process.cwd(), "templates", "vue", "server.mjs"), "utf8"),
@@ -443,36 +480,19 @@ describe("Inertia HTTP protocol", () => {
     assert.match(source, /falling back to client rendering/);
   });
 
-  it("classifies every dms-auth server route without claiming browser pages", async () => {
-    const runtime = await server;
-    const routes = [
-      ["POST", "/auth/login"],
-      ["POST", "/auth/signup"],
-      ["POST", "/auth/verify-2fa"],
-      ["POST", "/auth/request-2fa-email"],
-      ["POST", "/auth/switch-account"],
-      ["POST", "/auth/switch-tenant"],
-      ["POST", "/auth/validate-account"],
-      ["POST", "/auth/oauth/handoff"],
-      ["GET", "/auth/oauth/github/start"],
-      ["GET", "/auth/oauth/github/callback"],
-    ];
-    routes.forEach(([method, path]) => {
-      assert.equal(
-        runtime.requestOwnership(method, path),
-        "server",
-        `${method} ${path}`,
-      );
+  it("leaves the session, sign-in, e-mail render and tester paths to the modules and the backend", async () => {
+    const reached: string[] = [];
+    const backend = createServer((request, response) => {
+      reached.push(`${request.method} ${request.url}`);
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end('{"message":"error.page_not_found"}');
     });
-    for (const path of ["/auth/login", "/auth/signup", "/auth/oauth/complete"])
-      assert.equal(
-        runtime.requestOwnership("GET", path),
-        "frontend",
-        `GET ${path}`,
-      );
-  });
-
-  it("routes every tester method and optional trailing slash to its handler", async () => {
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const backendAddress = backend.address();
+    assert.ok(backendAddress && typeof backendAddress === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
@@ -480,20 +500,35 @@ describe("Inertia HTTP protocol", () => {
     );
     const address = frontend.address();
     assert.ok(address && typeof address === "object");
+    const base = `http://127.0.0.1:${address.port}`;
     try {
-      for (const [method, suffix] of [
-        ["GET", ""],
-        ["PATCH", "/"],
+      for (const [method, path] of [
+        ["POST", "/api/_auth/session"],
+        ["DELETE", "/api/_auth/session"],
+        ["POST", "/api/html/render"],
+        ["POST", "/api/_dms/tester"],
       ]) {
-        const response = await fetch(
-          `http://127.0.0.1:${address.port}/api/_dms/tester${suffix}`,
-          { method },
-        );
-        assert.equal(response.status, 405);
-        assert.equal(response.headers.get("allow"), "POST");
+        const response = await fetch(`${base}${path}`, {
+          method,
+          headers: { "content-type": "application/json", origin: base },
+          body: "{}",
+        });
+        assert.equal(response.status, 404, `${method} ${path}`);
+        assert.equal(reached.at(-1), `${method} ${path}`);
       }
+      // A path no module route and no backend proxy covers is a page: a
+      // sign-in action no module serves is a 404, never the backend's.
+      const signIn = await fetch(`${base}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: base },
+        body: "{}",
+      });
+      assert.equal(signIn.status, 404);
+      await signIn.body?.cancel();
+      assert.equal(reached.at(-1), "POST /api/_dms/tester");
     } finally {
       frontend.close();
+      backend.close();
     }
   });
 
@@ -714,161 +749,7 @@ describe("Inertia HTTP protocol", () => {
   });
 });
 
-describe("frontend auth runtime", () => {
-  it("rotates the sealed account tokens when validating an account", async () => {
-    process.env.DMS_SESSION_SECRET =
-      "test-secret-with-at-least-thirty-two-characters";
-    const backend = createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(
-        '{"access_token":"access-new","refresh_token":"refresh-new"}',
-      );
-    });
-    await new Promise<void>((resolve) =>
-      backend.listen(0, "127.0.0.1", resolve),
-    );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
-    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    const runtime = await server;
-    const sessionRuntime = await sessions;
-    const cookieHeaders = new Map<string, string | string[]>();
-    const cookieResponse = {
-      getHeader: (name: string) => cookieHeaders.get(name),
-      setHeader: (name: string, value: string | string[]) =>
-        cookieHeaders.set(name, value),
-    };
-    const accountId = "00000000-0000-4000-8000-000000000001";
-    sessionRuntime.storeAccount(
-      { headers: {} },
-      cookieResponse,
-      {
-        accessToken: "access-old",
-        refreshToken: "refresh-old",
-        user: { id: "user-1", email: "a@example.com" },
-      },
-      accountId,
-    );
-    const storedCookie = cookieHeaders.get("set-cookie") ?? "";
-    const initialCookie = Array.isArray(storedCookie)
-      ? storedCookie.join("; ")
-      : storedCookie;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/auth/validate-account`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            cookie: initialCookie,
-            origin: `http://127.0.0.1:${address.port}`,
-          },
-          body: JSON.stringify({ accountId }),
-        },
-      );
-      assert.deepEqual(await response.json(), { valid: true });
-      const updatedCookie = response.headers.get("set-cookie") ?? "";
-      assert.match(updatedCookie, /dms_account_/);
-      assert.notEqual(updatedCookie, initialCookie);
-      assert.doesNotMatch(updatedCookie, /refresh-new/);
-    } finally {
-      frontend.close();
-      backend.close();
-    }
-  });
-
-  it("establishes, refreshes, and clears an HttpOnly session without exposing refresh tokens", async () => {
-    process.env.DMS_SESSION_SECRET =
-      "test-secret-with-at-least-thirty-two-characters";
-    const jwt = `x.${Buffer.from('{"tenantId":"tenant-1"}').toString("base64url")}.x`;
-    const backend = createServer(async (request, response) => {
-      const payloads: Record<string, unknown> = {
-        "/api/auth/login": {
-          user: { id: "user-1" },
-          access_token: jwt,
-          refresh_token: "refresh-1",
-        },
-        "/api/auth/refresh": { access_token: jwt, refresh_token: "refresh-2" },
-        "/api/auth/me": { id: "user-1", name: "Updated" },
-        "/api/auth/logout": {},
-      };
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify(payloads[request.url ?? ""]));
-    });
-    await new Promise<void>((resolve) =>
-      backend.listen(0, "127.0.0.1", resolve),
-    );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
-    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    const runtime = await server;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
-    const base = `http://127.0.0.1:${address.port}`;
-    try {
-      const login = await fetch(`${base}/auth/login`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: base },
-        body: '{"email":"a@example.com"}',
-      });
-      const cookie = login.headers.get("set-cookie") ?? "";
-      assert.match(cookie, /HttpOnly/i);
-      assert.match(cookie, /SameSite=Lax/i);
-      assert.doesNotMatch(await login.text(), /refresh-1/);
-      const session = await fetch(`${base}/api/_auth/session`, {
-        method: "POST",
-        headers: { cookie, origin: base },
-      });
-      const sessionBody = await session.text();
-      assert.match(sessionBody, /Updated/);
-      assert.doesNotMatch(
-        sessionBody,
-        /accessToken|access_token|x\.[A-Za-z0-9_-]+\.x/,
-      );
-      assert.doesNotMatch(sessionBody, /refresh-2/);
-      const logout = await fetch(`${base}/api/_auth/session`, {
-        method: "DELETE",
-        headers: { cookie, origin: base },
-      });
-      assert.match(logout.headers.get("set-cookie") ?? "", /Max-Age=0/);
-      const rejected = await fetch(`${base}/auth/login`, {
-        method: "POST",
-        headers: { origin: "https://evil.example" },
-        body: "{}",
-      });
-      assert.equal(rejected.status, 403);
-      assert.deepEqual(await rejected.json(), {
-        error: "Forbidden",
-        reason: "missing or untrusted Origin header",
-      });
-      // A client that sends no Origin at all (curl, a server-side
-      // integration) gets the same explicit refusal rather than a bare
-      // "Forbidden" indistinguishable from bad credentials.
-      const originless = await fetch(`${base}/auth/login`, {
-        method: "POST",
-        body: "{}",
-      });
-      assert.equal(originless.status, 403);
-      assert.deepEqual(await originless.json(), {
-        error: "Forbidden",
-        reason: "missing or untrusted Origin header",
-      });
-    } finally {
-      frontend.close();
-      backend.close();
-    }
-  });
-
+describe("proxied mutations", () => {
   it("protects proxied mutations and preserves backend validation errors", async () => {
     const backend = createServer((_request, response) => {
       response.writeHead(422, {
@@ -933,17 +814,6 @@ describe("public endpoints through the proxy", () => {
     const jwt = `x.${Buffer.from('{"tenantId":"tenant-1"}').toString("base64url")}.x`;
     const seen: Record<string, string | undefined>[] = [];
     const backend = createServer((request, response) => {
-      if (request.url === "/api/auth/login") {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(
-          JSON.stringify({
-            user: { id: "user-1" },
-            access_token: jwt,
-            refresh_token: "refresh-1",
-          }),
-        );
-        return;
-      }
       seen.push({
         url: request.url,
         authorization: request.headers.authorization,
@@ -969,13 +839,11 @@ describe("public endpoints through the proxy", () => {
     assert.ok(address && typeof address === "object");
     const base = `http://127.0.0.1:${address.port}`;
     try {
-      const login = await fetch(`${base}/auth/login`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: base },
-        body: '{"email":"a@example.com"}',
+      const cookie = await sessionCookie({
+        accessToken: jwt,
+        refreshToken: "refresh-1",
+        user: { id: "user-1" },
       });
-      const cookie = login.headers.get("set-cookie") ?? "";
-      assert.match(cookie, /dms_/);
 
       const hook = await fetch(`${base}/api/hooks/resend?tenant=acme`, {
         method: "POST",
@@ -1028,77 +896,280 @@ describe("public endpoints through the proxy", () => {
   });
 });
 
-describe("HTML render HTTP endpoint", () => {
-  it("rejects an empty template name with 400", async () => {
-    process.env.DMS_HTML_RENDER_SECRET = "render-secret";
+interface PagePropsTemplate {
+  sharedOnceKey: (session?: Record<string, unknown>) => string;
+  SHARED_PROP_TTL_MS: number;
+}
+
+const pagePropsModule = import(
+  join(process.cwd(), "templates", "vue", "server", "page-props.mjs")
+) as Promise<PagePropsTemplate>;
+
+describe("Site layout as an Inertia once prop", () => {
+  const PAGE = { route: { fullSlug: "/articles" }, layout: { id: "layout" } };
+  const SHARED = { siteLayout: { pages: {} }, isOwner: true };
+  const FRESH_SHARED = { siteLayout: { pages: {} }, isOwner: false };
+
+  async function frontendWithBackend() {
+    const backendCalls: string[] = [];
+    const backend = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://backend.local");
+      backendCalls.push(`${url.pathname}${url.search}`);
+      if (url.pathname === "/dms/sitelayout") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(FRESH_SHARED));
+        return;
+      }
+      if (url.searchParams.get("path") === "/auth/custom") {
+        response.writeHead(404, { "content-type": "application/json" });
+        response.end('{"message":"error.page_not_found"}');
+        return;
+      }
+      const omitShared = url.searchParams.get("shared") === "false";
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify(omitShared ? PAGE : { ...PAGE, shared: SHARED }),
+      );
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    const address = backend.address();
+    assert.ok(address && typeof address === "object");
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/api/html/render`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-dms-service-token": serviceToken("render-secret"),
-          },
-          body: '{"templateName":"","props":{}}',
-        },
-      );
-      assert.equal(response.status, 400);
-    } finally {
+    const frontendAddress = frontend.address();
+    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const base = `http://127.0.0.1:${frontendAddress.port}`;
+    const visit = async (
+      path: string,
+      headers: Record<string, string> = {},
+    ) => {
+      backendCalls.length = 0;
+      const response = await fetch(`${base}${path}`, {
+        headers: { "x-inertia": "true", ...headers },
+        redirect: "manual",
+      });
+      const page = (await response.json()) as {
+        props: Record<string, unknown>;
+        onceProps?: Record<string, { prop: string; expiresAt: number | null }>;
+      };
+      return { page, backendCalls: [...backendCalls] };
+    };
+    const close = () => {
       frontend.close();
+      backend.close();
+    };
+    return { visit, close };
+  }
+
+  function accountCookie(accountId: string): Promise<string> {
+    return sessionCookie({
+      accessToken: "access",
+      accountId,
+      activeTenantId: "tenant-1",
+      user: { id: accountId },
+    });
+  }
+
+  it("sends the site layout once per session, then the page alone", async () => {
+    const { sharedOnceKey, SHARED_PROP_TTL_MS } = await pagePropsModule;
+    const { visit, close } = await frontendWithBackend();
+    const anonymous = sharedOnceKey(undefined);
+    try {
+      const before = Date.now();
+      const first = await visit("/articles");
+      assert.deepEqual(first.backendCalls, ["/dms/page?path=%2Farticles"]);
+      assert.deepEqual(first.page.props.shared, SHARED);
+      assert.deepEqual(first.page.props.page, PAGE);
+      assert.deepEqual(Object.keys(first.page.onceProps ?? {}), [anonymous]);
+      const declared = first.page.onceProps?.[anonymous];
+      assert.equal(declared?.prop, "shared");
+      assert.ok(
+        (declared?.expiresAt ?? 0) >= before + SHARED_PROP_TTL_MS &&
+          (declared?.expiresAt ?? 0) <= Date.now() + SHARED_PROP_TTL_MS,
+      );
+
+      const next = await visit("/articles", {
+        "x-inertia-except-once-props": anonymous,
+      });
+      assert.deepEqual(next.backendCalls, [
+        "/dms/page?path=%2Farticles&shared=false",
+      ]);
+      assert.equal("shared" in next.page.props, false);
+      assert.deepEqual(next.page.props.page, PAGE);
+      assert.deepEqual(next.page.onceProps, {
+        [anonymous]: { prop: "shared", expiresAt: null },
+      });
+
+      // The layout another session was sent is not this one's.
+      const cookie = await accountCookie("account-a");
+      const signedIn = await visit("/articles", {
+        cookie,
+        "x-inertia-except-once-props": anonymous,
+      });
+      assert.deepEqual(signedIn.backendCalls, ["/dms/page?path=%2Farticles"]);
+      assert.deepEqual(signedIn.page.props.shared, SHARED);
+      const accountKey = sharedOnceKey({
+        accountId: "account-a",
+        activeTenantId: "tenant-1",
+      });
+      assert.notEqual(accountKey, anonymous);
+      assert.deepEqual(Object.keys(signedIn.page.onceProps ?? {}), [
+        accountKey,
+      ]);
+      const held = await visit("/articles", {
+        cookie,
+        "x-inertia-except-once-props": accountKey,
+      });
+      assert.deepEqual(held.backendCalls, [
+        "/dms/page?path=%2Farticles&shared=false",
+      ]);
+      // A browser that holds another session's layout too may show that one
+      // under `shared`: it is sent this session's again.
+      const mixed = await visit("/articles", {
+        cookie,
+        "x-inertia-except-once-props": `${anonymous},${accountKey}`,
+      });
+      assert.deepEqual(mixed.backendCalls, ["/dms/page?path=%2Farticles"]);
+      assert.deepEqual(mixed.page.props.shared, SHARED);
+      assert.deepEqual(Object.keys(mixed.page.onceProps ?? {}), [accountKey]);
+      assert.equal(
+        sharedOnceKey({
+          accountId: "account-a",
+          activeTenantId: "tenant-2",
+        }) === accountKey,
+        false,
+      );
+    } finally {
+      close();
     }
   });
 
-  it("uses the content language header as the rendered locale", async () => {
-    process.env.DMS_HTML_RENDER_SECRET = "render-secret";
-    const rendererDir = join(
-      process.cwd(),
-      "templates",
-      "vue",
-      "dist",
-      "server",
-    );
-    const rendererPath = join(rendererDir, "email-renderer.js");
-    await mkdir(rendererDir, { recursive: true });
-    await writeFile(
-      rendererPath,
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: The fixture must retain this interpolation.
-      "export async function renderEmail(_name, _props, options) { return `<p>${options.locale}</p>`; }\n",
-    );
-    const runtime = await server;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+  it("answers a partial reload with the props it names", async () => {
+    const { sharedOnceKey } = await pagePropsModule;
+    const { visit, close } = await frontendWithBackend();
+    const held = sharedOnceKey(undefined);
+    const partial = (data: string, extra: Record<string, string> = {}) =>
+      visit("/articles?tab=b", {
+        "x-inertia-partial-component": "DmsDynamicPage",
+        "x-inertia-partial-data": data,
+        ...extra,
+      });
     try {
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/api/html/render`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-dms-service-token": serviceToken("render-secret"),
-            "x-content-language": "fr-FR",
-          },
-          body: '{"templateName":"welcome","props":{}}',
-        },
-      );
-      assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), { html: "<p>fr-FR</p>" });
+      // A forced reload of the layout the browser holds.
+      const shared = await partial("shared", {
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(shared.backendCalls, ["/dms/sitelayout"]);
+      assert.deepEqual(Object.keys(shared.page.props).sort(), [
+        "errors",
+        "shared",
+      ]);
+      assert.deepEqual(shared.page.props.shared, FRESH_SHARED);
+      assert.notEqual(shared.page.onceProps?.[held]?.expiresAt, null);
+
+      const page = await partial("page.layout", {
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(page.backendCalls, [
+        "/dms/page?path=%2Farticles&tab=b&shared=false",
+      ]);
+      assert.deepEqual(Object.keys(page.page.props).sort(), ["errors", "page"]);
+
+      // A signed-out session is sent as one, so the merge cannot keep the old.
+      const session = await partial("user,session", {
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(session.backendCalls, []);
+      assert.deepEqual(session.page.props, {
+        user: null,
+        session: null,
+        errors: {},
+      });
+
+      // A browser without this session's layout gets it with any reload.
+      const stale = await partial("page");
+      assert.deepEqual(stale.backendCalls, [
+        "/dms/page?path=%2Farticles&tab=b",
+      ]);
+      assert.deepEqual(stale.page.props.shared, SHARED);
+
+      const excepted = await visit("/articles", {
+        "x-inertia-partial-component": "DmsDynamicPage",
+        "x-inertia-partial-except": "page",
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(excepted.backendCalls, ["/dms/sitelayout"]);
+      assert.equal("page" in excepted.page.props, false);
+
+      // Another component's reload is a full visit.
+      const other = await visit("/articles", {
+        "x-inertia-partial-component": "Other",
+        "x-inertia-partial-data": "shared",
+        "x-inertia-except-once-props": held,
+      });
+      assert.deepEqual(other.backendCalls, [
+        "/dms/page?path=%2Farticles&shared=false",
+      ]);
+      assert.equal(typeof other.page.props.path, "string");
     } finally {
-      frontend.close();
+      close();
+    }
+  });
+
+  it("asks the backend for the page with the query of the visit", async () => {
+    const { sharedOnceKey } = await pagePropsModule;
+    const { visit, close } = await frontendWithBackend();
+    try {
+      // A header button's availability reads the page query: the layout is
+      // asked for the query the browser shows, one value per name, the last.
+      const first = await visit(
+        "/articles?workspace=web&locale=fr&locale=de&path=%2Fother",
+      );
+      assert.deepEqual(first.backendCalls, [
+        "/dms/page?path=%2Farticles&workspace=web&locale=de",
+      ]);
+      const next = await visit("/articles?workspace=web&shared=true", {
+        "x-inertia-except-once-props": sharedOnceKey(undefined),
+      });
+      assert.deepEqual(next.backendCalls, [
+        "/dms/page?path=%2Farticles&workspace=web&shared=false",
+      ]);
+    } finally {
+      close();
+    }
+  });
+
+  it("keeps the layout over a frontend-only page only when the browser holds it", async () => {
+    await writeSsrRendererFixture();
+    const { sharedOnceKey } = await pagePropsModule;
+    const { visit, close } = await frontendWithBackend();
+    const held = sharedOnceKey(undefined);
+    try {
+      const holding = await visit("/auth/custom", {
+        "x-inertia-except-once-props": held,
+      });
+      assert.equal(
+        (holding.page.props.page as { isFrontendOnly?: boolean })
+          .isFrontendOnly,
+        true,
+      );
+      assert.deepEqual(holding.page.onceProps, {
+        [held]: { prop: "shared", expiresAt: null },
+      });
+      const bare = await visit("/auth/custom");
+      assert.equal("shared" in bare.page.props, false);
+      assert.equal(bare.page.onceProps, undefined);
+    } finally {
+      close();
       await rm(join(process.cwd(), "templates", "vue", "dist"), {
-        recursive: true,
         force: true,
+        recursive: true,
       });
     }
   });

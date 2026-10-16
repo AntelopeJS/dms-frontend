@@ -7,6 +7,7 @@ import ui from "@nuxt/ui/vue-plugin";
 import { useHead } from "@unhead/vue";
 import type { VueHeadClient } from "@unhead/vue/types";
 import type { IconifyIcon } from "@iconify/vue";
+import { parse } from "devalue";
 import type { FetchOptions } from "ofetch";
 import {
   type App,
@@ -22,8 +23,10 @@ import {
 import { createI18n, useI18n } from "vue-i18n";
 import DmsDynamicPage from "./DmsDynamicPage.vue";
 import {
+  type DmsLayerAppConfig,
   type DmsLocaleLoader,
   type DmsPageProps,
+  type DmsPayload,
   type DmsUser,
   createDmsFrontendRuntime,
   dmsPageSuspenseProps,
@@ -32,18 +35,22 @@ import {
   getDmsLayoutProps,
   getDmsPage,
   hydrateDmsPageProps,
+  hydrateDmsSharedProps,
   installDmsPlugins,
+  keepSharedOverHistory,
   preloadDmsPage,
+  preloadPrefetchedDmsPages,
   provideDmsFrontendRuntime,
   readDmsLocaleCookie,
   resolveDmsAsyncComponents,
   resolveDmsComponent,
-  serializeDmsAsyncData,
+  restoreDmsPayload,
   trackDmsAsyncComponents,
+  updateDmsAppConfig,
   useDmsAppConfig,
   useDmsState,
-  useError,
-  useUserSession,
+  useDmsError,
+  useDmsUserSession,
 } from "./frontend-module";
 import {
   SSR_ICONS_ID,
@@ -87,7 +94,7 @@ export type DmsServerFetch = (
   options?: FetchOptions,
 ) => Promise<unknown>;
 
-const SSR_ASYNC_DATA_ID = "dms-ssr-async-data";
+export const DMS_PAYLOAD_ID = "dms-payload";
 export const SSR_ASYNC_COMPONENTS_ID = "dms-ssr-async-components";
 const DEFAULT_LOCALE = "en";
 
@@ -112,16 +119,37 @@ function userLocale(user: DmsUser | null | undefined): string | undefined {
   return supportedLocales.includes(locale) ? locale : undefined;
 }
 
-function readServerRendered<T>(id: string, empty: T): T {
+function readServerRendered<T>(
+  id: string,
+  empty: T,
+  parseText: (text: string) => unknown = JSON.parse,
+): T {
   if (typeof document === "undefined") return empty;
   const element = document.getElementById(id);
   if (!element?.textContent) return empty;
-  const value = JSON.parse(element.textContent) as T;
+  const value = parseText(element.textContent) as T;
   element.remove();
   return value;
 }
 
 drawLoadedIconsAtOnce();
+
+/** A browser runtime, started from what the server rendered, if it did. */
+function createBrowserRuntime(
+  serverFetch?: DmsServerFetch,
+): DmsConfiguredApp["runtime"] {
+  const runtime = createDmsFrontendRuntime(
+    serverFetch as typeof import("ofetch").ofetch,
+  );
+  // Nothing when the server did not render the page: no hydration then.
+  const payload = readServerRendered<DmsPayload | undefined>(
+    DMS_PAYLOAD_ID,
+    undefined,
+    parse,
+  );
+  if (payload) restoreDmsPayload(runtime, payload);
+  return runtime;
+}
 
 const DmsInertiaPage = defineComponent({
   name: "DmsInertiaPage",
@@ -152,7 +180,7 @@ const DmsPersistentLayout = defineComponent({
   setup(_, { attrs, slots }) {
     const props = computed(() => attrs as unknown as DmsPageProps);
     const i18n = useI18n();
-    const { user } = useUserSession();
+    const { user } = useDmsUserSession();
     let localeVersion = 0;
     useHead({
       htmlAttrs: { lang: computed(() => i18n.locale.value) },
@@ -161,6 +189,13 @@ const DmsPersistentLayout = defineComponent({
       () => [attrs.path, attrs.page, attrs.user, attrs.session, attrs.error],
       () => hydrateDmsPageProps(props.value),
       { immediate: true, flush: "sync" },
+    );
+    // Apart from the page: a reload of the site layout alone (`router.reload({
+    // only: ["shared"] })`) is not a navigation.
+    watch(
+      () => attrs.shared,
+      () => hydrateDmsSharedProps(props.value.shared),
+      { flush: "sync" },
     );
     // The session, not the page props: a page restored from history or from
     // the prefetch cache carries the user as it was when it was fetched, and
@@ -178,7 +213,7 @@ const DmsPersistentLayout = defineComponent({
       },
       { immediate: true, flush: "sync" },
     );
-    const currentError = useError();
+    const currentError = useDmsError();
     const overlays = useDmsState<string[]>("dms-app-overlays", () => []);
     return () => {
       const error = currentError.value ?? props.value.error;
@@ -206,7 +241,7 @@ export function resolveDmsInertiaPage(): Component {
 
 function renderDmsPage(
   props: DmsPageProps,
-  capturedError: DmsPageProps["error"] = useError().value,
+  capturedError: DmsPageProps["error"] = useDmsError().value,
 ) {
   const error = capturedError ?? props.error;
   const page = error
@@ -251,16 +286,21 @@ function mergeDmsAppConfig(): void {
   mergeUiAppConfig(useAppConfig(), useDmsAppConfig());
 }
 
+/**
+ * Development only: applies the layers' app configs, edited while the page is
+ * open, to the DMS app config and to Nuxt UI's, both in place, so the
+ * components reading them and Nuxt UI's colors follow without a reload.
+ */
+export function applyLayerAppConfigs(appConfigs: DmsLayerAppConfig[]): void {
+  updateDmsAppConfig(appConfigs);
+  mergeUiAppConfig(useAppConfig(), useDmsAppConfig(), { isChanged: true });
+}
+
 export async function configureDmsApp(
   options: DmsAppOptions,
 ): Promise<DmsConfiguredApp> {
   mergeDmsAppConfig();
-  const runtime =
-    options.runtime ??
-    createDmsFrontendRuntime(
-      options.serverFetch as typeof import("ofetch").ofetch,
-      readServerRendered<Record<string, unknown>>(SSR_ASYNC_DATA_ID, {}),
-    );
+  const runtime = options.runtime ?? createBrowserRuntime(options.serverFetch);
   // The signed-in user's language, else the one this browser picked, which is
   // how a visitor's choice on a public page survives a reload.
   const locale =
@@ -289,6 +329,8 @@ export async function configureDmsApp(
   if (typeof window !== "undefined") {
     const toast = options.app.runWithContext(() => useToast());
     showNetworkErrors(toast.add, i18n.global);
+    preloadPrefetchedDmsPages();
+    options.app.runWithContext(keepSharedOverHistory);
   }
   // Resolve, before the app mounts, every async component the server
   // rendered: the page, its layout, and the components the render reached.
@@ -309,4 +351,4 @@ export async function configureDmsApp(
   return { mounted, runtime };
 }
 
-export { serializeDmsAsyncData, trackDmsAsyncComponents };
+export { trackDmsAsyncComponents };

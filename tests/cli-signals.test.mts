@@ -282,7 +282,7 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
 
     assert.deepEqual(await run.exited, { code: 130, signal: null });
     assert.match(run.output(), /✔ Production server ready in \S+\n/);
-    assert.match(run.output(), /Local: +http:\/\/127\.0\.0\.1:1\//);
+    assert.match(run.output(), /Local: +http:\/\/localhost:1\//);
     assert.match(
       run.output(),
       /■ Stopped the production server · ran \d+(ms|\.\ds)\n/,
@@ -362,7 +362,7 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     const lines = run.output().split("\n");
     assert.deepEqual(
       lines.filter((line) => !line.startsWith("▲") && !line.startsWith("  →")),
-      ["  ➜  Local: http://127.0.0.1:1/", ""],
+      ["  ➜  Local: http://localhost:1/", ""],
     );
     await assertTreeGone(pids);
   });

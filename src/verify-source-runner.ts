@@ -177,6 +177,31 @@ function checkClientBundle(workspace: string): void {
     );
 }
 
+/**
+ * The server modules bundle holds no application code and loads in Node.js.
+ * Returns the line the task ends on.
+ */
+async function checkServerModulesBundle(workspace: string): Promise<string> {
+  const root = join(workspace, "dist", "server-modules");
+  const javascript = readdirSync(root, { recursive: true, encoding: "utf8" })
+    .filter((file) => file.endsWith(".js"))
+    .map((file) => readFileSync(join(root, file), "utf8"))
+    .join("\n");
+  ensure(
+    !/\.vue["'?]|createApp\(|DefaultLayout/.test(javascript),
+    "The server modules bundle loads application code",
+    "A dms.server.ts imports server code only, never .vue files or dms.frontend.ts.",
+  );
+  const { serverModules } = (await import(
+    join(root, "server-modules.generated.js")
+  )) as { serverModules: { id: string }[] };
+  ensure(
+    Array.isArray(serverModules),
+    "The server modules bundle exports none",
+  );
+  return `${pluralize(serverModules.length, "server module")}, ${formatSize(Buffer.byteLength(javascript))} JS`;
+}
+
 interface EmailCase {
   name: string;
   props: Record<string, unknown>;
@@ -380,6 +405,11 @@ async function verifySources(): Promise<VerificationResult> {
     "Checking the e-mail contracts",
     async () => checkEmailContracts(workspace),
     { done: (line) => line, failed: "E-mail contracts failed" },
+  );
+  await tasks.run(
+    "Checking the server modules",
+    async () => checkServerModulesBundle(workspace),
+    { done: (line) => line, failed: "Server modules check failed" },
   );
   return { ok: true, modules: layers.length };
 }

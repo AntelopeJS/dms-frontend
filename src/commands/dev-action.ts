@@ -29,6 +29,13 @@ import {
 import { reserveFreePort } from "../ports";
 import { readyLines, runServer } from "../server-process";
 import { reportAvailableUpdate } from "../update-check";
+import { readCachedManifest } from "../manifest";
+import {
+  followModuleSet,
+  type ModuleSetMember,
+  moduleSetFingerprint,
+  reportFrontendReady,
+} from "../module-set";
 import { setUpWorkspace } from "./workspace-task";
 
 export interface DevOptions {
@@ -144,63 +151,180 @@ export async function runDev(options: DevOptions): Promise<void> {
       });
     }
   }
-  const secrets = resolveManifestSecrets(manifestSecrets);
+  const session: DevSession = {
+    backendUrl,
+    clientUrl,
+    port,
+    workspaceKey,
+    bootstrapSecret,
+    // A development backend issues a new credential each time it restarts,
+    // and publishes it where discovery reads it.
+    refreshBootstrapSecret: () =>
+      resolveBootstrapSecret(options.bootstrapSecret, backendUrl),
+    sessionSecret,
+    startedAt,
+    isOffline: !!offline,
+  };
+  let setup: DevSetup = { workspaceDir, layers, manifestSecrets };
+  await reserved.release();
+  for (;;) {
+    const run = await serveWorkspace(session, setup);
+    if (!run.isRestart) {
+      process.exitCode = run.code;
+      return;
+    }
+    ui.message(
+      "info",
+      "Frontend modules changed on the backend: rebuilding the workspace",
+    );
+    session.startedAt = Date.now();
+    session.bootstrapSecret = session.refreshBootstrapSecret();
+    setup = await setUpWorkspace({
+      backendUrl,
+      force: false,
+      mode: "dev",
+      offline: false,
+      clientUrl,
+      workspaceKey,
+      bootstrapSecret: session.bootstrapSecret,
+    });
+  }
+}
+
+/** What stays the same across the restarts of one `dev` run. */
+interface DevSession {
+  backendUrl: string;
+  clientUrl: string;
+  port: number;
+  workspaceKey?: string;
+  bootstrapSecret?: string;
+  refreshBootstrapSecret: () => string | undefined;
+  sessionSecret: string;
+  startedAt: number;
+  isOffline: boolean;
+}
+
+/** The workspace one server of the run serves. */
+type DevSetup = Pick<
+  Awaited<ReturnType<typeof setUpWorkspace>>,
+  "workspaceDir" | "layers" | "manifestSecrets"
+>;
+
+interface ServedRun {
+  code: number;
+  /** The server stopped because the backend's module set changed. */
+  isRestart: boolean;
+}
+
+/**
+ * The modules the workspace was materialized from, as the manifest it cached
+ * lists them: what `followModuleSet` compares the backend's manifest with.
+ */
+function servedModules(setup: DevSetup): ModuleSetMember[] {
+  return readCachedManifest(setup.workspaceDir)?.manifest.modules ?? [];
+}
+
+function reportServed(session: DevSession, setup: DevSetup): Promise<boolean> {
+  return reportFrontendReady(
+    session.backendUrl,
+    servedModules(setup).map((module) => module.name),
+    session.bootstrapSecret,
+  );
+}
+
+/**
+ * Runs the dev server on `setup` until it exits, or until the backend serves
+ * another set of frontend modules (a module installed or removed from the
+ * Modules page), which stops it for a rebuild.
+ */
+async function serveWorkspace(
+  session: DevSession,
+  setup: DevSetup,
+): Promise<ServedRun> {
+  const restart = new AbortController();
+  // Offline, the backend is not there to follow.
+  const stopFollowing = session.isOffline
+    ? () => undefined
+    : followModuleSet({
+        backendUrl: session.backendUrl,
+        clientUrl: session.clientUrl,
+        bootstrapSecret: () => {
+          session.bootstrapSecret = session.refreshBootstrapSecret();
+          return session.bootstrapSecret;
+        },
+        fingerprint: moduleSetFingerprint(servedModules(setup)),
+        onChange: () => restart.abort(),
+        onUnchanged: () => void reportServed(session, setup),
+      });
+  // Mirrors source edits into the materialized workspace copy: HMR would
+  // otherwise be blind to changes in the real layer source tree, since
+  // layers are copied, not symlinked.
+  const stopWatchers = startLayerWatchers(setup.workspaceDir, setup.layers);
+  const handleShutdown = async () => {
+    stopFollowing();
+    await stopWatchers();
+  };
+  process.once("SIGINT", handleShutdown);
+  process.once("SIGTERM", handleShutdown);
+  try {
+    const code = await runDevServer(session, setup, restart.signal);
+    return { code, isRestart: restart.signal.aborted };
+  } finally {
+    process.off("SIGINT", handleShutdown);
+    process.off("SIGTERM", handleShutdown);
+    stopFollowing();
+    await stopWatchers();
+  }
+}
+
+function runDevServer(
+  session: DevSession,
+  setup: DevSetup,
+  stopSignal: AbortSignal,
+): Promise<number> {
+  const secrets = resolveManifestSecrets(setup.manifestSecrets);
   reportManifestSecrets(
     secrets,
     (count) =>
       `Set ${count === 1 ? "it" : "them"} in the environment or the project's .env`,
   );
-
-  // Start a chokidar watcher per layer that mirrors source edits
-  // into the materialized workspace copy. Without this, HMR would
-  // be blind to any change made in the real layer source tree,
-  // since we copy (not symlink) layers into the workspace.
-  const stopWatchers = startLayerWatchers(workspaceDir, layers);
-  const handleShutdown = async () => {
-    await stopWatchers();
-  };
-  process.once("SIGINT", handleShutdown);
-  process.once("SIGTERM", handleShutdown);
-
-  const nodeModulesDir = join(workspaceDir, "node_modules");
-  // Hand the reserved port over to the frontend server at the last moment.
-  await reserved.release();
   const secretSources = describeSecretSources(secrets.sources);
-  const code = await runServer({
+  const nodeModulesDir = join(setup.workspaceDir, "node_modules");
+  return runServer({
     name: "dev server",
     script: "server.mjs",
-    cwd: workspaceDir,
-    mapPath: createPathMapper(workspaceDir, layers),
+    cwd: setup.workspaceDir,
+    mapPath: createPathMapper(setup.workspaceDir, setup.layers),
+    stopSignal,
     env: {
       ...process.env,
-      PORT: String(port),
+      PORT: String(session.port),
       DMS_DEV: "true",
       DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "false",
-      DMS_API_BASE_URL: backendUrl,
-      DMS_BOOTSTRAP_SECRET: bootstrapSecret,
-      DMS_SESSION_SECRET: sessionSecret,
+      DMS_API_BASE_URL: session.backendUrl,
+      DMS_BOOTSTRAP_SECRET: session.bootstrapSecret,
+      DMS_SESSION_SECRET: session.sessionSecret,
       ...secrets.env,
       NODE_OPTIONS: "--max-old-space-size=4096",
       NODE_PATH: nodeModulesDir,
     },
     onReady: (address) => {
       writeReadyBlock({
-        title: `Dev server ready in ${formatDuration(Date.now() - startedAt)}`,
+        title: `Dev server ready in ${formatDuration(Date.now() - session.startedAt)}`,
         lines: readyLines(address, [
-          { label: "Backend", value: backendUrl },
-          { label: "Workspace", value: showWorkspace(workspaceDir) },
+          { label: "Backend", value: session.backendUrl },
+          { label: "Workspace", value: showWorkspace(setup.workspaceDir) },
           ...(secretSources
             ? [{ label: "Secrets", value: secretSources }]
             : []),
         ]),
         footer: [
-          `Watching ${pluralize(layers.length, "layer source")}`,
+          `Watching ${pluralize(setup.layers.length, "layer source")}`,
           "Ctrl+C to stop",
-        ].join(ui.symbols.separator),
+        ].join(getProcessUi().symbols.separator),
       });
+      void reportServed(session, setup);
       void reportAvailableUpdate({ isFollowed: true });
     },
-  }).finally(stopWatchers);
-
-  process.exitCode = code;
+  });
 }

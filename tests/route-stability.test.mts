@@ -132,6 +132,12 @@ describe("Navigation to the URL shown", () => {
       urls.push(url);
       options?.onFinish?.({});
     });
+    // Another query of the page on screen stays in the browser.
+    for (const kind of ["push", "replace"] as const)
+      context.mock.method(router, kind, (params) => {
+        urls.push(`${kind} ${params.url}`);
+        params.onFinish?.(params);
+      });
     await navigate(app.runWithContext(useDmsRouter));
     return urls;
   }
@@ -159,7 +165,7 @@ describe("Navigation to the URL shown", () => {
       context,
     );
 
-    assert.deepEqual(urls, ["/runs?tab=open"]);
+    assert.deepEqual(urls, ["replace /runs?tab=open"]);
   });
 
   it("does not navigate to the URL already shown, however it is spelled", async (context) => {

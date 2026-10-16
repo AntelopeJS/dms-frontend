@@ -86,6 +86,7 @@ describe("public endpoints", () => {
       proxyAccess(
         { method: "POST", url, headers: { host: "frontend.local" } },
         new Set(["GET", "HEAD"]),
+        { auth: "session" },
       );
     try {
       for (const url of [
@@ -96,8 +97,8 @@ describe("public endpoints", () => {
         "/api/hooks\\..\\items/x",
         "/api/hooks/./x/..",
       ]) {
-        const { publicEndpoint, isRefused } = access(url);
-        assert.equal(publicEndpoint, undefined, url);
+        const { anonymous, isRefused } = access(url);
+        assert.equal(anonymous, false, url);
         assert.equal(isRefused, true, url);
         // The proxy sends the backend the same normalized path it matched.
         assert.equal(
@@ -108,12 +109,26 @@ describe("public endpoints", () => {
       }
       // A traversal that lands on the declared route reaches that route, as
       // the backend sees it.
-      const { publicEndpoint } = access("/api/other/../hooks/resend");
-      assert.equal(publicEndpoint?.path, "/api/hooks/*");
+      const reached = access("/api/other/../hooks/resend");
+      assert.equal(reached.anonymous, true);
+      assert.equal(reached.isRefused, false);
     } finally {
       if (previous === undefined) delete process.env.DMS_PUBLIC_ENDPOINTS;
       else process.env.DMS_PUBLIC_ENDPOINTS = previous;
     }
+  });
+
+  it("sends nothing of the session through a proxy without auth, and needs no Origin", () => {
+    const access = proxyAccess(
+      { method: "POST", url: "/media/upload", headers: { host: "x" } },
+      new Set(["GET", "HEAD"]),
+      { auth: "none" },
+    );
+    assert.deepEqual(access, {
+      anonymous: true,
+      headers: [],
+      isRefused: false,
+    });
   });
 
   it("reads a literal dot in a path as a dot", () => {

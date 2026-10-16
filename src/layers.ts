@@ -156,8 +156,10 @@ function resolveLayer(layerPath: string, mod: ManifestModule): ResolvedLayer {
     priority: mod.priority,
     configKey: mod.configKey,
     options: mod.options,
+    privateOptions: mod.privateOptions,
     authEstablishEndpoints: mod.authEstablishEndpoints,
     publicEndpoints: mod.publicEndpoints,
+    backendProxies: mod.backendProxies,
   };
 }
 
