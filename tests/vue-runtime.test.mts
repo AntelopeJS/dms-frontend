@@ -16,7 +16,7 @@ import {
 } from "vue";
 import {
   createDmsFrontendRuntime,
-  createError,
+  createDmsError,
   defineDmsPageMeta,
   dmsPageSuspenseProps,
   hydrateDmsPageProps,
@@ -29,7 +29,7 @@ import {
   trackDmsAsyncComponents,
   trackDmsServerScopes,
   useDmsAsyncData,
-  useError,
+  useDmsError,
   useDmsRuntimeHooks,
   useDmsCookie,
   useDmsState,
@@ -37,7 +37,7 @@ import {
   useDmsRoute,
   useDmsRouter,
   useDmsPageLoading,
-  useUserSession,
+  useDmsUserSession,
   setupFrontendModules,
   type DmsMiddleware,
 } from "../templates/vue/frontend-module.ts";
@@ -610,7 +610,7 @@ describe("Vue request runtime", () => {
     const hadWindow = "window" in globalThis;
     Reflect.set(globalThis, "window", globalThis);
     try {
-      const session = app.runWithContext(useUserSession);
+      const session = app.runWithContext(useDmsUserSession);
       const counts: number[] = [];
       for (let index = 0; index < 4; index++) {
         await session.fetch();
@@ -737,13 +737,13 @@ describe("Vue request runtime", () => {
   it("restores isolated application contexts between asynchronous middleware", async () => {
     const first = application("first");
     const second = application("second");
-    const capturedErrors = new Map<string, ReturnType<typeof useError>>();
+    const capturedErrors = new Map<string, ReturnType<typeof useDmsError>>();
     await registerGlobalMiddleware(
       async () => {
         await Promise.resolve();
       },
       (to) => {
-        capturedErrors.set(to.path, useError());
+        capturedErrors.set(to.path, useDmsError());
         return false;
       },
     );
@@ -988,7 +988,7 @@ describe("Page meta", () => {
     await registerGlobalMiddleware(async (to) => {
       await Promise.resolve();
       if (to.path === "/missing")
-        throw createError({ statusCode: 404, statusMessage: "Not here" });
+        throw createDmsError({ statusCode: 404, statusMessage: "Not here" });
     });
     const { app, runtime } = application("first");
     app.runWithContext(() => {
@@ -1091,7 +1091,7 @@ describe("Session hydration", () => {
   }
 
   function currentLanguage(app): unknown {
-    return app.runWithContext(() => useUserSession().user.value?.language);
+    return app.runWithContext(() => useDmsUserSession().user.value?.language);
   }
 
   it("keeps a newer session over the one a restored page carries", () => {

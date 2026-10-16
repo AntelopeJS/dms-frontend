@@ -1,1 +1,1 @@
-declare const defineAppConfig: typeof import("./frontend-module").defineAppConfig;
+declare const defineDmsAppConfig: typeof import("./frontend-module").defineDmsAppConfig;

@@ -38,8 +38,14 @@ compatibility.
   server. Data loaded before is read again on each mount (stale while
   revalidate), and `error` stays until the next answer.
 - **Removed aliases:** `getDmsComponent` (use `resolveDmsComponent`),
-  `prefetchComponents` (use `preloadComponents`) and `useDmsLazyAsyncData`
+  `prefetchComponents` (use `preloadDmsComponents`) and `useDmsLazyAsyncData`
   (use `useDmsAsyncData` with `lazy: true`).
+- **Every generic runtime export carries `Dms`.** Renamed, with no alias:
+  `useUserSession` → `useDmsUserSession`, `useError` → `useDmsError`,
+  `clearError` → `clearDmsError`, `createError` → `createDmsError`,
+  `showError` → `showDmsError`, `abortNavigation` → `abortDmsNavigation`,
+  `defineAppConfig` → `defineDmsAppConfig` (in every `app.config.ts`) and
+  `preloadComponents` → `preloadDmsComponents`. The auto-imports follow.
 - A route rule header value with a control character is ignored.
 - The secrets the manifest publishes win over `DMS_HTML_RENDER_SECRET` and
   `DMS_OAUTH_RELAY_SECRET`, which only fill in a secret the manifest leaves
@@ -98,8 +104,10 @@ compatibility.
    module's `dms.server.ts`.
 7. A `dms.server.ts` that writes sealed cookies: rename any `dms_*` cookie,
    and expect the stored name to change (`<module id>.<name>`).
-8. Use `resolveDmsComponent`, `preloadComponents` and `useDmsAsyncData(…, {
+8. Use `resolveDmsComponent`, `preloadDmsComponents` and `useDmsAsyncData(…, {
    lazy: true })` instead of the removed aliases.
+9. Rename the calls to the runtime exports that gained `Dms`, auto-imported
+   ones included, and `defineAppConfig` in `app.config.ts`.
 
 ## Migration for the DMS
 

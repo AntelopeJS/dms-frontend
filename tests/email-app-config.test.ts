@@ -48,7 +48,7 @@ it("gives emails the layers' app configs, module by module, after each module's 
     // What a theme editor writes into the project's layer.
     writeFile(
       join(project.path, "app", "app.config.ts"),
-      'export default defineAppConfig({ branding: { logo: { email: "/project-email.png" } } });\n',
+      'export default defineDmsAppConfig({ branding: { logo: { email: "/project-email.png" } } });\n',
     );
     writeFile(
       join(dms.path, "layers", "dms-layout", "app", "app.config.ts"),

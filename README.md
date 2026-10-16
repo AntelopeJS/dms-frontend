@@ -196,7 +196,7 @@ Within one setup, the first module to register a name keeps it. `ajs-dms dev` se
 Each layer of a module, or the module root when it has no `layers/` directory, may hold an `app/app.config.ts` whose default export is a plain object: branding, Nuxt UI's `ui` (colors, icons, component themes), anything the modules read through `useDmsAppConfig()`.
 
 ```ts
-export default defineAppConfig({
+export default defineDmsAppConfig({
   branding: { logo: { light: "/branding/logo.svg" } },
   ui: { colors: { primary: "emerald" } },
 });
@@ -361,7 +361,7 @@ It stays `false` on the server and during hydration, which render the page resol
 
 ### Interface language
 
-The interface language follows the session (`useUserSession().user.language`), not the props of the page on screen: the first render takes it from the session the page arrived with, and it changes when the session's language does, after `useUserSession().fetch()` or a visit with a newer session. A page Inertia restores from history or serves from its prefetch cache carries the session it was fetched with: the frontend server stamps every session it writes (`session.updatedAt`), and a page carrying an older stamp of the same account updates neither the session nor the language. A session without a language, such as a signed-out one, keeps the language on screen; `$i18n.setLocale()` still switches it at any time. It also remembers a language the application offers in the `dms_locale` cookie (one year, `SameSite=Lax`), and a page without a signed-in user's language, such as a public sign-in page, first renders in that one: a visitor's choice survives a reload, while a signed-in user's own language still comes first.
+The interface language follows the session (`useDmsUserSession().user.language`), not the props of the page on screen: the first render takes it from the session the page arrived with, and it changes when the session's language does, after `useDmsUserSession().fetch()` or a visit with a newer session. A page Inertia restores from history or serves from its prefetch cache carries the session it was fetched with: the frontend server stamps every session it writes (`session.updatedAt`), and a page carrying an older stamp of the same account updates neither the session nor the language. A session without a language, such as a signed-out one, keeps the language on screen; `$i18n.setLocale()` still switches it at any time. It also remembers a language the application offers in the `dms_locale` cookie (one year, `SameSite=Lax`), and a page without a signed-in user's language, such as a public sign-in page, first renders in that one: a visitor's choice survives a reload, while a signed-in user's own language still comes first.
 
 ### Declaring the loader releases a module supports
 

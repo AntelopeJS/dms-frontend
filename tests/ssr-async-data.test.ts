@@ -12,7 +12,7 @@ import { parse } from "devalue";
 const FIXTURE_MODULES = `
 import {defineComponent,h} from 'vue';
 import {Icon,addIcon} from '@iconify/vue';
-import {$fetch,createError,defineDmsPageMeta,useDmsAsyncData,useDmsState} from './frontend-module';
+import {$fetch,createDmsError,defineDmsPageMeta,useDmsAsyncData,useDmsState} from './frontend-module';
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  addIcon('fixture:dot',{body:'<circle cx="1" cy="1" r="1"/>',width:2,height:2});
@@ -31,7 +31,7 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
   useDmsState('closing',()=>'</script><script>alert(1)</script>',{transfer:true});
   useDmsState('server-only',()=>'private-value');
   useDmsState('instance',()=>new (class Box{value=1})(),{transfer:true});
-  const {status}=useDmsAsyncData('missing',async()=>{throw createError({statusCode:404,statusMessage:'Not Found',data:'orders.not_found'})});
+  const {status}=useDmsAsyncData('missing',async()=>{throw createDmsError({statusCode:404,statusMessage:'Not Found',data:'orders.not_found'})});
   return()=>h('p',['payload '+status.value+':'+seen.value.size,h(Icon,{icon:'fixture:dot'})])}}));
 }}}];`;
 

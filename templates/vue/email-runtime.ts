@@ -16,7 +16,7 @@ export function useDmsRuntimeConfig(): EmailRuntimeConfig {
   });
 }
 
-export function defineAppConfig<T extends Record<string, unknown>>(
+export function defineDmsAppConfig<T extends Record<string, unknown>>(
   config: T,
 ): T {
   return config;

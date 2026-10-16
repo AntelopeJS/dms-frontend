@@ -1586,7 +1586,11 @@ function serverAsyncDataState<T>(
     };
   const failure = runtime.hydratedAsyncErrors.get(key);
   if (!failure) return undefined;
-  return { data: fallback.data, error: createError(failure), status: "error" };
+  return {
+    data: fallback.data,
+    error: createDmsError(failure),
+    status: "error",
+  };
 }
 
 /**
@@ -2299,7 +2303,7 @@ const HTTP_ERROR_STATUS = { min: 400, max: 599 };
 const SERVER_FAILURE_STATUS = 500;
 const FETCH_ERROR_NAME = "FetchError";
 
-/** The fields of a failure, under the names `createError` and ofetch use. */
+/** The fields of a failure, under the names `createDmsError` and ofetch use. */
 interface DmsFailure extends DmsErrorData {
   name?: string;
   status?: number;
@@ -2411,7 +2415,7 @@ export function useDmsRuntimeConfig(): DmsRuntimeConfig {
 export function useDmsAppConfig(): DmsAppConfig {
   return appConfig.value as DmsAppConfig;
 }
-export function defineAppConfig<T extends Record<string, unknown>>(
+export function defineDmsAppConfig<T extends Record<string, unknown>>(
   config: T,
 ): T {
   return config;
@@ -2449,7 +2453,7 @@ function failPage(runtime: DmsFrontendRuntime, reason: unknown): void {
   runtime.currentError.value ??=
     reason instanceof Error ? reason : new Error(String(reason));
 }
-export function abortNavigation(): false {
+export function abortDmsNavigation(): false {
   return false;
 }
 export const useHead = useUnhead;
@@ -2673,7 +2677,7 @@ export function useDmsCookie<T = string | null>(
   return runtime.sharedState.get(key) as Ref<T>;
 }
 
-export function createError(
+export function createDmsError(
   input: string | DmsErrorData,
 ): Error & DmsErrorData {
   const details = typeof input === "string" ? { message: input } : input;
@@ -2682,15 +2686,17 @@ export function createError(
     details,
   );
 }
-export function showError(input: string | DmsErrorData): Error & DmsErrorData {
-  const error = createError(input);
+export function showDmsError(
+  input: string | DmsErrorData,
+): Error & DmsErrorData {
+  const error = createDmsError(input);
   useDmsRuntime().currentError.value = error;
   return error;
 }
-export function useError(): Ref<(Error & DmsErrorData) | null> {
+export function useDmsError(): Ref<(Error & DmsErrorData) | null> {
   return useDmsRuntime().currentError as Ref<(Error & DmsErrorData) | null>;
 }
-export async function clearError(options?: {
+export async function clearDmsError(options?: {
   redirect?: string;
 }): Promise<void> {
   useDmsRuntime().currentError.value = null;
@@ -2732,7 +2738,7 @@ export function preloadPrefetchedDmsPages(): () => void {
   });
 }
 
-export function useUserSession<
+export function useDmsUserSession<
   TUser = DmsUser,
   TSession = DmsSession,
 >(): DmsUserSession<TUser, TSession> {
@@ -2914,7 +2920,7 @@ export async function resolveDmsAsyncComponents(
     ),
   );
 }
-export async function preloadComponents(names: string[]): Promise<void> {
+export async function preloadDmsComponents(names: string[]): Promise<void> {
   const registry = useDmsRuntime().appContext?.vueApp._context.components ?? {};
   await Promise.all(
     names.map((name) =>
@@ -3025,7 +3031,7 @@ export function getDmsLayoutProps(
  * Whether a page carries an older session of the same account than the one
  * the app holds: Inertia restores a page from history, or serves it from the
  * prefetch cache, with the props it was fetched with, and those must not undo
- * a later `useUserSession().fetch()`.
+ * a later `useDmsUserSession().fetch()`.
  */
 function isStaleSession(
   incoming: DmsSession | undefined,

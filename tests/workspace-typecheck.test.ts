@@ -206,7 +206,7 @@ describe("generated workspace typecheck", () => {
     // layer's `app/app.config.ts`, and its development hot update.
     const workspace = shippedRuntimeWorkspace({
       "app/app.config.ts":
-        'export default defineAppConfig({\n  branding: { logo: "/logo.svg" },\n  ui: { colors: { primary: "green" } },\n});\n',
+        'export default defineDmsAppConfig({\n  branding: { logo: "/logo.svg" },\n  ui: { colors: { primary: "green" } },\n});\n',
     });
 
     const result = typecheck(workspace);

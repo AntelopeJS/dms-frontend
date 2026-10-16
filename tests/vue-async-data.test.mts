@@ -590,7 +590,7 @@ describe("Server payload", () => {
   it("transfers a failed server run, so hydration does not run it again (E5)", async () => {
     const { html, payload } = await serverPayload(() => {
       const { status, error } = useDmsAsyncData("e5", async () => {
-        throw runtimeModule.createError({
+        throw runtimeModule.createDmsError({
           statusCode: 404,
           statusMessage: "Not Found",
           message: "No such order",

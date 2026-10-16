@@ -69,7 +69,7 @@ export default defineConfig({
           [normalizePath(resolve(__dirname, "email-runtime.ts"))]: [
             "useDmsAppConfig",
             "useDmsRuntimeConfig",
-            "defineAppConfig",
+            "defineDmsAppConfig",
           ],
         },
       ],

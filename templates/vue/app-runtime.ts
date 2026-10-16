@@ -49,8 +49,8 @@ import {
   updateDmsAppConfig,
   useDmsAppConfig,
   useDmsState,
-  useError,
-  useUserSession,
+  useDmsError,
+  useDmsUserSession,
 } from "./frontend-module";
 import {
   SSR_ICONS_ID,
@@ -180,7 +180,7 @@ const DmsPersistentLayout = defineComponent({
   setup(_, { attrs, slots }) {
     const props = computed(() => attrs as unknown as DmsPageProps);
     const i18n = useI18n();
-    const { user } = useUserSession();
+    const { user } = useDmsUserSession();
     let localeVersion = 0;
     useHead({
       htmlAttrs: { lang: computed(() => i18n.locale.value) },
@@ -213,7 +213,7 @@ const DmsPersistentLayout = defineComponent({
       },
       { immediate: true, flush: "sync" },
     );
-    const currentError = useError();
+    const currentError = useDmsError();
     const overlays = useDmsState<string[]>("dms-app-overlays", () => []);
     return () => {
       const error = currentError.value ?? props.value.error;
@@ -241,7 +241,7 @@ export function resolveDmsInertiaPage(): Component {
 
 function renderDmsPage(
   props: DmsPageProps,
-  capturedError: DmsPageProps["error"] = useError().value,
+  capturedError: DmsPageProps["error"] = useDmsError().value,
 ) {
   const error = capturedError ?? props.error;
   const page = error

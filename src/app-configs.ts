@@ -51,7 +51,7 @@ function discoverAppConfigs(registry: AppConfigModules): LayerAppConfigFile[] {
  * The module through which the application, the server renderer and the email
  * renderer import every layer's app config. It imports nothing else at run
  * time, the email bundle above all must not pull the browser runtime in: a
- * layer's config auto-imports `defineAppConfig` from `frontend-module.ts`, and
+ * layer's config auto-imports `defineDmsAppConfig` from `frontend-module.ts`, and
  * the runtime never imports this module either, which would make a cycle.
  *
  * In development this module accepts its own hot updates, as the locale module

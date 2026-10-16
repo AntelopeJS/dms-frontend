@@ -80,7 +80,7 @@ export interface DmsServerEvent {
     /**
      * What the session shows a page (`user`, `session`), as the module that
      * owns sign-in renders it: the page props, and what
-     * `useUserSession().fetch()` reads.
+     * `useDmsUserSession().fetch()` reads.
      */
     view(): DmsPublicSession;
     /**

@@ -57,7 +57,7 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
       join(workspace, "frontend-modules.generated.ts"),
       `
 import {defineComponent,h} from 'vue';
-import {createError,defineDmsPageMeta,navigateDms,useUserSession,useI18n,useDmsState} from './frontend-module';
+import {createDmsError,defineDmsPageMeta,navigateDms,useDmsUserSession,useI18n,useDmsState} from './frontend-module';
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 let exactPreloads=0;
 let catchAllPreloads=0;
@@ -69,14 +69,14 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('slow-guard-redirect',defineComponent({setup(){defineDmsPageMeta({auth:true});return()=>h('p','Guarded page')}}));
  sdk.registerPage('slow-guard-page-redirect',defineComponent({async setup(){defineDmsPageMeta({auth:true});await navigateDms('/onboarding?source=page');return()=>h('p','Leaving page')}}));
  sdk.registerPage('slow-guard-both',defineComponent({async setup(){defineDmsPageMeta({auth:true});await navigateDms('/onboarding?source=page');return()=>h('p','Leaving page')}}));
- sdk.registerMiddleware('failing-guard',async to=>{if(!to.path.startsWith('/guard-'))return;await Promise.resolve();if(to.path==='/guard-not-found')throw createError({statusCode:404,statusMessage:'Module not found'});if(to.path==='/guard-broken')throw new Error('private middleware detail');return '/onboarding?source=guard'},{global:true});
+ sdk.registerMiddleware('failing-guard',async to=>{if(!to.path.startsWith('/guard-'))return;await Promise.resolve();if(to.path==='/guard-not-found')throw createDmsError({statusCode:404,statusMessage:'Module not found'});if(to.path==='/guard-broken')throw new Error('private middleware detail');return '/onboarding?source=guard'},{global:true});
  const Guarded=defineComponent({async setup(){defineDmsPageMeta({auth:true});await new Promise(r=>setTimeout(r,20));return()=>h('p','Guarded content')}});
  sdk.registerPage('guard-not-found',Guarded);
  sdk.registerPage('guard-broken',Guarded);
  sdk.registerPage('guard-redirect',Guarded);
  sdk.registerMiddleware('onboarding-redirect',to=>to.path.startsWith('/requires-onboarding-')?'/onboarding?source='+to.path.slice(-1):undefined,{global:true});
- sdk.registerPlugin(()=>{const {user}=useUserSession();useDmsState('plugin-user',()=>user.value?._id??'anonymous')});
- sdk.registerPage('session',defineComponent({setup(){const {user}=useUserSession();const {locale}=useI18n();const pluginUser=useDmsState('plugin-user');return()=>h('p',(user.value?._id??'anonymous')+':'+locale.value+':'+pluginUser.value)}}));
+ sdk.registerPlugin(()=>{const {user}=useDmsUserSession();useDmsState('plugin-user',()=>user.value?._id??'anonymous')});
+ sdk.registerPage('session',defineComponent({setup(){const {user}=useDmsUserSession();const {locale}=useI18n();const pluginUser=useDmsState('plugin-user');return()=>h('p',(user.value?._id??'anonymous')+':'+locale.value+':'+pluginUser.value)}}));
  sdk.registerPage('async-runtime-a',defineComponent({async setup(){defineDmsPageMeta({auth:true});await Promise.resolve();const value=useDmsState('async-runtime');return()=>h('p','Async runtime A:'+value.value)}}));
  sdk.registerPage('async-runtime-b',defineComponent({async setup(){defineDmsPageMeta({auth:true});await Promise.resolve();const value=useDmsState('async-runtime');return()=>h('p','Async runtime B:'+value.value)}}));
  sdk.registerPage('initial-route',defineComponent({setup(){defineDmsPageMeta({auth:true});return()=>h('p','Initial route:'+initialMiddlewarePath)}}));
@@ -84,7 +84,7 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('requires-onboarding-a',RequiresOnboarding);
  sdk.registerPage('requires-onboarding-b',RequiresOnboarding);
  sdk.registerPage('onboarding',defineComponent({setup(){return()=>h('p','Onboarding')}}));
- sdk.registerPage('throws',defineComponent({setup(){throw createError({statusCode:400,message:'Missing required token parameter'})},render(){throw new Error('secondary render failure')}}));
+ sdk.registerPage('throws',defineComponent({setup(){throw createDmsError({statusCode:400,message:'Missing required token parameter'})},render(){throw new Error('secondary render failure')}}));
  sdk.registerPage('fetch-not-found',defineComponent({async setup(){await Promise.resolve();throw Object.assign(new Error('[GET] "http://10.0.0.5:5010/api/secret": 404 Not Found'),{name:'FetchError',statusCode:404,statusMessage:'Not Found'})}}));
  sdk.registerPage('async-throws',defineComponent({async setup(){await Promise.resolve();throw new Error('private database hostname')}}));
  sdk.registerPage('healthy',defineComponent({async setup(){await new Promise(r=>setTimeout(r,5));return()=>h('p','Healthy request')}}));
