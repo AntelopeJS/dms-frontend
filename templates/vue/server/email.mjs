@@ -10,8 +10,7 @@ const EMAIL_BUNDLE_WATCH_URL = new URL(
   "./email-bundle-watch.mjs",
   import.meta.url,
 );
-// A render waits this long for a build in progress, then tries the bundle
-// already on disk rather than holding the backend's request indefinitely.
+// Bound the request's wait, but never read a bundle being replaced.
 const EMAIL_BUILD_WAIT_MS = 60_000;
 
 // Settled whenever no email build is running. The version changes with each
@@ -20,6 +19,11 @@ const EMAIL_BUILD_WAIT_MS = 60_000;
 let emailBuild = Promise.resolve();
 let settleEmailBuild;
 let emailBundleVersion = 0;
+// A build empties dist/server before it writes the new bundle, so it never
+// starts while a render still imports from the previous one: the builder asks
+// first, and gets the go-ahead once the renders in progress have finished.
+let rendersInProgress = 0;
+let startPendingBuild;
 
 function emailBuildStarted() {
   if (settleEmailBuild) return;
@@ -30,8 +34,22 @@ function emailBuildStarted() {
 
 function emailBuildSettled() {
   emailBundleVersion += 1;
+  startPendingBuild = undefined;
   settleEmailBuild?.();
   settleEmailBuild = undefined;
+}
+
+function startBuildOnceRendersFinish(start) {
+  if (rendersInProgress) startPendingBuild = start;
+  else start();
+}
+
+function renderFinished() {
+  rendersInProgress -= 1;
+  if (rendersInProgress || !startPendingBuild) return;
+  const start = startPendingBuild;
+  startPendingBuild = undefined;
+  start();
 }
 
 /**
@@ -51,8 +69,14 @@ export function watchEmailBundle() {
     // Not permitted on this platform; the build only runs at normal priority.
   }
   builder.on("message", (message) => {
-    if (message?.state === "building") emailBuildStarted();
-    else emailBuildSettled();
+    if (message?.state !== "building") {
+      emailBuildSettled();
+      return;
+    }
+    emailBuildStarted();
+    startBuildOnceRendersFinish(() => {
+      if (builder.connected) builder.send({ state: "build" });
+    });
   });
   builder.on("exit", (code) => {
     emailBuildSettled();
@@ -61,15 +85,25 @@ export function watchEmailBundle() {
   return builder;
 }
 
-async function loadEmailRenderer() {
-  let timer;
-  await Promise.race([
-    emailBuild,
-    new Promise((settle) => {
-      timer = setTimeout(settle, EMAIL_BUILD_WAIT_MS);
-    }),
-  ]);
-  clearTimeout(timer);
+async function waitForEmailBuild() {
+  const deadline = Date.now() + EMAIL_BUILD_WAIT_MS;
+  // Another build may start while a render waits for the previous one.
+  while (settleEmailBuild && Date.now() < deadline) {
+    let timer;
+    await Promise.race([
+      emailBuild,
+      new Promise((settle) => {
+        timer = setTimeout(settle, deadline - Date.now());
+      }),
+    ]);
+    clearTimeout(timer);
+  }
+  if (settleEmailBuild) {
+    throw new Error("Timed out waiting for the email bundle build");
+  }
+}
+
+function loadEmailRenderer() {
   const url = new URL(EMAIL_RENDERER_URL);
   if (emailBundleVersion) url.searchParams.set("v", emailBundleVersion);
   return import(url.href);
@@ -84,6 +118,15 @@ async function loadEmailRenderer() {
  * @param options `locale`, the language to render in
  */
 export async function renderEmailTemplate(template, props, options = {}) {
-  const { renderEmail } = await loadEmailRenderer();
-  return renderEmail(template, props, options);
+  await waitForEmailBuild();
+  // Counted from here, with no await in between, so a build the builder asks
+  // for now waits for this render, which imports templates and reads catalogs
+  // from the bundle until it ends.
+  rendersInProgress += 1;
+  try {
+    const { renderEmail } = await loadEmailRenderer();
+    return await renderEmail(template, props, options);
+  } finally {
+    renderFinished();
+  }
 }
