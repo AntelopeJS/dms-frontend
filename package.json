@@ -15,6 +15,10 @@
     "vite",
     "vue"
   ],
+  "homepage": "https://dms.antelopejs.com/docs/frontend",
+  "bugs": {
+    "url": "https://github.com/AntelopeJS/dms-frontend/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
