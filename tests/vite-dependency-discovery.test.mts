@@ -11,13 +11,21 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runInNewContext } from "node:vm";
 import { it } from "node:test";
-import { build, createServer, type DepOptimizationOptions } from "vite";
+import {
+  build,
+  createServer,
+  normalizePath,
+  type DepOptimizationOptions,
+} from "vite";
 
-function templateOptimization(): DepOptimizationOptions {
-  const template = readFileSync(
-    resolve("templates/vue/vite.config.ts"),
-    "utf8",
-  );
+function templateSource(): string {
+  return readFileSync(resolve("templates/vue/vite.config.ts"), "utf8");
+}
+
+function templateOptimization(
+  optimizerEntries: string[] = [],
+): DepOptimizationOptions {
+  const template = templateSource();
   const options = template.match(/optimizeDeps: (\{[^}]+\})/);
   assert.ok(
     options,
@@ -26,9 +34,8 @@ function templateOptimization(): DepOptimizationOptions {
   return runInNewContext(`(${options[1]})`, {
     optimizedDependencies: [],
     // The template crawls each materialized module at startup. A fixture has
-    // none, so the crawl is empty here and the lazy-discovery guarantee below
-    // is what this test still exercises.
-    optimizerEntries: [],
+    // none unless the test passes its sources.
+    optimizerEntries,
   }) as DepOptimizationOptions;
 }
 
@@ -121,4 +128,79 @@ it("optimizes a module's CommonJS dependency discovered after startup", async ()
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+it("pre-bundles a module's dependency at startup without naming it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dms-vite-dependency-"));
+  const moduleRoot = "frontend-modules/example";
+  const dependencyRoot = `${moduleRoot}/node_modules/example-sortable`;
+  writeFixture(root, "package.json", '{"type":"module"}');
+  writeFixture(
+    root,
+    "index.html",
+    '<script type="module" src="/entry.js"></script>',
+  );
+  writeFixture(root, "entry.js", 'console.log("shell");');
+  writeFixture(
+    root,
+    `${moduleRoot}/package.json`,
+    JSON.stringify({
+      name: "example-module",
+      dependencies: { "example-sortable": "1.0.0" },
+    }),
+  );
+  writeFixture(
+    root,
+    `${dependencyRoot}/package.json`,
+    JSON.stringify({ name: "example-sortable", version: "1.0.0" }),
+  );
+  writeFixture(
+    root,
+    `${dependencyRoot}/index.js`,
+    "exports.sortable = () => true;",
+  );
+  writeFixture(
+    root,
+    `${moduleRoot}/app/composables/useList.ts`,
+    'import { sortable } from "example-sortable"; export const useList = sortable;',
+  );
+  // What the template crawls for each module: its `app/` sources.
+  const optimizeDeps = templateOptimization([
+    normalizePath(resolve(root, moduleRoot, "app/**/*.ts")),
+  ]);
+  const server = await createServer({
+    root,
+    configFile: false,
+    logLevel: "silent",
+    optimizeDeps,
+    server: { port: 0, host: "127.0.0.1" },
+  });
+  try {
+    await server.listen();
+    const optimizer = server.environments.client.depsOptimizer;
+    assert.ok(optimizer);
+    await optimizer.scanProcessing;
+    const { discovered, optimized } = optimizer.metadata;
+    assert.ok(
+      "example-sortable" in discovered || "example-sortable" in optimized,
+      "the crawl of the module's sources finds the dependency at startup",
+    );
+  } finally {
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("names no dependency the DMS dropped for SortableJS", () => {
+  // vuedraggable left the DMS (useSortable) and dms-mailing does the same: a
+  // project without it saw "Failed to resolve dependency: vuedraggable" at
+  // every dev start. The crawl above pre-bundles it for a module that still
+  // imports it.
+  const list = templateSource().match(
+    /const optimizedDependencies = (\[[^\]]*\])/,
+  );
+  assert.ok(list, "the template lists the dependencies it pre-bundles");
+  const names = runInNewContext(list[1]) as string[];
+  assert.ok(names.includes("vue"));
+  assert.ok(!names.includes("vuedraggable"));
 });

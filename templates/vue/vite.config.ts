@@ -65,6 +65,12 @@ const importDirectories = autoImportDirectories(
   frontendBuilds,
   (message) => logger.warn(message),
 );
+/**
+ * Dependencies pre-bundled by name. A module's own dependencies need no entry:
+ * the startup crawl below (`optimizerEntries`) finds them in its sources. A
+ * name no module installs any more only earns a "Failed to resolve
+ * dependency" warning at every start.
+ */
 const optimizedDependencies = [
   "vue",
   "@inertiajs/vue3",
@@ -74,7 +80,6 @@ const optimizedDependencies = [
   "@vueuse/core",
   "reka-ui",
   "@internationalized/date",
-  "vuedraggable",
   "vue3-apexcharts",
   "apexcharts",
   "tailwind-variants",
