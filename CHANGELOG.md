@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.0...v0.6.1)
+
+### 🚀 Enhancements
+
+- Report the dms-frontend version when the frontend server is ready ([#136](https://github.com/AntelopeJS/dms-frontend/pull/136))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.6.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.6...v0.6.0)
