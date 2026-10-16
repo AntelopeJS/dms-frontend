@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.6...v0.6.0)
+
+### 🚀 Enhancements
+
+- ⚠️  Renderer 0.6.0, the server-rendering stack without backward compatibility ([#133](https://github.com/AntelopeJS/dms-frontend/pull/133))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Renderer 0.6.0, the server-rendering stack without backward compatibility ([#133](https://github.com/AntelopeJS/dms-frontend/pull/133))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.5.6
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.5.5...v0.5.6)
