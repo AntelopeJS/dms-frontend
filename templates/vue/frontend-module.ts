@@ -384,6 +384,14 @@ export interface DmsMiddlewareRegistrationOptions {
 }
 export interface DmsPluginRegistrationOptions {
   clientOnly?: boolean;
+  /**
+   * When the plugin runs, as Nuxt's `enforce`: every module's `"pre"`
+   * plugins first, then the `"default"` ones, then the `"post"` ones, each
+   * group in the modules' priority order. A plugin that the others depend on
+   * whatever their module's priority, such as the one setting the async data
+   * scope (`setDmsAsyncDataScope`), is `"pre"`.
+   */
+  enforce?: "pre" | "default" | "post";
 }
 export type DmsComponentPreloader = () => Promise<unknown>;
 export interface DmsComponentRegistrationOptions {
@@ -494,7 +502,10 @@ interface DmsAsyncComponent {
 interface DmsPluginRegistration {
   setup: DmsPluginSetup;
   clientOnly: boolean;
+  enforce: NonNullable<DmsPluginRegistrationOptions["enforce"]>;
 }
+
+const PLUGIN_ORDER = { pre: 0, default: 1, post: 2 } as const;
 
 /**
  * What the frontend modules registered through their SDK. Modules are set up
@@ -2263,7 +2274,9 @@ export async function refreshDmsPageData(): Promise<void> {
  * show their default until they load again. Call it on both sides before
  * the page renders, with the same value, so the browser finds the data the
  * server transferred; the scope is written in the page with each key, so a
- * digest rather than an identifier.
+ * digest rather than an identifier. Call it from a plugin registered with
+ * `{ enforce: "pre" }`: a plugin of another module that reads data at setup
+ * would otherwise run first, and the new scope abort its read.
  *
  * @param scope The scope, or `undefined` for none
  */
@@ -3220,6 +3233,7 @@ function createSdk(
       target.pluginSetups.push({
         setup,
         clientOnly: options.clientOnly ?? false,
+        enforce: options.enforce ?? "default",
       }),
     registerMiddleware: (name, handler, options = {}) => {
       if (!target.namedMiddleware.has(name))
@@ -3361,7 +3375,11 @@ export async function installDmsPlugins(
   registry.plugins.forEach((plugin) => {
     app.use(plugin);
   });
-  for (const registration of registry.pluginSetups) {
+  // Stable: within a group, the modules' priority order stays.
+  const pluginSetups = [...registry.pluginSetups].sort(
+    (left, right) => PLUGIN_ORDER[left.enforce] - PLUGIN_ORDER[right.enforce],
+  );
+  for (const registration of pluginSetups) {
     if (registration.clientOnly && typeof window === "undefined") continue;
     await runtime.scope.run(() =>
       app.runWithContext(() => registration.setup(appContext)),
