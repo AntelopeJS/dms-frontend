@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.6.2
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.1...v0.6.2)
+
+### 🚀 Enhancements
+
+- **vue:** Run a plugin before or after the others with `enforce` ([#140](https://github.com/AntelopeJS/dms-frontend/pull/140))
+
+### 🔥 Performance
+
+- **client:** Start the app from a function so the entry stays one chunk ([#142](https://github.com/AntelopeJS/dms-frontend/pull/142))
+- **server:** Send the build's public files with their type, an ETag and a Last-Modified ([#143](https://github.com/AntelopeJS/dms-frontend/pull/143))
+- **proxy:** Compress the backend answers the backend sent uncompressed ([#144](https://github.com/AntelopeJS/dms-frontend/pull/144))
+
+### 🩹 Fixes
+
+- **vue:** Keep Nuxt UI's state, toasts included, to the request that set it ([#139](https://github.com/AntelopeJS/dms-frontend/pull/139))
+- Stop serving the build manifest ([#138](https://github.com/AntelopeJS/dms-frontend/pull/138))
+
+### 📖 Documentation
+
+- Add the frontend user guide, its env reference check and a dms-frontend skill ([#137](https://github.com/AntelopeJS/dms-frontend/pull/137))
+- Remove the 0.6 migration page ([#147](https://github.com/AntelopeJS/dms-frontend/pull/147))
+- Make the 0.6 migration page exact and complete ([#141](https://github.com/AntelopeJS/dms-frontend/pull/141))
+
+### 🏡 Chore
+
+- **dev:** Stop pre-bundling vuedraggable by name ([#145](https://github.com/AntelopeJS/dms-frontend/pull/145))
+
+### ❤️ Contributors
+
+- Alessandro Aloisio ([@alessaloisio](http://github.com/alessaloisio))
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.6.1
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.0...v0.6.1)
