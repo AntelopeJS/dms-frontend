@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/AntelopeJS/dms/main/packages/dms/frontend-vue/layers/dms-layout/public/images/antelope-logo/dark.svg">
+  <img alt="Antelope DMS" src="https://raw.githubusercontent.com/AntelopeJS/dms/main/packages/dms/frontend-vue/layers/dms-layout/public/images/antelope-logo/light.svg" height="72">
+</picture>
+
 # @antelopejs/dms-frontend
 
 <a href="https://www.npmjs.com/package/@antelopejs/dms-frontend"><img alt="npm" src="https://img.shields.io/npm/v/@antelopejs/dms-frontend?style=for-the-badge&labelColor=000000&color=000000"></a>
