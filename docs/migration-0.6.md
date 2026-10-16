@@ -37,8 +37,9 @@ compatibility.
   `UseAsyncDataOptions`. A call without a key is left to the browser on a
   server. Data loaded before is read again on each mount (stale while
   revalidate), and `error` stays until the next answer.
-- **Removed aliases:** `getDmsComponent` (use `resolveDmsComponent`) and
-  `prefetchComponents` (use `preloadComponents`).
+- **Removed aliases:** `getDmsComponent` (use `resolveDmsComponent`),
+  `prefetchComponents` (use `preloadComponents`) and `useDmsLazyAsyncData`
+  (use `useDmsAsyncData` with `lazy: true`).
 - A route rule header value with a control character is ignored.
 - The secrets the manifest publishes win over `DMS_HTML_RENDER_SECRET` and
   `DMS_OAUTH_RELAY_SECRET`, which only fill in a secret the manifest leaves
@@ -97,8 +98,8 @@ compatibility.
    module's `dms.server.ts`.
 7. A `dms.server.ts` that writes sealed cookies: rename any `dms_*` cookie,
    and expect the stored name to change (`<module id>.<name>`).
-8. Use `resolveDmsComponent` and `preloadComponents` instead of the removed
-   aliases.
+8. Use `resolveDmsComponent`, `preloadComponents` and `useDmsAsyncData(…, {
+   lazy: true })` instead of the removed aliases.
 
 ## Migration for the DMS
 

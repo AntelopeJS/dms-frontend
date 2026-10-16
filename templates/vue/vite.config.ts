@@ -193,7 +193,6 @@ export default defineConfig({
               "useHead",
               "useI18n",
               "useError",
-              "useDmsLazyAsyncData",
               "useDmsPagedData",
               "useDmsPageLoading",
               "useDmsApp",

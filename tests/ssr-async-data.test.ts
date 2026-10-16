@@ -12,19 +12,19 @@ import { parse } from "devalue";
 const FIXTURE_MODULES = `
 import {defineComponent,h} from 'vue';
 import {Icon,addIcon} from '@iconify/vue';
-import {$fetch,createError,defineDmsPageMeta,useDmsAsyncData,useDmsLazyAsyncData,useDmsState} from './frontend-module';
+import {$fetch,createError,defineDmsPageMeta,useDmsAsyncData,useDmsState} from './frontend-module';
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  addIcon('fixture:dot',{body:'<circle cx="1" cy="1" r="1"/>',width:2,height:2});
- sdk.registerPlugin(async()=>{const {data,refresh}=useDmsLazyAsyncData('plugin-key',()=>$fetch('/plugin-data'));if(!data.value)await refresh()});
+ sdk.registerPlugin(async()=>{const {data,refresh}=useDmsAsyncData('plugin-key',()=>$fetch('/plugin-data'),{lazy:true});if(!data.value)await refresh()});
  sdk.registerMiddleware('guard-data',async to=>{if(to.path!=='/guarded')return;await sleep(5);useDmsState('guard-state',()=>undefined,{transfer:true}).value='set by the guard';await useDmsAsyncData('guard-key',async()=>'loaded by the guard')},{global:true});
- const Lazy=defineComponent({setup(){const {data,status}=useDmsLazyAsyncData('lazy-key',async()=>{await sleep(1);return 'fresh'});return()=>h('p','lazy '+status.value+':'+data.value)}});
+ const Lazy=defineComponent({setup(){const {data,status}=useDmsAsyncData('lazy-key',async()=>{await sleep(1);return 'fresh'},{lazy:true});return()=>h('p','lazy '+status.value+':'+data.value)}});
  const Slow=defineComponent({async setup(){await sleep(30);return()=>h('p','slow sibling')}});
  sdk.registerPage('lazy',defineComponent({setup(){return()=>h('div',[h(Lazy),h(Slow)])}}));
  const GuardedContent=defineComponent({setup(){const state=useDmsState('guard-state');const {data}=useDmsAsyncData('guard-key',async()=>'loaded again');return()=>h('p','content:'+state.value+':'+data.value)}});
  sdk.registerPage('guarded',defineComponent({setup(){defineDmsPageMeta({});const state=useDmsState('guard-state');return()=>h('div',[h('p','page:'+state.value),h(GuardedContent)])}}));
  sdk.registerPage('client-only',defineComponent({setup(){const {data,status}=useDmsAsyncData('client-key',()=>$fetch('/client-data'),{server:false,default:()=>'default'});return()=>h('p','client '+status.value+':'+data.value)}}));
- sdk.registerPage('plugin',defineComponent({setup(){const {data}=useDmsLazyAsyncData('plugin-key',()=>$fetch('/plugin-data'));return()=>h('p','plugin:'+data.value)}}));
+ sdk.registerPage('plugin',defineComponent({setup(){const {data}=useDmsAsyncData('plugin-key',()=>$fetch('/plugin-data'),{lazy:true});return()=>h('p','plugin:'+data.value)}}));
  sdk.registerPage('payload',defineComponent({setup(){
   const seen=useDmsState('seen',()=>new Set(['a','b']),{transfer:true});
   useDmsState('since',()=>new Date('2026-10-02T00:00:00.000Z'),{transfer:true});

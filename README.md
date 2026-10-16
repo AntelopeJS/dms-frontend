@@ -757,7 +757,7 @@ kept after a failure, the first `lazy` run started after the caller's turn):
 - **The result works with or without `await`.** Its refs are there at once;
   awaiting it waits for the data.
 - **`lazy: true`** spares client navigations the wait; a server render still
-  waits. `useDmsLazyAsyncData` is the same call with `lazy`.
+  waits.
 - **`server: false`** leaves the data to the browser: the server renders the
   default, and the browser fetches the data once the page is mounted.
 - **The handler receives `{ signal }`.** It is aborted when a newer run

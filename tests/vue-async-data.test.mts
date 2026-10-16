@@ -29,7 +29,6 @@ const {
   serializeDmsAsyncData,
   setupFrontendModules,
   useDmsAsyncData,
-  useDmsLazyAsyncData,
 } = runtimeModule;
 
 type Runtime = ReturnType<typeof createDmsFrontendRuntime>;
@@ -95,10 +94,14 @@ describe("Async data in a server render", () => {
   it("awaits lazy data before rendering it, so the HTML shows what the payload carries (E2)", async () => {
     const Lazy = defineComponent({
       setup() {
-        const { data, status } = useDmsLazyAsyncData("e2", async () => {
-          await sleep(1);
-          return "fresh";
-        });
+        const { data, status } = useDmsAsyncData(
+          "e2",
+          async () => {
+            await sleep(1);
+            return "fresh";
+          },
+          { lazy: true },
+        );
         return () => h("p", `${status.value}:${String(data.value)}`);
       },
     });
@@ -202,12 +205,14 @@ describe("Async data in a server render", () => {
             // Started, never awaited, and slower than everything after it: the
             // render must wait for it all the same.
             sdk.registerPlugin(() => {
-              useDmsLazyAsyncData("plugin-lazy", handler(40));
+              useDmsAsyncData("plugin-lazy", handler(40), { lazy: true });
             });
             // The DMS seo plugin: a lazy key, then an explicit refresh in the
             // same turn, which replaces the scheduled first run.
             sdk.registerPlugin(async () => {
-              const entry = useDmsLazyAsyncData("plugin-refreshed", handler(5));
+              const entry = useDmsAsyncData("plugin-refreshed", handler(5), {
+                lazy: true,
+              });
               if (!entry.data.value) await entry.refresh();
             });
           },

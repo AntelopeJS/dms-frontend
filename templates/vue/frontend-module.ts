@@ -2007,14 +2007,6 @@ function followAsyncDataKey<T>(
   };
 }
 
-export function useDmsLazyAsyncData<T>(
-  keyOrHandler: MaybeRefOrGetter<DmsAsyncDataKey> | DmsAsyncDataHandler<T>,
-  handler?: DmsAsyncDataHandler<T>,
-  options: UseAsyncDataOptions<T> = {},
-): DmsAsyncDataResult<T> {
-  return useDmsAsyncData(keyOrHandler, handler, { ...options, lazy: true });
-}
-
 /** What a paged read keeps under its key: the pages loaded, in order. */
 export interface DmsPagedDataValue<TPage, TCursor> {
   pages: TPage[];
