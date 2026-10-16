@@ -575,6 +575,12 @@ await AddFrontendModule({
 - `auth: "none"` never sends the session, so it needs no `Origin`: for media,
   or a webhook that authenticates its caller itself.
 
+The proxy asks the backend for an uncompressed answer and compresses a text
+one (JSON, text, XML, SVG) of 1 KiB or more, or of unknown length, in Brotli or
+gzip as the client accepts, each part as the backend writes it. An event stream,
+a range, an answer marked `no-transform` and one already encoded go out as they
+came.
+
 A pattern is `/x`, `/x/*` (one segment below) or `/x/**` (the path and
 everything below), its first segment literal, outside the renderer's own paths.
 Of two patterns covering a path, the more specific wins; for one pattern, the

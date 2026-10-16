@@ -1,8 +1,6 @@
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, maxHeaderSize } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { ofetch } from "ofetch";
 import {
@@ -49,7 +47,10 @@ import { htmlTag } from "./server/html-tag.mjs";
 import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
-import { writeProxyHeaders } from "./server/proxy-headers.mjs";
+import {
+  PLAIN_ANSWER_HEADERS,
+  relayAnswer,
+} from "./server/proxy-compression.mjs";
 import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
 import {
   createInertiaPage,
@@ -215,13 +216,11 @@ async function proxy(request, response, backendProxy) {
   const upstream = await fetch(backendUrl(request.url), {
     signal: abandoned.signal,
     method: request.method,
-    headers: backendHeaders(request, access),
+    headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
   });
-  writeProxyHeaders(response, upstream);
-  if (!upstream.body || request.method === "HEAD") response.end();
-  else await pipeline(Readable.fromWeb(upstream.body), response);
+  await relayAnswer(request, response, upstream);
 }
 
 function acceptedAsset(pathname, request) {

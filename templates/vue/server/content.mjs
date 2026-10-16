@@ -6,23 +6,40 @@ import {
   constants as zlibConstants,
 } from "node:zlib";
 
-const MINIMUM_COMPRESSION_BYTES = 1_024;
+/** Below this size, compressing saves less than it costs. */
+export const MINIMUM_COMPRESSION_BYTES = 1_024;
 const DYNAMIC_BROTLI_QUALITY = 4;
 
-function responseEncoder(request, content) {
-  if (Buffer.byteLength(content) < MINIMUM_COMPRESSION_BYTES) return undefined;
+/**
+ * A compressor for a body generated or relayed now, in the encoding the client
+ * accepts (Brotli first), or `undefined` when it accepts neither. `streaming`
+ * flushes what each write gives at once, for a body written over time: the
+ * client gets each part when it is written, not when a block fills.
+ */
+export function acceptedEncoder(request, { streaming = false } = {}) {
   const accepted = request.headers["accept-encoding"] ?? "";
   if (accepted.includes("br"))
     return {
       encoding: "br",
       stream: createBrotliCompress({
+        ...(streaming && { flush: zlibConstants.BROTLI_OPERATION_FLUSH }),
         params: {
           [zlibConstants.BROTLI_PARAM_QUALITY]: DYNAMIC_BROTLI_QUALITY,
         },
       }),
     };
   if (accepted.includes("gzip"))
-    return { encoding: "gzip", stream: createGzip() };
+    return {
+      encoding: "gzip",
+      stream: createGzip(
+        streaming ? { flush: zlibConstants.Z_SYNC_FLUSH } : {},
+      ),
+    };
+}
+
+function responseEncoder(request, content) {
+  if (Buffer.byteLength(content) < MINIMUM_COMPRESSION_BYTES) return undefined;
+  return acceptedEncoder(request);
 }
 
 /** Send a generated body, compressed when the client accepts it. */

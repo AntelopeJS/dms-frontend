@@ -11,8 +11,23 @@ const HOP_BY_HOP_HEADERS = [
   "upgrade",
 ];
 
-/** Writes the backend's status and end-to-end headers on `response`. */
-export function writeProxyHeaders(response, upstream) {
+/** `Accept-Encoding` added to the backend's own `Vary`, once. */
+function varyWithEncoding(vary) {
+  const names = (vary ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (names.some((name) => name === "*" || /^accept-encoding$/i.test(name)))
+    return names.join(", ");
+  return [...names, "Accept-Encoding"].join(", ");
+}
+
+/**
+ * Writes the backend's status and end-to-end headers on `response`. With an
+ * `encoding`, the proxy compresses the body itself: its length is no longer
+ * known, and a strong validator no longer names these bytes.
+ */
+export function writeProxyHeaders(response, upstream, encoding) {
   const headers = Object.fromEntries(upstream.headers);
   const named = (headers.connection ?? "")
     .split(",")
@@ -21,5 +36,12 @@ export function writeProxyHeaders(response, upstream) {
   delete headers["set-cookie"];
   const cookies = upstream.headers.getSetCookie?.() ?? [];
   if (cookies.length) headers["set-cookie"] = cookies;
+  if (encoding) {
+    delete headers["content-length"];
+    headers["content-encoding"] = encoding;
+    headers.vary = varyWithEncoding(headers.vary);
+    if (headers.etag && !headers.etag.startsWith("W/"))
+      headers.etag = `W/${headers.etag}`;
+  }
   response.writeHead(upstream.status, headers);
 }
