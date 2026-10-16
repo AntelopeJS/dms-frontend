@@ -152,7 +152,7 @@ describe("DMS CLI plugin", () => {
   it("requires the AntelopeJS CLI that publishes its output module", () => {
     assert.equal(
       packageJson.peerDependencies["@antelopejs/core"],
-      ">=1.13.2 <2",
+      ">=1.16.0 <2",
     );
     assert.equal(packageJson.peerDependenciesMeta, undefined);
     for (const dependency of ["figlet", "boxen", "chalk", "@types/figlet"]) {
