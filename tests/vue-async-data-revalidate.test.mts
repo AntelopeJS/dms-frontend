@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToString } from "@vue/server-renderer";
+import { createI18n } from "vue-i18n";
 import {
   type Component,
   createRenderer,
@@ -379,6 +380,64 @@ describe("Async data scope", () => {
     );
     assert.equal(calls, 0);
     assert.equal(entry.data.value, "server plan");
+  });
+});
+
+describe("Plugin order", () => {
+  it("sets the scope from a pre plugin before another module's plugin reads", async () => {
+    const reads: Array<{ data: { value: unknown } }> = [];
+    await runtimeModule.setupFrontendModules([
+      {
+        // Of higher priority, so set up and run first by default: the
+        // assistant of dms-ai, which reads its status as it starts.
+        options: { public: {} },
+        module: {
+          setup(sdk) {
+            sdk.registerPlugin(() => {
+              reads.push(
+                useDmsAsyncData("sidecar-info", async () => {
+                  await sleep(5);
+                  return "running";
+                }),
+              );
+            });
+          },
+        },
+      },
+      {
+        // The DMS, which puts every key in the session's scope.
+        options: { public: {} },
+        module: {
+          setup(sdk) {
+            sdk.registerPlugin(
+              () => runtimeModule.setDmsAsyncDataScope("account-a"),
+              { enforce: "pre" },
+            );
+            sdk.registerPlugin(() => {}, { enforce: "post" });
+          },
+        },
+      },
+    ]);
+    try {
+      const { app, runtime } = clientApp();
+      const i18n = createI18n({ legacy: false, locale: "en", messages: {} });
+      await runtimeModule.installDmsPlugins(
+        app,
+        i18n.global,
+        runtime,
+        async () => ({}),
+        ["en"],
+      );
+      await sleep(20);
+      assert.equal(reads.length, 1);
+      assert.equal(reads[0].data.value, "running", "the read was not aborted");
+      assert.deepEqual(
+        [...runtime.asyncData.keys()],
+        ["account-a|sidecar-info"],
+      );
+    } finally {
+      await runtimeModule.setupFrontendModules([]);
+    }
   });
 });
 
