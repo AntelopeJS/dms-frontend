@@ -23,8 +23,9 @@ interface ServerRenderer {
 
 /**
  * Nuxt UI as the generated workspace installs it, reduced to what matters
- * here: its Inertia Link and route stub, which read Inertia's page with the
- * very lines Nuxt UI 4.10 ships, and a component stub for everything else.
+ * here: its Inertia Link and route stub, which read Inertia's page, and its
+ * `useState`, with the very lines Nuxt UI 4.10 ships, and a component stub
+ * for everything else.
  */
 const NUXT_UI_FILES: Record<string, string> = {
   "package.json": JSON.stringify({
@@ -47,6 +48,18 @@ const page = usePage();
 const active = computed(() => page.url === props.to || page.url.startsWith(\`\${props.to}/\`));
 </script>
 <template><a :href="to" :data-active="active"><slot /></a></template>
+`,
+  // Nuxt UI 4.10's useState, verbatim: one record of refs for the module.
+  "dist/runtime/vue/stubs/base.js": `import { ref } from "vue";
+const state = {};
+export const useState = (key, init) => {
+  if (state[key]) {
+    return state[key];
+  }
+  const value = ref(init());
+  state[key] = value;
+  return value;
+};
 `,
   "dist/runtime/vue/stubs/inertia.js": `import { usePage } from "@inertiajs/vue3";
 export const useRoute = () => {
@@ -106,18 +119,42 @@ function seen(body: string) {
   };
 }
 
-it("gives Nuxt UI's Link and route stub their own request's URL while another request renders", async () => {
+/**
+ * A page that adds a toast the way `useToast()` does, to Nuxt UI's
+ * `useState("toasts")`, when its URL asks for it, and lists the toasts.
+ */
+const TOAST_PAGE = `
+import { defineComponent, h } from "vue";
+import { useState } from "@nuxt/ui/dist/runtime/vue/stubs/base.js";
+import { useDmsRoute } from "#dms/frontend-module";
+
+export default defineComponent({
+  setup() {
+    const toasts = useState("toasts", () => []);
+    if (useDmsRoute().query.fail) toasts.value.push("could not load");
+    return () => h("main", "toasts:" + toasts.value.join(","));
+  },
+});
+`;
+
+/**
+ * The template's server renderer in Vite, on a workspace whose one module
+ * registers `page` as the "orders" page.
+ */
+async function withServerRenderer(
+  page: string,
+  run: (renderer: ServerRenderer) => Promise<void>,
+): Promise<void> {
   // Inside the repository, like the other server render tests, so the
   // renderer's dependencies resolve; with the template's own Vite config.
   const workspace = realpathSync(mkdtempSync(resolve(".ui-request-page-")));
-  const probe: RenderProbe = {};
   let server: ViteDevServer | undefined;
   try {
     cpSync("templates/vue", workspace, { recursive: true });
     for (const [path, content] of Object.entries(NUXT_UI_FILES))
       write(workspace, join("node_modules", "@nuxt", "ui", path), content);
     const moduleRoot = join(workspace, "frontend-modules", "fixture");
-    write(moduleRoot, "OrdersPage.ts", PAGE);
+    write(moduleRoot, "OrdersPage.ts", page);
     write(
       moduleRoot,
       "dms.frontend.ts",
@@ -152,7 +189,6 @@ it("gives Nuxt UI's Link and route stub their own request's URL while another re
       "locales.generated.ts",
       'export const localeMessages={en:{}};export const supportedLocales=["en"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );
-    Reflect.set(globalThis, "__dmsUiRequestPage", probe);
 
     const { createServer } = await import("vite");
     server = await createServer({
@@ -163,31 +199,52 @@ it("gives Nuxt UI's Link and route stub their own request's URL while another re
       optimizeDeps: { noDiscovery: true },
       server: { middlewareMode: true, ws: false, watch: null },
     });
-    const renderer = (await server.ssrLoadModule(
-      "/ssr-renderer.ts",
-    )) as ServerRenderer;
-
-    // The first request suspends once its app has set up; the second renders
-    // whole meanwhile, then the first one resumes.
-    let release = () => {};
-    probe.gate = new Promise<void>((settle) => (release = settle));
-    const waiting = new Promise<void>((settle) => (probe.waiting = settle));
-    const first = renderer.renderDmsPage(inertiaPage("/dashboard"));
-    await waiting;
-    const second = await renderer.renderDmsPage(
-      inertiaPage("/orders/42?tab=b"),
-    );
-    release();
-    assert.deepEqual(
-      [seen((await first).body), seen(second.body)],
-      [
-        { route: "/dashboard", ordersLinkActive: "false" },
-        { route: "/orders/42?tab=b", ordersLinkActive: "true" },
-      ],
+    await run(
+      (await server.ssrLoadModule("/ssr-renderer.ts")) as ServerRenderer,
     );
   } finally {
     await server?.close();
-    Reflect.deleteProperty(globalThis, "__dmsUiRequestPage");
     rmSync(workspace, { recursive: true, force: true });
   }
+}
+
+it("gives Nuxt UI's Link and route stub their own request's URL while another request renders", async () => {
+  const probe: RenderProbe = {};
+  Reflect.set(globalThis, "__dmsUiRequestPage", probe);
+  try {
+    await withServerRenderer(PAGE, async (renderer) => {
+      // The first request suspends once its app has set up; the second
+      // renders whole meanwhile, then the first one resumes.
+      let release = () => {};
+      probe.gate = new Promise<void>((settle) => (release = settle));
+      const waiting = new Promise<void>((settle) => (probe.waiting = settle));
+      const first = renderer.renderDmsPage(inertiaPage("/dashboard"));
+      await waiting;
+      const second = await renderer.renderDmsPage(
+        inertiaPage("/orders/42?tab=b"),
+      );
+      release();
+      assert.deepEqual(
+        [seen((await first).body), seen(second.body)],
+        [
+          { route: "/dashboard", ordersLinkActive: "false" },
+          { route: "/orders/42?tab=b", ordersLinkActive: "true" },
+        ],
+      );
+    });
+  } finally {
+    Reflect.deleteProperty(globalThis, "__dmsUiRequestPage");
+  }
+});
+
+it("keeps Nuxt UI's state, such as a toast, to the request that set it", async () => {
+  await withServerRenderer(TOAST_PAGE, async (renderer) => {
+    const toasts = async (url: string) =>
+      /toasts:([^<]*)/.exec(
+        (await renderer.renderDmsPage(inertiaPage(url))).body,
+      )?.[1];
+    assert.equal(await toasts("/orders?fail=1"), "could not load");
+    assert.equal(await toasts("/orders"), "", "another request's toast");
+    assert.equal(await toasts("/orders?fail=1"), "could not load");
+  });
 });
