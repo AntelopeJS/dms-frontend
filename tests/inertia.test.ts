@@ -342,6 +342,19 @@ describe("Inertia HTTP protocol", () => {
         "public, max-age=31536000, immutable",
       );
       assert.deepEqual(backendPaths, []);
+      // A public file keeps its name across builds: sent with its type, then
+      // revalidated rather than downloaded again.
+      await writeFile(join(assets, "..", `${assetName}.woff2`), "font");
+      const font = await fetch(`${base}/${assetName}.woff2`);
+      assert.equal(font.headers.get("content-type"), "font/woff2");
+      assert.equal(font.headers.get("cache-control"), "no-cache");
+      await font.body?.cancel();
+      const revalidated = await fetch(`${base}/${assetName}.woff2`, {
+        headers: { "if-none-match": font.headers.get("etag") ?? "" },
+      });
+      assert.equal(revalidated.status, 304);
+      await revalidated.body?.cancel();
+      assert.deepEqual(backendPaths, []);
       // A file the build does not have is the backend's under a prefix a
       // module declares, and the backend is asked for nothing else.
       process.env.DMS_BACKEND_PROXIES = JSON.stringify([
@@ -357,6 +370,7 @@ describe("Inertia HTTP protocol", () => {
       assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
     } finally {
       process.env.DMS_BACKEND_PROXIES = DMS_BACKEND_PROXIES;
+      await rm(join(assets, "..", `${assetName}.woff2`), { force: true });
       await rm(created ?? join(assets, assetName), {
         recursive: true,
         force: true,

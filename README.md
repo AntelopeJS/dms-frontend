@@ -554,6 +554,15 @@ whatever the method, in this order:
    there is a `404`. A backend route outside every declared prefix (such as a
    page's `<page>/pagelayout`) is never reached from the browser.
 
+The built files go out precompressed (Brotli or gzip, as the client accepts)
+with their type. Those under `/assets/`, named after their content, are cached
+for good (`public, max-age=31536000, immutable`). Any other one keeps its name
+from one build to the next, such as a file of a layer's `public/` directory:
+it is sent with `no-cache`, an `ETag` and a `Last-Modified`, so a browser asks
+again on each use and is answered `304`, without the file, while it has not
+changed. A file every page loads, such as a font, is better imported from the
+module's CSS or code: Vite then names it after its content, under `/assets/`.
+
 A frontend module declares a prefix in its `dms.server.ts`:
 
 ```ts
