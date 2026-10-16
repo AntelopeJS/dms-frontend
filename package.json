@@ -15,6 +15,10 @@
     "vite",
     "vue"
   ],
+  "homepage": "https://dms.antelopejs.com/docs/frontend",
+  "bugs": {
+    "url": "https://github.com/AntelopeJS/dms-frontend/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -26,7 +30,8 @@
   "files": [
     "dist/",
     "!dist/.tsbuildinfo",
-    "templates/"
+    "templates/",
+    "skills/"
   ],
   "main": "./dist/common.js",
   "types": "./dist/common.d.ts",
@@ -59,11 +64,13 @@
     "test": "node --import tsx --test tests/*.test.ts tests/*.test.mts",
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
-    "lint": "oxlint && oxfmt --check . && antelopejs-check-interface-ranges",
+    "lint": "oxlint && oxfmt --check . && antelopejs-check-interface-ranges && pnpm run docs:reference:check",
     "typecheck": "tsc --noEmit",
     "lint:fix": "oxlint --fix --max-warnings=1000000 && oxfmt .",
     "knip": "knip --dependencies",
-    "knip:all": "knip"
+    "knip:all": "knip",
+    "docs:reference": "tsx scripts/docs-reference.ts",
+    "docs:reference:check": "tsx scripts/docs-reference.ts --check"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -114,5 +121,10 @@
   "engines": {
     "node": ">=20.12.0"
   },
-  "packageManager": "pnpm@10.6.5"
+  "packageManager": "pnpm@10.6.5",
+  "antelopeJs": {
+    "skills": [
+      "./skills"
+    ]
+  }
 }
