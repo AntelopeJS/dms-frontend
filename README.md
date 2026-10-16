@@ -122,6 +122,14 @@ be reached or fails, `build` exits 1, says whether a cached manifest exists and
 how old it is, and builds from it only when asked with `--offline`. `dev` and
 `prepare` still fall back to the cache, with a warning.
 
+`start` serves HTTP/1.1, over which a browser opens at most six connections to
+one origin. A page loads its JavaScript as many small files, one per page and
+component it shows and per piece of code they share (around a hundred to two
+hundred on a signed-in page of the DMS), so each round trip to the server holds
+up its first interaction. In production, put a reverse proxy that speaks HTTP/2
+or HTTP/3 to browsers in front of it (nginx `listen 443 ssl; http2 on;`, Caddy,
+a CDN): every file then shares one connection.
+
 The commands follow the output contract of `ajs`: what the CLI itself prints
 on stdout is only the help and the version, and everything else (progress,
 warnings, errors) goes to stderr. The dependency install and each step of the

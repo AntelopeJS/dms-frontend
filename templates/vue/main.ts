@@ -57,27 +57,40 @@ if (import.meta.env.DEV) adoptViteDevStyles();
 // the generated server answers those queries from the installed collections.
 addAPIProvider("", sameOriginIconProvider(location.origin));
 
-await setupFrontendModules(frontendModules, appConfigs);
-// A layer's app config edited during development reaches the page without a
-// reload. A server render imports the new configs instead.
-syncAppConfigs(applyLayerAppConfigs);
+/**
+ * Sets the modules up, then starts the app.
+ *
+ * A function rather than top-level statements: Rollup keeps apart every module
+ * the entry shares with a dynamic import when the entry awaits at its top level
+ * (merging them could deadlock that await). Every page and component is such
+ * an import, so the bundle split the entry into a hundred one-module chunks the
+ * browser requested one by one.
+ */
+async function startDmsApp(): Promise<void> {
+  await setupFrontendModules(frontendModules, appConfigs);
+  // A layer's app config edited during development reaches the page without a
+  // reload. A server render imports the new configs instead.
+  syncAppConfigs(applyLayerAppConfigs);
 
-createInertiaApp({
-  resolve: resolveDmsInertiaPage,
-  async setup({ App, el, props, plugin }) {
-    const root = { render: () => h(App, props) };
-    const app = el.hasAttribute("data-server-rendered")
-      ? createSSRApp(root)
-      : createApp(root);
-    const configured = await configureDmsApp({
-      app,
-      head: createHead(),
-      initialPageProps: props.initialPage.props,
-      initialPageUrl: props.initialPage.url,
-      inertiaPlugin: plugin,
-    });
-    app.mount(el);
-    markDmsReady();
-    await configured.mounted();
-  },
-});
+  createInertiaApp({
+    resolve: resolveDmsInertiaPage,
+    async setup({ App, el, props, plugin }) {
+      const root = { render: () => h(App, props) };
+      const app = el.hasAttribute("data-server-rendered")
+        ? createSSRApp(root)
+        : createApp(root);
+      const configured = await configureDmsApp({
+        app,
+        head: createHead(),
+        initialPageProps: props.initialPage.props,
+        initialPageUrl: props.initialPage.url,
+        inertiaPlugin: plugin,
+      });
+      app.mount(el);
+      markDmsReady();
+      await configured.mounted();
+    },
+  });
+}
+
+void startDmsApp();
