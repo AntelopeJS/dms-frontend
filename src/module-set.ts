@@ -12,6 +12,7 @@ export const MODULE_SET_POLL_INTERVAL_MS = 3000;
 const READY_ENDPOINT = "/dms/frontend/ready";
 const READY_TIMEOUT_MS = 5000;
 const JSON_CONTENT_TYPE = "application/json";
+const OWN_RELEASE: { version: string } = require("../package.json");
 
 /** What a module set is compared on. */
 export type ModuleSetMember = Pick<
@@ -123,8 +124,10 @@ export function followModuleSet(options: ModuleSetFollowOptions): () => void {
 
 /**
  * Tells the backend which frontend modules the server that just became ready
- * serves. Best effort: a backend that predates the endpoint answers 404, and
- * nothing in the frontend depends on the answer.
+ * serves, and which dms-frontend version runs it: the module store checks a
+ * module version's supported dms-frontend range against it. Best effort: a
+ * backend that predates the endpoint answers 404, one that predates the
+ * version ignores it, and nothing in the frontend depends on the answer.
  *
  * @returns Whether the backend took the report
  */
@@ -140,7 +143,10 @@ export async function reportFrontendReady(
         ...bootstrapHeaders(bootstrapSecret),
         "content-type": JSON_CONTENT_TYPE,
       },
-      body: JSON.stringify({ modules: moduleNames }),
+      body: JSON.stringify({
+        modules: moduleNames,
+        version: OWN_RELEASE.version,
+      }),
       signal: AbortSignal.timeout(READY_TIMEOUT_MS),
     });
     return response.ok;

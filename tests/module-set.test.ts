@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   followModuleSet,
   moduleSetFingerprint,
   reportFrontendReady,
 } from "../src/module-set";
+
+const ownVersion: string = JSON.parse(
+  readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "../package.json"),
+    "utf8",
+  ),
+).version;
 
 interface RecordedRequest {
   method?: string;
@@ -221,7 +231,7 @@ describe("module set", () => {
     assert.equal(changes, 0);
   });
 
-  it("reports the served modules with the bootstrap credential", async () => {
+  it("reports the served modules and its own version with the bootstrap credential", async () => {
     const isTaken = await reportFrontendReady(
       backendUrl,
       [dmsModule.name],
@@ -235,6 +245,7 @@ describe("module set", () => {
     assert.equal(report?.headers["x-dms-bootstrap"], "secret");
     assert.deepEqual(JSON.parse(report?.body ?? "{}"), {
       modules: [dmsModule.name],
+      version: ownVersion,
     });
   });
 
