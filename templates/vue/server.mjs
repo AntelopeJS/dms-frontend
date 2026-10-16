@@ -25,6 +25,7 @@ import {
   reportReady,
   reportStartError,
 } from "./server/cli-report.mjs";
+import { publicBuildFile } from "./server/built-files.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { writeContent } from "./server/content.mjs";
 import {
@@ -72,6 +73,7 @@ const MIME_TYPES = {
 };
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
+const CLIENT_ROOT = join(PROJECT_ROOT, "dist/client");
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
 const BUILT_SSR_RENDERER_PATH = join(PROJECT_ROOT, "dist/ssr/ssr-renderer.js");
 // The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
@@ -225,26 +227,19 @@ async function proxy(request, response, backendProxy) {
 }
 
 function acceptedAsset(pathname, request) {
-  const file = resolve(PROJECT_ROOT, "dist/client", `.${pathname}`);
+  const source = publicBuildFile(CLIENT_ROOT, pathname);
+  if (!source) return undefined;
   const accepted = request.headers["accept-encoding"] ?? "";
-  if (accepted.includes("br") && existsSync(`${file}.br`))
-    return { file: `${file}.br`, encoding: "br", source: file };
-  if (accepted.includes("gzip") && existsSync(`${file}.gz`))
-    return { file: `${file}.gz`, encoding: "gzip", source: file };
-  return { file, encoding: undefined, source: file };
+  if (accepted.includes("br") && existsSync(`${source}.br`))
+    return { file: `${source}.br`, encoding: "br", source };
+  if (accepted.includes("gzip") && existsSync(`${source}.gz`))
+    return { file: `${source}.gz`, encoding: "gzip", source };
+  return { file: source, encoding: undefined, source };
 }
 
 function serveAsset(pathname, request, response) {
   const selected = acceptedAsset(pathname, request);
-  // Native separator: `selected.source` comes from `resolve`, so a hardcoded
-  // `/` here would make the containment check fail for every asset on Windows.
-  const assetRoot = `${resolve(PROJECT_ROOT, "dist/client")}${sep}`;
-  if (
-    !selected.source.startsWith(assetRoot) ||
-    !existsSync(selected.file) ||
-    !statSync(selected.file).isFile()
-  )
-    return false;
+  if (!selected) return false;
   const headers = {
     "cache-control": pathname.startsWith("/assets/")
       ? "public, max-age=31536000, immutable"
@@ -391,8 +386,8 @@ async function answeredByVite(devServer, request, response) {
 
 /**
  * Whether the renderer has a file at `pathname`: a development source Vite
- * serves (under the workspace or its `public/`), or a built asset. Only a
- * path with an extension names one.
+ * serves (under the workspace or its `public/`), or a built asset the
+ * production server serves. Only a path with an extension names one.
  */
 function hasRendererFile(devServer, requested) {
   let pathname;
@@ -403,9 +398,10 @@ function hasRendererFile(devServer, requested) {
     return false;
   }
   if (extname(pathname) === "") return false;
-  const roots = devServer
-    ? [devServer.config.root, devServer.config.publicDir].filter(Boolean)
-    : [join(PROJECT_ROOT, "dist/client")];
+  if (!devServer) return publicBuildFile(CLIENT_ROOT, requested) !== undefined;
+  const roots = [devServer.config.root, devServer.config.publicDir].filter(
+    Boolean,
+  );
   return roots.some((root) => {
     const file = resolve(root, `.${pathname}`);
     return (

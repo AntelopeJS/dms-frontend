@@ -542,6 +542,9 @@ whatever the method, in this order:
 
 1. **The renderer**: its icon endpoint (`/api/_dms/icons`), Vite's URLs, the
    built assets, and any file it has (a development source, a built asset).
+   In production, a path with a segment starting with a dot is never a built
+   asset, so the build metadata Vite writes under `dist/client/.vite/` stays
+   private; `/.well-known/` is the one exception.
 2. **The module routes** of the modules' `dms.server.ts`, for every method: a
    method the module does not declare on its path answers `405`, and a `HEAD`
    reaches the `GET` route.
