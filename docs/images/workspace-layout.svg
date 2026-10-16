@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 630" width="1000" height="630" role="img" aria-labelledby="title desc">
+  <title id="title">Layout of a generated workspace</title>
+  <desc id="desc">A workspace under ~/.antelopejs/dms-frontend/&lt;sha256&gt;/ holds metadata, files derived from the frontend modules the backend serves, two owner-only files carrying secrets, files copied from the vue renderer templates, and the installed dependencies and build output.</desc>
+  <style>
+    .t { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: #3f3f46; font-size: 13px; }
+    .m { font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #27272a; font-size: 13px; }
+    .s { fill: #71717a; }
+    .h { font-family: Geist, Inter, ui-sans-serif, system-ui, sans-serif; font-size: 11px; letter-spacing: 0.12em; font-weight: 600; fill: #71717a; }
+    .branch { fill: none; stroke: #a1a1aa; stroke-width: 1; }
+    .k-derived { fill: #1ba2af; }
+    .k-secret { fill: none; stroke: #1ba2af; stroke-width: 2; }
+    .k-template { fill: #a1a1aa; }
+    .k-output { fill: none; stroke: #a1a1aa; stroke-width: 1.5; stroke-dasharray: 3 2; }
+    .k-meta { fill: #a1a1aa; fill-opacity: 0.35; }
+    .band { fill: #71717a; fill-opacity: 0.05; }
+    @media (prefers-color-scheme: dark) {
+      .t { fill: #d4d4d8; }
+      .m { fill: #e4e4e7; }
+      .s, .h { fill: #a1a1aa; }
+      .branch { stroke: #71717a; }
+      .k-derived { fill: #4dd9e6; }
+      .k-secret { stroke: #4dd9e6; }
+      .k-template { fill: #71717a; }
+      .k-output { stroke: #71717a; }
+      .k-meta { fill: #a1a1aa; fill-opacity: 0.2; }
+      .band { fill: #a1a1aa; fill-opacity: 0.06; }
+    }
+  </style>
+  <text class="h" x="40" y="36">LEGEND</text>
+  <rect class="k-derived" x="40" y="52" width="12" height="12" rx="3"/>
+  <text class="t s" x="60" y="63">Derived from the modules</text>
+  <rect class="k-secret" x="264" y="52" width="12" height="12" rx="3"/>
+  <text class="t s" x="284" y="63">Secrets, owner-only</text>
+  <rect class="k-template" x="453" y="52" width="12" height="12" rx="3"/>
+  <text class="t s" x="473" y="63">Copied from templates/vue</text>
+  <rect class="k-output" x="684" y="52" width="12" height="12" rx="3"/>
+  <text class="t s" x="704" y="63">Installed or built</text>
+  <rect class="k-meta" x="866" y="52" width="12" height="12" rx="3"/>
+  <text class="t s" x="886" y="63">Bookkeeping</text>
+  <text class="h" x="40" y="104">PATH</text>
+  <text class="h" x="520" y="104">WHAT IT HOLDS</text>
+  <rect class="band" x="24" y="120" width="952" height="32" rx="4"/>
+  <text class="m" x="64" y="140.5">~/.antelopejs/dms-frontend/</text>
+  <text class="t" x="520" y="140.5">Every workspace, one directory each</text>
+  <path class="branch" d="M70 150.0 V168.0 H84"/>
+  <text class="m" x="90" y="172.5">&lt;sha256&gt;/</text>
+  <text class="t" x="520" y="172.5">One per backend URL; dev without -b keys it on the project (0700)</text>
+  <rect class="band" x="24" y="184" width="952" height="32" rx="4"/>
+  <path class="branch" d="M96 182.0 V200.0 H110"/>
+  <rect class="k-meta" x="40" y="194.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="204.5">.ajs-dms-meta.json</text>
+  <text class="t" x="520" y="204.5">Backend URL and key, read by ajs dms workspaces</text>
+  <path class="branch" d="M96 208.0 V232.0 H110"/>
+  <rect class="k-secret" x="40" y="226.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="236.5">.manifest-cache.json</text>
+  <text class="t" x="520" y="236.5">Last manifest, replayed by --offline (0600)</text>
+  <rect class="band" x="24" y="248" width="952" height="32" rx="4"/>
+  <path class="branch" d="M96 240.0 V264.0 H110"/>
+  <rect class="k-derived" x="40" y="258.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="268.5">.layers-cache/</text>
+  <text class="t" x="520" y="268.5">Module archive extracted by build</text>
+  <path class="branch" d="M96 272.0 V296.0 H110"/>
+  <rect class="k-derived" x="40" y="290.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="300.5">frontend-modules/&lt;module&gt;/</text>
+  <text class="t" x="520" y="300.5">Each module: copied in place (dev, prepare) or extracted (build)</text>
+  <rect class="band" x="24" y="312" width="952" height="32" rx="4"/>
+  <path class="branch" d="M96 304.0 V328.0 H110"/>
+  <rect class="k-derived" x="40" y="322.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="332.5">generated-frontend-modules.json</text>
+  <text class="t" x="520" y="332.5">The modules, in manifest-priority order</text>
+  <path class="branch" d="M96 336.0 V360.0 H110"/>
+  <rect class="k-derived" x="40" y="354.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="364.5">frontend-modules.generated.ts</text>
+  <text class="t" x="520" y="364.5">Imports every dms.frontend.ts</text>
+  <rect class="band" x="24" y="376" width="952" height="32" rx="4"/>
+  <path class="branch" d="M96 368.0 V392.0 H110"/>
+  <rect class="k-derived" x="40" y="386.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="396.5">server-modules.generated.ts</text>
+  <text class="t" x="520" y="396.5">Imports every dms.server.ts</text>
+  <path class="branch" d="M96 400.0 V424.0 H110"/>
+  <rect class="k-derived" x="40" y="418.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="428.5">locales.generated.ts</text>
+  <text class="t" x="520" y="428.5">Merged i18n catalogs</text>
+  <rect class="band" x="24" y="440" width="952" height="32" rx="4"/>
+  <path class="branch" d="M96 432.0 V456.0 H110"/>
+  <rect class="k-secret" x="40" y="450.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="460.5">generated-server-options.json</text>
+  <text class="t" x="520" y="460.5">Private module options for dms.server.ts (0600)</text>
+  <path class="branch" d="M96 464.0 V488.0 H110"/>
+  <rect class="k-template" x="40" y="482.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="492.5">vite.config.ts · main.ts · …</text>
+  <text class="t" x="520" y="492.5">The renderer's application entry and build configs</text>
+  <rect class="band" x="24" y="504" width="952" height="32" rx="4"/>
+  <path class="branch" d="M96 496.0 V520.0 H110"/>
+  <rect class="k-template" x="40" y="514.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="524.5">server.mjs · server/</text>
+  <text class="t" x="520" y="524.5">The frontend server dev and start run</text>
+  <path class="branch" d="M96 528.0 V552.0 H110"/>
+  <rect class="k-output" x="40" y="546.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="556.5">node_modules/</text>
+  <text class="t" x="520" y="556.5">pnpm install, skipped while the dependencies are unchanged</text>
+  <rect class="band" x="24" y="568" width="952" height="32" rx="4"/>
+  <path class="branch" d="M96 560.0 V584.0 H110"/>
+  <rect class="k-output" x="40" y="578.0" width="12" height="12" rx="3"/>
+  <text class="m" x="116" y="588.5">dist/</text>
+  <text class="t" x="520" y="588.5">client · ssr · server · server-modules, written by build</text>
+</svg>
