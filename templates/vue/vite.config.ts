@@ -11,6 +11,7 @@ import {
 } from "vite";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { uiInertiaPage } from "./ui-inertia-page.mjs";
+import { uiRequestState } from "./ui-request-state.mjs";
 import { autoImportDirectories } from "./frontend-build-loader";
 import { frontendBuilds } from "./frontend-builds.generated";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
@@ -135,7 +136,9 @@ const uiInertiaLinkImport = resolve(
  * Inertia keeps a single page for the whole process, written by each server
  * render as it starts: a link rendered after an await could take another
  * request's URL to set its active state. Their `usePage()` is the DMS one,
- * which gives the page of the request being rendered.
+ * which gives the page of the request being rendered. Likewise, their
+ * `useState()` (the toasts among others) is the DMS's per-application state,
+ * not one record for the whole process.
  */
 const isNuxtUiFile = (id: string) =>
   normalizePath(id).includes("/node_modules/@nuxt/ui/");
@@ -154,6 +157,7 @@ export default defineConfig({
       },
     },
     uiInertiaPage(isNuxtUiFile),
+    uiRequestState(isNuxtUiFile),
     vue(),
     ui({
       router: "inertia",

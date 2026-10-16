@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 520" width="1080" height="520" role="img" aria-labelledby="title desc">
+  <title id="title">How the DMS frontend fits between the browser and the DMS backend</title>
+  <desc id="desc">At run time the browser talks only to the frontend server, which renders pages, answers module routes and proxies declared backend prefixes to the DMS backend with the session's token. At build time the ajs dms CLI fetches the frontend manifest and module sources from the backend, writes a workspace under ~/.antelopejs/dms-frontend, and spawns the frontend server from it.</desc>
+  <style>
+    .t { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: #27272a; }
+    .m { font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #52525b; }
+    .s { fill: #71717a; }
+    .h { font-size: 11px; letter-spacing: 0.12em; font-weight: 600; }
+    .title { font-size: 16px; font-weight: 600; }
+    .body { font-size: 13px; }
+    .small { font-size: 11px; }
+    .box { fill: #71717a; fill-opacity: 0.06; stroke: #a1a1aa; stroke-width: 1.5; }
+    .row { fill: #71717a; fill-opacity: 0.07; stroke: none; }
+    .line { fill: none; stroke: #a1a1aa; stroke-width: 1.5; }
+    .dash { stroke-dasharray: 5 5; }
+    .acc { fill: none; stroke: #1ba2af; stroke-width: 2; }
+    .acct { fill: #1ba2af; }
+    .num { fill: #ffffff; font-weight: 600; }
+    @media (prefers-color-scheme: dark) {
+      .t { fill: #e4e4e7; }
+      .m { fill: #a1a1aa; }
+      .s { fill: #a1a1aa; }
+      .box { stroke: #52525b; fill: #a1a1aa; fill-opacity: 0.06; }
+      .row { fill: #a1a1aa; fill-opacity: 0.08; }
+      .line { stroke: #71717a; }
+      .acc { stroke: #4dd9e6; }
+      .acct { fill: #4dd9e6; }
+      .num { fill: #07262b; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#a1a1aa"/>
+    </marker>
+    <marker id="arrow-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1ba2af"/>
+    </marker>
+  </defs>
+
+  <text class="t s h" x="24" y="36">RUN TIME</text>
+
+  <text class="t s h" x="24" y="64">BROWSER</text>
+  <rect class="box" x="24" y="76" width="210" height="236" rx="12"/>
+  <text class="t title" x="44" y="108">Dashboard tab</text>
+  <text class="m small" x="44" y="128">localhost:3001</text>
+  <text class="t body" x="44" y="172">Hydrates the server render</text>
+  <text class="t body" x="44" y="198">Inertia visits</text>
+  <text class="t body" x="44" y="224">Calls /api/…</text>
+  <text class="t s small" x="44" y="276">Holds only a sealed,</text>
+  <text class="t s small" x="44" y="292">HttpOnly session cookie</text>
+
+  <text class="t s h" x="364" y="64">FRONTEND SERVER</text>
+  <rect class="box" x="364" y="76" width="340" height="236" rx="12"/>
+  <text class="t title" x="384" y="108">Node server</text>
+  <text class="m small" x="384" y="128">ajs dms dev · ajs dms start</text>
+  <rect class="row" x="380" y="144" width="308" height="34" rx="6"/>
+  <circle class="acct" cx="398" cy="161" r="9"/>
+  <text class="t small num" x="398" y="165" text-anchor="middle">1</text>
+  <text class="t body" x="416" y="166">Renderer files</text>
+  <text class="m small" x="676" y="165" text-anchor="end">/assets · /api/_dms/icons</text>
+  <rect class="row" x="380" y="184" width="308" height="34" rx="6"/>
+  <circle class="acct" cx="398" cy="201" r="9"/>
+  <text class="t small num" x="398" y="205" text-anchor="middle">2</text>
+  <text class="t body" x="416" y="206">Module routes</text>
+  <text class="m small" x="676" y="205" text-anchor="end">dms.server.ts</text>
+  <rect class="row" x="380" y="224" width="308" height="34" rx="6"/>
+  <circle class="acct" cx="398" cy="241" r="9"/>
+  <text class="t small num" x="398" y="245" text-anchor="middle">3</text>
+  <text class="t body" x="416" y="246">Backend proxies</text>
+  <text class="m small" x="676" y="245" text-anchor="end">/api/** · /dms/**</text>
+  <rect class="row" x="380" y="264" width="308" height="34" rx="6"/>
+  <circle class="acct" cx="398" cy="281" r="9"/>
+  <text class="t small num" x="398" y="285" text-anchor="middle">4</text>
+  <text class="t body" x="416" y="286">Pages</text>
+  <text class="m small" x="676" y="285" text-anchor="end">SSR · Inertia</text>
+  <text class="t s small" x="534" y="332" text-anchor="middle">Each path has one owner, checked from 1 to 4</text>
+
+  <text class="t s h" x="834" y="64">DMS BACKEND</text>
+  <rect class="box" x="834" y="76" width="222" height="236" rx="12"/>
+  <text class="t title" x="854" y="108">AntelopeJS project</text>
+  <text class="m small" x="854" y="128">localhost:5010</text>
+  <text class="m small" x="854" y="172">/dms/page?path=…</text>
+  <text class="m small" x="854" y="198">/api/**</text>
+  <text class="m small" x="854" y="224">/dms/frontend</text>
+  <text class="t s small" x="854" y="276">@antelopejs/dms and the</text>
+  <text class="t s small" x="854" y="292">modules it loads</text>
+
+  <path class="acc" d="M236 168 H362" marker-end="url(#arrow-acc)"/>
+  <text class="m small" x="299" y="156" text-anchor="middle">GET /orders</text>
+  <path class="line dash" d="M362 216 H236" marker-end="url(#arrow)"/>
+  <text class="t s small" x="299" y="236" text-anchor="middle">HTML · page object</text>
+
+  <path class="acc" d="M706 168 H832" marker-end="url(#arrow-acc)"/>
+  <text class="m small" x="769" y="156" text-anchor="middle">+ Bearer token</text>
+  <path class="line dash" d="M832 216 H706" marker-end="url(#arrow)"/>
+  <text class="t s small" x="769" y="236" text-anchor="middle">page · JSON</text>
+
+  <line class="line dash" x1="24" y1="372" x2="1056" y2="372"/>
+  <text class="t s h" x="24" y="404">BUILD TIME</text>
+
+  <rect class="box" x="364" y="420" width="340" height="84" rx="12"/>
+  <text class="m body" x="384" y="450" style="font-weight:600">ajs dms dev · build · prepare</text>
+  <text class="t s small" x="384" y="472">Fetches the manifest and module sources,</text>
+  <text class="t s small" x="384" y="488">then materializes a workspace for the vue renderer</text>
+
+  <rect class="box" x="24" y="420" width="210" height="84" rx="12"/>
+  <text class="t body" x="44" y="450" style="font-weight:600">Workspace</text>
+  <text class="m small" x="44" y="470">~/.antelopejs/</text>
+  <text class="m small" x="44" y="486">dms-frontend/&lt;sha256&gt;/</text>
+
+  <path class="line" d="M362 462 H236" marker-end="url(#arrow)"/>
+  <text class="t s small" x="299" y="452" text-anchor="middle">writes</text>
+
+  <path class="line dash" d="M706 462 H945 V314" marker-end="url(#arrow)"/>
+  <text class="m small" x="830" y="452" text-anchor="middle">GET /dms/frontend</text>
+  <text class="t s small" x="830" y="488" text-anchor="middle">x-dms-bootstrap credential</text>
+
+  <path class="line dash" d="M534 418 V354" marker-end="url(#arrow)"/>
+  <text class="t s small" x="544" y="394">spawns server.mjs (dev, start)</text>
+</svg>
