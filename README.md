@@ -187,7 +187,7 @@ const frontendModule: DmsFrontendModule = {
 export default frontendModule;
 ```
 
-The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
+The SDK also exposes `use` for Vue plugins. Entries execute by descending manifest priority, then stable module id. Plugins registered with `registerPlugin(setup, { enforce: "pre" })` run before the others, whatever their module's priority, and those with `{ enforce: "post" }` after them, in that order within each group, as Nuxt's `enforce` does. Modules without `dms.frontend.ts` are skipped by the generated loader. Registered page keys match a route's `fullSlug`, request path, or `default`; unregistered pages and components use the generic card renderer.
 
 Within one setup, the first module to register a name keeps it. `ajs-dms dev` sets every module up again each time a change to a layer reaches the server renderer, into empty registries, so the next server render uses the edited component without a restart. A `setup` may therefore run more than once in a process: it should only register, and keep no state of its own between runs.
 
@@ -837,7 +837,8 @@ kept after a failure, the first `lazy` run started after the caller's turn):
   of the account and the workspace: the same key in another scope is another
   entry, and moving to another scope drops the data of every key. Set it on
   both sides before the page renders, with the same value: the scope is
-  written in the page with each key.
+  written in the page with each key. Set it from a plugin registered with
+  `{ enforce: "pre" }`, so it is in place before any module's plugin reads.
 - **A call without a key** (`useDmsAsyncData(handler)`, or `useDmsFetch` with
   a body it cannot key, such as a `FormData`) cannot be transferred: the
   server leaves it to the browser, as `server: false` does, so the page
