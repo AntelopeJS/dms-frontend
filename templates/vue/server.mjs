@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, maxHeaderSize } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
@@ -26,6 +26,7 @@ import {
   reportStartError,
 } from "./server/cli-report.mjs";
 import { publicBuildFile } from "./server/built-files.mjs";
+import { serveStaticFile } from "./server/static-files.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
 import { writeContent } from "./server/content.mjs";
 import {
@@ -66,11 +67,6 @@ export * from "./server/inertia.mjs";
 const INERTIA_HEADER = "x-inertia";
 const JSON_TYPE = "application/json";
 const PROJECT_ROOT = fileURLToPath(new URL(".", import.meta.url));
-const MIME_TYPES = {
-  ".css": "text/css",
-  ".js": "text/javascript",
-  ".svg": "image/svg+xml",
-};
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const CLIENT_ROOT = join(PROJECT_ROOT, "dist/client");
@@ -226,32 +222,17 @@ async function proxy(request, response, backendProxy) {
   else await pipeline(Readable.fromWeb(upstream.body), response);
 }
 
-function acceptedAsset(pathname, request) {
-  const source = publicBuildFile(CLIENT_ROOT, pathname);
-  if (!source) return undefined;
-  const accepted = request.headers["accept-encoding"] ?? "";
-  if (accepted.includes("br") && existsSync(`${source}.br`))
-    return { file: `${source}.br`, encoding: "br", source };
-  if (accepted.includes("gzip") && existsSync(`${source}.gz`))
-    return { file: `${source}.gz`, encoding: "gzip", source };
-  return { file: source, encoding: undefined, source };
-}
-
+/**
+ * Send the built file `pathname` names, or `false` when the build has none
+ * there. `publicBuildFile` decides which file that is; `serveStaticFile` how
+ * it goes out.
+ */
 function serveAsset(pathname, request, response) {
-  const selected = acceptedAsset(pathname, request);
-  if (!selected) return false;
-  const headers = {
-    "cache-control": pathname.startsWith("/assets/")
-      ? "public, max-age=31536000, immutable"
-      : "no-cache",
-    "content-type":
-      MIME_TYPES[extname(selected.source)] ?? "application/octet-stream",
-    "content-length": statSync(selected.file).size,
-    vary: "Accept-Encoding",
-  };
-  if (selected.encoding) headers["content-encoding"] = selected.encoding;
-  response.writeHead(200, headers);
-  createReadStream(selected.file).pipe(response);
+  const file = publicBuildFile(CLIENT_ROOT, pathname);
+  if (!file) return false;
+  serveStaticFile(file, request, response, {
+    immutable: pathname.startsWith("/assets/"),
+  });
   return true;
 }
 
