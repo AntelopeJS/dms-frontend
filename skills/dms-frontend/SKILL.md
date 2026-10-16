@@ -45,7 +45,6 @@ tags: [frontend, cli, renderer, vue, inertia, ssr, deployment, dms-module]
 | Module files and SDK | `/docs/frontend/frontend-modules/anatomy`, then `server-routes`, `sessions-and-sign-in`, `route-rules`, `emails` |
 | SSR, navigation, data, icons | `/docs/frontend/rendering/model`, `navigation`, `data-loading`, `icons` |
 | Production, proxy, security | `/docs/frontend/deployment/production`, `routing-and-proxy`, `public-endpoints`, `security` |
-| Upgrading a module to 0.6 | `/docs/frontend/upgrading/migrating-to-0-6` |
 | An error message | `/docs/frontend/troubleshooting` |
 
 The same pages ship in this package's repository under `docs/`.
