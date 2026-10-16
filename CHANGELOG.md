@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.3
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.2...v0.6.3)
+
+### 🩹 Fixes
+
+- **deps:** Require core 1.16.0 and current tooling ([#149](https://github.com/AntelopeJS/dms-frontend/pull/149))
+
+### 📖 Documentation
+
+- Make dense guide sections easier to scan ([#148](https://github.com/AntelopeJS/dms-frontend/pull/148))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.6.2
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.1...v0.6.2)
