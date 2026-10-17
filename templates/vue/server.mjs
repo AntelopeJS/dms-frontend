@@ -213,6 +213,8 @@ async function proxy(request, response, backendProxy) {
   response.once("close", () => abandoned.abort());
   const upstream = await fetch(backendUrl(request.url), {
     signal: abandoned.signal,
+    // The browser follows a redirect, not the proxy (see proxy-redirects.mjs).
+    redirect: "manual",
     method: request.method,
     headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request,

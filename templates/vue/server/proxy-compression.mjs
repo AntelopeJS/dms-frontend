@@ -85,7 +85,12 @@ export async function relayAnswer(
     headers.delete("content-length");
     const etag = headers.get("etag");
     if (etag && !etag.startsWith("W/")) headers.set("etag", `W/${etag}`);
-    upstream = { status: upstream.status, headers, body: upstream.body };
+    upstream = {
+      status: upstream.status,
+      headers,
+      body: upstream.body,
+      url: upstream.url,
+    };
   }
   const encoder = proxyEncoder(request, upstream);
   writeProxyHeaders(

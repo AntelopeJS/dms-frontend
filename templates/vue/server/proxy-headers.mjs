@@ -1,3 +1,5 @@
+import { relayedLocation } from "./proxy-redirects.mjs";
+
 // Hop-by-hop headers describe the backend connection, not the client's one.
 // Forwarded, an explicit `connection: keep-alive` overrode the client's own
 // `Connection: close`, so Node kept the socket open until its idle timeout.
@@ -25,7 +27,8 @@ function varyWithEncoding(vary) {
 /**
  * Writes the backend's status and end-to-end headers on `response`. With an
  * `encoding`, the proxy compresses the body itself: its length is no longer
- * known, and a strong validator no longer names these bytes.
+ * known, and a strong validator no longer names these bytes. A `Location` on
+ * the backend's origin becomes the same path on the frontend's.
  */
 export function writeProxyHeaders(
   response,
@@ -41,6 +44,8 @@ export function writeProxyHeaders(
   delete headers["set-cookie"];
   const cookies = upstream.headers.getSetCookie?.() ?? [];
   if (cookies.length) headers["set-cookie"] = cookies;
+  if (headers.location && upstream.url)
+    headers.location = relayedLocation(headers.location, upstream.url);
   if (encoding || varies) headers.vary = varyWithEncoding(headers.vary);
   if (encoding) {
     delete headers["content-length"];
