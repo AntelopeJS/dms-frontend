@@ -3,8 +3,6 @@
 // and the defaults every route gets once (same-origin on unsafe methods, a body
 // limit, `no-store`). See `server-module.ts` for the types a module reads.
 
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { backend, json, RequestBodyError } from "./auth/backend.mjs";
 import {
   clientIp,
@@ -24,6 +22,7 @@ import {
 } from "./auth/session.mjs";
 import { renderEmailTemplate } from "./email.mjs";
 import { backendUrl } from "./request-target.mjs";
+import { pipeWebBody } from "./web-body.mjs";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const COOKIE_NAME = /^[A-Za-z0-9_-]{1,64}$/;
@@ -237,7 +236,7 @@ async function writeServerResponse(request, response, result) {
     response.end();
     return;
   }
-  await pipeline(Readable.fromWeb(answer.body), response);
+  await pipeWebBody(answer.body, response);
 }
 
 /**
