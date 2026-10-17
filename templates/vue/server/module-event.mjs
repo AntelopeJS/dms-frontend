@@ -3,6 +3,7 @@
 // and the defaults every route gets once (same-origin on unsafe methods, a body
 // limit, `no-store`). See `server-module.ts` for the types a module reads.
 
+import { Readable } from "node:stream";
 import { backend, json, RequestBodyError } from "./auth/backend.mjs";
 import {
   clientIp,
