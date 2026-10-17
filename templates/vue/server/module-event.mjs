@@ -23,6 +23,11 @@ import {
   writeSession,
 } from "./auth/session.mjs";
 import { renderEmailTemplate } from "./email.mjs";
+import {
+  isBackendUrl,
+  relayableCookies,
+  relayedLocation,
+} from "./proxy-redirects.mjs";
 import { backendUrl } from "./request-target.mjs";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -218,15 +223,23 @@ function asResponse(result) {
 
 /**
  * Writes a handler's answer. The cookies the event wrote are already on the
- * Node response; those of a returned `Response` are added to them.
+ * Node response; those of a returned `Response` are added to them. A backend
+ * answer the handler relays goes out as the proxy relays one: its `Location`
+ * on the frontend's origin, no cookie of another site its fetch reached.
  */
 async function writeServerResponse(request, response, result) {
   const answer = asResponse(result);
   const cookies = [response.getHeader("set-cookie") ?? []]
     .flat()
-    .concat(answer.headers.getSetCookie());
+    .concat(relayableCookies(answer));
   answer.headers.forEach((value, name) => {
-    if (name !== "set-cookie") response.setHeader(name, value);
+    if (name === "set-cookie") return;
+    response.setHeader(
+      name,
+      name === "location" && isBackendUrl(answer.url)
+        ? relayedLocation(value, answer.url)
+        : value,
+    );
   });
   if (cookies.length) response.setHeader("set-cookie", cookies);
   if (!answer.headers.has("cache-control"))

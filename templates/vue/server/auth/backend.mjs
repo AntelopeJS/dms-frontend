@@ -1,3 +1,4 @@
+import { REDIRECT_STATUSES } from "../proxy-redirects.mjs";
 import { clientCountryHeader, clientIp } from "./client-ip.mjs";
 
 const FORWARDED_HEADERS = [
@@ -48,6 +49,7 @@ export function relayedHeaders(request, names) {
  *
  * `options.headers` adds request headers; the client's address and the
  * relayed client headers are set after them, so no caller replaces those.
+ * A redirect is not followed: it is no JSON answer, so it fails with a 502.
  */
 export async function backend(path, request, options = {}) {
   const headers = Object.fromEntries(
@@ -66,7 +68,15 @@ export async function backend(path, request, options = {}) {
     method: options.method ?? "GET",
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    redirect: "manual",
   });
+  if (REDIRECT_STATUSES.has(response.status)) {
+    await response.body?.cancel();
+    console.error(
+      `DMS backend request redirected: ${response.status} ${options.method ?? "GET"} ${path}`,
+    );
+    throw new UpstreamError(502, GENERIC_ERROR_MESSAGE);
+  }
   const text = await response.text();
   let data;
   try {
