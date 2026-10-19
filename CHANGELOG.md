@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.7.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.7.0...v0.7.1)
+
+### 🩹 Fixes
+
+- **server:** Wait out a starting backend's 503, not only a waking one ([#158](https://github.com/AntelopeJS/dms-frontend/pull/158))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.7.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.4...v0.7.0)
