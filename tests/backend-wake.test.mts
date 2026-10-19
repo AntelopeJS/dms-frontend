@@ -4,6 +4,7 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import "./fixtures/dms-backend-proxies.mts";
 import { backendResponseError } from "../templates/vue/server/backend-response.mjs";
+import { fetchWaking } from "../templates/vue/server/backend-wake.mjs";
 
 interface ServerTemplate {
   handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
@@ -13,6 +14,10 @@ interface Answer {
   status: number;
   headers?: Record<string, string>;
   body?: string;
+  /** Never answers, as a backend stuck while it starts. */
+  hangs?: boolean;
+  /** Sends the body, then a second part this many ms later. */
+  trickleMs?: number;
 }
 
 const COLD: Answer = {
@@ -49,12 +54,25 @@ describe("the proxy waits out a waking backend", () => {
     secret: process.env.DMS_SESSION_SECRET,
   };
   let answers: Answer[] = [];
-  let requests: { method: string; at: number }[] = [];
+  let requests: { method: string; at: number; abortedAt?: number }[] = [];
   const backend = createServer((request, response) => {
-    requests.push({ method: request.method ?? "", at: Date.now() });
+    const seen = { method: request.method ?? "", at: Date.now() };
+    requests.push(seen);
     request.resume();
     request.on("end", () => {
       const answer = answers.shift() ?? READY;
+      if (answer.hangs) {
+        response.on("close", () => {
+          seen.abortedAt = Date.now();
+        });
+        return;
+      }
+      if (answer.trickleMs) {
+        response.writeHead(answer.status, answer.headers);
+        response.write("first;");
+        setTimeout(() => response.end("second"), answer.trickleMs);
+        return;
+      }
       response.writeHead(answer.status, answer.headers);
       response.end(answer.body ?? "");
     });
@@ -88,6 +106,7 @@ describe("the proxy waits out a waking backend", () => {
       else process.env[name] = value;
     }
     frontend?.close();
+    backend.closeAllConnections();
     backend.close();
   });
 
@@ -102,14 +121,18 @@ describe("the proxy waits out a waking backend", () => {
   });
 
   it("passes the backend's own 503 on at once", async () => {
-    answers = [
-      { status: 503, headers: { "retry-after": "1" }, body: "maintenance" },
-      READY,
-    ];
-    const response = await fetch(`${frontendUrl}/api/items`);
-    assert.equal(response.status, 503);
-    assert.equal(await response.text(), "maintenance");
-    assert.equal(requests.length, 1);
+    for (const headers of [
+      { "retry-after": "1" },
+      { "x-antelope-cold-start": "1" },
+      { "x-antelope-cold-start": "1", "retry-after": "soon" },
+    ]) {
+      answers = [{ status: 503, headers, body: "maintenance" }, READY];
+      requests = [];
+      const response = await fetch(`${frontendUrl}/api/items`);
+      assert.equal(response.status, 503, JSON.stringify(headers));
+      assert.equal(await response.text(), "maintenance");
+      assert.equal(requests.length, 1, JSON.stringify(headers));
+    }
   });
 
   it("sends a POST once, even when the platform answers it as cold", async () => {
@@ -139,6 +162,41 @@ describe("the proxy waits out a waking backend", () => {
     assert.ok(Date.now() - started < 2500);
   });
 
+  it("aborts a repeat still unanswered when the budget runs out", async () => {
+    process.env.DMS_BACKEND_WAKE_BUDGET_MS = "1500";
+    answers = [COLD, { status: 200, hangs: true }];
+    const started = Date.now();
+    const response = await fetch(`${frontendUrl}/api/items`);
+    const elapsed = Date.now() - started;
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("retry-after"), "1");
+    await response.arrayBuffer();
+    assert.ok(elapsed >= 1400 && elapsed < 2200, `answered in ${elapsed}ms`);
+    await sleep(100);
+    assert.equal(requests.length, 2);
+    const abortedAfter = (requests[1].abortedAt ?? Infinity) - requests[0].at;
+    assert.ok(
+      abortedAfter < 2200,
+      `backend request aborted ${abortedAfter}ms in`,
+    );
+  });
+
+  it("streams a ready answer past the budget", async () => {
+    process.env.DMS_BACKEND_WAKE_BUDGET_MS = "1500";
+    answers = [
+      COLD,
+      {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+        trickleMs: 1500,
+      },
+    ];
+    const response = await fetch(`${frontendUrl}/api/items`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "first;second");
+    assert.equal(requests.length, 2);
+  });
+
   it("stops waiting when the client leaves", async () => {
     answers = [COLD, COLD, READY];
     const client = new AbortController();
@@ -153,6 +211,37 @@ describe("the proxy waits out a waking backend", () => {
   });
 });
 
+describe("a wait the event loop held up", () => {
+  it("sends nothing once the pause ends past the budget", async () => {
+    let hits = 0;
+    const backend = createServer((request, response) => {
+      hits += 1;
+      response.writeHead(COLD.status, COLD.headers).end();
+    });
+    const url = `http://127.0.0.1:${await listen(backend)}/`;
+    let skew = 0;
+    const stall = setTimeout(() => {
+      skew = 10_000;
+    }, 500);
+    try {
+      const response = await fetchWaking(
+        url,
+        {},
+        {
+          budgetMs: 5_000,
+          now: () => Date.now() + skew,
+        },
+      );
+      assert.equal(response.status, 503);
+      assert.equal(response.headers.get("retry-after"), "1");
+      assert.equal(hits, 1);
+    } finally {
+      clearTimeout(stall);
+      backend.close();
+    }
+  });
+});
+
 describe("a failed backend response", () => {
   it("keeps Retry-After for the platform's cold start only", async () => {
     const cold = await backendResponseError(
@@ -164,5 +253,12 @@ describe("a failed backend response", () => {
       new Response("", { status: 503, headers: { "retry-after": "1" } }),
     );
     assert.equal(own.retryAfter, undefined);
+    const unsigned = await backendResponseError(
+      new Response("", {
+        status: 503,
+        headers: { "x-antelope-cold-start": "1" },
+      }),
+    );
+    assert.equal(unsigned.retryAfter, undefined);
   });
 });
