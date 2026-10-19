@@ -35,6 +35,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "Secure cookies unless false (default: false in dev, true in start)",
   ],
   [
+    "NODE_ENV",
+    "Build of Vue and its libraries the server loads (default: development in dev, production in start)",
+  ],
+  [
     "DMS_TRUSTED_PROXY_HOPS",
     "Trusted reverse-proxy hops, counted from the right (default: 0)",
   ],
