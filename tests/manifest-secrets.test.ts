@@ -262,6 +262,7 @@ describe("ajs dms start", () => {
   async function start(
     env: Record<string, string>,
     modules: ManifestModule[] = [dmsModule(MANIFEST_SECRET)],
+    serverOptions?: Record<string, unknown>,
   ): Promise<{ report: StartReport; log: string }> {
     const home = mkdtempSync(join(tmpdir(), "dms-manifest-secrets-"));
     try {
@@ -282,6 +283,11 @@ describe("ajs dms start", () => {
           fetchedAt: new Date().toISOString(),
         }),
       );
+      if (serverOptions)
+        writeFileSync(
+          join(workspace, "generated-server-options.json"),
+          JSON.stringify({ modules: serverOptions }),
+        );
       writeFileSync(
         join(workspace, "server.mjs"),
         'process.send({ type: "dms:ready", address: "127.0.0.1", port: 3321 });\n' +
@@ -299,7 +305,10 @@ describe("ajs dms start", () => {
         DMS_SESSION_SECRET: SESSION_SECRET,
         ...env,
       };
-      for (const name of Object.keys(MANIFEST_SECRET_ENV))
+      for (const name of [
+        ...Object.keys(MANIFEST_SECRET_ENV),
+        "DMS_PRIVATE_OPTIONS",
+      ])
         if (!(name in env)) delete environment[name];
       const { stdout, stderr } = await promisify(execFile)(
         process.execPath,
@@ -364,8 +373,57 @@ describe("ajs dms start", () => {
     );
     assert.match(
       log,
-      /▲ DMS_OAUTH_RELAY_SECRET is not set: OAuth sign-in will be refused by the backend\n {2}→ Set them, or rebuild with DMS_BOOTSTRAP_SECRET/,
+      /▲ DMS_OAUTH_RELAY_SECRET is not set: OAuth sign-in will be refused by the backend\n {2}→ Set them in the server's environment, with the values the backend uses/,
     );
     assert.doesNotMatch(log, /Secrets:/);
+  });
+
+  it("names each module option the server would get empty, until DMS_PRIVATE_OPTIONS sets it", async () => {
+    const built = {
+      "acme__shop-frontend-vue": {
+        apiKey: "",
+        webhook: { token: "" },
+        keys: [""],
+        htmlRender: { serviceSecret: "" },
+      },
+    };
+    const unset = await start({}, [dmsModule(MANIFEST_SECRET)], built);
+    assert.match(
+      unset.log,
+      /▲ acme__shop-frontend-vue: private option apiKey is not set\n▲ acme__shop-frontend-vue: private option webhook\.token is not set\n▲ acme__shop-frontend-vue: private option keys\.0 is not set\n {2}→ Set them in DMS_PRIVATE_OPTIONS/,
+    );
+    assert.doesNotMatch(unset.log, /private option htmlRender/);
+
+    const set = await start(
+      {
+        DMS_PRIVATE_OPTIONS: JSON.stringify({
+          "acme__shop-frontend-vue": {
+            apiKey: "shop-api-key",
+            webhook: { token: "" },
+          },
+        }),
+      },
+      [dmsModule(MANIFEST_SECRET)],
+      built,
+    );
+    assert.doesNotMatch(set.log, /private option apiKey/);
+    assert.match(set.log, /private option webhook.token is not set/);
+    assert.ok(!set.log.includes("shop-api-key"));
+  });
+
+  it("refuses a DMS_PRIVATE_OPTIONS that is not options by module id, without repeating it", async () => {
+    await assert.rejects(
+      start({
+        DMS_PRIVATE_OPTIONS: '{"acme__shop-frontend-vue":"leaked-value"}',
+      }),
+      (error: { stderr: string }) => {
+        assert.match(
+          error.stderr,
+          /DMS_PRIVATE_OPTIONS is not a JSON object of options by module id/,
+        );
+        assert.ok(!error.stderr.includes("leaked-value"));
+        return true;
+      },
+    );
   });
 });

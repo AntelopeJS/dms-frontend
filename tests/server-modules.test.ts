@@ -1004,6 +1004,60 @@ describe("The module testing helper", () => {
     }
   });
 
+  it("fills any module's empty private options from DMS_PRIVATE_OPTIONS, the manifest's winning", async () => {
+    const { privateOptionsFromJson } =
+      await import("../templates/vue/server/module-server.mjs");
+    const warnings: string[] = [];
+    const filled = privateOptionsFromJson(
+      {
+        shop: {
+          apiKey: "",
+          region: "eu",
+          retries: 5,
+          hooks: { token: "" },
+          keys: ["", ""],
+        },
+        other: { apiKey: "" },
+      },
+      JSON.stringify({
+        shop: {
+          apiKey: "from-env",
+          region: "us",
+          retries: "9",
+          hooks: "flattened",
+          keys: ["k1", "k2"],
+          added: "new",
+        },
+        missing: { apiKey: "ignored" },
+        __proto__: { polluted: "yes" },
+        constructor: { polluted: "yes" },
+      }),
+      (message: string) => warnings.push(message),
+    );
+    assert.deepEqual(filled, {
+      shop: {
+        apiKey: "from-env",
+        region: "eu",
+        retries: 5,
+        hooks: { token: "" },
+        keys: ["k1", "k2"],
+      },
+      other: { apiKey: "" },
+    });
+    assert.equal(({} as Record<string, unknown>).polluted, undefined);
+    assert.deepEqual(warnings, []);
+
+    const untouched = { shop: { apiKey: "" } };
+    privateOptionsFromJson(
+      untouched,
+      '["secret-in-array"]',
+      (message: string) => warnings.push(message),
+    );
+    assert.deepEqual(untouched, { shop: { apiKey: "" } });
+    assert.equal(warnings.length, 1);
+    assert.ok(!warnings[0].includes("secret-in-array"));
+  });
+
   it("takes a secret from the environment only where the manifest has none", async () => {
     const { privateOptionsWithFallbacks } =
       await import("../templates/vue/server/module-server.mjs");

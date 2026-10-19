@@ -91,7 +91,7 @@ describe("DMS CLI plugin", () => {
       "explicit-session-secret-32-characters!!",
     );
 
-    for (const mode of ["dev", "build", "start"] as const) {
+    for (const mode of ["dev", "start"] as const) {
       assert.throws(
         () => resolveSessionSecret(mode, ""),
         usageError(/DMS_SESSION_SECRET is empty/),
@@ -101,12 +101,10 @@ describe("DMS CLI plugin", () => {
         usageError(/is too short: 9 characters, at least 32 needed/),
       );
     }
-    for (const mode of ["build", "start"] as const) {
-      assert.throws(
-        () => resolveSessionSecret(mode, undefined),
-        usageError(/DMS_SESSION_SECRET is not set/, /openssl rand -hex 32/),
-      );
-    }
+    assert.throws(
+      () => resolveSessionSecret("start", undefined),
+      usageError(/DMS_SESSION_SECRET is not set/, /openssl rand -hex 32/),
+    );
   });
 
   it("accepts only http and https backend URLs", () => {
@@ -388,13 +386,13 @@ const ESC = "\x1b";
 
 const SECRET_NOT_SET = [
   "DMS_SESSION_SECRET is not set",
-  "  build and start sign sessions with it, so it must stay the same across restarts.",
+  "  start signs sessions with it, so it must stay the same across restarts.",
   "  {hint} Create one: openssl rand -hex 32, then set it in the environment or ./.env",
 ];
 
 function secretNotSet(): UsageError {
   try {
-    resolveSessionSecret("build", undefined);
+    resolveSessionSecret("start", undefined);
   } catch (err) {
     if (err instanceof UsageError) return err;
   }
