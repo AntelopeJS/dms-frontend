@@ -73,7 +73,7 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ],
   [
     "DMS_BACKEND_WAKE_BUDGET_MS",
-    "How long a GET or HEAD waits out a backend's cold-start 503, in ms (default: 30000; 0: never)",
+    "How long a GET or HEAD waits out a waking or starting backend's 503, in ms (default: 30000; 0: never)",
   ],
   ["DMS_CLIENT_BASE_URL", "Public frontend URL used in links and e-mails"],
   ["NO_COLOR", "Same as --no-color"],

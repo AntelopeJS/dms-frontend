@@ -120,9 +120,25 @@ describe("the proxy waits out a waking backend", () => {
     for (const pause of pauses) assert.ok(pause >= 950, `paused ${pause}ms`);
   });
 
-  it("passes the backend's own 503 on at once", async () => {
+  it("waits out a starting backend's 503, which carries Retry-After without the platform's header", async () => {
+    answers = [
+      {
+        status: 503,
+        headers: { "retry-after": "1", "content-type": "application/json" },
+        body: '"error.server_starting"',
+      },
+      READY,
+    ];
+    const response = await fetch(`${frontendUrl}/api/items`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true });
+    assert.equal(requests.length, 2);
+    assert.ok(requests[1].at - requests[0].at >= 950);
+  });
+
+  it("passes a 503 without a usable Retry-After on at once", async () => {
     for (const headers of [
-      { "retry-after": "1" },
+      {},
       { "x-antelope-cold-start": "1" },
       { "x-antelope-cold-start": "1", "retry-after": "soon" },
     ]) {
@@ -243,7 +259,7 @@ describe("a wait the event loop held up", () => {
 });
 
 describe("a failed backend response", () => {
-  it("keeps Retry-After for the platform's cold start only", async () => {
+  it("keeps Retry-After for a 503 that asks to come back, in whole seconds", async () => {
     const cold = await backendResponseError(
       new Response("", { status: 503, headers: COLD.headers }),
     );
@@ -252,7 +268,7 @@ describe("a failed backend response", () => {
     const own = await backendResponseError(
       new Response("", { status: 503, headers: { "retry-after": "1" } }),
     );
-    assert.equal(own.retryAfter, undefined);
+    assert.equal(own.retryAfter, "1");
     const unsigned = await backendResponseError(
       new Response("", {
         status: 503,

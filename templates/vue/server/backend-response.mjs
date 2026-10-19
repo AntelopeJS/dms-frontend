@@ -4,7 +4,7 @@
 // allows.
 
 import { GENERIC_ERROR_MESSAGE } from "./auth/backend.mjs";
-import { isColdStart } from "./backend-wake.mjs";
+import { isWaitable } from "./backend-wake.mjs";
 import { isFrontendVisit, redirectFrontendVisit } from "./inertia.mjs";
 
 // What a JSON caller gets when the backend fails: the generic i18n key of the
@@ -47,7 +47,7 @@ async function refusalCode(response) {
 
 /** The error for a failed backend response, with its typed code if any. */
 export async function backendResponseError(response) {
-  const retryAfter = isColdStart(response)
+  const retryAfter = isWaitable(response)
     ? (response.headers.get("retry-after") ?? undefined)
     : undefined;
   return new BackendResponseError(
