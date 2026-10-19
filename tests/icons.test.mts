@@ -252,7 +252,7 @@ describe("the client-bundle icon scan", () => {
     );
     assert.match(
       config,
-      /scan: \{ globInclude: iconScanGlobs\(__dirname, frontendSourceRoots\) \}/,
+      /scan: \{\s*globInclude: iconScanGlobs\(\s*import\.meta\.dirname,\s*frontendSourceRoots,?\s*\),?\s*\}/,
     );
   });
 });

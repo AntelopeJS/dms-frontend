@@ -14,6 +14,8 @@ import {
   createFrontendModuleRegistry,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { sanitizedBuildDeclaration } from "../src/fs-sync";
+import { materializeLayers } from "../src/materialize";
 import { defineDmsFrontendBuild } from "../templates/vue/frontend-build";
 import { autoImportDirectories } from "../templates/vue/frontend-build-loader";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
@@ -117,6 +119,11 @@ describe("The generated build declarations loader", () => {
     const crm = temporaryDirectory("dms-build-crm-");
     writeFixture(
       billing,
+      "package.json",
+      '{"name":"@acme/billing-frontend","version":"1.0.0"}',
+    );
+    writeFixture(
+      billing,
       BUILD_FILE,
       [
         'import { defineDmsFrontendBuild } from "#dms/frontend-build";',
@@ -128,7 +135,12 @@ describe("The generated build declarations loader", () => {
       ].join("\n"),
     );
     return [
-      { path: billing, name: "@acme/billing-frontend", priority: 2 },
+      {
+        path: billing,
+        name: "@acme/billing-frontend",
+        packageName: "@acme/billing-frontend",
+        priority: 2,
+      },
       { path: crm, packageName: "@acme/crm-frontend", priority: 1 },
     ];
   }
@@ -194,12 +206,10 @@ describe("The generated build declarations loader", () => {
       const layers = sources();
       const registry = createFrontendModuleRegistry(workspace, layers);
       writeFrontendModuleRegistry(workspace, layers);
+      // As `ajs dms` lays a module out: copied, with its own package.json,
+      // which is the scope Vite 8's config bundler resolves `#` imports in.
+      materializeLayers(workspace, layers);
       const declaration = join(registry.modules[0].root, BUILD_FILE);
-      writeFixture(
-        registry.modules[0].root,
-        BUILD_FILE,
-        readFileSync(join(layers[0].path, BUILD_FILE), "utf8"),
-      );
       writeFixture(
         workspace,
         "probe.config.ts",
@@ -237,5 +247,16 @@ describe("The generated build declarations loader", () => {
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }
+  });
+});
+
+describe("A module's build declaration in the workspace", () => {
+  it("imports the helper by path, whatever the quotes", () => {
+    assert.equal(
+      sanitizedBuildDeclaration(
+        'import { a } from \'#dms/frontend-build\';\nimport { b } from "#dms/frontend-build";\nimport c from "#dms/frontend-module";\n',
+      ),
+      'import { a } from \'../../frontend-build.ts\';\nimport { b } from "../../frontend-build.ts";\nimport c from "#dms/frontend-module";\n',
+    );
   });
 });

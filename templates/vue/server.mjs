@@ -94,8 +94,7 @@ async function developmentServer() {
         // The generated secrets and the modules' server code, never served.
         fs: { deny: DEV_FS_DENY },
       };
-      if (frontendHttpServer)
-        serverOptions.hmr = { server: frontendHttpServer };
+      if (frontendHttpServer) serverOptions.ws = { server: frontendHttpServer };
       return createViteServer({
         server: serverOptions,
         appType: "custom",

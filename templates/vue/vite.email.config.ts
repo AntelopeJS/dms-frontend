@@ -14,7 +14,10 @@ interface FrontendModuleRegistry {
 }
 
 const registry = JSON.parse(
-  readFileSync(resolve(__dirname, "generated-frontend-modules.json"), "utf8"),
+  readFileSync(
+    resolve(import.meta.dirname, "generated-frontend-modules.json"),
+    "utf8",
+  ),
 ) as FrontendModuleRegistry;
 const moduleAliases = Object.fromEntries(
   registry.modules.map((module) => [`@frontend/${module.id}`, module.root]),
@@ -42,7 +45,7 @@ export default defineConfig({
     {
       name: "dms-email-locale-assets",
       buildStart() {
-        const directory = resolve(__dirname, "locales.generated");
+        const directory = resolve(import.meta.dirname, "locales.generated");
         for (const file of readdirSync(directory).filter((name) =>
           name.endsWith(".json"),
         )) {
@@ -66,7 +69,7 @@ export default defineConfig({
           // Inlined verbatim as a module specifier in the generated import, so
           // it has to be POSIX: a native Windows path would reach the parser
           // with its backslashes read as string escapes. See vite.config.ts.
-          [normalizePath(resolve(__dirname, "email-runtime.ts"))]: [
+          [normalizePath(resolve(import.meta.dirname, "email-runtime.ts"))]: [
             "useDmsAppConfig",
             "useDmsRuntimeConfig",
             "defineDmsAppConfig",
