@@ -1010,19 +1010,41 @@ describe("The module testing helper", () => {
     const warnings: string[] = [];
     const filled = privateOptionsFromJson(
       {
-        shop: { apiKey: "", region: "eu", hooks: { token: "" } },
+        shop: {
+          apiKey: "",
+          region: "eu",
+          retries: 5,
+          hooks: { token: "" },
+          keys: ["", ""],
+        },
         other: { apiKey: "" },
       },
       JSON.stringify({
-        shop: { apiKey: "from-env", region: "us", hooks: { token: "t" } },
+        shop: {
+          apiKey: "from-env",
+          region: "us",
+          retries: "9",
+          hooks: "flattened",
+          keys: ["k1", "k2"],
+          added: "new",
+        },
         missing: { apiKey: "ignored" },
+        __proto__: { polluted: "yes" },
+        constructor: { polluted: "yes" },
       }),
       (message: string) => warnings.push(message),
     );
     assert.deepEqual(filled, {
-      shop: { apiKey: "from-env", region: "eu", hooks: { token: "t" } },
+      shop: {
+        apiKey: "from-env",
+        region: "eu",
+        retries: 5,
+        hooks: { token: "" },
+        keys: ["k1", "k2"],
+      },
       other: { apiKey: "" },
     });
+    assert.equal(({} as Record<string, unknown>).polluted, undefined);
     assert.deepEqual(warnings, []);
 
     const untouched = { shop: { apiKey: "" } };

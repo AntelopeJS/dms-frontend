@@ -49,15 +49,33 @@ function readJsonFile(url, fallback) {
   }
 }
 
-/** Sets `value` at `path` when the object holding it exists but lacks it. */
-function fillPath(target, path, value) {
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/** The object holding `path`'s last key, when every key up to it is own. */
+function holderOf(target, path) {
   let node = target;
   for (const key of path.slice(0, -1)) {
-    if (typeof node[key] !== "object" || node[key] === null) return;
+    if (UNSAFE_KEYS.has(key) || !Object.hasOwn(node, key)) return undefined;
     node = node[key];
+    if (typeof node !== "object" || node === null) return undefined;
   }
+  return UNSAFE_KEYS.has(path.at(-1)) ? undefined : node;
+}
+
+/** Sets `value` at `path` when the object holding it exists but lacks it. */
+function fillPath(target, path, value) {
+  const holder = holderOf(target, path);
   const key = path.at(-1);
-  if (typeof node[key] !== "string" || node[key] === "") node[key] = value;
+  if (holder && (holder[key] === undefined || holder[key] === ""))
+    holder[key] = value;
+}
+
+/** Sets `value` at `path` only where the build left an empty string. */
+function fillEmptied(target, path, value) {
+  const holder = holderOf(target, path);
+  const key = path.at(-1);
+  if (holder && Object.hasOwn(holder, key) && holder[key] === "")
+    holder[key] = value;
 }
 
 /**
@@ -77,10 +95,10 @@ export function privateOptionsWithFallbacks(modules, environment, env) {
   return modules;
 }
 
-/** Each string leaf of `value`, with its path. */
+/** Each string leaf of `value`, array items included, with its path. */
 function* stringLeaves(value, path = []) {
   if (typeof value === "string") yield [path, value];
-  else if (typeof value === "object" && value !== null && !Array.isArray(value))
+  else if (typeof value === "object" && value !== null)
     for (const [key, child] of Object.entries(value))
       yield* stringLeaves(child, [...path, key]);
 }
@@ -89,9 +107,9 @@ function* stringLeaves(value, path = []) {
  * Fills the private values a build left empty from `DMS_PRIVATE_OPTIONS`, a
  * JSON object of private options by module id
  * (`{"acme__shop-frontend-vue":{"apiKey":"…"}}`): any module's secrets, where
- * `DMS_HTML_RENDER_SECRET` and `DMS_OAUTH_RELAY_SECRET` name two of them. As
- * with those, a value the manifest carries wins, and only a section the
- * module publishes is filled.
+ * `DMS_HTML_RENDER_SECRET` and `DMS_OAUTH_RELAY_SECRET` name two of them. Only
+ * a value the build emptied is filled, array items included: a value the
+ * manifest carries wins, and no option or section is added or replaced.
  *
  * @param modules The private options by module id
  * @param json The variable's value; nothing is filled when unset
@@ -110,9 +128,9 @@ export function privateOptionsFromJson(modules, json, warn) {
     return modules;
   }
   for (const [id, options] of Object.entries(given)) {
-    if (!modules[id]) continue;
+    if (UNSAFE_KEYS.has(id) || !Object.hasOwn(modules, id)) continue;
     for (const [path, value] of stringLeaves(options))
-      if (path.length > 0) fillPath(modules[id], path, value);
+      if (path.length > 0) fillEmptied(modules[id], path, value);
   }
   return modules;
 }

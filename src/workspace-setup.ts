@@ -561,7 +561,8 @@ export async function setupWorkspace(
     takenAt:
       opts.snapshot?.snapshot.takenAt ?? fetchedAt ?? new Date().toISOString(),
     digest: manifestDigest(manifest.modules),
-    authenticated: !!opts.snapshot || !!opts.bootstrapSecret,
+    // A cached manifest may have been read without it.
+    authenticated: !!opts.snapshot || (!!opts.bootstrapSecret && !fromCache),
   };
 
   assertLayersSupportRenderer(layers, { workspaceDir });

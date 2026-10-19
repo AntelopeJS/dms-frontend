@@ -83,8 +83,9 @@ export function parsePrivateOptions(
 function readPath(options: unknown, path: readonly string[]): unknown {
   let value = options;
   for (const key of path) {
-    if (!isOptions(value)) return undefined;
-    value = value[key];
+    if (typeof value !== "object" || value === null) return undefined;
+    if (!Object.prototype.hasOwnProperty.call(value, key)) return undefined;
+    value = (value as Record<string, unknown>)[key];
   }
   return value;
 }
@@ -94,7 +95,7 @@ function* emptyStrings(
   path: string[] = [],
 ): Generator<string[]> {
   if (value === "") yield path;
-  else if (isOptions(value))
+  else if (typeof value === "object" && value !== null)
     for (const [key, child] of Object.entries(value))
       yield* emptyStrings(child, [...path, key]);
 }

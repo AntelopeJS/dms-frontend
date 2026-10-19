@@ -383,13 +383,14 @@ describe("ajs dms start", () => {
       "acme__shop-frontend-vue": {
         apiKey: "",
         webhook: { token: "" },
+        keys: [""],
         htmlRender: { serviceSecret: "" },
       },
     };
     const unset = await start({}, [dmsModule(MANIFEST_SECRET)], built);
     assert.match(
       unset.log,
-      /▲ acme__shop-frontend-vue: private option apiKey is not set\n▲ acme__shop-frontend-vue: private option webhook\.token is not set\n {2}→ Set them in DMS_PRIVATE_OPTIONS/,
+      /▲ acme__shop-frontend-vue: private option apiKey is not set\n▲ acme__shop-frontend-vue: private option webhook\.token is not set\n▲ acme__shop-frontend-vue: private option keys\.0 is not set\n {2}→ Set them in DMS_PRIVATE_OPTIONS/,
     );
     assert.doesNotMatch(unset.log, /private option htmlRender/);
 
