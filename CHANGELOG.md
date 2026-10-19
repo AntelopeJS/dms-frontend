@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.7.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.4...v0.7.0)
+
+### 🚀 Enhancements
+
+- **cli:** ⚠️  Build a frontend from a snapshot, without secrets or a live backend ([#157](https://github.com/AntelopeJS/dms-frontend/pull/157))
+
+#### ⚠️ Breaking Changes
+
+- **cli:** ⚠️  Build a frontend from a snapshot, without secrets or a live backend ([#157](https://github.com/AntelopeJS/dms-frontend/pull/157))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.6.4
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.3...v0.6.4)
