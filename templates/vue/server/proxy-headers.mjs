@@ -28,13 +28,15 @@ function varyWithEncoding(vary) {
  * Writes the backend's status and end-to-end headers on `response`. With an
  * `encoding`, the proxy compresses the body itself: its length is no longer
  * known, and a strong validator no longer names these bytes. A `Location` on
- * the backend's origin becomes the same path on the frontend's.
+ * the backend's origin becomes the same path on the frontend's when
+ * `isProxiedPath` says the frontend proxies it (see `relayedLocation`).
  */
 export function writeProxyHeaders(
   response,
   upstream,
   encoding,
   varies = false,
+  isProxiedPath,
 ) {
   const headers = Object.fromEntries(upstream.headers);
   const named = (headers.connection ?? "")
@@ -45,7 +47,11 @@ export function writeProxyHeaders(
   const cookies = upstream.headers.getSetCookie?.() ?? [];
   if (cookies.length) headers["set-cookie"] = cookies;
   if (headers.location && upstream.url)
-    headers.location = relayedLocation(headers.location, upstream.url);
+    headers.location = relayedLocation(
+      headers.location,
+      upstream.url,
+      isProxiedPath,
+    );
   if (encoding || varies) headers.vary = varyWithEncoding(headers.vary);
   if (encoding) {
     delete headers["content-length"];

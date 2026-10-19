@@ -225,9 +225,10 @@ function asResponse(result) {
  * Writes a handler's answer. The cookies the event wrote are already on the
  * Node response; those of a returned `Response` are added to them. A backend
  * answer the handler relays goes out as the proxy relays one: its `Location`
- * on the frontend's origin, no cookie of another site its fetch reached.
+ * on the frontend's origin when the frontend proxies its path, no cookie of
+ * another site its fetch reached.
  */
-async function writeServerResponse(request, response, result) {
+async function writeServerResponse(request, response, result, isProxiedPath) {
   const answer = asResponse(result);
   const cookies = [response.getHeader("set-cookie") ?? []]
     .flat()
@@ -237,7 +238,7 @@ async function writeServerResponse(request, response, result) {
     response.setHeader(
       name,
       name === "location" && isBackendUrl(answer.url)
-        ? relayedLocation(value, answer.url)
+        ? relayedLocation(value, answer.url, isProxiedPath)
         : value,
     );
   });
@@ -260,7 +261,8 @@ async function writeServerResponse(request, response, result) {
  * through reaches the server's error handling with the cookies written so
  * far.
  *
- * @param context See `createServerEvent`
+ * @param context See `createServerEvent`, plus `isProxiedPath(pathname)`:
+ *   whether the frontend sends that path to the backend
  */
 export async function answerModuleRoute(context) {
   const { request, response, route } = context;
@@ -274,5 +276,5 @@ export async function answerModuleRoute(context) {
   }
   const event = createServerEvent(context);
   const result = await route.handler(event);
-  await writeServerResponse(request, response, result);
+  await writeServerResponse(request, response, result, context.isProxiedPath);
 }

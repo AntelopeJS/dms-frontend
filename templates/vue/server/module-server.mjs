@@ -20,6 +20,7 @@ import {
   environmentBackendProxies,
   readDeclaredBackendProxies,
 } from "./public-endpoints.mjs";
+import { reachesBackend } from "./request-routing.mjs";
 
 const WORKSPACE_ROOT = new URL("../", import.meta.url);
 const SOURCE_LOADER = "/server-modules.generated.ts";
@@ -219,6 +220,7 @@ export async function handleModuleRoute(request, response, pathname, modules) {
     route: reached.route,
     params: reached.params,
     view: modules.serverAuth.view,
+    isProxiedPath: (path) => reachesBackend(path, modules),
     ...modules.context(reached.route.id),
   });
   return true;

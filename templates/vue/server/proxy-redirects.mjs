@@ -26,13 +26,22 @@ export function isBackendUrl(
 /**
  * The `Location` the client gets for a backend answer fetched from
  * `fetchedUrl`. The proxy keeps the path, so a location on the backend's
- * origin becomes the same path on the frontend's: the backend's origin is
- * often unreachable from the browser. Another site's location is kept.
+ * origin becomes the same path on the frontend's when the frontend sends that
+ * path to the backend: the backend's origin is often unreachable from the
+ * browser. A backend path the frontend does not proxy (a signed file URL the
+ * backend serves itself) stays an absolute backend URL, which the browser
+ * follows to the backend. Another site's location is kept.
  *
  * @param location The backend's `Location`
  * @param fetchedUrl The backend URL the answer came from
+ * @param isProxiedPath `(pathname) => boolean`, whether the frontend server
+ *   sends that path to the backend
  */
-export function relayedLocation(location, fetchedUrl) {
+export function relayedLocation(
+  location,
+  fetchedUrl,
+  isProxiedPath = () => false,
+) {
   let target;
   try {
     target = new URL(location, fetchedUrl);
@@ -40,6 +49,7 @@ export function relayedLocation(location, fetchedUrl) {
     return location;
   }
   if (target.origin !== originOf(fetchedUrl)) return location;
+  if (!isProxiedPath(target.pathname)) return target.href;
   const path = `${target.pathname}${target.search}${target.hash}`;
   // `//host` would name another host: `/.` keeps it a path.
   return path.startsWith("//") ? `/.${path}` : path;

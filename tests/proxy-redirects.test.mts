@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { after, before, beforeEach, describe, it } from "node:test";
+import { relayedLocation } from "../templates/vue/server/proxy-redirects.mjs";
 import "./fixtures/dms-backend-proxies.mts";
 
 // A backend redirect is the browser's to follow. Followed by the proxy, a
@@ -36,6 +37,8 @@ const ENVIRONMENT = [
 ] as const;
 const REDIRECT_STATUSES = [302, 303, 307] as const;
 const BACKEND_COOKIE = "backend=1; Path=/";
+/** A URL the backend signs and serves itself, on a path no proxy covers. */
+const SIGNED_FILE = "/file-storage/files/report.pdf?token=signed";
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -68,6 +71,7 @@ describe("backend redirects", () => {
       "/api/internal": `${backendUrl}/api/target?from=internal#top`,
       "/api/relative": "target?from=relative",
       "/api/climbing": `${backendUrl}//elsewhere.test/x`,
+      "/api/signed": `${backendUrl}${SIGNED_FILE}`,
     }[url.pathname];
     if (location) {
       response.writeHead(status, { location, "set-cookie": BACKEND_COOKIE });
@@ -154,14 +158,23 @@ describe("backend redirects", () => {
       );
     });
 
-    it("keeps a backend path that starts with // a path on the frontend", async () => {
-      const response = await visit("/api/climbing");
-      const location = response.headers.get("location") ?? "";
-      assert.equal(new URL(location, frontendUrl).origin, frontendUrl);
+    it("keeps a backend path the frontend does not proxy on the backend", async () => {
+      const response = await visit("/api/signed");
+      assert.equal(response.status, 302);
       assert.equal(
-        new URL(location, frontendUrl).pathname,
-        "//elsewhere.test/x",
+        response.headers.get("location"),
+        `${backendUrl}${SIGNED_FILE}`,
       );
+    });
+
+    it("never turns a backend path that starts with // into another host", async () => {
+      const response = await visit("/api/climbing");
+      const location = new URL(
+        response.headers.get("location") ?? "",
+        frontendUrl,
+      );
+      assert.equal(location.origin, backendUrl);
+      assert.equal(location.pathname, "//elsewhere.test/x");
     });
 
     it("leaves an answer that is no redirect as it was", async () => {
@@ -191,33 +204,39 @@ describe("backend redirects", () => {
     before(async () => {
       const { serveModuleRoutes } =
         await import("../templates/vue/server/module-testing.mjs");
-      served = (await serveModuleRoutes([
-        {
-          id: "relay",
-          setup: (server: ModuleServer) => {
-            server.registerRoute("GET", "/api/_relay/json", (event) =>
-              event.backend("/api/maps?status=302"),
-            );
-            server.registerRoute("GET", "/api/_relay/raw", (event) =>
-              fetch(event.backendUrl("/api/internal?status=303"), {
-                redirect: "manual",
-              }),
-            );
-            server.registerRoute("GET", "/api/_relay/followed", (event) =>
-              fetch(event.backendUrl("/api/maps?status=302")),
-            );
-            server.registerRoute(
-              "GET",
-              "/api/_relay/own",
-              () =>
-                new Response(null, {
-                  status: 302,
-                  headers: { location: `${backendUrl}/api/target` },
+      served = (await serveModuleRoutes(
+        [
+          {
+            id: "relay",
+            setup: (server: ModuleServer) => {
+              server.registerRoute("GET", "/api/_relay/json", (event) =>
+                event.backend("/api/maps?status=302"),
+              );
+              server.registerRoute("GET", "/api/_relay/raw", (event) =>
+                fetch(event.backendUrl("/api/internal?status=303"), {
+                  redirect: "manual",
                 }),
-            );
+              );
+              server.registerRoute("GET", "/api/_relay/signed", (event) =>
+                fetch(event.backendUrl("/api/signed"), { redirect: "manual" }),
+              );
+              server.registerRoute("GET", "/api/_relay/followed", (event) =>
+                fetch(event.backendUrl("/api/maps?status=302")),
+              );
+              server.registerRoute(
+                "GET",
+                "/api/_relay/own",
+                () =>
+                  new Response(null, {
+                    status: 302,
+                    headers: { location: `${backendUrl}/api/target` },
+                  }),
+              );
+            },
           },
-        },
-      ])) as ServedModules;
+        ],
+        { backendProxies: [{ module: "dms", path: "/api/**" }] },
+      )) as ServedModules;
     });
 
     after(() => served?.close());
@@ -251,6 +270,17 @@ describe("backend redirects", () => {
       assert.deepEqual(response.headers.getSetCookie(), [BACKEND_COOKIE]);
     });
 
+    it("keeps a route's backend redirect to a path the frontend does not proxy on the backend", async () => {
+      const response = await fetch(`${served?.url}/api/_relay/signed`, {
+        redirect: "manual",
+      });
+      assert.equal(response.status, 302);
+      assert.equal(
+        response.headers.get("location"),
+        `${backendUrl}${SIGNED_FILE}`,
+      );
+    });
+
     it("drops the cookies of another site a route's fetch was redirected to", async () => {
       const response = await fetch(`${served?.url}/api/_relay/followed`, {
         redirect: "manual",
@@ -268,5 +298,54 @@ describe("backend redirects", () => {
         `${backendUrl}/api/target`,
       );
     });
+  });
+});
+
+describe("relayedLocation", () => {
+  const backend = "http://backend.test";
+  const fetched = `${backend}/api/files/1`;
+  const proxied = (path: string) => path.startsWith("/api/");
+
+  it("names a proxied backend path on the frontend", () => {
+    assert.equal(
+      relayedLocation(`${backend}/api/files/2?v=1#x`, fetched, proxied),
+      "/api/files/2?v=1#x",
+    );
+    assert.equal(
+      relayedLocation("../files/3", fetched, proxied),
+      "/api/files/3",
+    );
+  });
+
+  it("keeps a backend path the frontend does not proxy absolute", () => {
+    assert.equal(
+      relayedLocation(`${backend}${SIGNED_FILE}`, fetched, proxied),
+      `${backend}${SIGNED_FILE}`,
+    );
+    assert.equal(
+      relayedLocation(SIGNED_FILE, fetched, proxied),
+      `${backend}${SIGNED_FILE}`,
+    );
+  });
+
+  it("keeps every backend location absolute without a proxied path", () => {
+    assert.equal(
+      relayedLocation(`${backend}/api/files/2`, fetched),
+      `${backend}/api/files/2`,
+    );
+  });
+
+  it("keeps a path that starts with // a path", () => {
+    assert.equal(
+      relayedLocation(`${backend}//elsewhere.test/x`, fetched, () => true),
+      "/.//elsewhere.test/x",
+    );
+  });
+
+  it("keeps another site's location as it came", () => {
+    assert.equal(
+      relayedLocation("https://maps.test/place", fetched, () => true),
+      "https://maps.test/place",
+    );
   });
 });

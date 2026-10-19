@@ -50,12 +50,15 @@ function proxyEncoder(request, upstream) {
     : undefined;
 }
 
-/** Relays a backend answer to the client, compressed when it should be. */
+/**
+ * Relays a backend answer to the client, compressed when it should be.
+ * `isProxiedPath` decides which backend `Location` becomes a frontend path.
+ */
 export async function relayAnswer(
   request,
   response,
   upstream,
-  { fetched = false } = {},
+  { fetched = false, isProxiedPath } = {},
 ) {
   // Only native fetch bodies are decoded. Synthetic/opaque responses may
   // still contain the encoded bytes, and unknown coding chains stay opaque.
@@ -98,6 +101,7 @@ export async function relayAnswer(
     upstream,
     encoder?.encoding,
     isCompressible(request, upstream),
+    isProxiedPath,
   );
   if (!upstream.body || request.method === "HEAD") return response.end();
   const body = Readable.fromWeb(upstream.body);

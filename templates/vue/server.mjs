@@ -36,7 +36,11 @@ import { documentStyleTags } from "./server/dev-styles.mjs";
 import { watchEmailBundle } from "./server/email.mjs";
 import { withFaviconPlaceholder } from "./server/favicon.mjs";
 import { DEV_FS_DENY, denyPrivateFiles } from "./server/dev-private-files.mjs";
-import { ownerLabel, requestOwner } from "./server/request-routing.mjs";
+import {
+  ownerLabel,
+  reachesBackend,
+  requestOwner,
+} from "./server/request-routing.mjs";
 import { routingReport } from "./server/backend-proxies.mjs";
 import { routeRuleFor, ruleHeaders } from "./server/route-rules.mjs";
 import {
@@ -200,8 +204,12 @@ function redirectSignedOutPrivatePage(request, response, props, auth) {
   return true;
 }
 
-/** Sends a request to the backend through the proxy it reached. */
-async function proxy(request, response, backendProxy) {
+/**
+ * Sends a request to the backend through the proxy it reached.
+ * `isProxiedPath` says which backend paths a relayed `Location` may name on
+ * the frontend's origin.
+ */
+async function proxy(request, response, backendProxy, isProxiedPath) {
   const access = proxyAccess(request, SAFE_METHODS, backendProxy);
   if (access.isRefused) {
     refuseCrossOrigin(response);
@@ -220,7 +228,10 @@ async function proxy(request, response, backendProxy) {
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
   });
-  await relayAnswer(request, response, upstream, { fetched: true });
+  await relayAnswer(request, response, upstream, {
+    fetched: true,
+    isProxiedPath,
+  });
 }
 
 /**
@@ -424,7 +435,10 @@ export async function handleRequest(request, response) {
     return serveRendererFile(devServer, request, response, pathname);
   if (owner.kind === "module")
     return handleModuleRoute(request, response, pathname, modules);
-  if (owner.kind === "backend") return proxy(request, response, owner.proxy);
+  if (owner.kind === "backend")
+    return proxy(request, response, owner.proxy, (path) =>
+      reachesBackend(path, modules, (file) => hasRendererFile(devServer, file)),
+    );
   if (owner.kind === "not-found") return writeNotFound(response);
   if (requestFailure.hasMalformedPath(request.url))
     return requestFailure.writeBadRequest(response);
