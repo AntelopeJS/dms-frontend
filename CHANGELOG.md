@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.6.4
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.3...v0.6.4)
+
+### 🚀 Enhancements
+
+- **server:** Wait out a backend's cold-start 503 for GET and HEAD ([#156](https://github.com/AntelopeJS/dms-frontend/pull/156))
+
+### 🩹 Fixes
+
+- **start:** Run the production server under NODE_ENV=production ([#154](https://github.com/AntelopeJS/dms-frontend/pull/154))
+- **ssr:** Name hand-over reads in the dev warning ([#155](https://github.com/AntelopeJS/dms-frontend/pull/155))
+
+### 📖 Documentation
+
+- Clarify learning paths and illustrate real outcomes ([#152](https://github.com/AntelopeJS/dms-frontend/pull/152))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+- Alessandro Aloisio
+
 ## v0.6.3
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.2...v0.6.3)
