@@ -219,6 +219,19 @@ export function ensureWorkspace(workspaceKey: string): string {
   return dir;
 }
 
+/**
+ * Ensure a workspace directory the caller named exists, and return its
+ * absolute path. Unlike one under the loader home, it is left readable by
+ * others: a build that ships with its project holds no secret (private
+ * values are dropped), and an image is often built by one user and served
+ * by another.
+ */
+export function ensureExplicitWorkspace(dir: string): string {
+  const absolute = resolve(dir);
+  mkdirSync(absolute, { recursive: true });
+  return absolute;
+}
+
 export interface WorkspaceEntry {
   dir: string;
   backendUrl: string;

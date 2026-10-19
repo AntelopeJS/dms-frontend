@@ -21,9 +21,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ["DMS_BOOTSTRAP_SECRET", "Same as --bootstrap-secret"],
   [
     "DMS_SESSION_SECRET",
-    "Session key, 32 characters or more; build and start need one, dev makes one when unset",
+    "Session key, 32 characters or more; start needs one, dev makes one when unset",
   ],
   ["DMS_OFFLINE", "Same as --offline, unless 0, false, no or off"],
+  ["DMS_WORKSPACE_DIR", "Same as build and start --workspace"],
   ["DMS_PREPARE_STRICT", "Same as prepare --strict, read like DMS_OFFLINE"],
   ["PORT", "Same as -p"],
   [
@@ -48,11 +49,11 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ],
   [
     "DMS_HTML_RENDER_SECRET",
-    "E-mail render secret, used when the backend publishes none in the manifest",
+    "E-mail render secret, the backend's htmlRender.serviceSecret; start needs it, a build keeps none",
   ],
   [
     "DMS_OAUTH_RELAY_SECRET",
-    "OAuth relay secret, used when the backend publishes none in the manifest",
+    "OAuth relay secret the backend expects; start needs it, a build keeps none",
   ],
   [
     "DMS_AUTH_ESTABLISH_ENDPOINTS",

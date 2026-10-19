@@ -34,6 +34,7 @@ import {
   assertCachedLayerPathsExist,
   type ManifestCacheUse,
   resolveManifest,
+  writeCachedManifest,
 } from "./manifest";
 import {
   collectManifestSecrets,
@@ -48,10 +49,18 @@ import {
   writeWorkspacePackageJson,
 } from "./materialize";
 import {
+  ensureExplicitWorkspace,
   ensureWorkspace,
+  type Manifest,
   ResolvedLayer,
   writeWorkspaceMeta,
 } from "./workspace";
+import {
+  type FrontendSnapshot,
+  manifestDigest,
+  SNAPSHOT_LAYERS_DIR,
+  writeBuildOrigin,
+} from "./snapshot";
 import { CancelledError, exitCodeForSignal } from "./cancellation";
 import { endInterruptedTask } from "./output";
 import { canonicalizeBackendUrl, DEPS_HASH_FILE } from "./config";
@@ -405,6 +414,16 @@ export interface SetupWorkspaceOptions {
   workspaceKey?: string;
   /** Credential presented on the backend's layer endpoints */
   bootstrapSecret?: string;
+  /**
+   * Directory to set the workspace up in, instead of the one keyed on the
+   * backend under the loader home: a build that ships with the project.
+   */
+  workspaceDir?: string;
+  /**
+   * Build from this snapshot, without the backend: its manifest and the layers
+   * under `<dir>/layers`. Build mode only.
+   */
+  snapshot?: { dir: string; snapshot: FrontendSnapshot };
   /** Called before `pnpm install` starts, e.g. to end the task that set the workspace up */
   beforeInstall?: () => Promise<void>;
 }
@@ -429,6 +448,90 @@ function manifestCacheUse(
   return mode === "build" ? "never" : "fallback";
 }
 
+interface WorkspaceSource {
+  manifest: Manifest;
+  fromCache: boolean;
+  fetchedAt?: string;
+  layers: ResolvedLayer[];
+}
+
+/** The manifest and layers of a snapshot: no backend is asked. */
+async function snapshotLayers(
+  { dir, snapshot }: NonNullable<SetupWorkspaceOptions["snapshot"]>,
+  workspaceDir: string,
+): Promise<WorkspaceSource> {
+  const { manifest, takenAt } = snapshot;
+  const cacheDir = join(dir, SNAPSHOT_LAYERS_DIR);
+  assertCachedArchivesExist(manifest.modules, cacheDir, takenAt);
+  // `start` reads the module set the build serves from the cached manifest.
+  writeCachedManifest(workspaceDir, manifest, "drop", takenAt);
+  return {
+    manifest,
+    fromCache: false,
+    layers: await buildLayersFromCache(manifest.modules, cacheDir),
+  };
+}
+
+/**
+ * The manifest and layers the backend serves, or the workspace cached from
+ * it: their paths in dev, the extracted archive in build.
+ */
+async function servedLayers(
+  opts: SetupWorkspaceOptions,
+  workspaceDir: string,
+): Promise<WorkspaceSource> {
+  const { backendUrl, force, mode, offline, clientUrl, bootstrapSecret } = opts;
+  const resolved = await resolveManifest(
+    workspaceDir,
+    backendUrl,
+    manifestCacheUse(mode, offline),
+    {
+      clientUrl,
+      bootstrapSecret,
+      privateValues: mode === "build" ? "drop" : "keep",
+    },
+  );
+  const { manifest, fromCache, fetchedAt } = resolved;
+
+  if (mode === "dev") {
+    assertLayerPathsServed(manifest.modules, backendUrl, {
+      bootstrapSecret,
+      cache: fromCache ? { fetchedAt } : undefined,
+    });
+    if (fromCache) {
+      assertCachedLayerPathsExist(manifest.modules, fetchedAt);
+    }
+    return { ...resolved, layers: buildLayersFromPaths(manifest.modules) };
+  }
+  const cacheDir = join(workspaceDir, ".layers-cache");
+  if (fromCache) {
+    // --offline: reuse the layers extracted by the last online run, after
+    // checking the extraction is complete — `buildLayersFromCache`
+    // silently skips missing archives.
+    if (!existsSync(cacheDir)) {
+      throw new CliError({
+        title: "No layers archive was downloaded for this workspace",
+        fixes: [
+          "Run once without --offline, with the backend reachable, first",
+        ],
+      });
+    }
+    assertCachedArchivesExist(manifest.modules, cacheDir, fetchedAt);
+  } else {
+    await downloadAndExtractLayers(
+      backendUrl,
+      manifest.pack,
+      cacheDir,
+      force,
+      bootstrapSecret,
+    );
+  }
+  return {
+    ...resolved,
+    layers: await buildLayersFromCache(manifest.modules, cacheDir),
+  };
+}
+
 /**
  * Full workspace setup: fetch the manifest, resolve frontend modules, check
  * that each supports this loader release, copy templates, write the workspace
@@ -439,56 +542,27 @@ function manifestCacheUse(
 export async function setupWorkspace(
   opts: SetupWorkspaceOptions,
 ): Promise<SetupWorkspaceResult> {
-  const { backendUrl, force, mode, offline, clientUrl, bootstrapSecret } = opts;
+  const { backendUrl, force, mode } = opts;
 
   const workspaceKey = opts.workspaceKey ?? canonicalizeBackendUrl(backendUrl);
-  const workspaceDir = ensureWorkspace(workspaceKey);
+  const workspaceDir = opts.workspaceDir
+    ? ensureExplicitWorkspace(opts.workspaceDir)
+    : ensureWorkspace(workspaceKey);
   writeWorkspaceMeta(workspaceDir, backendUrl, workspaceKey);
 
-  const resolved = await resolveManifest(
-    workspaceDir,
-    backendUrl,
-    manifestCacheUse(mode, offline),
-    clientUrl,
-    bootstrapSecret,
-  );
-  const { manifest, fromCache, fetchedAt } = resolved;
-
-  let layers: ResolvedLayer[];
-  if (mode === "dev") {
-    assertLayerPathsServed(manifest.modules, backendUrl, {
-      bootstrapSecret,
-      cache: fromCache ? { fetchedAt } : undefined,
+  const { manifest, fromCache, fetchedAt, layers } = opts.snapshot
+    ? await snapshotLayers(opts.snapshot, workspaceDir)
+    : await servedLayers(opts, workspaceDir);
+  if (mode === "build") {
+    writeBuildOrigin(workspaceDir, {
+      source: opts.snapshot ? "snapshot" : "backend",
+      backendUrl: canonicalizeBackendUrl(backendUrl),
+      takenAt:
+        opts.snapshot?.snapshot.takenAt ??
+        fetchedAt ??
+        new Date().toISOString(),
+      digest: manifestDigest(manifest.modules),
     });
-    if (fromCache) {
-      assertCachedLayerPathsExist(manifest.modules, fetchedAt);
-    }
-    layers = buildLayersFromPaths(manifest.modules);
-  } else {
-    const cacheDir = join(workspaceDir, ".layers-cache");
-    if (fromCache) {
-      // --offline: reuse the layers extracted by the last online run, after
-      // checking the extraction is complete — `buildLayersFromCache`
-      // silently skips missing archives.
-      if (!existsSync(cacheDir)) {
-        throw new CliError({
-          title: "No layers archive was downloaded for this workspace",
-          fixes: [
-            "Run once without --offline, with the backend reachable, first",
-          ],
-        });
-      }
-      assertCachedArchivesExist(manifest.modules, cacheDir, fetchedAt);
-    } else {
-      await downloadAndExtractLayers(
-        backendUrl,
-        manifest.pack,
-        cacheDir,
-        force,
-        bootstrapSecret,
-      );
-    }
-    layers = await buildLayersFromCache(manifest.modules, cacheDir);
   }
 
   assertLayersSupportRenderer(layers, { workspaceDir });

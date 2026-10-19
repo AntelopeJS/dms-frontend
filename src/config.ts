@@ -62,9 +62,28 @@ export const WORKSPACE_DIR_MODE = 0o700;
  * readable afterwards.
  */
 export function writeSecretBearingFile(file: string, content: string): void {
+  writeFileAtomically(file, content, SECRET_BEARING_FILE_MODE);
+}
+
+/**
+ * A generated file that carries no secret, readable by whoever runs the
+ * build: an image built as one user is served as another.
+ */
+const SHAREABLE_FILE_MODE = 0o644;
+
+/**
+ * Write a generated file that may replace a secret-bearing one: through a
+ * temporary sibling, so its mode is the one asked for even when the file
+ * existed with another.
+ */
+export function writeShareableFile(file: string, content: string): void {
+  writeFileAtomically(file, content, SHAREABLE_FILE_MODE);
+}
+
+function writeFileAtomically(file: string, content: string, mode: number) {
   const temp = `${file}.${process.pid}${TEMP_FILE_SUFFIX}`;
-  writeFileSync(temp, content, { mode: SECRET_BEARING_FILE_MODE });
-  chmodSync(temp, SECRET_BEARING_FILE_MODE);
+  writeFileSync(temp, content, { mode });
+  chmodSync(temp, mode);
   renameSync(temp, file);
 }
 
@@ -319,6 +338,12 @@ export const Options = {
     "Exit 1 when the workspace cannot be prepared, and 2 when the backend URL is missing or invalid, instead of warning and exiting 0 (env: DMS_PREPARE_STRICT)",
   ),
 
+  workspace(description: string): Option {
+    return new Option("--workspace <dir>", description).env(
+      "DMS_WORKSPACE_DIR",
+    );
+  },
+
   bootstrapSecret(discovery?: string): Option {
     return new Option(
       "--bootstrap-secret <secret>",
@@ -393,7 +418,7 @@ export function normalizeBootstrapSecret(
   return trimmed;
 }
 
-export type SessionSecretMode = "dev" | "build" | "start";
+export type SessionSecretMode = "dev" | "start";
 
 const SESSION_SECRET_MIN_LENGTH = 32;
 
@@ -417,7 +442,7 @@ export function resolveSessionSecret(
     reason:
       mode === "dev"
         ? "dev generates an ephemeral secret only when the variable is not set at all."
-        : "build and start sign sessions with it, so it must stay the same across restarts.",
+        : "start signs sessions with it, so it must stay the same across restarts.",
     fixes: [
       "Create one: openssl rand -hex 32, then set it in the environment or ./.env",
     ],

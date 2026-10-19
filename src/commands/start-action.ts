@@ -1,5 +1,5 @@
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { CliError, formatDuration, getProcessUi } from "@antelopejs/core/cli";
 import {
   canonicalizeBackendUrl,
@@ -15,6 +15,7 @@ import {
   writeWorkspaceMeta,
 } from "../common";
 import {
+  cachedAge,
   formatAge,
   showWorkspace,
   writeHeader,
@@ -23,7 +24,8 @@ import {
 import { reservePort } from "../ports";
 import { readyLines, runServer } from "../server-process";
 import { reportAvailableUpdate } from "../update-check";
-import { reportFrontendReady } from "../module-set";
+import { compareWithBackend, reportFrontendReady } from "../module-set";
+import { type BuildOrigin, manifestDigest, readBuildOrigin } from "../snapshot";
 
 const BUILD_TIME_MANIFEST = "the build-time manifest";
 const PRODUCTION = "production";
@@ -58,14 +60,80 @@ function serverNodeEnv(): string {
 export interface StartOptions {
   backendUrl?: string;
   port: string;
+  /** Workspace the build was made in, when it is not the one under the home. */
+  workspace?: string;
+}
+
+/**
+ * Says, once the server is ready, whether the backend still serves the
+ * module set the build was made from, and how to refresh a snapshot that
+ * aged. The server never waits for it.
+ */
+async function reportDrift(
+  backendUrl: string,
+  origin: BuildOrigin | undefined,
+): Promise<void> {
+  const ui = getProcessUi();
+  const bootstrapSecret = process.env.DMS_BOOTSTRAP_SECRET?.trim();
+  if (!origin) return;
+  if (!bootstrapSecret) {
+    ui.message(
+      "info",
+      `Built from modules ${origin.digest}; not compared with the backend`,
+      { detail: "Set DMS_BOOTSTRAP_SECRET to have start compare them." },
+    );
+    return;
+  }
+  const drift = await compareWithBackend(
+    backendUrl,
+    origin.digest,
+    manifestDigest,
+    bootstrapSecret,
+  );
+  if (drift.status === "matches") {
+    ui.message(
+      "info",
+      `The backend serves the modules ${origin.digest} this build was made from`,
+    );
+    return;
+  }
+  if (drift.status === "unknown") {
+    ui.message(
+      "info",
+      `Built from modules ${origin.digest}; not compared with the backend: ${drift.reason}`,
+    );
+    return;
+  }
+  const refresh =
+    origin.source === "snapshot"
+      ? `Refresh the snapshot and rebuild: ajs dms snapshot -b ${backendUrl} -o <dir>, then ajs dms build --from <dir>`
+      : `Rebuild: ajs dms build -b ${backendUrl}`;
+  ui.message(
+    "warn",
+    `The backend serves modules ${drift.served}; this build was made from ${origin.digest} (${origin.source}${cachedAge(origin.takenAt)})`,
+    {
+      details: [
+        "Pages of modules added, removed or changed since are missing or stale.",
+        `${ui.symbols.levels.hint} ${refresh}`,
+      ],
+    },
+  );
 }
 
 export async function runStart(options: StartOptions): Promise<void> {
   const startedAt = Date.now();
-  const backendUrl = requireBackendUrl(options.backendUrl);
+  const explicitWorkspace = options.workspace
+    ? resolve(options.workspace)
+    : undefined;
+  const origin = explicitWorkspace
+    ? readBuildOrigin(explicitWorkspace)
+    : undefined;
+  const backendUrl = requireBackendUrl(
+    options.backendUrl ?? origin?.backendUrl,
+  );
   const requestedPort = parsePort(options.port);
   const sessionSecret = resolveSessionSecret("start");
-  const workspaceDir = getWorkspaceDir(backendUrl);
+  const workspaceDir = explicitWorkspace ?? getWorkspaceDir(backendUrl);
   const serverPath = join(workspaceDir, "server.mjs");
   const clientPath = join(workspaceDir, "dist", "client", "index.html");
 
@@ -77,12 +145,16 @@ export async function runStart(options: StartOptions): Promise<void> {
     });
   }
 
-  // Serving from the workspace is a use, which `workspaces` reports.
-  writeWorkspaceMeta(
-    workspaceDir,
-    backendUrl,
-    canonicalizeBackendUrl(backendUrl),
-  );
+  // Serving from the workspace is a use, which `workspaces` reports. One the
+  // caller named is not listed there, and may be read-only (an image): start
+  // writes nothing into it.
+  if (!explicitWorkspace) {
+    writeWorkspaceMeta(
+      workspaceDir,
+      backendUrl,
+      canonicalizeBackendUrl(backendUrl),
+    );
+  }
   const builtAt = statSync(clientPath).mtime.toISOString();
   writeHeader("start", [
     backendUrl,
@@ -103,8 +175,9 @@ export async function runStart(options: StartOptions): Promise<void> {
   }
   const port = reserved.port;
 
-  // The build cached the manifest it was made from: the backend's
-  // secrets come from there unless the environment sets its own.
+  // The build cached the manifest it was made from, without private values
+  // since builds drop them: the server's secrets come from the environment.
+  // A workspace built before keeps the ones it cached.
   const secrets = resolveManifestSecrets(
     collectManifestSecrets(
       readCachedManifest(workspaceDir)?.manifest.modules ?? [],
@@ -113,7 +186,7 @@ export async function runStart(options: StartOptions): Promise<void> {
   reportManifestSecrets(
     secrets,
     (count) =>
-      `Set ${count === 1 ? "it" : "them"}, or rebuild with DMS_BOOTSTRAP_SECRET so the manifest carries ${count === 1 ? "it" : "them"}`,
+      `Set ${count === 1 ? "it" : "them"} in the server's environment, with the value${count === 1 ? "" : "s"} the backend uses`,
   );
   const secretSources = describeSecretSources(
     secrets.sources,
@@ -157,6 +230,7 @@ export async function runStart(options: StartOptions): Promise<void> {
         process.env.DMS_BOOTSTRAP_SECRET,
       );
       void reportAvailableUpdate({ isFollowed: true });
+      void reportDrift(backendUrl, origin ?? readBuildOrigin(workspaceDir));
     },
   });
 

@@ -17,6 +17,7 @@ import { cmdBuild } from "./commands/build";
 import { cmdClean } from "./commands/clean";
 import { cmdDev } from "./commands/dev";
 import { cmdPrepare } from "./commands/prepare";
+import { cmdSnapshot } from "./commands/snapshot";
 import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
 import { cmdWorkspaces } from "./commands/workspaces";
@@ -199,6 +200,7 @@ const runCLI = async () => {
   program.addCommand(cmdDev());
   program.addCommand(cmdBuild());
   program.addCommand(cmdStart());
+  program.addCommand(cmdSnapshot());
   program.addCommand(cmdPrepare());
   program.addCommand(cmdWorkspaces());
   program.addCommand(cmdClean());

@@ -290,7 +290,7 @@ describePosix("framing pnpm install and the production build", () => {
           "Built the production frontend → \\./\\.antelopejs/dms-frontend/[0-9a-f]{64}/dist · \\d+(?:ms|\\.\\ds)",
           "",
           "Next steps",
-          `  ajs dms start -b ${OFFLINE_BACKEND.replaceAll(".", "\\.")}  with the DMS_SESSION_SECRET this build used`,
+          `  ajs dms start -b ${OFFLINE_BACKEND.replaceAll(".", "\\.")}  with DMS_SESSION_SECRET and the server's secrets in its environment`,
           "",
         ].join("\n") + "$",
       ),

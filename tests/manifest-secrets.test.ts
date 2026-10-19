@@ -364,7 +364,7 @@ describe("ajs dms start", () => {
     );
     assert.match(
       log,
-      /▲ DMS_OAUTH_RELAY_SECRET is not set: OAuth sign-in will be refused by the backend\n {2}→ Set them, or rebuild with DMS_BOOTSTRAP_SECRET/,
+      /▲ DMS_OAUTH_RELAY_SECRET is not set: OAuth sign-in will be refused by the backend\n {2}→ Set them in the server's environment, with the values the backend uses/,
     );
     assert.doesNotMatch(log, /Secrets:/);
   });

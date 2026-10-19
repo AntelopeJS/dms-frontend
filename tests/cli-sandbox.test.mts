@@ -175,18 +175,18 @@ describe("running outside a DMS project", () => {
     assert.match(unreachable.stderr, /▲ Skipped prepare:/);
   });
 
-  it("requires a session secret for build and start", async () => {
+  it("requires a session secret to start, and none to build", async () => {
     const noSecret = { env: { DMS_SESSION_SECRET: undefined } };
     const build = await runCli(["build", "-b", BACKEND_URL], noSecret);
-    assert.equal(build.code, 2);
-    assert.equal(build.stdout, "");
-    assert.match(build.stderr, /^✖ DMS_SESSION_SECRET is not set\n/);
-    assert.match(build.stderr, /→ Create one: openssl rand -hex 32/);
-    assert.doesNotMatch(build.stderr, /Error:|at least 32/);
+    assert.notEqual(build.code, 2);
+    assert.doesNotMatch(build.stderr, /DMS_SESSION_SECRET/);
 
     const start = await runCli(["start", "-b", BACKEND_URL], noSecret);
     assert.equal(start.code, 2);
-    assert.match(start.stderr, /✖ DMS_SESSION_SECRET is not set/);
+    assert.equal(start.stdout, "");
+    assert.match(start.stderr, /^✖ DMS_SESSION_SECRET is not set\n/);
+    assert.match(start.stderr, /→ Create one: openssl rand -hex 32/);
+    assert.doesNotMatch(start.stderr, /Error:|at least 32/);
 
     const short = await runCli(["start", "-b", BACKEND_URL], {
       env: { DMS_SESSION_SECRET: "short" },
@@ -223,12 +223,12 @@ describe("following the ajs output contract", () => {
   });
 
   it("reports usage errors with the core template and exit code 2", async () => {
-    const option = await runCli(["build", "--prod"]);
+    const option = await runCli(["build", "--minify"]);
     assert.equal(option.code, 2);
     assert.equal(option.stdout, "");
     assert.equal(
       option.stderr,
-      "✖ Unknown option '--prod'\n" +
+      "✖ Unknown option '--minify'\n" +
         "  Usage: ajs dms build [options]\n" +
         "  → Run ajs dms build --help for usage\n",
     );

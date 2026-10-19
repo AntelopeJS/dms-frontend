@@ -154,3 +154,49 @@ export async function reportFrontendReady(
     return false;
   }
 }
+
+/** How long `start` waits for the manifest it compares its build with. */
+const DRIFT_CHECK_TIMEOUT_MS = 10_000;
+
+/** How a build compares with the module set its backend serves now. */
+export type BuildDrift =
+  | { status: "matches"; served: string }
+  | { status: "drifted"; served: string }
+  | { status: "unknown"; reason: string };
+
+/**
+ * Compares the module set a build was made from with the one the backend
+ * serves now, once, after the server is ready: a snapshot kept with the
+ * project ages as the backend's modules change. Never retried and never
+ * awaited by the server, so a backend that sleeps or is down delays nothing.
+ *
+ * @param backendUrl Backend the server proxies to
+ * @param builtDigest `manifestDigest` of the build's modules
+ * @param digestOf Digest of a served manifest's modules
+ * @param bootstrapSecret Credential for the manifest, when the server has one
+ */
+export async function compareWithBackend(
+  backendUrl: string,
+  builtDigest: string,
+  digestOf: (modules: readonly ManifestModule[]) => string,
+  bootstrapSecret?: string,
+): Promise<BuildDrift> {
+  try {
+    const manifest = await Promise.race([
+      fetchManifest(backendUrl, undefined, bootstrapSecret),
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(
+          () => reject(new Error("the backend did not answer in time")),
+          DRIFT_CHECK_TIMEOUT_MS,
+        ).unref(),
+      ),
+    ]);
+    const served = digestOf(manifest.modules);
+    return { status: served === builtDigest ? "matches" : "drifted", served };
+  } catch (error) {
+    return {
+      status: "unknown",
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}

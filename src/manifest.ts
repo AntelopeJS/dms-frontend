@@ -10,7 +10,13 @@ import {
   type CliProblem,
   FAILURE_EXIT_CODE,
 } from "@antelopejs/core/cli";
-import { parseBackendUrl, UsageError, writeSecretBearingFile } from "./config";
+import {
+  parseBackendUrl,
+  UsageError,
+  writeSecretBearingFile,
+  writeShareableFile,
+} from "./config";
+import { withoutPrivateValues } from "./private-values";
 import { cachedAge, formatAge } from "./output";
 import {
   Manifest,
@@ -342,16 +348,27 @@ export function readCachedManifest(
   }
 }
 
-function writeCachedManifest(workspaceDir: string, manifest: Manifest): void {
-  const entry: ManifestCacheEntry = {
-    manifest,
-    fetchedAt: new Date().toISOString(),
-  };
-  writeSecretBearingFile(
+export function writeCachedManifest(
+  workspaceDir: string,
+  manifest: Manifest,
+  privateValues: PrivateValues,
+  fetchedAt = new Date().toISOString(),
+): void {
+  const entry: ManifestCacheEntry = { manifest, fetchedAt };
+  const write =
+    privateValues === "keep" ? writeSecretBearingFile : writeShareableFile;
+  write(
     join(workspaceDir, MANIFEST_CACHE_FILE),
     `${JSON.stringify(entry, null, 2)}\n`,
   );
 }
+
+/**
+ * Whether the private values the backend serves stay in the manifest the
+ * workspace keeps: `dev` keeps them, a build, whose workspace is deployed,
+ * drops them (the server reads them from its environment).
+ */
+export type PrivateValues = "keep" | "drop";
 
 /**
  * When the cached manifest stands in for the backend: `fallback` replays it
@@ -394,17 +411,28 @@ export async function resolveManifest(
   workspaceDir: string,
   backendUrl: string,
   cacheUse: ManifestCacheUse,
-  clientUrl?: string,
-  bootstrapSecret?: string,
+  {
+    clientUrl,
+    bootstrapSecret,
+    privateValues = "keep",
+  }: {
+    clientUrl?: string;
+    bootstrapSecret?: string;
+    privateValues?: PrivateValues;
+  } = {},
 ): Promise<ResolvedManifest> {
   if (cacheUse !== "offline") {
     try {
-      const manifest = await fetchManifest(
+      const served = await fetchManifest(
         backendUrl,
         clientUrl,
         bootstrapSecret,
       );
-      writeCachedManifest(workspaceDir, manifest);
+      const manifest =
+        privateValues === "keep"
+          ? served
+          : { ...served, modules: withoutPrivateValues(served.modules) };
+      writeCachedManifest(workspaceDir, manifest, privateValues);
       return { manifest, fromCache: false };
     } catch (err) {
       if (err instanceof ManifestUnauthorizedError) throw err;
@@ -412,13 +440,13 @@ export async function resolveManifest(
       const cached = readCachedManifest(workspaceDir);
       if (!cached) throw err;
       if (cacheUse === "never") throw cacheNotUsed(err, backendUrl, cached);
-      return fromCachedEntry(cached);
+      return fromCachedEntry(workspaceDir, cached, privateValues);
     }
   }
 
   const cached = readCachedManifest(workspaceDir);
   if (!cached) throw new NoCachedManifestError();
-  return fromCachedEntry(cached);
+  return fromCachedEntry(workspaceDir, cached, privateValues);
 }
 
 /**
@@ -448,12 +476,21 @@ function cacheNotUsed(
   );
 }
 
-function fromCachedEntry(cached: ManifestCacheEntry): ResolvedManifest {
-  return {
-    manifest: cached.manifest,
-    fromCache: true,
-    fetchedAt: cached.fetchedAt,
-  };
+/**
+ * A cache written before builds dropped private values can still hold them:
+ * a build replaying it drops them, from the file too.
+ */
+function fromCachedEntry(
+  workspaceDir: string,
+  cached: ManifestCacheEntry,
+  privateValues: PrivateValues,
+): ResolvedManifest {
+  let { manifest } = cached;
+  if (privateValues === "drop") {
+    manifest = { ...manifest, modules: withoutPrivateValues(manifest.modules) };
+    writeCachedManifest(workspaceDir, manifest, "drop", cached.fetchedAt);
+  }
+  return { manifest, fromCache: true, fetchedAt: cached.fetchedAt };
 }
 
 /**

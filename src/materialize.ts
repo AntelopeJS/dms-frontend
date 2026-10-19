@@ -23,6 +23,7 @@ import {
   TAILWIND_SOURCE_GLOB,
   TEMPLATE_FILES,
   writeSecretBearingFile,
+  writeShareableFile,
 } from "./config";
 import {
   createFrontendModuleRegistry,
@@ -308,6 +309,14 @@ function writePublicEndpoints(
   );
 }
 
+/** Whether private options carry a value rather than only their shape. */
+function holdsValue(value: unknown): boolean {
+  if (typeof value === "string") return value !== "";
+  if (value !== null && typeof value === "object")
+    return Object.values(value).some(holdsValue);
+  return false;
+}
+
 /**
  * Write each module's private options where the generated server hands them
  * to that module's server routes, owner-readable only: they hold the backend's
@@ -325,7 +334,10 @@ function writeServerOptions(
         : [],
     ),
   );
-  writeSecretBearingFile(
+  const write = Object.values(modules).some(holdsValue)
+    ? writeSecretBearingFile
+    : writeShareableFile;
+  write(
     join(workspaceDir, SERVER_OPTIONS_FILE),
     `${JSON.stringify({ modules, environment: MANIFEST_SECRET_ENV }, null, 2)}\n`,
   );
