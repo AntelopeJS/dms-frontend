@@ -653,6 +653,38 @@ describe("validating options before any work", () => {
     assert.equal(result.stdout, `server port ${port}\n`);
   });
 
+  /** A built workspace whose server prints the NODE_ENV it was given. */
+  function nodeEnvWorkspace(): Record<string, string> {
+    return {
+      ...builtWorkspace(BACKEND_URL),
+      [join(workspaceDir(BACKEND_URL), "server.mjs")]:
+        "console.log(`NODE_ENV ${process.env.NODE_ENV}`);\n",
+    };
+  }
+
+  it("runs the production server under NODE_ENV=production when it is unset", async () => {
+    const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
+      files: nodeEnvWorkspace(),
+      env: { DMS_SESSION_SECRET: SESSION_SECRET, NODE_ENV: undefined },
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout, "NODE_ENV production\n");
+    assert.doesNotMatch(result.stderr, /NODE_ENV/);
+  });
+
+  it("keeps a NODE_ENV the project sets, and warns it is not production", async () => {
+    const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
+      files: { ...nodeEnvWorkspace(), ".env": "NODE_ENV=development\n" },
+      env: { DMS_SESSION_SECRET: SESSION_SECRET, NODE_ENV: undefined },
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout, "NODE_ENV development\n");
+    assert.match(
+      result.stderr,
+      /▲ NODE_ENV is development: the server renders with the development builds of Vue and its libraries\n {2}→ Unset it for start, or set it to production\n/,
+    );
+  });
+
   it("reports clean without a target as a usage error", async () => {
     const result = await runCli(["clean"]);
     assert.equal(result.code, 2);

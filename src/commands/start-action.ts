@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CliError, formatDuration } from "@antelopejs/core/cli";
+import { CliError, formatDuration, getProcessUi } from "@antelopejs/core/cli";
 import {
   canonicalizeBackendUrl,
   getWorkspaceDir,
@@ -26,6 +26,34 @@ import { reportAvailableUpdate } from "../update-check";
 import { reportFrontendReady } from "../module-set";
 
 const BUILD_TIME_MANIFEST = "the build-time manifest";
+const PRODUCTION = "production";
+
+/**
+ * The NODE_ENV the production server runs under. The SSR bundle reads
+ * `process.env.NODE_ENV` at run time (Vite inlines it in the client bundle
+ * only), and so do the packages it loads from the workspace: Vue, its server
+ * renderer and vue-i18n pick their production or development build from it.
+ * Unset, the server would render with the development builds, slower and
+ * printing their warnings. A value the environment sets wins, as with
+ * `vite preview`, `nuxi preview` and `next start`, with a warning when it is
+ * not production.
+ */
+function serverNodeEnv(): string {
+  const nodeEnv = process.env.NODE_ENV || PRODUCTION;
+  if (nodeEnv !== PRODUCTION) {
+    const ui = getProcessUi();
+    ui.message(
+      "warn",
+      `NODE_ENV is ${nodeEnv}: the server renders with the development builds of Vue and its libraries`,
+      {
+        details: [
+          `${ui.symbols.levels.hint} Unset it for start, or set it to ${PRODUCTION}`,
+        ],
+      },
+    );
+  }
+  return nodeEnv;
+}
 
 export interface StartOptions {
   backendUrl?: string;
@@ -91,6 +119,7 @@ export async function runStart(options: StartOptions): Promise<void> {
     secrets.sources,
     BUILD_TIME_MANIFEST,
   );
+  const nodeEnv = serverNodeEnv();
 
   await reserved.release();
   const code = await runServer({
@@ -99,6 +128,7 @@ export async function runStart(options: StartOptions): Promise<void> {
     cwd: workspaceDir,
     env: {
       ...process.env,
+      NODE_ENV: nodeEnv,
       PORT: String(port),
       DMS_API_BASE_URL: backendUrl,
       DMS_SESSION_SECRET: sessionSecret,
