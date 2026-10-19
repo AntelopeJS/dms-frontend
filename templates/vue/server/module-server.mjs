@@ -77,12 +77,56 @@ export function privateOptionsWithFallbacks(modules, environment, env) {
   return modules;
 }
 
+/** Each string leaf of `value`, with its path. */
+function* stringLeaves(value, path = []) {
+  if (typeof value === "string") yield [path, value];
+  else if (typeof value === "object" && value !== null && !Array.isArray(value))
+    for (const [key, child] of Object.entries(value))
+      yield* stringLeaves(child, [...path, key]);
+}
+
+/**
+ * Fills the private values a build left empty from `DMS_PRIVATE_OPTIONS`, a
+ * JSON object of private options by module id
+ * (`{"acme__shop-frontend-vue":{"apiKey":"…"}}`): any module's secrets, where
+ * `DMS_HTML_RENDER_SECRET` and `DMS_OAUTH_RELAY_SECRET` name two of them. As
+ * with those, a value the manifest carries wins, and only a section the
+ * module publishes is filled.
+ *
+ * @param modules The private options by module id
+ * @param json The variable's value; nothing is filled when unset
+ * @param warn Reports a value that is not a JSON object, never its content
+ */
+export function privateOptionsFromJson(modules, json, warn) {
+  if (!json) return modules;
+  let given;
+  try {
+    given = JSON.parse(json);
+  } catch {
+    given = undefined;
+  }
+  if (typeof given !== "object" || given === null || Array.isArray(given)) {
+    warn("DMS_PRIVATE_OPTIONS is not a JSON object of options by module id");
+    return modules;
+  }
+  for (const [id, options] of Object.entries(given)) {
+    if (!modules[id]) continue;
+    for (const [path, value] of stringLeaves(options))
+      if (path.length > 0) fillPath(modules[id], path, value);
+  }
+  return modules;
+}
+
 function readPrivateOptions(env = process.env) {
   const { modules = {}, environment = {} } = readJsonFile(
     SERVER_OPTIONS_FILE,
     {},
   );
-  return privateOptionsWithFallbacks(modules, environment, env);
+  return privateOptionsFromJson(
+    privateOptionsWithFallbacks(modules, environment, env),
+    env.DMS_PRIVATE_OPTIONS,
+    (message) => console.warn(message),
+  );
 }
 
 function readPublicOptions() {

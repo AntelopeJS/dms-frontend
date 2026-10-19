@@ -53,13 +53,20 @@ export interface BuildOrigin {
   /** When the manifest was taken or fetched, ISO 8601. */
   takenAt: string;
   digest: string;
+  /**
+   * Whether the manifest was read with the bootstrap credential. Without it
+   * the backend withholds the modules' backend proxies, so its digest cannot
+   * be compared with the one `start` reads with the credential.
+   */
+  authenticated: boolean;
 }
 
 /**
  * A short, stable identity of the module set a manifest serves: the same
  * modules, priorities and routes give the same digest whoever reads it, so a
  * build and the backend it serves can be compared. Option values are left out
- * (see `moduleSetFingerprint`).
+ * (see `moduleSetFingerprint`). Module versions are not in the manifest, so
+ * an upgrade that keeps a module's name and routes keeps the digest.
  *
  * @param modules The manifest's modules
  */

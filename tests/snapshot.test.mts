@@ -198,6 +198,16 @@ describe("a build that ships with its project", () => {
     ]);
 
     requests = [];
+    const failed = await runCli(
+      ["build", "--from", "dms-snapshot", "--workspace", ".dms-frontend"],
+      { FAKE_PNPM_SCENARIO: "ssr-fails" },
+      project,
+    );
+    assert.notEqual(failed.code, 0);
+    assert.ok(
+      !existsSync(join(project, ".dms-frontend", ".build-origin.json")),
+      "a failed build recorded what it was made from",
+    );
     const built = await runCli(
       ["build", "--from", "dms-snapshot", "--workspace", ".dms-frontend"],
       {},
@@ -219,11 +229,11 @@ describe("a build that ships with its project", () => {
         oauth: { relaySecret: "" },
       },
     });
-    assert.equal(
-      JSON.parse(readFileSync(join(workspace, ".build-origin.json"), "utf8"))
-        .digest,
-      snapshot.digest,
+    const origin = JSON.parse(
+      readFileSync(join(workspace, ".build-origin.json"), "utf8"),
     );
+    assert.equal(origin.digest, snapshot.digest);
+    assert.equal(origin.authenticated, true);
   });
 
   it("serves the build read-only with its environment's secrets, and says when the backend moved on", async () => {

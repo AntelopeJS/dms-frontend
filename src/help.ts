@@ -56,6 +56,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "OAuth relay secret the backend expects; start needs it, a build keeps none",
   ],
   [
+    "DMS_PRIVATE_OPTIONS",
+    "Any module's private options for start, as JSON by module id; a build keeps none",
+  ],
+  [
     "DMS_AUTH_ESTABLISH_ENDPOINTS",
     "More backend endpoints /auth/establish may open a session from, comma-separated",
   ],

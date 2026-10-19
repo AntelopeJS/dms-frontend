@@ -1004,6 +1004,38 @@ describe("The module testing helper", () => {
     }
   });
 
+  it("fills any module's empty private options from DMS_PRIVATE_OPTIONS, the manifest's winning", async () => {
+    const { privateOptionsFromJson } =
+      await import("../templates/vue/server/module-server.mjs");
+    const warnings: string[] = [];
+    const filled = privateOptionsFromJson(
+      {
+        shop: { apiKey: "", region: "eu", hooks: { token: "" } },
+        other: { apiKey: "" },
+      },
+      JSON.stringify({
+        shop: { apiKey: "from-env", region: "us", hooks: { token: "t" } },
+        missing: { apiKey: "ignored" },
+      }),
+      (message: string) => warnings.push(message),
+    );
+    assert.deepEqual(filled, {
+      shop: { apiKey: "from-env", region: "eu", hooks: { token: "t" } },
+      other: { apiKey: "" },
+    });
+    assert.deepEqual(warnings, []);
+
+    const untouched = { shop: { apiKey: "" } };
+    privateOptionsFromJson(
+      untouched,
+      '["secret-in-array"]',
+      (message: string) => warnings.push(message),
+    );
+    assert.deepEqual(untouched, { shop: { apiKey: "" } });
+    assert.equal(warnings.length, 1);
+    assert.ok(!warnings[0].includes("secret-in-array"));
+  });
+
   it("takes a secret from the environment only where the manifest has none", async () => {
     const { privateOptionsWithFallbacks } =
       await import("../templates/vue/server/module-server.mjs");

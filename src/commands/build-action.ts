@@ -21,7 +21,11 @@ import {
   requireBackendUrl,
   runFramedCommand,
 } from "../common";
-import { type FrontendSnapshot, readSnapshot } from "../snapshot";
+import {
+  type FrontendSnapshot,
+  readSnapshot,
+  writeBuildOrigin,
+} from "../snapshot";
 import {
   cachedAge,
   endInterruptedTask,
@@ -239,16 +243,21 @@ async function buildProduction(
   const ui = getProcessUi();
 
   writeHeader("build", [backendUrl, "production"]);
-  const { workspaceDir, layers, manifestFromCache, manifestFetchedAt } =
-    await setUpWorkspace({
-      backendUrl,
-      force: !!options.force,
-      mode: "build",
-      offline: snapshot ? false : flagOrEnv(options.offline, "DMS_OFFLINE"),
-      bootstrapSecret,
-      workspaceDir: options.workspace,
-      snapshot,
-    });
+  const {
+    workspaceDir,
+    layers,
+    manifestFromCache,
+    manifestFetchedAt,
+    buildOrigin,
+  } = await setUpWorkspace({
+    backendUrl,
+    force: !!options.force,
+    mode: "build",
+    offline: snapshot ? false : flagOrEnv(options.offline, "DMS_OFFLINE"),
+    bootstrapSecret,
+    workspaceDir: options.workspace,
+    snapshot,
+  });
 
   if (snapshot) {
     ui.message(
@@ -283,6 +292,9 @@ async function buildProduction(
     },
   };
   for (const step of BUILD_STEPS) await runBuildStep(step, context);
+  // Recorded once the build succeeded: a failed one leaves the previous
+  // build in dist, which the previous origin still describes.
+  writeBuildOrigin(workspaceDir, buildOrigin);
   reportViteWarnings(context.warnings, isVerbose, ui);
 
   writeBlankLine();

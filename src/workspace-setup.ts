@@ -56,10 +56,10 @@ import {
   writeWorkspaceMeta,
 } from "./workspace";
 import {
+  type BuildOrigin,
   type FrontendSnapshot,
   manifestDigest,
   SNAPSHOT_LAYERS_DIR,
-  writeBuildOrigin,
 } from "./snapshot";
 import { CancelledError, exitCodeForSignal } from "./cancellation";
 import { endInterruptedTask } from "./output";
@@ -437,6 +437,8 @@ export interface SetupWorkspaceResult {
   manifestFetchedAt?: string;
   /** Server secrets the backend published in the manifest */
   manifestSecrets: ManifestSecrets;
+  /** What the workspace is made from, for `build` to record once it built */
+  buildOrigin: BuildOrigin;
 }
 
 /** A build is deployed, so only --offline lets it use the cache. */
@@ -542,7 +544,7 @@ async function servedLayers(
 export async function setupWorkspace(
   opts: SetupWorkspaceOptions,
 ): Promise<SetupWorkspaceResult> {
-  const { backendUrl, force, mode } = opts;
+  const { backendUrl, force } = opts;
 
   const workspaceKey = opts.workspaceKey ?? canonicalizeBackendUrl(backendUrl);
   const workspaceDir = opts.workspaceDir
@@ -553,17 +555,14 @@ export async function setupWorkspace(
   const { manifest, fromCache, fetchedAt, layers } = opts.snapshot
     ? await snapshotLayers(opts.snapshot, workspaceDir)
     : await servedLayers(opts, workspaceDir);
-  if (mode === "build") {
-    writeBuildOrigin(workspaceDir, {
-      source: opts.snapshot ? "snapshot" : "backend",
-      backendUrl: canonicalizeBackendUrl(backendUrl),
-      takenAt:
-        opts.snapshot?.snapshot.takenAt ??
-        fetchedAt ??
-        new Date().toISOString(),
-      digest: manifestDigest(manifest.modules),
-    });
-  }
+  const buildOrigin: BuildOrigin = {
+    source: opts.snapshot ? "snapshot" : "backend",
+    backendUrl: canonicalizeBackendUrl(backendUrl),
+    takenAt:
+      opts.snapshot?.snapshot.takenAt ?? fetchedAt ?? new Date().toISOString(),
+    digest: manifestDigest(manifest.modules),
+    authenticated: !!opts.snapshot || !!opts.bootstrapSecret,
+  };
 
   assertLayersSupportRenderer(layers, { workspaceDir });
 
@@ -591,6 +590,7 @@ export async function setupWorkspace(
     manifestFromCache: fromCache,
     manifestFetchedAt: fetchedAt,
     manifestSecrets: collectManifestSecrets(manifest.modules),
+    buildOrigin,
   };
 }
 

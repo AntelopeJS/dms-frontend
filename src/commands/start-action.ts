@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { CliError, formatDuration, getProcessUi } from "@antelopejs/core/cli";
 import {
@@ -26,8 +26,59 @@ import { readyLines, runServer } from "../server-process";
 import { reportAvailableUpdate } from "../update-check";
 import { compareWithBackend, reportFrontendReady } from "../module-set";
 import { type BuildOrigin, manifestDigest, readBuildOrigin } from "../snapshot";
+import { SERVER_OPTIONS_FILE } from "../config";
+import { MANIFEST_SECRET_ENV } from "../manifest-secrets";
+import {
+  PRIVATE_OPTIONS_VARIABLE,
+  parsePrivateOptions,
+  unfilledPrivateValues,
+} from "../private-values";
+import type { FrontendModuleOptions } from "../workspace";
 
 const BUILD_TIME_MANIFEST = "the build-time manifest";
+
+/** The private options by module id the build wrote, none when unreadable. */
+function builtPrivateOptions(
+  workspaceDir: string,
+): Record<string, FrontendModuleOptions> {
+  try {
+    const { modules } = JSON.parse(
+      readFileSync(join(workspaceDir, SERVER_OPTIONS_FILE), "utf8"),
+    ) as { modules?: Record<string, FrontendModuleOptions> };
+    return modules ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Warns about each private value of a module the server would receive empty
+ * and that no named variable covers: a module's own secrets, which only
+ * `DMS_PRIVATE_OPTIONS` can carry. Names the module and the option, never a
+ * value.
+ */
+function reportUnfilledPrivateValues(workspaceDir: string): void {
+  const unfilled = unfilledPrivateValues(
+    builtPrivateOptions(workspaceDir),
+    parsePrivateOptions(process.env[PRIVATE_OPTIONS_VARIABLE]),
+    Object.values(MANIFEST_SECRET_ENV),
+  );
+  const ui = getProcessUi();
+  unfilled.forEach(({ module, path }, index) => {
+    const isLast = index === unfilled.length - 1;
+    ui.message(
+      "warn",
+      `${module}: private option ${path.join(".")} is not set`,
+      {
+        details: isLast
+          ? [
+              `${ui.symbols.levels.hint} Set ${unfilled.length === 1 ? "it" : "them"} in ${PRIVATE_OPTIONS_VARIABLE}, a JSON object of options by module id, with the values the backend uses`,
+            ]
+          : [],
+      },
+    );
+  });
+}
 const PRODUCTION = "production";
 
 /**
@@ -76,6 +127,17 @@ async function reportDrift(
   const ui = getProcessUi();
   const bootstrapSecret = process.env.DMS_BOOTSTRAP_SECRET?.trim();
   if (!origin) return;
+  if (origin.authenticated === false) {
+    ui.message(
+      "info",
+      `Built from modules ${origin.digest}; not compared with the backend`,
+      {
+        detail:
+          "The build read the manifest without DMS_BOOTSTRAP_SECRET, which leaves out the backend proxies.",
+      },
+    );
+    return;
+  }
   if (!bootstrapSecret) {
     ui.message(
       "info",
@@ -113,7 +175,7 @@ async function reportDrift(
     `The backend serves modules ${drift.served}; this build was made from ${origin.digest} (${origin.source}${cachedAge(origin.takenAt)})`,
     {
       details: [
-        "Pages of modules added, removed or changed since are missing or stale.",
+        "Pages of modules added or removed since, or whose routes changed, are missing or stale.",
         `${ui.symbols.levels.hint} ${refresh}`,
       ],
     },
@@ -141,7 +203,11 @@ export async function runStart(options: StartOptions): Promise<void> {
     throw new CliError({
       title: `No production build for ${backendUrl}`,
       reason: `${showWorkspace(workspaceDir)} has no built server or client.`,
-      fixes: [`Build it first: ajs dms build -b ${backendUrl}`],
+      fixes: [
+        explicitWorkspace
+          ? `Build it first: ajs dms build --from <snapshot> --workspace ${options.workspace}`
+          : `Build it first: ajs dms build -b ${backendUrl}`,
+      ],
     });
   }
 
@@ -188,6 +254,7 @@ export async function runStart(options: StartOptions): Promise<void> {
     (count) =>
       `Set ${count === 1 ? "it" : "them"} in the server's environment, with the value${count === 1 ? "" : "s"} the backend uses`,
   );
+  reportUnfilledPrivateValues(workspaceDir);
   const secretSources = describeSecretSources(
     secrets.sources,
     BUILD_TIME_MANIFEST,
