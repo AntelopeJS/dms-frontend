@@ -47,7 +47,18 @@ function ssrModuleGraph(devServer) {
   return devServer.environments?.ssr?.moduleGraph ?? devServer.moduleGraph;
 }
 
+// Vite only treats an id as a stylesheet when the language is the LAST thing in
+// it, and a component's style block ends in `&lang.css`. Appending `&direct`
+// after that makes Vite skip its stylesheet pipeline, so the block comes back
+// as written: `@import "package/dist/style.css"` is left for the browser, which
+// resolves it against the page URL and gets a 404. `direct` therefore goes in
+// front of the trailing language segment.
+const TRAILING_LANG = /&(lang\.[^&?]*)$/;
+
 function directUrl(url) {
+  if (SFC_STYLE.test(url) && TRAILING_LANG.test(url)) {
+    return url.replace(TRAILING_LANG, "&direct&$1");
+  }
   return `${url}${url.includes("?") ? "&" : "?"}direct`;
 }
 
