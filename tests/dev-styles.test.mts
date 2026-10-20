@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { runInNewContext } from "node:vm";
+import vue from "@vitejs/plugin-vue";
 import { createServer, normalizePath } from "vite";
 import { developmentStyleTags } from "../templates/vue/server/dev-styles.mjs";
 import { orderHeadForFirstPaint } from "../templates/vue/head-order.mjs";
@@ -87,6 +88,66 @@ describe("development stylesheets in the served document", () => {
       /<link rel="stylesheet"[^>]*href="\/plain\.css\?direct">/,
     );
     assert.doesNotMatch(tags, /ignored\.ts/);
+  });
+
+  it("serves a component's style block compiled, with its package imports resolved", async () => {
+    const root = mkdtempSync(
+      join(process.cwd(), "node_modules", ".dms-dev-styles-"),
+    );
+    writeFixture(root, "package.json", '{"type":"module"}');
+    writeFixture(
+      root,
+      "node_modules/fixture-pkg/package.json",
+      '{"name":"fixture-pkg","version":"1.0.0"}',
+    );
+    writeFixture(
+      root,
+      "node_modules/fixture-pkg/dist/style.css",
+      ".fixture-pkg-rule { color: rebeccapurple; }",
+    );
+    writeFixture(
+      root,
+      "Widget.vue",
+      [
+        "<script>export default {};</script>",
+        "<style>",
+        '@import "fixture-pkg/dist/style.css";',
+        ".own-rule { display: block; }",
+        "</style>",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(
+      root,
+      "ssr-entry.js",
+      'import Widget from "./Widget.vue";\nexport default Widget;',
+    );
+    const server = await createServer({
+      root,
+      configFile: false,
+      logLevel: "silent",
+      server: { middlewareMode: true },
+      appType: "custom",
+      plugins: [vue()],
+    });
+    try {
+      await server.ssrLoadModule("/ssr-entry.js");
+      const tags = await developmentStyleTags(server);
+      assert.match(tags, /\.own-rule/);
+      assert.match(
+        tags,
+        /\.fixture-pkg-rule/,
+        "the package stylesheet must be inlined where Vite compiles the block",
+      );
+      assert.doesNotMatch(
+        tags,
+        /@import/,
+        "a bare specifier left in the document is resolved by the browser against the page URL, which answers 404",
+      );
+    } finally {
+      await server.close();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("drops a style block that could close its own tag", async () => {
