@@ -15,7 +15,9 @@ interface BuiltFiles {
 }
 
 const builtFiles = import(
-  join(process.cwd(), "templates", "vue", "server", "built-files.mjs")
+  pathToFileURL(
+    join(process.cwd(), "templates", "vue", "server", "built-files.mjs"),
+  ).href
 ) as Promise<BuiltFiles>;
 
 const PAGE_COMPONENT = "ArticleList";

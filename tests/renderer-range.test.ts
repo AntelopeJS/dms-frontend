@@ -12,7 +12,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
   assertLayersSupportRenderer,
@@ -280,7 +280,12 @@ async function runTypeScript(
   try {
     const { stdout, stderr } = await promisify(execFile)(
       process.execPath,
-      ["--import", require.resolve("tsx"), join(REPOSITORY, entry), ...args],
+      [
+        "--import",
+        pathToFileURL(require.resolve("tsx")).href,
+        join(REPOSITORY, entry),
+        ...args,
+      ],
       {
         cwd: home,
         env: {

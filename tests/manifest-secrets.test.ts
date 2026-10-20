@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { canonicalizeBackendUrl } from "../src/config";
 import {
@@ -315,7 +315,7 @@ describe("ajs dms start", () => {
         process.execPath,
         [
           "--import",
-          require.resolve("tsx"),
+          pathToFileURL(require.resolve("tsx")).href,
           join(REPOSITORY, "src", "index.ts"),
           "start",
           "-b",
