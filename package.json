@@ -91,6 +91,7 @@
     "@unhead/vue": "^2.1.4",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/server-renderer": "^3.5.25",
+    "@vueuse/core": "14.4.0",
     "defu": "^6.1.4",
     "devalue": "^5.9.4",
     "knip": "^6.34.0",
@@ -122,6 +123,11 @@
     "node": ">=20.19.0"
   },
   "packageManager": "pnpm@10.6.5",
+  "pnpm": {
+    "patchedDependencies": {
+      "@vueuse/core@14.4.0": "templates/vue/patches/@vueuse__core@14.4.0.patch"
+    }
+  },
   "antelopeJs": {
     "skills": [
       "./skills"

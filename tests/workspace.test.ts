@@ -71,6 +71,23 @@ describe("renderer dependency patches", () => {
     assert.ok(shipped.length > 0);
     assert.deepEqual(declared, shipped);
   });
+
+  it("pins every patched dependency to the version its patch targets", () => {
+    // A range would let a fresh install resolve a newer release, which pnpm
+    // then refuses to install because the patch no longer has a target.
+    const template = join("templates", "vue");
+    const { dependencies } = JSON.parse(
+      readFileSync(join(template, "package.json"), "utf8"),
+    );
+    const config = readFileSync(join(template, "pnpm-workspace.yaml"), "utf8");
+    const patched = [
+      ...config.matchAll(/^\s+"(@?[^@"]+)@([^"]+)":\s*patches\/\S+$/gm),
+    ];
+    assert.ok(patched.length > 0);
+    for (const [, name, version] of patched) {
+      assert.equal(dependencies[name], version, name);
+    }
+  });
 });
 
 describe("workspace identity", () => {

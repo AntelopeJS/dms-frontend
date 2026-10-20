@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@vueuse/core@14.4.0':
+    hash: e6a46bb783895532ecc138b0af4baf15f32d0b09343fc75e0af69c2531e22637
+    path: templates/vue/patches/@vueuse__core@14.4.0.patch
+
 importers:
 
   .:
@@ -57,6 +62,9 @@ importers:
       '@vue/server-renderer':
         specifier: ^3.5.25
         version: 3.5.25(vue@3.5.25(typescript@6.0.3))
+      '@vueuse/core':
+        specifier: 14.4.0
+        version: 14.4.0(patch_hash=e6a46bb783895532ecc138b0af4baf15f32d0b09343fc75e0af69c2531e22637)(vue@3.5.25(typescript@6.0.3))
       defu:
         specifier: ^6.1.4
         version: 6.1.4
@@ -95,7 +103,7 @@ importers:
         version: 6.0.3
       unplugin-auto-import:
         specifier: ^20.2.0
-        version: 20.2.0(@nuxt/kit@4.4.2(magicast@0.5.1))(@vueuse/core@14.1.0(vue@3.5.25(typescript@6.0.3)))
+        version: 20.2.0(@nuxt/kit@4.4.2(magicast@0.5.1))(@vueuse/core@14.4.0(patch_hash=e6a46bb783895532ecc138b0af4baf15f32d0b09343fc75e0af69c2531e22637)(vue@3.5.25(typescript@6.0.3)))
       vite:
         specifier: ^8.3.4
         version: 8.3.4(@types/node@24.8.1)(jiti@2.7.0)(sass@1.71.1)(terser@5.44.0)(tsx@4.20.6)(yaml@2.9.1)
@@ -1616,16 +1624,16 @@ packages:
   '@vue/shared@3.5.25':
     resolution: {integrity: sha512-AbOPdQQnAnzs58H2FrrDxYj/TJfmeS2jdfEEhgiKINy+bnOANmVizIEgq1r+C5zsbs6l1CCQxtcj71rwNQ4jWg==}
 
-  '@vueuse/core@14.1.0':
-    resolution: {integrity: sha512-rgBinKs07hAYyPF834mDTigH7BtPqvZ3Pryuzt1SD/lg5wEcWqvwzXXYGEDb2/cP0Sj5zSvHl3WkmMELr5kfWw==}
+  '@vueuse/core@14.4.0':
+    resolution: {integrity: sha512-X4WHz1HlCzCBoYXesUkifzzWBAcZgXG8Fi5iNPQg/epdzOB3gu8Fawj3hvuwYR1nGcXGnvxwYYcUC/71++svtQ==}
     peerDependencies:
       vue: ^3.5.0
 
-  '@vueuse/metadata@14.1.0':
-    resolution: {integrity: sha512-7hK4g015rWn2PhKcZ99NyT+ZD9sbwm7SGvp7k+k+rKGWnLjS/oQozoIZzWfCewSUeBmnJkIb+CNr7Zc/EyRnnA==}
+  '@vueuse/metadata@14.4.0':
+    resolution: {integrity: sha512-swx/255R6JyHZFJhx845iz5CRWDZdCfvkZOpACWc5+c5WHcG24mv8gUT1WIdFQaHt6dq79rvILd9QnCWiyVm9g==}
 
-  '@vueuse/shared@14.1.0':
-    resolution: {integrity: sha512-EcKxtYvn6gx1F8z9J5/rsg3+lTQnvOruQd8fUecW99DCK04BkWD7z5KQ/wTAx+DazyoEE9dJt/zV8OIEQbM6kw==}
+  '@vueuse/shared@14.4.0':
+    resolution: {integrity: sha512-JRgY90Sz8DDtPMsaDflvPMp9xYk69JZAmbuDvAquUVXKr2gEjqtzGNTTthLfckH0BzBqvnu31gb4a8TGLRe79g==}
     peerDependencies:
       vue: ^3.5.0
 
@@ -4884,8 +4892,7 @@ snapshots:
     dependencies:
       '@types/node': 24.8.1
 
-  '@types/web-bluetooth@0.0.21':
-    optional: true
+  '@types/web-bluetooth@0.0.21': {}
 
   '@typescript-eslint/eslint-plugin@8.71.2(@typescript-eslint/parser@8.71.2(eslint@8.57.1)(typescript@6.0.3))(eslint@8.57.1)(typescript@6.0.3)':
     dependencies:
@@ -5129,21 +5136,18 @@ snapshots:
 
   '@vue/shared@3.5.25': {}
 
-  '@vueuse/core@14.1.0(vue@3.5.25(typescript@6.0.3))':
+  '@vueuse/core@14.4.0(patch_hash=e6a46bb783895532ecc138b0af4baf15f32d0b09343fc75e0af69c2531e22637)(vue@3.5.25(typescript@6.0.3))':
     dependencies:
       '@types/web-bluetooth': 0.0.21
-      '@vueuse/metadata': 14.1.0
-      '@vueuse/shared': 14.1.0(vue@3.5.25(typescript@6.0.3))
+      '@vueuse/metadata': 14.4.0
+      '@vueuse/shared': 14.4.0(vue@3.5.25(typescript@6.0.3))
       vue: 3.5.25(typescript@6.0.3)
-    optional: true
 
-  '@vueuse/metadata@14.1.0':
-    optional: true
+  '@vueuse/metadata@14.4.0': {}
 
-  '@vueuse/shared@14.1.0(vue@3.5.25(typescript@6.0.3))':
+  '@vueuse/shared@14.4.0(vue@3.5.25(typescript@6.0.3))':
     dependencies:
       vue: 3.5.25(typescript@6.0.3)
-    optional: true
 
   acorn-jsx@5.3.2(acorn@8.19.0):
     dependencies:
@@ -7447,7 +7451,7 @@ snapshots:
 
   universalify@2.0.1: {}
 
-  unplugin-auto-import@20.2.0(@nuxt/kit@4.4.2(magicast@0.5.1))(@vueuse/core@14.1.0(vue@3.5.25(typescript@6.0.3))):
+  unplugin-auto-import@20.2.0(@nuxt/kit@4.4.2(magicast@0.5.1))(@vueuse/core@14.4.0(patch_hash=e6a46bb783895532ecc138b0af4baf15f32d0b09343fc75e0af69c2531e22637)(vue@3.5.25(typescript@6.0.3))):
     dependencies:
       local-pkg: 1.1.2
       magic-string: 0.30.21
@@ -7457,7 +7461,7 @@ snapshots:
       unplugin-utils: 0.3.1
     optionalDependencies:
       '@nuxt/kit': 4.4.2(magicast@0.5.1)
-      '@vueuse/core': 14.1.0(vue@3.5.25(typescript@6.0.3))
+      '@vueuse/core': 14.4.0(patch_hash=e6a46bb783895532ecc138b0af4baf15f32d0b09343fc75e0af69c2531e22637)(vue@3.5.25(typescript@6.0.3))
 
   unplugin-utils@0.3.1:
     dependencies:
