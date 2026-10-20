@@ -12,7 +12,10 @@ interface FrontendModuleRegistry {
 }
 
 const registry = JSON.parse(
-  readFileSync(resolve(__dirname, "generated-frontend-modules.json"), "utf8"),
+  readFileSync(
+    resolve(import.meta.dirname, "generated-frontend-modules.json"),
+    "utf8",
+  ),
 ) as FrontendModuleRegistry;
 const moduleAliases = Object.fromEntries(
   registry.modules.map((module) => [`@frontend/${module.id}`, module.root]),
@@ -44,7 +47,7 @@ export default defineConfig({
   logLevel,
   resolve: {
     alias: {
-      "#dms/server": resolve(__dirname, "server-module.ts"),
+      "#dms/server": resolve(import.meta.dirname, "server-module.ts"),
       ...stableModuleAliases,
       ...moduleAliases,
     },

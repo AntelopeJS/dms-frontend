@@ -23,12 +23,7 @@ await build({
   build: {
     write: false,
     emptyOutDir: false,
-    rollupOptions: {
-      input: ENTRY,
-      // The entry is empty on purpose.
-      onwarn: (warning, warn) => {
-        if (warning.code !== "EMPTY_BUNDLE") warn(warning);
-      },
-    },
+    // The entry is empty on purpose; Rolldown does not warn about it.
+    rolldownOptions: { input: ENTRY },
   },
 });

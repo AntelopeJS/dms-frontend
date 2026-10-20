@@ -1070,9 +1070,11 @@ const warnedServerReads = new Set<string>();
 
 /**
  * Warns, in a development server render, about a backend read no async data
- * handler makes: an immediate watcher's, a setup's own `await $fetch`. The
- * server waits for it, but the page carries none of it, so the browser reads
- * it again and may hydrate with other data.
+ * handler makes: an immediate watcher's, a setup's own `await $fetch`, a
+ * middleware's. The server waits for it, but the page carries none of it, so
+ * the browser reads it again and may hydrate with other data. Code that hands
+ * the answer over itself (`useDmsState` with `transfer: true`) looks the same
+ * from here, so the message names that exception rather than guess.
  */
 function warnUntransferredRead(
   runtime: DmsFrontendRuntime,
@@ -1089,9 +1091,10 @@ function warnUntransferredRead(
   warnedServerReads.add(request);
   console.warn(
     `DMS: ${request} was read during a server render outside useDmsFetch and useDmsAsyncData ` +
-      "(an immediate watcher, a setup's own await): the page does not carry the answer, " +
-      "so the browser reads it again. Load it with useDmsFetch or useDmsAsyncData, " +
-      "or leave it to the browser (server: false, onMounted).",
+      "(an immediate watcher, a setup's own await, a middleware): unless the code hands the " +
+      "answer over (useDmsState with transfer: true), the page does not carry it and the " +
+      "browser reads it again. Load it with useDmsFetch or useDmsAsyncData, in a middleware " +
+      "or a plugin too, or leave it to the browser (server: false, onMounted).",
   );
 }
 

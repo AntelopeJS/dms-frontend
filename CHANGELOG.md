@@ -1,5 +1,55 @@
 # Changelog
 
+## v0.7.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.7.0...v0.7.1)
+
+### 🩹 Fixes
+
+- **server:** Wait out a starting backend's 503, not only a waking one ([#158](https://github.com/AntelopeJS/dms-frontend/pull/158))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
+## v0.7.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.4...v0.7.0)
+
+### 🚀 Enhancements
+
+- **cli:** ⚠️  Build a frontend from a snapshot, without secrets or a live backend ([#157](https://github.com/AntelopeJS/dms-frontend/pull/157))
+
+#### ⚠️ Breaking Changes
+
+- **cli:** ⚠️  Build a frontend from a snapshot, without secrets or a live backend ([#157](https://github.com/AntelopeJS/dms-frontend/pull/157))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
+## v0.6.4
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.3...v0.6.4)
+
+### 🚀 Enhancements
+
+- **server:** Wait out a backend's cold-start 503 for GET and HEAD ([#156](https://github.com/AntelopeJS/dms-frontend/pull/156))
+
+### 🩹 Fixes
+
+- **start:** Run the production server under NODE_ENV=production ([#154](https://github.com/AntelopeJS/dms-frontend/pull/154))
+- **ssr:** Name hand-over reads in the dev warning ([#155](https://github.com/AntelopeJS/dms-frontend/pull/155))
+
+### 📖 Documentation
+
+- Clarify learning paths and illustrate real outcomes ([#152](https://github.com/AntelopeJS/dms-frontend/pull/152))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+- Alessandro Aloisio
+
 ## v0.6.3
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.6.2...v0.6.3)

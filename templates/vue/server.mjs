@@ -17,6 +17,7 @@ import {
   redirectAccessRefusal,
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
+import { fetchWaking } from "./server/backend-wake.mjs";
 import { handleClientError } from "./server/client-error.mjs";
 import {
   reportListenError,
@@ -97,8 +98,7 @@ async function developmentServer() {
         // The generated secrets and the modules' server code, never served.
         fs: { deny: DEV_FS_DENY },
       };
-      if (frontendHttpServer)
-        serverOptions.hmr = { server: frontendHttpServer };
+      if (frontendHttpServer) serverOptions.ws = { server: frontendHttpServer };
       return createViteServer({
         server: serverOptions,
         appType: "custom",
@@ -158,9 +158,10 @@ function serverComponentFetch(request) {
 }
 
 async function backendJson(path, request) {
-  const response = await fetch(new URL(path, process.env.DMS_API_BASE_URL), {
-    headers: backendHeaders(request),
-  });
+  const response = await fetchWaking(
+    new URL(path, process.env.DMS_API_BASE_URL),
+    { headers: backendHeaders(request), signal: request.dmsAbandoned },
+  );
   if (!response.ok) {
     throw await backendResponseError(response);
   }
@@ -219,7 +220,7 @@ async function proxy(request, response, backendProxy, isProxiedPath) {
   // answers: its stream, an SSE feed above all, then stayed open for good.
   const abandoned = new AbortController();
   response.once("close", () => abandoned.abort());
-  const upstream = await fetch(backendUrl(request.url), {
+  const upstream = await fetchWaking(backendUrl(request.url), {
     signal: abandoned.signal,
     // The browser follows a redirect, not the proxy (see proxy-redirects.mjs).
     redirect: "manual",
@@ -228,10 +229,8 @@ async function proxy(request, response, backendProxy, isProxiedPath) {
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
   });
-  await relayAnswer(request, response, upstream, {
-    fetched: true,
-    isProxiedPath,
-  });
+  const relay = { fetched: true, isProxiedPath };
+  await relayAnswer(request, response, upstream, relay);
 }
 
 /**
@@ -261,6 +260,7 @@ function clientRenderedShell(page) {
     body: inertiaAppHtml(page),
     head: { headTags: "", htmlAttrs: "", bodyAttrs: "" },
     overlays: "",
+    modules: [],
   };
 }
 
@@ -301,7 +301,11 @@ export async function renderHtml(
       : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
-  const preloads = await documentStyleTags(devServer, page, template);
+  const preloads = await documentStyleTags(
+    devServer,
+    rendered.modules,
+    template,
+  );
   const html = template
     .replace("<title>Antelope DMS</title>", () =>
       withFaviconPlaceholder(rendered.head.headTags),
@@ -343,6 +347,9 @@ async function writeBackendError(error, request, response) {
   if (await redirectAccessRefusal(error, request, response, loadRenderer))
     return;
   console.error("DMS backend request failed", error);
+  const retryHeaders = error?.retryAfter
+    ? { "retry-after": error.retryAfter }
+    : {};
   if (isFrontendVisit(request)) {
     const props = {
       path: pathname,
@@ -356,18 +363,24 @@ async function writeBackendError(error, request, response) {
         request,
         response,
         status,
-        inertiaHeaders(page.version),
+        { ...inertiaHeaders(page.version), ...retryHeaders },
         JSON.stringify(page),
       );
     }
     const { html } = await renderRequestHtml(page, request);
-    return writeContent(request, response, status, htmlHeaders(), html);
+    return writeContent(
+      request,
+      response,
+      status,
+      { ...htmlHeaders(), ...retryHeaders },
+      html,
+    );
   }
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
       ? { message: error.message }
       : UNEXPECTED_ERROR_BODY;
-  response.writeHead(status, { "content-type": JSON_TYPE });
+  response.writeHead(status, { "content-type": JSON_TYPE, ...retryHeaders });
   response.end(JSON.stringify(payload));
 }
 
@@ -427,18 +440,16 @@ export async function handleRequest(request, response) {
   if (localRoute) return localRoute[1](request, response);
   const devServer = await developmentServer();
   const modules = await loadServerModules(devServer);
-  const owner = requestOwner(request.method, pathname, modules, (path) =>
-    hasRendererFile(devServer, path),
-  );
+  const hasFile = (path) => hasRendererFile(devServer, path);
+  const owner = requestOwner(request.method, pathname, modules, hasFile);
   if (devServer) response.setHeader("x-dms-route-owner", ownerLabel(owner));
   if (owner.kind === "renderer")
     return serveRendererFile(devServer, request, response, pathname);
   if (owner.kind === "module")
     return handleModuleRoute(request, response, pathname, modules);
+  const isProxiedPath = (path) => reachesBackend(path, modules, hasFile);
   if (owner.kind === "backend")
-    return proxy(request, response, owner.proxy, (path) =>
-      reachesBackend(path, modules, (file) => hasRendererFile(devServer, file)),
-    );
+    return proxy(request, response, owner.proxy, isProxiedPath);
   if (owner.kind === "not-found") return writeNotFound(response);
   if (requestFailure.hasMalformedPath(request.url))
     return requestFailure.writeBadRequest(response);
@@ -492,7 +503,19 @@ async function writeRequestFailure(error, request, response) {
   await writeBackendError(error, request, response);
 }
 
+/**
+ * Aborted once the client is gone, ending a wait for a waking backend. An
+ * embedder's response that emits no events never aborts it.
+ */
+function abandonedSignal(response) {
+  const abandoned = new AbortController();
+  if (typeof response.once === "function")
+    response.once("close", () => abandoned.abort());
+  return abandoned.signal;
+}
+
 export async function handleRequestSafely(request, response) {
+  request.dmsAbandoned = abandonedSignal(response);
   try {
     if (refuseForeignTarget(request, response)) return;
     await handleRequest(request, response);

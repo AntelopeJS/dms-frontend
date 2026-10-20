@@ -508,6 +508,13 @@ describe("Async data a server cannot transfer", () => {
         String(warnings[0]),
         /\/api\/watched was read during a server render/,
       );
+      // A read handed over with `transfer: true` looks the same from the
+      // renderer: the message says so instead of claiming the browser reads
+      // it again.
+      assert.match(
+        String(warnings[0]),
+        /unless the code hands the answer over \(useDmsState with transfer: true\)/,
+      );
     } finally {
       console.warn = originalWarn;
     }

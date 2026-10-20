@@ -17,10 +17,15 @@ import {
   flagOrEnv,
   type FramedCommandResult,
   normalizeBootstrapSecret,
+  parseBackendUrl,
   requireBackendUrl,
-  resolveSessionSecret,
   runFramedCommand,
 } from "../common";
+import {
+  type FrontendSnapshot,
+  readSnapshot,
+  writeBuildOrigin,
+} from "../snapshot";
 import {
   cachedAge,
   endInterruptedTask,
@@ -42,6 +47,37 @@ export interface BuildOptions {
   force?: boolean;
   offline?: boolean;
   bootstrapSecret?: string;
+  /** Snapshot directory to build from, without the backend. */
+  from?: string;
+  /** Workspace directory to build into, instead of the one under the home. */
+  workspace?: string;
+}
+
+/**
+ * The snapshot a build reads, and the backend URL it is for: the one given,
+ * or the one the snapshot was taken from.
+ */
+function buildSource(options: BuildOptions): {
+  backendUrl: string;
+  snapshot?: { dir: string; snapshot: FrontendSnapshot };
+} {
+  if (!options.from) {
+    return { backendUrl: requireBackendUrl(options.backendUrl) };
+  }
+  if (options.offline) {
+    throw new CliError({
+      title: "--from and --offline cannot be combined",
+      reason: "A snapshot build never asks the backend already.",
+      fixes: ["Drop --offline"],
+    });
+  }
+  const snapshot = readSnapshot(options.from);
+  return {
+    backendUrl: options.backendUrl
+      ? parseBackendUrl(options.backendUrl)
+      : snapshot.backendUrl,
+    snapshot: { dir: options.from, snapshot },
+  };
 }
 
 interface BuildStep {
@@ -200,22 +236,36 @@ async function buildProduction(
   options: BuildOptions,
   startedAt: number,
 ): Promise<void> {
-  const backendUrl = requireBackendUrl(options.backendUrl);
-  const sessionSecret = resolveSessionSecret("build");
-  const bootstrapSecret = normalizeBootstrapSecret(options.bootstrapSecret);
+  const { backendUrl, snapshot } = buildSource(options);
+  const bootstrapSecret = snapshot
+    ? undefined
+    : normalizeBootstrapSecret(options.bootstrapSecret);
   const ui = getProcessUi();
 
   writeHeader("build", [backendUrl, "production"]);
-  const { workspaceDir, layers, manifestFromCache, manifestFetchedAt } =
-    await setUpWorkspace({
-      backendUrl,
-      force: !!options.force,
-      mode: "build",
-      offline: flagOrEnv(options.offline, "DMS_OFFLINE"),
-      bootstrapSecret,
-    });
+  const {
+    workspaceDir,
+    layers,
+    manifestFromCache,
+    manifestFetchedAt,
+    buildOrigin,
+  } = await setUpWorkspace({
+    backendUrl,
+    force: !!options.force,
+    mode: "build",
+    offline: snapshot ? false : flagOrEnv(options.offline, "DMS_OFFLINE"),
+    bootstrapSecret,
+    workspaceDir: options.workspace,
+    snapshot,
+  });
 
-  if (manifestFromCache) {
+  if (snapshot) {
+    ui.message(
+      "info",
+      `Building from the snapshot of ${snapshot.snapshot.backendUrl}${cachedAge(snapshot.snapshot.takenAt)}`,
+      { detail: `Modules digest ${snapshot.snapshot.digest}` },
+    );
+  } else if (manifestFromCache) {
     ui.message(
       "warn",
       `Building from the manifest and layers archive${cachedAge(manifestFetchedAt)}`,
@@ -236,13 +286,15 @@ async function buildProduction(
     nameFile: createFileNamer(layers),
     env: {
       ...process.env,
-      DMS_SESSION_SECRET: sessionSecret,
       NODE_OPTIONS: "--max-old-space-size=4096",
       NODE_PATH: join(workspaceDir, "node_modules"),
       [VITE_LOG_LEVEL_VARIABLE]: viteLogLevel(isVerbose),
     },
   };
   for (const step of BUILD_STEPS) await runBuildStep(step, context);
+  // Recorded once the build succeeded: a failed one leaves the previous
+  // build in dist, which the previous origin still describes.
+  writeBuildOrigin(workspaceDir, buildOrigin);
   reportViteWarnings(context.warnings, isVerbose, ui);
 
   writeBlankLine();
@@ -252,8 +304,11 @@ async function buildProduction(
     durationMs: Date.now() - startedAt,
     nextSteps: [
       {
-        command: `ajs dms start -b ${backendUrl}`,
-        description: "with the DMS_SESSION_SECRET this build used",
+        command: options.workspace
+          ? `ajs dms start -b ${backendUrl} --workspace ${options.workspace}`
+          : `ajs dms start -b ${backendUrl}`,
+        description:
+          "with DMS_SESSION_SECRET and the server's secrets in its environment",
       },
     ],
   });

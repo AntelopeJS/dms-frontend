@@ -53,6 +53,12 @@ export interface DmsSsrResult {
   body: string;
   head: DmsSsrHead;
   overlays: string;
+  /**
+   * The id of every single-file component the render created, its path from
+   * the workspace root as the client manifest keys it: the server links their
+   * stylesheets.
+   */
+  modules: string[];
   error?: DmsErrorData;
   redirect?: string;
 }
@@ -64,6 +70,8 @@ export interface DmsSsrHead {
 }
 
 interface DmsSsrContext {
+  /** Filled by `@vitejs/plugin-vue`: each component adds its id as it sets up. */
+  modules?: Set<string>;
   teleports?: Record<string, string>;
 }
 
@@ -208,6 +216,7 @@ async function renderDmsPageWithRuntime(
         body: "",
         head: { bodyAttrs: "", headTags: "", htmlAttrs: "" },
         overlays: "",
+        modules: [],
         redirect: runtime.serverRedirect,
       };
     }
@@ -238,6 +247,7 @@ async function renderDmsPageWithRuntime(
         htmlAttrs: renderedHead.htmlAttrs,
       },
       overlays: ssrContext.teleports?.["#dms-overlays"] ?? "",
+      modules: [...(ssrContext.modules ?? [])],
     };
   } finally {
     // Only once the head and the async data are serialized: both still read

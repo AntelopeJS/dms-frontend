@@ -21,9 +21,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ["DMS_BOOTSTRAP_SECRET", "Same as --bootstrap-secret"],
   [
     "DMS_SESSION_SECRET",
-    "Session key, 32 characters or more; build and start need one, dev makes one when unset",
+    "Session key, 32 characters or more; start needs one, dev makes one when unset",
   ],
   ["DMS_OFFLINE", "Same as --offline, unless 0, false, no or off"],
+  ["DMS_WORKSPACE_DIR", "Same as build and start --workspace"],
   ["DMS_PREPARE_STRICT", "Same as prepare --strict, read like DMS_OFFLINE"],
   ["PORT", "Same as -p"],
   [
@@ -35,6 +36,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "Secure cookies unless false (default: false in dev, true in start)",
   ],
   [
+    "NODE_ENV",
+    "Build of Vue and its libraries the server loads (default: development in dev, production in start)",
+  ],
+  [
     "DMS_TRUSTED_PROXY_HOPS",
     "Trusted reverse-proxy hops, counted from the right (default: 0)",
   ],
@@ -44,11 +49,15 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ],
   [
     "DMS_HTML_RENDER_SECRET",
-    "E-mail render secret, used when the backend publishes none in the manifest",
+    "E-mail render secret, the backend's htmlRender.serviceSecret; start needs it, a build keeps none",
   ],
   [
     "DMS_OAUTH_RELAY_SECRET",
-    "OAuth relay secret, used when the backend publishes none in the manifest",
+    "OAuth relay secret the backend expects; start needs it, a build keeps none",
+  ],
+  [
+    "DMS_PRIVATE_OPTIONS",
+    "Any module's private options for start, as JSON by module id; a build keeps none",
   ],
   [
     "DMS_AUTH_ESTABLISH_ENDPOINTS",
@@ -61,6 +70,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   [
     "DMS_BACKEND_PROXIES",
     "More backend prefixes the server proxies, as a JSON array of { path, auth? }",
+  ],
+  [
+    "DMS_BACKEND_WAKE_BUDGET_MS",
+    "How long a GET or HEAD waits out a waking or starting backend's 503, in ms (default: 30000; 0: never)",
   ],
   ["DMS_CLIENT_BASE_URL", "Public frontend URL used in links and e-mails"],
   ["NO_COLOR", "Same as --no-color"],

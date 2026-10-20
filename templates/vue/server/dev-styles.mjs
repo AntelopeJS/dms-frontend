@@ -18,7 +18,7 @@
 
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pageModulePreloads } from "./client-manifest.mjs";
+import { renderedModuleStyleTags } from "./client-manifest.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const STYLE_ATTRIBUTE = "data-dms-dev-style";
@@ -47,7 +47,18 @@ function ssrModuleGraph(devServer) {
   return devServer.environments?.ssr?.moduleGraph ?? devServer.moduleGraph;
 }
 
+// Vite only treats an id as a stylesheet when the language is the LAST thing in
+// it, and a component's style block ends in `&lang.css`. Appending `&direct`
+// after that makes Vite skip its stylesheet pipeline, so the block comes back
+// as written: `@import "package/dist/style.css"` is left for the browser, which
+// resolves it against the page URL and gets a 404. `direct` therefore goes in
+// front of the trailing language segment.
+const TRAILING_LANG = /&(lang\.[^&?]*)$/;
+
 function directUrl(url) {
+  if (SFC_STYLE.test(url) && TRAILING_LANG.test(url)) {
+    return url.replace(TRAILING_LANG, "&direct&$1");
+  }
   return `${url}${url.includes("?") ? "&" : "?"}direct`;
 }
 
@@ -96,11 +107,11 @@ export async function developmentStyleTags(devServer) {
 
 /**
  * The style tags a document needs, whichever server is answering it: collected
- * from the live module graph in development, read from the build manifest in
- * production.
+ * from the live module graph in development, read from the build manifest for
+ * the components the render created (`modules`) in production.
  */
-export async function documentStyleTags(devServer, page, template) {
+export async function documentStyleTags(devServer, modules, template) {
   return devServer
     ? developmentStyleTags(devServer)
-    : pageModulePreloads(page, template);
+    : renderedModuleStyleTags(modules, template);
 }

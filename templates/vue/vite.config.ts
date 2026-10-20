@@ -9,11 +9,12 @@ import {
   normalizePath,
   type Plugin,
 } from "vite";
+import { clientCodeSplitting, onBuildLog } from "./client-chunking.mjs";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { uiInertiaPage } from "./ui-inertia-page.mjs";
 import { uiRequestState } from "./ui-request-state.mjs";
-import { autoImportDirectories } from "./frontend-build-loader";
-import { frontendBuilds } from "./frontend-builds.generated";
+import { autoImportDirectories } from "./frontend-build-loader.ts";
+import { frontendBuilds } from "./frontend-builds.generated.ts";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
 import { iconScanGlobs } from "./icon-scan.mjs";
 
@@ -27,7 +28,10 @@ interface FrontendModuleRegistry {
   modules: FrontendModuleRegistryEntry[];
 }
 
-const registryPath = resolve(__dirname, "generated-frontend-modules.json");
+const registryPath = resolve(
+  import.meta.dirname,
+  "generated-frontend-modules.json",
+);
 const registry = JSON.parse(
   readFileSync(registryPath, "utf8"),
 ) as FrontendModuleRegistry;
@@ -109,7 +113,7 @@ const optimizedDependencies = [
  * `normalizePath` is Vite's own answer to this, the identity on POSIX.
  */
 const optimizerEntries = [
-  resolve(__dirname, "main.ts"),
+  resolve(import.meta.dirname, "main.ts"),
   ...moduleRoots.map((root) => resolve(root, "dms.frontend.ts")),
   ...frontendSourceRoots.flatMap((root) => [
     resolve(root, "app/**/*.vue"),
@@ -128,7 +132,7 @@ function paintBeforeHydrate(): Plugin {
 
 const uiLinkImport = "@nuxt/ui/components/Link.vue";
 const uiInertiaLinkImport = resolve(
-  __dirname,
+  import.meta.dirname,
   "node_modules/@nuxt/ui/dist/runtime/vue/overrides/inertia/Link.vue",
 );
 /**
@@ -163,7 +167,12 @@ export default defineConfig({
       router: "inertia",
       icon: {
         clientBundle: {
-          scan: { globInclude: iconScanGlobs(__dirname, frontendSourceRoots) },
+          scan: {
+            globInclude: iconScanGlobs(
+              import.meta.dirname,
+              frontendSourceRoots,
+            ),
+          },
         },
       },
       components: { dirs: [] },
@@ -179,42 +188,43 @@ export default defineConfig({
             // backslashes intact, where `\U`, `\M` and `\f` are read as escape
             // sequences: the specifier the bundler then resolves is a mangled
             // path that cannot exist. Keep it POSIX.
-            [normalizePath(resolve(__dirname, "frontend-module.ts"))]: [
-              "$fetch",
-              "abortDmsNavigation",
-              "clearDmsError",
-              "createDmsError",
-              "dmsRequestKey",
-              "defineDmsAppConfig",
-              "defineDmsPlugin",
-              "defineDmsMiddleware",
-              "defineDmsPageMeta",
-              "navigateDms",
-              "preloadDmsComponents",
-              "refreshDmsData",
-              "refreshDmsPageData",
-              "setDmsAsyncDataScope",
-              "showDmsError",
-              "useDmsAsyncData",
-              "useDmsData",
-              "useDmsCookie",
-              "useDmsFetch",
-              "useHead",
-              "useI18n",
-              "useDmsError",
-              "useDmsPagedData",
-              "useDmsPageLoading",
-              "useDmsApp",
-              "useDmsRoute",
-              "useDmsRouter",
-              "useDmsRuntimeConfig",
-              "useSeoMeta",
-              "useDmsState",
-              "useDmsAppConfig",
-              "DmsClientOnly",
-              "DmsLink",
-              "useDmsUserSession",
-            ],
+            [normalizePath(resolve(import.meta.dirname, "frontend-module.ts"))]:
+              [
+                "$fetch",
+                "abortDmsNavigation",
+                "clearDmsError",
+                "createDmsError",
+                "dmsRequestKey",
+                "defineDmsAppConfig",
+                "defineDmsPlugin",
+                "defineDmsMiddleware",
+                "defineDmsPageMeta",
+                "navigateDms",
+                "preloadDmsComponents",
+                "refreshDmsData",
+                "refreshDmsPageData",
+                "setDmsAsyncDataScope",
+                "showDmsError",
+                "useDmsAsyncData",
+                "useDmsData",
+                "useDmsCookie",
+                "useDmsFetch",
+                "useHead",
+                "useI18n",
+                "useDmsError",
+                "useDmsPagedData",
+                "useDmsPageLoading",
+                "useDmsApp",
+                "useDmsRoute",
+                "useDmsRouter",
+                "useDmsRuntimeConfig",
+                "useSeoMeta",
+                "useDmsState",
+                "useDmsAppConfig",
+                "DmsClientOnly",
+                "DmsLink",
+                "useDmsUserSession",
+              ],
           },
         ],
         dts: "auto-imports.d.ts",
@@ -228,13 +238,16 @@ export default defineConfig({
     // Nuxt UI's `Icon` must share one copy for the same-origin provider to apply.
     dedupe: ["vue", "reka-ui", "@nuxt/ui", "@vueuse/core", "@iconify/vue"],
     alias: {
-      "#dms/frontend-module": resolve(__dirname, "frontend-module.ts"),
+      "#dms/frontend-module": resolve(
+        import.meta.dirname,
+        "frontend-module.ts",
+      ),
       // For the server's development loader only: no browser module imports
       // a `dms.server.ts`.
-      "#dms/server": resolve(__dirname, "server-module.ts"),
+      "#dms/server": resolve(import.meta.dirname, "server-module.ts"),
       "#build/nuxt-icon-client-bundle": "virtual:nuxt-ui-icons",
       "#shortcuts-aggregated": resolve(
-        __dirname,
+        import.meta.dirname,
         "shortcuts-aggregated.generated.ts",
       ),
       ...stableModuleAliases,
@@ -252,5 +265,18 @@ export default defineConfig({
   },
   ssr: { noExternal: ["@nuxt/icon", "@nuxt/ui"] },
   server: { strictPort: true, allowedHosts: [".onamp.dev"] },
-  build: { manifest: true, outDir: "dist/client" },
+  build: {
+    manifest: true,
+    outDir: "dist/client",
+    rolldownOptions: { onLog: onBuildLog },
+  },
+  // The browser bundle only: the server bundles are single Node programs, for
+  // which a file count means nothing.
+  environments: {
+    client: {
+      build: {
+        rolldownOptions: { output: { codeSplitting: clientCodeSplitting } },
+      },
+    },
+  },
 });
