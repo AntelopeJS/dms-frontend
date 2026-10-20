@@ -208,6 +208,7 @@ export default defineConfig({
                 "useDmsAsyncData",
                 "useDmsData",
                 "useDmsCookie",
+                "useDmsRequestHeader",
                 "useDmsFetch",
                 "useHead",
                 "useI18n",

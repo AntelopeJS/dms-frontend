@@ -591,6 +591,13 @@ export interface DmsFrontendRuntime {
   /** The `Cookie` header of the request a server runtime renders. */
   requestCookies?: string;
   /**
+   * The other headers of that request, by lower-case name, without its
+   * credentials: see `useDmsRequestHeader`.
+   */
+  requestHeaders?: Readonly<Record<string, string>>;
+  /** The request headers the render read, which its answer varies on. */
+  readRequestHeaders: Set<string>;
+  /**
    * Owns the effects plugins create while they set up. A server render stops
    * it once done: nothing else would, since a server app is never unmounted.
    */
@@ -641,9 +648,12 @@ export function createDmsFrontendRuntime(
   hydratedAsyncData?: Record<string, unknown>,
   isServer = false,
   requestCookies?: string,
+  requestHeaders?: Readonly<Record<string, string | string[] | undefined>>,
 ): DmsFrontendRuntime {
   const runtime: DmsFrontendRuntime = {
     requestCookies,
+    requestHeaders: requestHeaders && readableRequestHeaders(requestHeaders),
+    readRequestHeaders: new Set(),
     sharedState: new Map(),
     asyncData: shallowReactive(new Map()),
     hydratedAsyncData: new Map(Object.entries(hydratedAsyncData ?? {})),
@@ -2659,6 +2669,49 @@ export function readDmsLocaleCookie(
     // A value that is not URI-encoded: as if the browser had picked none.
     return undefined;
   }
+}
+
+/**
+ * Request headers an application never reads: the cookies go through
+ * `useDmsCookie`, and the credentials stay with the server.
+ */
+const WITHHELD_REQUEST_HEADERS = new Set([
+  "cookie",
+  "authorization",
+  "proxy-authorization",
+]);
+
+function readableRequestHeaders(
+  headers: Readonly<Record<string, string | string[] | undefined>>,
+): Record<string, string> {
+  const readable: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    const key = name.toLowerCase();
+    if (value === undefined || key.startsWith(":")) continue;
+    if (WITHHELD_REQUEST_HEADERS.has(key)) continue;
+    readable[key] = [value].flat().join(", ");
+  }
+  return readable;
+}
+
+/**
+ * A header of the request a server render answers, by name (any case), or
+ * `undefined` when the request has none. The browser has no request to read:
+ * there it is always `undefined`, so a value the page renders from a header
+ * reaches the browser with `useDmsState(key, init, { transfer: true })`, for
+ * hydration to start from what the server rendered. The answer varies on
+ * every header a render reads (`Vary`), so a shared cache keeps a copy per
+ * value. `Cookie`, `Authorization` and `Proxy-Authorization` always read
+ * `undefined`: cookies go through `useDmsCookie`, credentials stay with the
+ * server.
+ */
+export function useDmsRequestHeader(name: string): string | undefined {
+  if (typeof document !== "undefined") return undefined;
+  const runtime = useDmsRuntime();
+  const key = name.toLowerCase();
+  if (!runtime.isServer || WITHHELD_REQUEST_HEADERS.has(key)) return undefined;
+  runtime.readRequestHeaders.add(key);
+  return runtime.requestHeaders?.[key];
 }
 
 /**

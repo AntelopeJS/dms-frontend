@@ -27,7 +27,7 @@ import {
 import { publicBuildFile } from "./server/built-files.mjs";
 import { serveStaticFile } from "./server/static-files.mjs";
 import { productionHtmlTemplate } from "./server/client-manifest.mjs";
-import { writeContent } from "./server/content.mjs";
+import { withVary, writeContent } from "./server/content.mjs";
 import {
   captureViteErrors,
   runViteMiddlewares,
@@ -253,10 +253,11 @@ function clientRenderedShell(page) {
   };
 }
 
-async function serverRendered(page, serverFetch, requestCookies, devServer) {
+async function serverRendered(page, serverFetch, request, devServer) {
   try {
     const renderer = await ssrRenderer(devServer);
-    return await renderer.renderDmsPage(page, serverFetch, requestCookies);
+    const { cookies, headers } = request;
+    return await renderer.renderDmsPage(page, serverFetch, cookies, headers);
   } catch (error) {
     console.error(
       "DMS SSR render failed; falling back to client rendering",
@@ -268,7 +269,8 @@ async function serverRendered(page, serverFetch, requestCookies, devServer) {
 
 /**
  * Renders a page document. With `{ ssr: false }` (a route rule), the client
- * renders the page from the shell instead.
+ * renders the page from the shell instead. `requestHeaders` are the ones the
+ * render may read; `vary` names those it read.
  */
 export async function renderHtml(
   page,
@@ -284,10 +286,11 @@ export async function renderHtml(
   const template = devServer
     ? await devServer.transformIndexHtml(requestUrl, rawTemplate)
     : rawTemplate;
+  const request = { cookies: requestCookies, headers: options.requestHeaders };
   const rendered =
     options.ssr === false
       ? clientRenderedShell(page)
-      : await serverRendered(page, serverFetch, requestCookies, devServer);
+      : await serverRendered(page, serverFetch, request, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
   const preloads = await documentStyleTags(
@@ -309,13 +312,15 @@ export async function renderHtml(
       `<div id="dms-overlays" class="isolate">${rendered.overlays}</div>`,
     )
     .replace("__DMS_APP__", () => rendered.body);
-  return { html, status: rendered.error?.statusCode ?? 200 };
+  const vary = rendered.varyHeaders ?? [];
+  return { html, status: rendered.error?.statusCode ?? 200, vary };
 }
 
 function renderRequestHtml(page, request, rule = {}) {
   const fetch = serverComponentFetch(request);
   return renderHtml(page, request.url, fetch, request.headers.cookie, {
     ssr: rule.ssr,
+    requestHeaders: request.headers,
   });
 }
 
@@ -356,12 +361,12 @@ async function writeBackendError(error, request, response) {
         JSON.stringify(page),
       );
     }
-    const { html } = await renderRequestHtml(page, request);
+    const { html, vary } = await renderRequestHtml(page, request);
     return writeContent(
       request,
       response,
       status,
-      { ...htmlHeaders(), ...retryHeaders },
+      withVary({ ...htmlHeaders(), ...retryHeaders }, vary),
       html,
     );
   }
@@ -464,11 +469,12 @@ export async function handleRequest(request, response) {
     redirectFrontendVisit(request, response, rendered.redirect);
     return;
   }
+  const headers = { ...htmlHeaders(), ...headersFor(rendered.status) };
   return writeContent(
     request,
     response,
     rendered.status,
-    { ...htmlHeaders(), ...headersFor(rendered.status) },
+    withVary(headers, rendered.vary),
     rendered.html,
   );
 }
