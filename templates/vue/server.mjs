@@ -73,7 +73,12 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const CLIENT_ROOT = join(PROJECT_ROOT, "dist/client");
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
-const BUILT_SSR_RENDERER_PATH = join(PROJECT_ROOT, "dist/ssr/ssr-renderer.js");
+// A URL, not a path: on Windows, `import()` reads `C:\...` as a URL whose
+// scheme is `c:` and refuses it.
+const BUILT_SSR_RENDERER_URL = new URL(
+  "dist/ssr/ssr-renderer.js",
+  import.meta.url,
+);
 // The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
 // which reads compile-time flags only a bundler replaces. Vite inlines them in
 // the client bundle; without the same value here, installing vue-i18n under
@@ -240,7 +245,7 @@ function serveAsset(pathname, request, response) {
 async function ssrRenderer(devServer) {
   const renderer = devServer
     ? await devServer.ssrLoadModule("/ssr-renderer.ts")
-    : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_PATH));
+    : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_URL.href));
   await icons.provideIconCollections(renderer);
   return renderer;
 }
