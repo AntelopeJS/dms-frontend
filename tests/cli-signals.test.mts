@@ -74,6 +74,7 @@ function startCli({
     env: {
       ...process.env,
       HOME: home,
+      USERPROFILE: home,
       NO_UPDATE_NOTIFIER: "1",
       DMS_API_BASE_URL: "",
       DMS_TEST_PID_FILE: pidFile,

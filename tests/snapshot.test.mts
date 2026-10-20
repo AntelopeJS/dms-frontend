@@ -53,6 +53,7 @@ function runCli(
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
     HOME: scratch,
+    USERPROFILE: scratch,
     NO_COLOR: "1",
     NO_UPDATE_NOTIFIER: "1",
     NODE_OPTIONS: "--no-deprecation",

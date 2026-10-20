@@ -61,7 +61,8 @@ const TERMINAL_STDERR = import.meta.resolve("./fixtures/terminal-stderr.mjs");
 
 /**
  * Run the CLI the way a user outside any DMS project would: an empty cwd and
- * an empty HOME, so `clean --all` can never reach the real workspaces.
+ * an empty home (HOME, and USERPROFILE, which Windows reads it from), so
+ * `clean --all` can never reach the real workspaces.
  */
 async function runCli(
   args: string[],
@@ -75,6 +76,7 @@ async function runCli(
   const env: Record<string, string | undefined> = {
     ...process.env,
     HOME: sandbox,
+    USERPROFILE: sandbox,
     NO_UPDATE_NOTIFIER: "1",
     DMS_API_BASE_URL: "",
     // What the output looks like depends on these: pin them to a plain

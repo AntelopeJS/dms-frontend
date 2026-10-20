@@ -298,6 +298,7 @@ describe("ajs dms start", () => {
       const environment: NodeJS.ProcessEnv = {
         ...process.env,
         HOME: home,
+        USERPROFILE: home,
         NO_UPDATE_NOTIFIER: "1",
         // start reserves its port before spawning the server: ask for any
         // free one, so the suite does not depend on 3001 being free.

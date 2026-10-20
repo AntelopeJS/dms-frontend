@@ -65,6 +65,7 @@ function runCli(args: string[], options: RunOptions = {}): Promise<Run> {
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
     HOME: sandbox,
+    USERPROFILE: sandbox,
     NO_COLOR: "1",
     NO_UPDATE_NOTIFIER: "1",
     DMS_API_BASE_URL: "",

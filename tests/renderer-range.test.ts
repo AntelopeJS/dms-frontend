@@ -283,7 +283,13 @@ async function runTypeScript(
       ["--import", require.resolve("tsx"), join(REPOSITORY, entry), ...args],
       {
         cwd: home,
-        env: { ...process.env, HOME: home, NO_UPDATE_NOTIFIER: "1", ...env },
+        env: {
+          ...process.env,
+          HOME: home,
+          USERPROFILE: home,
+          NO_UPDATE_NOTIFIER: "1",
+          ...env,
+        },
       },
     );
     return { status: 0, output: `${stdout}${stderr}` };
