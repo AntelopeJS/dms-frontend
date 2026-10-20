@@ -250,6 +250,7 @@ function clientRenderedShell(page) {
     body: inertiaAppHtml(page),
     head: { headTags: "", htmlAttrs: "", bodyAttrs: "" },
     overlays: "",
+    modules: [],
   };
 }
 
@@ -290,7 +291,11 @@ export async function renderHtml(
       : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
-  const preloads = await documentStyleTags(devServer, page, template);
+  const preloads = await documentStyleTags(
+    devServer,
+    rendered.modules,
+    template,
+  );
   const html = template
     .replace("<title>Antelope DMS</title>", () =>
       withFaviconPlaceholder(rendered.head.headTags),
