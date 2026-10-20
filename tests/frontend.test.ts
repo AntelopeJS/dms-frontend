@@ -231,6 +231,7 @@ describe("Vite frontend generation", () => {
       "dist/",
       "frontend-modules/**/i18n/locales/",
       "locales.generated/",
+      "sfc-global-types.generated.d.ts",
     ]);
   });
 });

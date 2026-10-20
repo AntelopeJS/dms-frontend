@@ -117,6 +117,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["client-server-guard.mjs", "client-server-guard.mjs"],
   ["ui-inertia-page.mjs", "ui-inertia-page.mjs"],
   ["ui-request-state.mjs", "ui-request-state.mjs"],
+  ["sfc-global-types.mjs", "sfc-global-types.mjs"],
   ["icon-api.mjs", "icon-api.mjs"],
   ["icon-scan.mjs", "icon-scan.mjs"],
   ["email-renderer.ts", "email-renderer.ts"],
