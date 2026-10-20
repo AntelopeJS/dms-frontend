@@ -9,6 +9,7 @@ import {
   normalizePath,
   type Plugin,
 } from "vite";
+import { clientCodeSplitting, onBuildLog } from "./client-chunking.mjs";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { uiInertiaPage } from "./ui-inertia-page.mjs";
 import { uiRequestState } from "./ui-request-state.mjs";
@@ -267,13 +268,15 @@ export default defineConfig({
   build: {
     manifest: true,
     outDir: "dist/client",
-    rolldownOptions: {
-      // Rolldown reports a dynamic import of a module another one imports
-      // statically (the modules' `dms.frontend.ts` registrations against the
-      // components they also use), where Rollup said nothing. The bundle is
-      // the same; the warning, with its absolute paths, would head every
-      // `ajs dms build`. Revisit with the chunking (`codeSplitting`).
-      checks: { ineffectiveDynamicImport: false },
+    rolldownOptions: { onLog: onBuildLog },
+  },
+  // The browser bundle only: the server bundles are single Node programs, for
+  // which a file count means nothing.
+  environments: {
+    client: {
+      build: {
+        rolldownOptions: { output: { codeSplitting: clientCodeSplitting } },
+      },
     },
   },
 });
