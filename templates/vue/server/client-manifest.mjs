@@ -1,5 +1,5 @@
-// Reading the built client manifest and turning a rendered page into the style
-// and module-preload tags its HTML needs.
+// Reading the built client manifest and turning the components a server render
+// created into the stylesheet links its HTML needs.
 //
 // Lives apart from server.mjs so the file stays under the size the linter
 // allows. Production-only: in dev, Vite serves these itself.
@@ -30,62 +30,11 @@ export function productionHtmlTemplate() {
   return productionTemplate;
 }
 
-export function normalizeDmsName(name) {
-  return name
-    .replace(/^lazy/i, "")
-    .replace(/^dms[-_]?/i, "")
-    .replace(/[^a-z0-9]/gi, "")
-    .toLowerCase();
-}
-
-export function collectRenderedComponentNames(value, names) {
-  if (!value || typeof value !== "object") return;
-  if (Array.isArray(value)) {
-    value.forEach((entry) => {
-      collectRenderedComponentNames(entry, names);
-    });
-    return;
-  }
-  if (typeof value.componentName === "string")
-    names.add(normalizeDmsName(value.componentName));
-  Object.values(value).forEach((entry) => {
-    collectRenderedComponentNames(entry, names);
-  });
-}
-
 function productionClientManifest() {
   if (clientManifest) return clientManifest;
   if (!existsSync(CLIENT_MANIFEST_PATH)) return undefined;
   clientManifest = JSON.parse(readFileSync(CLIENT_MANIFEST_PATH, "utf8"));
   return clientManifest;
-}
-
-function sourceComponentName(source) {
-  const filename =
-    source
-      .split("/")
-      .at(-1)
-      ?.replace(/\.vue$/, "") ?? "";
-  return normalizeDmsName(filename);
-}
-
-function matchedPageManifestEntries(page, manifest) {
-  const names = new Set();
-  const layout = page.props?.page?.layout;
-  collectRenderedComponentNames(layout, names);
-  [
-    page.props?.page?.componentName,
-    layout?.componentName,
-    layout?.layout?.componentName,
-  ].forEach((name) => {
-    if (typeof name === "string") names.add(normalizeDmsName(name));
-  });
-  return Object.entries(manifest)
-    .filter(
-      ([source, entry]) =>
-        entry.isDynamicEntry && names.has(sourceComponentName(source)),
-    )
-    .map(([key]) => key);
 }
 
 function collectManifestStyles(manifest, key, styles, visited) {
@@ -98,18 +47,33 @@ function collectManifestStyles(manifest, key, styles, visited) {
     collectManifestStyles(manifest, imported, styles, visited);
 }
 
-export function pageModuleStyles(page) {
+/**
+ * The stylesheets the client build split out for the components a server
+ * render created, each named by the module id `@vitejs/plugin-vue` records in
+ * the render's `ssrContext.modules`. That id is the component's path from the
+ * workspace root, the very key the client manifest gives a lazily loaded
+ * component, so the lookup needs no guessing from names. A component bundled
+ * into another chunk is no key of its own: its stylesheet comes with that
+ * chunk's, reached through the `imports` of the component that loaded it.
+ */
+function renderedModuleStyles(modules = []) {
   const manifest = productionClientManifest();
   const styles = new Set();
   if (!manifest) return styles;
   const visited = new Set();
-  for (const key of matchedPageManifestEntries(page, manifest))
-    collectManifestStyles(manifest, key, styles, visited);
+  for (const id of modules)
+    collectManifestStyles(manifest, id, styles, visited);
   return styles;
 }
 
-export function pageModulePreloads(page, template) {
-  return [...pageModuleStyles(page)]
+/**
+ * Links the stylesheets of every component the server rendered and the built
+ * template does not link already, so that none of them waits for its chunk's
+ * JavaScript to arrive: the HTML would otherwise paint unstyled and shift once
+ * it does. A component the render did not reach gets no link.
+ */
+export function renderedModuleStyleTags(modules, template) {
+  return [...renderedModuleStyles(modules)]
     .filter((file) => !template.includes(`href="/${file}"`))
     .map((file) => `<link rel="stylesheet" href="/${file}">`)
     .join("");

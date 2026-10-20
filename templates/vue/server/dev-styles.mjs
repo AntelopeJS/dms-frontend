@@ -18,7 +18,7 @@
 
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pageModulePreloads } from "./client-manifest.mjs";
+import { renderedModuleStyleTags } from "./client-manifest.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const STYLE_ATTRIBUTE = "data-dms-dev-style";
@@ -107,11 +107,11 @@ export async function developmentStyleTags(devServer) {
 
 /**
  * The style tags a document needs, whichever server is answering it: collected
- * from the live module graph in development, read from the build manifest in
- * production.
+ * from the live module graph in development, read from the build manifest for
+ * the components the render created (`modules`) in production.
  */
-export async function documentStyleTags(devServer, page, template) {
+export async function documentStyleTags(devServer, modules, template) {
   return devServer
     ? developmentStyleTags(devServer)
-    : pageModulePreloads(page, template);
+    : renderedModuleStyleTags(modules, template);
 }

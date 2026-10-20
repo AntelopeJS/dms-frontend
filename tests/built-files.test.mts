@@ -19,12 +19,13 @@ const builtFiles = import(
 ) as Promise<BuiltFiles>;
 
 const PAGE_COMPONENT = "ArticleList";
+const PAGE_MODULE = "frontend-modules/fixture/components/ArticleList.vue";
 const PAGE_STYLESHEET = "assets/ArticleList-c3d4.css";
 const ENTRY_SCRIPT = "export const entry = 1;\n".repeat(64);
 const CLIENT_MANIFEST = `${JSON.stringify(
   {
     "main.ts": { file: "assets/main-a1b2.js", isEntry: true },
-    "frontend-modules/fixture/components/ArticleList.vue": {
+    [PAGE_MODULE]: {
       file: "assets/ArticleList-c3d4.js",
       isDynamicEntry: true,
       css: [PAGE_STYLESHEET],
@@ -47,7 +48,8 @@ function writeBuiltFile(
 /**
  * A production workspace: the server template, a client build as `ajs dms
  * build` lays it out (the manifest and its compressed copies included), and
- * an SSR renderer that renders the page shell.
+ * an SSR renderer that renders the page shell and reports the component it
+ * rendered, as the real one does from `ssrContext.modules`.
  */
 function writeProductionWorkspace(workspace: string): void {
   cpSync("templates/vue", workspace, { recursive: true });
@@ -80,7 +82,8 @@ function writeProductionWorkspace(workspace: string): void {
     join(workspace, "dist", "ssr"),
     "ssr-renderer.js",
     `export async function renderDmsPage(page) {
-  return { body: '<div id="app">' + (page.props.page.componentName ?? "error") + "</div>", head: { headTags: "", htmlAttrs: "", bodyAttrs: "" }, overlays: "" };
+  const name = page.props.page.componentName;
+  return { body: '<div id="app">' + (name ?? "error") + "</div>", head: { headTags: "", htmlAttrs: "", bodyAttrs: "" }, overlays: "", modules: name === ${JSON.stringify(PAGE_COMPONENT)} ? [${JSON.stringify(PAGE_MODULE)}] : [] };
 }
 export function isDmsFrontendPage() {
   return false;
@@ -214,7 +217,8 @@ describe("built files the production server serves", () => {
       assert.equal(await wellKnown.text(), "Contact: test\n");
 
       // The server still reads the manifest: the page links the stylesheet
-      // of its component, and the asset version is the manifest's hash.
+      // of the component it rendered, and the asset version is the
+      // manifest's hash.
       const page = await get("/articles");
       assert.equal(page.status, 200);
       const html = await page.text();
