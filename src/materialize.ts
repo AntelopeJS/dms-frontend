@@ -17,6 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { getProcessUi } from "@antelopejs/core/cli";
 import {
   AUTH_ESTABLISH_FILE,
+  FRONTEND_BUILD_ENTRY,
   PUBLIC_ENDPOINTS_FILE,
   LAYERS_SUBDIR,
   SERVER_OPTIONS_FILE,
@@ -40,6 +41,7 @@ import {
 import {
   applyContent,
   isBlocklistedCopyPath,
+  sanitizedBuildDeclaration,
   sanitizedPackageContent,
   toPosixPath,
 } from "./fs-sync";
@@ -186,6 +188,12 @@ function copyLayerSource(src: string, dest: string): void {
   });
 
   sanitizeLayerPackage(join(dest, "package.json"));
+  sanitizeBuildDeclaration(join(dest, FRONTEND_BUILD_ENTRY));
+}
+
+function sanitizeBuildDeclaration(file: string): void {
+  if (!existsSync(file)) return;
+  applyContent(sanitizedBuildDeclaration(readFileSync(file, "utf-8")), file);
 }
 
 function sanitizeLayerPackage(pkgPath: string): void {

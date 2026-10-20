@@ -192,7 +192,7 @@ function writeFrontendBuildLoader(
         `{ id: ${JSON.stringify(module.id)}, setup: build${index} }`,
     )
     .join(", ");
-  const content = `${imports}\n\nimport type { FrontendBuildDeclaration } from "./frontend-build-loader";\n\nexport const frontendBuilds: FrontendBuildDeclaration[] = [${declarations}];\n`;
+  const content = `${imports}\n\nimport type { FrontendBuildDeclaration } from "./frontend-build-loader.ts";\n\nexport const frontendBuilds: FrontendBuildDeclaration[] = [${declarations}];\n`;
   return applyContent(
     content,
     join(workspaceDir, "frontend-builds.generated.ts"),

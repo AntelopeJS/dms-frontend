@@ -227,8 +227,11 @@ describe("dependency optimizer entries", () => {
     );
     assert.ok(expression, "the template computes the optimizer's entry points");
     // `normalizePath` is the real one: it must stay the identity on POSIX.
-    const entries = runInNewContext(`(${expression[1]})`, {
-      __dirname: "/workspace",
+    // `import.meta` is not valid outside a module: the expression runs with
+    // the directory under a plain name.
+    const source = expression[1].replaceAll("import.meta.dirname", "dirname");
+    const entries = runInNewContext(`(${source})`, {
+      dirname: "/workspace",
       normalizePath,
       resolve: (...parts: string[]) => parts.join("/"),
       moduleRoots: ["/workspace/frontend-modules/core"],

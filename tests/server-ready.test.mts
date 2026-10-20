@@ -209,7 +209,7 @@ describe("Frontend server startup", () => {
       const message = await firstMessage(started);
       assert.deepEqual(message, {
         type: "dms:start-error",
-        message: 'Unexpected "}"',
+        message: "Unexpected token",
         location: { file: config, line: 4, column: 0, lineText: "};" },
       });
       assert.equal(await started.exited, 1);

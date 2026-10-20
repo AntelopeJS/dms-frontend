@@ -88,7 +88,7 @@ describe("Inertia HTTP protocol", () => {
     );
     assert.match(
       source,
-      /serverOptions\.hmr = \{ server: frontendHttpServer \}/,
+      /serverOptions\.ws = \{ server: frontendHttpServer \}/,
     );
     assert.match(source, /vitePromise \?\?=/);
     assert.match(source, /vitePromise = undefined/);

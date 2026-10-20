@@ -2,7 +2,9 @@
 // `ajs dms start`, it reports over IPC and the CLI words what the user reads.
 // Started on its own, it prints the line itself.
 
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 const WILDCARD_ADDRESSES = ["0.0.0.0", "::"];
 
@@ -45,31 +47,53 @@ export async function reportListenError(error, host, port) {
   process.exit(1);
 }
 
-/**
- * Where a startup error points, when it says: esbuild's location for a config
- * it could not bundle, Rollup's for a plugin that failed on a file.
- */
-function errorLocation(error) {
-  const location = error?.errors?.[0]?.location;
-  if (location?.file) {
-    return {
-      file: resolve(location.file),
-      line: location.line,
-      column: location.column,
-      lineText: location.lineText,
-    };
-  }
-  const file = error?.loc?.file ?? error?.id;
-  if (typeof file !== "string") return undefined;
-  return { file, line: error.loc?.line, column: error.loc?.column };
+/** The `[PARSE_ERROR] ` Rolldown puts in front of what it says. */
+const RULE_PREFIX = /^\[[A-Z_]+\]\s*/;
+
+/** The first problem Rolldown reports when it cannot bundle a config. */
+function bundlerError(error) {
+  const first = error?.errors?.[0];
+  return first && typeof first === "object" ? first : undefined;
 }
 
-/** The first line of what went wrong, without esbuild's error count. */
+/**
+ * Where a startup error points, when it says: Rolldown's location for a config
+ * it could not bundle (the line is read back from the file, which Rolldown
+ * only draws in a colored frame), Rollup's for a plugin that failed on a file.
+ */
+function errorLocation(error) {
+  const source = bundlerError(error) ?? error;
+  const file = source?.loc?.file ?? source?.id;
+  if (typeof file !== "string") return undefined;
+  const { line, column } = source.loc ?? {};
+  return {
+    file: resolve(file),
+    line,
+    column,
+    lineText: line === undefined ? undefined : readLine(file, line),
+  };
+}
+
+/** Line `line` (1-based) of `file`, `undefined` when it cannot be read. */
+function readLine(file, line) {
+  try {
+    return readFileSync(file, "utf8").split(/\r?\n/)[line - 1];
+  } catch {
+    return undefined;
+  }
+}
+
+/** The first line of what went wrong, without Rolldown's rule and frame. */
 function errorText(error) {
-  const text = error?.errors?.[0]?.text;
-  if (typeof text === "string") return text;
-  const message = error instanceof Error ? error.message : String(error);
-  return message.split(/\r?\n/)[0];
+  const reported = bundlerError(error);
+  const message = reported
+    ? String(reported.message)
+    : error instanceof Error
+      ? error.message
+      : String(error);
+  return stripVTControlCharacters(message)
+    .split(/\r?\n/)[0]
+    .replace(RULE_PREFIX, "");
 }
 
 /**
