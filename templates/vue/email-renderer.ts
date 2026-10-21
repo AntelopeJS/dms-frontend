@@ -133,6 +133,19 @@ function registerEmailElements(app: ReturnType<typeof createSSRApp>): void {
   );
 }
 
+/**
+ * The merged catalogs of `locale` (the language only, `fr` of `fr-BE`) and of
+ * English, its fallback: what a render in that locale reads its texts from.
+ * An unsupported locale reads English.
+ */
+export async function localeCatalogs(locale: string): Promise<{
+  messages: Record<string, unknown>;
+  fallback: Record<string, unknown>;
+}> {
+  const catalogs = await loadEmailLocaleMessages(locale);
+  return { messages: catalogs[locale], fallback: catalogs.en };
+}
+
 export async function renderEmail(
   templateName: string,
   props: Record<string, unknown>,

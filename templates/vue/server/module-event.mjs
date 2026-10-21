@@ -22,7 +22,7 @@ import {
   writeSealedCookie,
   writeSession,
 } from "./auth/session.mjs";
-import { renderEmailTemplate } from "./email.mjs";
+import { readLocaleCatalogs, renderEmailTemplate } from "./email.mjs";
 import { backendUrl } from "./request-target.mjs";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -187,6 +187,7 @@ export function createServerEvent(context) {
     }),
     renderEmail: (template, props, options = {}) =>
       renderEmailTemplate(template, props, options),
+    localeMessages: (locale) => readLocaleCatalogs(locale),
     app: Object.freeze({
       authEstablishEndpoints: Object.freeze([
         ...(context.app?.authEstablishEndpoints ?? []),

@@ -130,3 +130,20 @@ export async function renderEmailTemplate(template, props, options = {}) {
     renderFinished();
   }
 }
+
+/**
+ * The application's merged catalogs of a locale and of English, read from the
+ * email bundle like a render reads them.
+ *
+ * @param locale The language to read
+ */
+export async function readLocaleCatalogs(locale) {
+  await waitForEmailBuild();
+  rendersInProgress += 1;
+  try {
+    const { localeCatalogs } = await loadEmailRenderer();
+    return await localeCatalogs(locale);
+  } finally {
+    renderFinished();
+  }
+}

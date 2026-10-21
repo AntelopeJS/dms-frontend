@@ -167,8 +167,15 @@ const { t } = useI18n();
       germanPath,
       "invalid JSON: must not be read by an English or French render",
     );
-    const { renderEmail } = await import(
+    const { renderEmail, localeCatalogs } = await import(
       pathToFileURL(join(output, "email-renderer.js")).href
+    );
+    const french = await localeCatalogs("fr-BE");
+    assert.equal(french.messages.subject, "Override French");
+    assert.equal(french.fallback.fallback, "English fallback");
+    assert.equal(
+      (await localeCatalogs("es")).messages.subject,
+      "Override English",
     );
     const layout = await renderEmail("EmailFixture", {
       translationKey: "arbitrary",

@@ -135,6 +135,15 @@ export interface DmsServerEvent {
     props: Record<string, unknown>,
     options?: { locale?: string },
   ): Promise<string>;
+  /**
+   * The application's merged texts in `locale` (its language, `fr` of
+   * `fr-BE`) and in English, its fallback, as the pages and emails read them:
+   * for a backend that writes texts outside a page (an export).
+   */
+  localeMessages(locale: string): Promise<{
+    messages: Record<string, unknown>;
+    fallback: Record<string, unknown>;
+  }>;
   /** Deployment data from the manifest, read-only. */
   app: {
     /** Backend endpoints declared as session-opening (`authEstablishEndpoints`). */
