@@ -4,6 +4,7 @@ import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ofetch } from "ofetch";
 import {
+  CLIENT_HEADERS,
   relayedHeaders,
   RequestBodyError,
   UpstreamError,
@@ -126,9 +127,7 @@ function backendHeaders(request, access = { anonymous: false, headers: [] }) {
       "if-match",
       "origin",
       "referer",
-      "user-agent",
-      "x-content-language",
-      "x-realtime-session",
+      ...CLIENT_HEADERS,
       ...access.headers,
     ]),
     ...forwardedHeaders(request),

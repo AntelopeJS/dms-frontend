@@ -1,0 +1,44 @@
+diff --git a/dist/runtime/vue/overrides/inertia/Link.vue b/dist/runtime/vue/overrides/inertia/Link.vue
+index 5af1e3e..6cf09e1 100644
+--- a/dist/runtime/vue/overrides/inertia/Link.vue
++++ b/dist/runtime/vue/overrides/inertia/Link.vue
+@@ -106,20 +106,32 @@ const rel = computed(() => {
+   }
+   return null;
+ });
++// Patched by @antelopejs/dms-frontend until nuxt/ui#6809 is released: match on
++// path segments, so `/test` is not active on `/test-a` (nuxt/ui#6803). A `to`
++// that is not a string (a route object) has no path to match, as before.
++function normalizePath(url) {
++  if (typeof url !== "string") {
++    return void 0;
++  }
++  const path = url.split("#")[0].split("?")[0];
++  if (!path) {
++    return void 0;
++  }
++  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
++}
++const currentPath = computed(() => normalizePath(page.url) ?? "/");
++const targetPath = computed(() => href.value ? normalizePath(href.value) : void 0);
+ const isLinkActive = computed(() => {
+   if (props.active !== void 0) {
+     return props.active;
+   }
+-  if (!href.value) {
++  if (!targetPath.value) {
+     return false;
+   }
+-  if (props.exact && page.url === href.value) {
+-    return true;
+-  }
+-  if (!props.exact && page.url.startsWith(href.value)) {
+-    return true;
++  if (props.exact) {
++    return page.url === href.value;
+   }
+-  return false;
++  return currentPath.value === targetPath.value || currentPath.value.startsWith(targetPath.value === "/" ? "/" : `${targetPath.value}/`);
+ });
+ const linkClass = computed(() => {
+   const active = isLinkActive.value;

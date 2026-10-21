@@ -710,12 +710,21 @@ describe("Module server routes in the production server", () => {
     backendCalls.length = 0;
     const response = await fetch(`${frontendUrl}/api/_fixture/backend`, {
       method: "POST",
-      headers: { origin: frontendUrl },
+      headers: {
+        origin: frontendUrl,
+        "x-time-zone": "Europe/Brussels",
+        "x-realtime-connection": "connection-7",
+        "x-custom": "dropped",
+      },
     });
     assert.deepEqual(await response.json(), { from: "backend" });
     const [call] = backendCalls;
     assert.equal(call.url, "/api/echo");
     assert.equal(call.headers["x-forwarded-for"], "127.0.0.1");
+    // The client headers the proxy relays reach a module's backend call too.
+    assert.equal(call.headers["x-time-zone"], "Europe/Brussels");
+    assert.equal(call.headers["x-realtime-connection"], "connection-7");
+    assert.equal(call.headers["x-custom"], undefined);
     assert.equal(call.headers["x-fixture"], "yes");
     assert.equal(call.headers.authorization, "Bearer module-token");
   });

@@ -1,9 +1,17 @@
 import { clientCountryHeader, clientIp } from "./client-ip.mjs";
 
-const FORWARDED_HEADERS = [
+/**
+ * The client headers every backend request carries, the proxy's and a module
+ * route's alike: the browser's user agent, the interface language, the
+ * browser's time zone and every realtime header (`x-realtime-session`, the
+ * connection id of a shared stream, …). A name ending in `*` matches every
+ * header that starts with what precedes it.
+ */
+export const CLIENT_HEADERS = [
   "user-agent",
   "x-content-language",
-  "x-realtime-session",
+  "x-time-zone",
+  "x-realtime-*",
 ];
 
 export class UpstreamError extends Error {
@@ -29,15 +37,21 @@ export function publicBackendMessage(data) {
  * The headers of a client request the server relays to the backend.
  *
  * @param request The client request
- * @param names Lowercase names of the request headers to copy when present
+ * @param names Lowercase names of the request headers to copy when present;
+ *   a name ending in `*` copies every header starting with its prefix
  * @returns The client country header, then the copied headers
  */
 export function relayedHeaders(request, names) {
+  const prefixes = names
+    .filter((name) => name.endsWith("*"))
+    .map((name) => name.slice(0, -1));
+  const isRelayed = (name) =>
+    names.includes(name) || prefixes.some((prefix) => name.startsWith(prefix));
   return {
     ...clientCountryHeader(request),
     ...Object.fromEntries(
-      names.flatMap((name) =>
-        request.headers[name] ? [[name, request.headers[name]]] : [],
+      Object.entries(request.headers).filter(
+        ([name, value]) => value && isRelayed(name),
       ),
     ),
   };
@@ -56,7 +70,7 @@ export async function backend(path, request, options = {}) {
       String(value),
     ]),
   );
-  Object.assign(headers, relayedHeaders(request, FORWARDED_HEADERS));
+  Object.assign(headers, relayedHeaders(request, CLIENT_HEADERS));
   headers["x-forwarded-for"] = clientIp(request);
   if (options.token) headers.authorization = `Bearer ${options.token}`;
   if (options.relay)
