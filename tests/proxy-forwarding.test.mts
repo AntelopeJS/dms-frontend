@@ -46,6 +46,7 @@ async function sessionCookie(
 describe("the proxy forwards who is asking", () => {
   const previous = {
     backend: process.env.DMS_API_BASE_URL,
+    clientIpHeader: process.env.DMS_CLIENT_IP_HEADER,
     endpoints: process.env.DMS_PUBLIC_ENDPOINTS,
     hops: process.env.DMS_TRUSTED_PROXY_HOPS,
     secret: process.env.DMS_SESSION_SECRET,
@@ -78,11 +79,13 @@ describe("the proxy forwards who is asking", () => {
   beforeEach(() => {
     received = {};
     delete process.env.DMS_TRUSTED_PROXY_HOPS;
+    delete process.env.DMS_CLIENT_IP_HEADER;
   });
 
   after(() => {
     for (const [name, value] of Object.entries({
       DMS_API_BASE_URL: previous.backend,
+      DMS_CLIENT_IP_HEADER: previous.clientIpHeader,
       DMS_PUBLIC_ENDPOINTS: previous.endpoints,
       DMS_TRUSTED_PROXY_HOPS: previous.hops,
       DMS_SESSION_SECRET: previous.secret,
@@ -150,5 +153,53 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received["x-forwarded-for"], "127.0.0.1");
     assert.equal(received.origin, undefined);
     assert.equal(received.referer, undefined);
+  });
+
+  it("sends the client the platform header names, with the platform's scheme and host", async () => {
+    process.env.DMS_CLIENT_IP_HEADER = "X-Client-IP";
+    const response = await fetch(`${frontendUrl}/api/items`, {
+      headers: {
+        "x-client-ip": "203.0.113.7",
+        "x-forwarded-for": "198.51.100.66, 10.0.0.1",
+        "x-forwarded-proto": "https",
+        "x-forwarded-host": "app.example.test",
+      },
+    });
+    assert.equal(response.status, 200);
+    await response.arrayBuffer();
+    assert.equal(received["x-forwarded-for"], "203.0.113.7");
+    assert.equal(received["x-forwarded-proto"], "https");
+    assert.equal(received["x-forwarded-host"], "app.example.test");
+  });
+
+  it("falls back to the socket when the platform header is absent", async () => {
+    process.env.DMS_CLIENT_IP_HEADER = "X-Client-IP";
+    const response = await fetch(`${frontendUrl}/api/items`, {
+      headers: {
+        "x-forwarded-for": "198.51.100.66",
+        "x-forwarded-proto": "https",
+        "x-forwarded-host": "spoofed.example.test",
+      },
+    });
+    assert.equal(response.status, 200);
+    await response.arrayBuffer();
+    assert.equal(received["x-forwarded-for"], "127.0.0.1");
+    assert.equal(received["x-forwarded-proto"], "http");
+    assert.equal(received["x-forwarded-host"], new URL(frontendUrl).host);
+  });
+
+  it("ignores a client IP header no platform is configured to write", async () => {
+    const response = await fetch(`${frontendUrl}/api/items`, {
+      headers: {
+        "x-client-ip": "203.0.113.7",
+        "x-forwarded-proto": "https",
+        "x-forwarded-host": "spoofed.example.test",
+      },
+    });
+    assert.equal(response.status, 200);
+    await response.arrayBuffer();
+    assert.equal(received["x-forwarded-for"], "127.0.0.1");
+    assert.equal(received["x-forwarded-proto"], "http");
+    assert.equal(received["x-forwarded-host"], new URL(frontendUrl).host);
   });
 });

@@ -40,6 +40,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "Build of Vue and its libraries the server loads (default: development in dev, production in start)",
   ],
   [
+    "DMS_CLIENT_IP_HEADER",
+    "Header the hosting platform overwrites with the client's address, e.g. X-Client-IP (default: none)",
+  ],
+  [
     "DMS_TRUSTED_PROXY_HOPS",
     "Trusted reverse-proxy hops, counted from the right (default: 0)",
   ],
