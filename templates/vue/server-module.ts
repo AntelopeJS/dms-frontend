@@ -121,7 +121,10 @@ export interface DmsServerEvent {
    * whatever the path holds.
    */
   backendUrl(path: string): URL;
-  /** The client's address, behind `DMS_TRUSTED_PROXY_HOPS` proxies. */
+  /**
+   * The client's address, from the `DMS_CLIENT_IP_HEADER` header or behind
+   * `DMS_TRUSTED_PROXY_HOPS` proxies.
+   */
   clientIp(): string;
   /** This module, and only this one. */
   module: {

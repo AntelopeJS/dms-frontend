@@ -1,10 +1,36 @@
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
+
+function headerName(value) {
+  const name = (value ?? "").trim().toLowerCase();
+  return HEADER_NAME.test(name) ? name : undefined;
+}
+
 function trustedHops() {
   const value = Number.parseInt(process.env.DMS_TRUSTED_PROXY_HOPS ?? "0", 10);
   return Number.isSafeInteger(value) && value > 0 ? value : 0;
 }
 
+/**
+ * The client's address as the platform wrote it in the header
+ * `DMS_CLIENT_IP_HEADER` names (antelopejs.cloud: `X-Client-IP`), if the
+ * request carries it. The platform overwrites that header on every request,
+ * so its presence also vouches for the platform's `X-Forwarded-*`. On a path
+ * the platform does not front (a private call from another service), it is
+ * absent and the request falls back to `DMS_TRUSTED_PROXY_HOPS`.
+ */
+function platformClientIp(request) {
+  const name = headerName(process.env.DMS_CLIENT_IP_HEADER);
+  if (!name) return undefined;
+  const value = request.headers?.[name];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isProxyTrusted(request) {
+  return Boolean(platformClientIp(request)) || trustedHops() > 0;
+}
+
 export function requestScheme(request) {
-  if (trustedHops()) {
+  if (isProxyTrusted(request)) {
     const forwarded = String(request.headers["x-forwarded-proto"] ?? "")
       .split(",")
       .map((value) => value.trim().toLowerCase())
@@ -16,7 +42,7 @@ export function requestScheme(request) {
 }
 
 function requestHost(request) {
-  if (!trustedHops()) return request.headers.host;
+  if (!isProxyTrusted(request)) return request.headers.host;
   return (
     String(request.headers["x-forwarded-host"] ?? "")
       .split(",")
@@ -31,12 +57,25 @@ function requestHost(request) {
  * the client a request comes from: its address, to limit each client, and
  * the scheme and host it asked, to check an Origin against.
  *
- * The client's own `X-Forwarded-For` is extended only when a trusted reverse
+ * Behind the platform, `X-Forwarded-For` is the address it wrote. Otherwise
+ * the client's own `X-Forwarded-For` is extended only when a trusted reverse
  * proxy wrote it (`DMS_TRUSTED_PROXY_HOPS` above `0`): otherwise any caller
  * could have, and the socket's address replaces it. The scheme and the host
  * are read the same way as the CSRF origin check reads them.
  */
 export function forwardedHeaders(request) {
+  const headers = {
+    "x-forwarded-for": forwardedFor(request),
+    "x-forwarded-proto": requestScheme(request),
+  };
+  const host = requestHost(request);
+  if (host) headers["x-forwarded-host"] = host;
+  return headers;
+}
+
+function forwardedFor(request) {
+  const platformIp = platformClientIp(request);
+  if (platformIp) return platformIp;
   const socketIp = request.socket?.remoteAddress || "unknown";
   const incoming = trustedHops()
     ? String(request.headers["x-forwarded-for"] ?? "")
@@ -44,13 +83,7 @@ export function forwardedHeaders(request) {
         .map((value) => value.trim())
         .filter(Boolean)
     : [];
-  const headers = {
-    "x-forwarded-for": [...incoming, socketIp].join(", "),
-    "x-forwarded-proto": requestScheme(request),
-  };
-  const host = requestHost(request);
-  if (host) headers["x-forwarded-host"] = host;
-  return headers;
+  return [...incoming, socketIp].join(", ");
 }
 
 export function isSameOrigin(request) {
@@ -67,6 +100,8 @@ export function isSameOrigin(request) {
 }
 
 export function clientIp(request) {
+  const platformIp = platformClientIp(request);
+  if (platformIp) return platformIp;
   const socketIp = request.socket?.remoteAddress || "unknown";
   const hops = trustedHops();
   if (!hops) return socketIp;
@@ -79,14 +114,6 @@ export function clientIp(request) {
 }
 
 const DEFAULT_COUNTRY_HEADER = "CF-IPCountry";
-const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
-
-function countryHeader() {
-  const name = (process.env.DMS_COUNTRY_HEADER ?? DEFAULT_COUNTRY_HEADER)
-    .trim()
-    .toLowerCase();
-  return HEADER_NAME.test(name) ? name : undefined;
-}
 
 /**
  * The client's country header, as the backend request headers to add.
@@ -94,12 +121,15 @@ function countryHeader() {
  * The header is the one `DMS_COUNTRY_HEADER` names (`CF-IPCountry` by
  * default, empty to relay none), the name the DMS reads from
  * `auth.signInCountry.header`. Like `X-Forwarded-For`, it is only believed
- * from a trusted reverse proxy: with `DMS_TRUSTED_PROXY_HOPS` at `0`, any
- * caller could have set it, so nothing is relayed.
+ * from a trusted reverse proxy (the platform's client IP header, or
+ * `DMS_TRUSTED_PROXY_HOPS` above `0`): otherwise any caller could have set
+ * it, so nothing is relayed.
  */
 export function clientCountryHeader(request) {
-  const name = countryHeader();
-  if (!name || !trustedHops()) return {};
+  const name = headerName(
+    process.env.DMS_COUNTRY_HEADER ?? DEFAULT_COUNTRY_HEADER,
+  );
+  if (!name || !isProxyTrusted(request)) return {};
   const value = request.headers?.[name];
   return typeof value === "string" && value.trim()
     ? { [name]: value.trim() }
