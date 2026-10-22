@@ -142,11 +142,15 @@ describe("running outside a DMS project", () => {
 
   it("names what is missing for a project-bound command", async () => {
     const build = await runCli(["build"]);
-    assert.equal(build.code, 2);
+    assert.equal(build.code, 1);
     assert.equal(build.stdout, "");
-    assert.equal(
+    assert.match(
       build.stderr,
-      "✖ Backend URL is required\n  → Pass -b <url> or set DMS_API_BASE_URL\n",
+      /✖ Could not evaluate the project's configuration in \S+\n/,
+    );
+    assert.match(
+      build.stderr,
+      /→ Run from the project root, or pass --project <dir>\n/,
     );
 
     const dev = await runCli(["dev"]);
@@ -177,7 +181,7 @@ describe("running outside a DMS project", () => {
 
   it("requires a session secret to start, and none to build", async () => {
     const noSecret = { env: { DMS_SESSION_SECRET: undefined } };
-    const build = await runCli(["build", "-b", BACKEND_URL], noSecret);
+    const build = await runCli(["build"], noSecret);
     assert.notEqual(build.code, 2);
     assert.doesNotMatch(build.stderr, /DMS_SESSION_SECRET/);
 
@@ -324,20 +328,16 @@ describe("following the ajs output contract", () => {
     assert.match(result.stderr, /\n {2}> Remove every workspace/);
     assert.doesNotMatch(result.stderr, /[✖→▲✔ℹ]/);
 
-    const build = await runCli(["build", "-b", "http://127.0.0.1:9"], {
+    const build = await runCli(["build"], {
       env: { TERM: "dumb", DMS_SESSION_SECRET: SESSION_SECRET },
     });
     assert.equal(build.code, 1);
-    assert.match(
-      build.stderr,
-      /^ajs dms build {2}http:\/\/127\.0\.0\.1:9 - production\n/,
-    );
+    assert.match(build.stderr, /^ajs dms build {2}\. - production\n/);
     assert.doesNotMatch(build.stderr, /[^\n -~]/);
   });
 
   it("shows the cause's stack trace only in a verbose run", async () => {
-    const backend = "http://127.0.0.1:9";
-    const quiet = await runCli(["build", "-b", backend], {
+    const quiet = await runCli(["build"], {
       env: { DMS_SESSION_SECRET: SESSION_SECRET },
     });
     assert.equal(quiet.code, 1);
@@ -345,12 +345,12 @@ describe("following the ajs output contract", () => {
     assert.match(quiet.stderr, /Run with --verbose for the full trace/);
 
     for (const verbose of [
-      { args: ["build", "-b", backend, "--verbose"], env: {} },
-      { args: ["build", "-b", backend, "--verbose=cli"], env: {} },
-      { args: ["--verbose=cli,fetch", "build", "-b", backend], env: {} },
-      { args: ["--verbose", "build", "-b", backend], env: {} },
-      { args: ["build", "-b", backend], env: { ANTELOPEJS_VERBOSE: "*" } },
-      { args: ["build", "-b", backend], env: { ANTELOPEJS_VERBOSE: "cli" } },
+      { args: ["build", "--verbose"], env: {} },
+      { args: ["build", "--verbose=cli"], env: {} },
+      { args: ["--verbose=cli,fetch", "build"], env: {} },
+      { args: ["--verbose", "build"], env: {} },
+      { args: ["build"], env: { ANTELOPEJS_VERBOSE: "*" } },
+      { args: ["build"], env: { ANTELOPEJS_VERBOSE: "cli" } },
     ]) {
       const result = await runCli(verbose.args, {
         env: { DMS_SESSION_SECRET: SESSION_SECRET, ...verbose.env },
@@ -373,13 +373,20 @@ function workspaceDir(backendUrl: string): string {
   return join(".antelopejs", "dms-frontend", hash);
 }
 
-/** A built workspace whose server prints the port it was given, then exits. */
-function builtWorkspace(backendUrl: string): Record<string, string> {
-  const dir = workspaceDir(backendUrl);
+/** Sandbox-relative directory a project's production build goes to. */
+const PRODUCTION_WORKSPACE = ".dms-frontend";
+
+/**
+ * A project without frontend modules, built: its server prints the port it
+ * was given, then exits.
+ */
+function builtWorkspace(): Record<string, string> {
   return {
-    [join(dir, "server.mjs")]:
+    "antelope.config.ts": 'export default { name: "sandbox", modules: {} };\n',
+    [join(PRODUCTION_WORKSPACE, "server.mjs")]:
       "console.log(`server port ${process.env.PORT}`);\n",
-    [join(dir, "dist", "client", "index.html")]: "<!doctype html>\n",
+    [join(PRODUCTION_WORKSPACE, "dist", "client", "index.html")]:
+      "<!doctype html>\n",
   };
 }
 
@@ -456,11 +463,10 @@ describe("documenting the commands", () => {
       await help("dev"),
       /-b, --backend-url <url> Backend URL; when omitted, discovered from the enclosing antelope project's \.antelope\/dev\.json \(env: DMS_API_BASE_URL\)/,
     );
-    for (const command of ["build", "start"]) {
-      const text = await help(command);
-      assert.match(text, /-b, --backend-url <url> Backend URL[^(]*; required/);
-      assert.doesNotMatch(text, /discover/);
-    }
+    const start = await help("start");
+    assert.match(start, /-b, --backend-url <url> Backend URL[^(]*; required/);
+    assert.doesNotMatch(start, /discover/);
+    assert.doesNotMatch(await help("build"), /--backend-url/);
     const clean = await help("clean");
     assert.match(
       clean,
@@ -532,7 +538,7 @@ describe("validating options before any work", () => {
   });
 
   it("rejects a backend URL without an http or https scheme", async () => {
-    for (const command of ["dev", "build", "start", "clean"]) {
+    for (const command of ["dev", "start", "clean"]) {
       const result = await runCli([command, "-b", "localhost:5010"], {
         env: { DMS_SESSION_SECRET: SESSION_SECRET },
       });
@@ -573,15 +579,6 @@ describe("validating options before any work", () => {
     );
     assert.match(result.stderr, /DMS_BOOTSTRAP_SECRET contains a space\./);
     assert.doesNotMatch(result.stderr, /Error:|contains a line break|abc def/);
-
-    const build = await runCli(["build", "-b", BACKEND_URL], {
-      env: {
-        DMS_BOOTSTRAP_SECRET: "abc def",
-        DMS_SESSION_SECRET: SESSION_SECRET,
-      },
-    });
-    assert.equal(build.code, 2);
-    assert.doesNotMatch(build.stderr, /Setup failed|ajs dms build/);
   });
 
   it("stops start on a busy port before spawning the server", async () => {
@@ -590,7 +587,7 @@ describe("validating options before any work", () => {
       const result = await runCli(
         ["start", "-b", BACKEND_URL, "-p", `${port}`],
         {
-          files: builtWorkspace(BACKEND_URL),
+          files: builtWorkspace(),
           env: { DMS_SESSION_SECRET: SESSION_SECRET },
         },
       );
@@ -608,10 +605,10 @@ describe("validating options before any work", () => {
   });
 
   it("reports a server that could not listen as a failure with a fix", async () => {
-    const dir = workspaceDir(BACKEND_URL);
+    const dir = PRODUCTION_WORKSPACE;
     const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
       files: {
-        ...builtWorkspace(BACKEND_URL),
+        ...builtWorkspace(),
         [join(dir, "server.mjs")]:
           'process.send({ type: "dms:listen-error", code: "EADDRINUSE", ' +
           'message: "listen EADDRINUSE", host: "0.0.0.0", port: 3331 }, ' +
@@ -630,7 +627,7 @@ describe("validating options before any work", () => {
 
   it("opens start with the backend, the mode and the build's age", async () => {
     const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
-      files: builtWorkspace(BACKEND_URL),
+      files: builtWorkspace(),
       env: { DMS_SESSION_SECRET: SESSION_SECRET },
     });
     assert.equal(result.code, 0);
@@ -646,7 +643,7 @@ describe("validating options before any work", () => {
     const { server, port } = await listenOnFreePort();
     await closeServer(server);
     const result = await runCli(["start", "-b", BACKEND_URL, "-p", `${port}`], {
-      files: builtWorkspace(BACKEND_URL),
+      files: builtWorkspace(),
       env: { DMS_SESSION_SECRET: SESSION_SECRET },
     });
     assert.equal(result.code, 0);
@@ -656,8 +653,8 @@ describe("validating options before any work", () => {
   /** A built workspace whose server prints the NODE_ENV it was given. */
   function nodeEnvWorkspace(): Record<string, string> {
     return {
-      ...builtWorkspace(BACKEND_URL),
-      [join(workspaceDir(BACKEND_URL), "server.mjs")]:
+      ...builtWorkspace(),
+      [join(PRODUCTION_WORKSPACE, "server.mjs")]:
         "console.log(`NODE_ENV ${process.env.NODE_ENV}`);\n",
     };
   }
@@ -820,9 +817,9 @@ describe("explaining an unreachable backend", () => {
     return `http://127.0.0.1:${port}`;
   }
 
-  it("names the URL and the cause in dev, build and prepare", async () => {
+  it("names the URL and the cause in dev and prepare", async () => {
     const backendUrl = await closedBackendUrl();
-    for (const command of ["dev", "build", "prepare"]) {
+    for (const command of ["dev", "prepare"]) {
       const result = await runCli([command, "-b", backendUrl], {
         env: { DMS_SESSION_SECRET: SESSION_SECRET },
       });
@@ -963,20 +960,20 @@ describe("telling a skipped prepare from a failed one", () => {
   });
 
   it("reports an incompatible manifest as a failure, an error with DMS_PREPARE_STRICT", async () => {
-    await withBackend(200, { version: 2, modules: [] }, async (backendUrl) => {
+    await withBackend(200, { version: 3, modules: [] }, async (backendUrl) => {
       const args = ["prepare", "-b", backendUrl];
       const failed = await runCli(args);
       assert.equal(failed.code, 0);
       assert.match(
         failed.stderr,
-        /▲ Prepare failed: The backend serves frontend manifest version 2, which @antelopejs\/dms-frontend \S+ cannot read\n/,
+        /▲ Prepare failed: The backend serves frontend manifest version 3, which @antelopejs\/dms-frontend \S+ cannot read\n/,
       );
 
       const strict = await runCli(args, { env: { DMS_PREPARE_STRICT: "1" } });
       assert.equal(strict.code, 1);
       assert.match(
         strict.stderr,
-        /\n✖ The backend serves frontend manifest version 2, which @antelopejs\/dms-frontend \S+ cannot read\n {2}This loader reads version 1; the backend's @antelopejs\/dms is newer than this loader\.\n {2}→ Upgrade the loader \(ajs update dms\) to a release that reads version 2\n/,
+        /\n✖ The backend serves frontend manifest version 3, which @antelopejs\/dms-frontend \S+ cannot read\n {2}This loader reads version 2; the backend's @antelopejs\/dms is newer than this loader\.\n {2}→ Upgrade the loader \(ajs update dms\) to a release that reads version 3\n/,
       );
 
       const off = await runCli(args, { env: { DMS_PREPARE_STRICT: "0" } });
@@ -987,56 +984,58 @@ describe("telling a skipped prepare from a failed one", () => {
 
 /**
  * `start` is the cheapest command that proves a variable reached Commander:
- * it needs only a backend URL, touches no network, and names the URL it
- * resolved in the "build first" hint it prints when the workspace is absent.
+ * from a built project it touches no network, and names the URL it resolved
+ * in its header.
  */
 describe("loading the project .env", () => {
   const ENV_ONLY = {
     DMS_API_BASE_URL: undefined,
     DMS_SESSION_SECRET: "configured-session-secret-at-least-32-characters",
+    PORT: "0",
   };
+  const startedFor = (port: number) =>
+    new RegExp(`^ajs dms start {2}http://127\\.0\\.0\\.1:${port} · `);
 
   it("fills a variable the environment does not define", async () => {
     const result = await runCli(["start"], {
-      files: { ".env": "DMS_API_BASE_URL=http://127.0.0.1:5010\n" },
+      files: {
+        ...builtWorkspace(),
+        ".env": "DMS_API_BASE_URL=http://127.0.0.1:5010\n",
+      },
       env: ENV_ONLY,
     });
 
-    assert.equal(result.code, 1);
-    assert.equal(result.stdout, "");
+    assert.equal(result.code, 0, result.stderr);
     assert.doesNotMatch(result.stderr, /Backend URL is required/);
-    assert.match(
-      result.stderr,
-      /✖ No production build for http:\/\/127\.0\.0\.1:5010\n/,
-    );
-    assert.match(result.stderr, /build -b http:\/\/127\.0\.0\.1:5010/);
+    assert.match(result.stderr, startedFor(5010));
   });
 
   it("lets a real environment variable win over the .env", async () => {
     const result = await runCli(["start"], {
-      files: { ".env": "DMS_API_BASE_URL=http://127.0.0.1:5010\n" },
-      env: {
-        DMS_API_BASE_URL: "http://127.0.0.1:5999",
-        DMS_SESSION_SECRET: ENV_ONLY.DMS_SESSION_SECRET,
+      files: {
+        ...builtWorkspace(),
+        ".env": "DMS_API_BASE_URL=http://127.0.0.1:5010\n",
       },
+      env: { ...ENV_ONLY, DMS_API_BASE_URL: "http://127.0.0.1:5999" },
     });
 
-    assert.equal(result.code, 1);
-    assert.match(result.stderr, /build -b http:\/\/127\.0\.0\.1:5999/);
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stderr, startedFor(5999));
     assert.doesNotMatch(result.stderr, /5010/);
   });
 
   it("lets .env.local win over .env", async () => {
     const result = await runCli(["start"], {
       files: {
+        ...builtWorkspace(),
         ".env": "DMS_API_BASE_URL=http://127.0.0.1:5010\n",
         ".env.local": "DMS_API_BASE_URL=http://127.0.0.1:5011\n",
       },
       env: ENV_ONLY,
     });
 
-    assert.equal(result.code, 1);
-    assert.match(result.stderr, /build -b http:\/\/127\.0\.0\.1:5011/);
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stderr, startedFor(5011));
   });
 
   it("runs normally in a directory with no .env", async () => {
@@ -1245,10 +1244,10 @@ describe("update notice", () => {
 });
 
 /** A built workspace whose server prints the output settings it inherited. */
-function settingsWorkspace(backendUrl: string): Record<string, string> {
+function settingsWorkspace(): Record<string, string> {
   return {
-    ...builtWorkspace(backendUrl),
-    [join(workspaceDir(backendUrl), "server.mjs")]:
+    ...builtWorkspace(),
+    [join(PRODUCTION_WORKSPACE, "server.mjs")]:
       "const { ANTELOPEJS_QUIET, ANTELOPEJS_VERBOSE } = process.env;\n" +
       "console.log(JSON.stringify({ ANTELOPEJS_QUIET, ANTELOPEJS_VERBOSE }));\n",
   };
@@ -1303,7 +1302,7 @@ describe("global options after the command", () => {
       const result = await runCli(
         [...args.slice(0, 1), "-b", BACKEND_URL, "-p", "0", ...args.slice(1)],
         {
-          files: settingsWorkspace(BACKEND_URL),
+          files: settingsWorkspace(),
           env: { DMS_SESSION_SECRET: SESSION_SECRET },
         },
       );
@@ -1360,7 +1359,7 @@ describe("quiet runs", () => {
     const started = await runCli(
       ["start", "-b", BACKEND_URL, "-p", "0", "-q"],
       {
-        files: builtWorkspace(BACKEND_URL),
+        files: builtWorkspace(),
         env: { DMS_SESSION_SECRET: SESSION_SECRET },
       },
     );
@@ -1369,14 +1368,22 @@ describe("quiet runs", () => {
     assert.match(started.stderr, /^▲ DMS_HTML_RENDER_SECRET is not set/);
     assert.doesNotMatch(started.stderr, /ajs dms start/);
 
-    for (const command of ["build", "dev"]) {
-      const result = await runCli([command, "-b", "http://127.0.0.1:9"], {
-        env: { DMS_SESSION_SECRET: SESSION_SECRET, ANTELOPEJS_QUIET: "1" },
-      });
-      assert.equal(result.code, 1, command);
-      assert.match(result.stderr, /^✖ Cannot reach the DMS backend/, command);
-      assert.doesNotMatch(result.stderr, /ajs dms (build|dev) {2}/, command);
-    }
+    const dev = await runCli(["dev", "-b", "http://127.0.0.1:9"], {
+      env: { DMS_SESSION_SECRET: SESSION_SECRET, ANTELOPEJS_QUIET: "1" },
+    });
+    assert.equal(dev.code, 1);
+    assert.match(dev.stderr, /^✖ Cannot reach the DMS backend/);
+    assert.doesNotMatch(dev.stderr, /ajs dms dev {2}/);
+
+    const build = await runCli(["build"], {
+      env: { DMS_SESSION_SECRET: SESSION_SECRET, ANTELOPEJS_QUIET: "1" },
+    });
+    assert.equal(build.code, 1);
+    assert.match(
+      build.stderr,
+      /^✖ Could not evaluate the project's configuration/,
+    );
+    assert.doesNotMatch(build.stderr, /ajs dms build {2}/);
   });
 
   it("keep the warning of a skipped prepare", async () => {

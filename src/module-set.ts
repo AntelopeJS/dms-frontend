@@ -5,12 +5,7 @@
 // the Modules page knows when to reload.
 
 import { setTimeout as sleep } from "node:timers/promises";
-import {
-  BackendResponseError,
-  BackendUnreachableError,
-  backendEndpoint,
-  fetchManifest,
-} from "./manifest";
+import { backendEndpoint, fetchManifest } from "./manifest";
 import { bootstrapHeaders, type ManifestModule } from "./workspace";
 
 /** How often `dev` reads the manifest to notice a module set change. */
@@ -128,33 +123,77 @@ export function followModuleSet(options: ModuleSetFollowOptions): () => void {
   };
 }
 
+/** A frontend module a server serves, and the package version it ships in. */
+export interface ServedModule {
+  name: string;
+  version?: string;
+}
+
 /**
- * Tells the backend which frontend modules the server that just became ready
- * serves, and which dms-frontend version runs it: the module store checks a
- * module version's supported dms-frontend range against it. Best effort: a
- * backend that predates the endpoint answers 404, one that predates the
- * version ignores it, and nothing in the frontend depends on the answer.
+ * How long one report may take: longer than a platform holds a request while
+ * it wakes the backend (60 s), so a held report is not cut short.
+ */
+const READY_WAKE_TIMEOUT_MS = 90_000;
+/** The first pause before reporting again to a backend that did not answer. */
+const READY_FIRST_RETRY_MS = 2_000;
+/** The longest pause between two reports to a backend that does not answer. */
+const READY_MAX_RETRY_MS = 60_000;
+const SERVER_ERROR = 500;
+
+/** Pauses between reports to a backend that does not answer yet. */
+export interface ReadyRetry {
+  firstDelayMs: number;
+  maxDelayMs: number;
+  timeoutMs: number;
+}
+
+const DEFAULT_READY_RETRY: ReadyRetry = {
+  firstDelayMs: READY_FIRST_RETRY_MS,
+  maxDelayMs: READY_MAX_RETRY_MS,
+  timeoutMs: READY_WAKE_TIMEOUT_MS,
+};
+
+/** Posts the ready report; rejects when the backend does not answer. */
+async function postReadyReport(
+  backendUrl: string,
+  modules: readonly ServedModule[],
+  bootstrapSecret: string | undefined,
+  timeoutMs: number,
+): Promise<Response> {
+  const response = await fetch(backendEndpoint(backendUrl, READY_ENDPOINT), {
+    method: "POST",
+    headers: {
+      ...bootstrapHeaders(bootstrapSecret),
+      "content-type": JSON_CONTENT_TYPE,
+    },
+    body: JSON.stringify({ modules, version: OWN_RELEASE.version }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  await response.body?.cancel();
+  return response;
+}
+
+/**
+ * Tells the backend which frontend modules, at which versions, the server
+ * that just became ready serves, and which dms-frontend version runs it: the
+ * backend warns when its own module versions differ, and the module store
+ * checks a module version's supported dms-frontend range. Best effort:
+ * nothing in the frontend depends on the answer.
  *
  * @returns Whether the backend took the report
  */
 export async function reportFrontendReady(
   backendUrl: string,
-  moduleNames: readonly string[],
+  modules: readonly ServedModule[],
   bootstrapSecret?: string,
 ): Promise<boolean> {
   try {
-    const response = await fetch(backendEndpoint(backendUrl, READY_ENDPOINT), {
-      method: "POST",
-      headers: {
-        ...bootstrapHeaders(bootstrapSecret),
-        "content-type": JSON_CONTENT_TYPE,
-      },
-      body: JSON.stringify({
-        modules: moduleNames,
-        version: OWN_RELEASE.version,
-      }),
-      signal: AbortSignal.timeout(READY_TIMEOUT_MS),
-    });
+    const response = await postReadyReport(
+      backendUrl,
+      modules,
+      bootstrapSecret,
+      READY_TIMEOUT_MS,
+    );
     return response.ok;
   } catch {
     return false;
@@ -162,94 +201,32 @@ export async function reportFrontendReady(
 }
 
 /**
- * How long one read of the manifest may take: longer than a platform holds a
- * request while it wakes the backend (60 s), so a held read is not cut short.
- */
-const DRIFT_READ_TIMEOUT_MS = 90_000;
-/** The first pause before reading again a backend that did not answer. */
-const DRIFT_FIRST_RETRY_MS = 2_000;
-/** The longest pause between two reads of a backend that does not answer. */
-const DRIFT_MAX_RETRY_MS = 60_000;
-const SERVER_ERROR = 500;
-
-/** How a build compares with the module set its backend serves now. */
-export type BuildDrift =
-  | { status: "matches"; served: string }
-  | { status: "drifted"; served: string }
-  | { status: "unknown"; reason: string };
-
-/** Pauses between reads of a backend that does not answer yet. */
-export interface DriftRetry {
-  firstDelayMs: number;
-  maxDelayMs: number;
-  readTimeoutMs: number;
-}
-
-const DEFAULT_DRIFT_RETRY: DriftRetry = {
-  firstDelayMs: DRIFT_FIRST_RETRY_MS,
-  maxDelayMs: DRIFT_MAX_RETRY_MS,
-  readTimeoutMs: DRIFT_READ_TIMEOUT_MS,
-};
-
-/**
- * Whether a failed read means the backend has not answered yet, asleep,
- * starting or out of reach, rather than that it answered something the
- * comparison cannot use.
- */
-function isNotAnsweringYet(error: unknown): boolean {
-  if (error instanceof BackendUnreachableError) return true;
-  if (error instanceof BackendResponseError)
-    return error.status >= SERVER_ERROR;
-  return error instanceof Error && error.name === "TimeoutError";
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return Promise.race([
-    promise,
-    sleep(timeoutMs, undefined, { ref: false }).then(() => {
-      throw Object.assign(new Error("the backend did not answer in time"), {
-        name: "TimeoutError",
-      });
-    }),
-  ]);
-}
-
-/**
- * Compares the module set a build was made from with the one the backend
- * serves, once the backend first answers: on a platform that wakes the
- * backend with the frontend, that is after the server is ready. Reads again,
- * with a growing pause, while the backend is asleep, starting or out of
- * reach, on timers that never keep the process alive. Never awaited by the
- * server, so it delays nothing.
+ * {@link reportFrontendReady}, once the backend first answers: on a platform
+ * that wakes the backend with the frontend, that is after the server is
+ * ready. Reports again, with a growing pause, while the backend is asleep,
+ * starting (a 5xx) or out of reach, on timers that never keep the process
+ * alive; any other answer ends it. Never awaited by the server.
  *
- * @param backendUrl Backend the server proxies to
- * @param builtDigest `manifestDigest` of the build's modules
- * @param digestOf Digest of a served manifest's modules
- * @param bootstrapSecret Credential for the manifest, when the server has one
- * @param retry Pauses between reads, for tests
+ * @param retry Pauses between reports, for tests
+ * @returns Whether the backend took the report
  */
-export async function compareWithBackend(
+export async function reportFrontendReadyOnceAnswered(
   backendUrl: string,
-  builtDigest: string,
-  digestOf: (modules: readonly ManifestModule[]) => string,
+  modules: readonly ServedModule[],
   bootstrapSecret?: string,
-  retry: DriftRetry = DEFAULT_DRIFT_RETRY,
-): Promise<BuildDrift> {
-  for (let delayMs = retry.firstDelayMs; ;) {
+  retry: ReadyRetry = DEFAULT_READY_RETRY,
+): Promise<boolean> {
+  for (let delayMs = retry.firstDelayMs; ; ) {
     try {
-      const manifest = await withTimeout(
-        fetchManifest(backendUrl, undefined, bootstrapSecret),
-        retry.readTimeoutMs,
+      const response = await postReadyReport(
+        backendUrl,
+        modules,
+        bootstrapSecret,
+        retry.timeoutMs,
       );
-      const served = digestOf(manifest.modules);
-      return { status: served === builtDigest ? "matches" : "drifted", served };
-    } catch (error) {
-      if (!isNotAnsweringYet(error)) {
-        return {
-          status: "unknown",
-          reason: error instanceof Error ? error.message : String(error),
-        };
-      }
+      if (response.status < SERVER_ERROR) return response.ok;
+    } catch {
+      // Asleep, waking or out of reach: report again.
     }
     await sleep(delayMs, undefined, { ref: false });
     delayMs = Math.min(retry.maxDelayMs, delayMs * 2);

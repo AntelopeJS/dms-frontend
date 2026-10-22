@@ -44,6 +44,7 @@ import {
   loadServerModules,
 } from "./server/module-server.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
+import { publicOptionsScript } from "./server/public-options.mjs";
 import { loadPageProps } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import { listenHost } from "./server/listen-host.mjs";
@@ -295,11 +296,9 @@ export async function renderHtml(
       : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
-  const preloads = await documentStyleTags(
-    devServer,
-    rendered.modules,
-    template,
-  );
+  const headEnd =
+    (await documentStyleTags(devServer, rendered.modules, template)) +
+    publicOptionsScript();
   const html = template
     .replace("<title>Antelope DMS</title>", () =>
       withFaviconPlaceholder(rendered.head.headTags),
@@ -308,7 +307,7 @@ export async function renderHtml(
       htmlTag(attributes, rendered.head.htmlAttrs),
     )
     .replace("<body", `<body ${rendered.head.bodyAttrs}`)
-    .replace("</head>", `${preloads}</head>`)
+    .replace("</head>", `${headEnd}</head>`)
     .replace(
       '<div id="dms-overlays" class="isolate"></div>',
       `<div id="dms-overlays" class="isolate">${rendered.overlays}</div>`,

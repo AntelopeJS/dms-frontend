@@ -18,8 +18,8 @@ tags: [frontend, cli, renderer, vue, inertia, ssr, deployment, dms-module]
 
 ## Rules that bite
 
-- **One workspace per backend URL**, under `~/.antelopejs/dms-frontend/<sha256>/`. `dev` without `-b` keys its own on the project directory instead, so `dev` then `build -b` builds a second workspace. `start` serves the workspace `build` made for the same URL, user and home directory.
-- **Secrets.** `build` and `start` need the same `DMS_SESSION_SECRET` (32+ characters); `dev` generates one only when it is unset. `build` takes `DMS_BOOTSTRAP_SECRET` explicitly, never from `.antelope/dms-dev.json`. A build without it still succeeds, but loses the modules' private options, the manifest's backend proxies and the e-mail and OAuth secrets: `start` then warns that e-mail renders and OAuth sign-in will be refused.
+- **One dev workspace per backend URL**, under `~/.antelopejs/dms-frontend/<sha256>/`. `dev` without `-b` keys its own on the project directory instead. A production build is different: `build` reads the project itself (`antelope.config.ts` with `-e production`, each installed module's `dmsFrontend` function), needs no backend, and writes `<project>/.dms-frontend`, which `start` serves from the project root.
+- **Secrets.** `start` needs `DMS_SESSION_SECRET` (32+ characters); `dev` generates one only when it is unset. `build` needs no secret. `start` reads `DMS_HTML_RENDER_SECRET` and `DMS_OAUTH_RELAY_SECRET` from its environment and warns when they are unset, and computes the modules' public options from the project's configuration with its own variables, which must match the backend's.
 - **`.env`** is read from the current directory only (shell, then `.env.local`, then `.env`). A `DMS_API_BASE_URL` in `.env` turns off backend discovery for `dev`. `clean` never reads it.
 - **`prepare` never fails** without `--strict`: it warns and exits 0. Use `--strict` where the types are required.
 - **Exit codes:** 0 success, 1 failure, 2 usage error, 130 Ctrl+C.

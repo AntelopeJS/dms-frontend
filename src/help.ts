@@ -17,6 +17,10 @@ export const ENVIRONMENT_TOPIC = "environment";
 
 /** Every variable a user may set, in the order the topic lists them. */
 export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
+  [
+    "ANTELOPEJS_LAUNCH_ENV",
+    "AntelopeJS environment build and start evaluate the project in, same as -e",
+  ],
   ["DMS_API_BASE_URL", "Backend URL, same as -b; clean ignores it"],
   ["DMS_BOOTSTRAP_SECRET", "Same as --bootstrap-secret"],
   [

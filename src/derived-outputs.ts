@@ -159,7 +159,7 @@ function writeFrontendModuleLoader(
   const registrations = modules
     .map(
       (module, index) =>
-        `{ name: ${JSON.stringify(module.name)}, module: module${index}, options: { public: ${JSON.stringify(module.options)} } }`,
+        `{ id: ${JSON.stringify(module.id)}, name: ${JSON.stringify(module.name)}, module: module${index}, options: { public: ${JSON.stringify(module.options)} } }`,
     )
     .join(", ");
   const content = `${imports}\n\nimport type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [${registrations}];\n`;
