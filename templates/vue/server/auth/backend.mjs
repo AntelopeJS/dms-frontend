@@ -1,4 +1,4 @@
-import { clientCountryHeader, clientIp } from "./client-ip.mjs";
+import { clientCountryHeader, clientIp, clientIpHeader } from "./client-ip.mjs";
 
 const FORWARDED_HEADERS = [
   "user-agent",
@@ -58,6 +58,7 @@ export async function backend(path, request, options = {}) {
   );
   Object.assign(headers, relayedHeaders(request, FORWARDED_HEADERS));
   headers["x-forwarded-for"] = clientIp(request);
+  Object.assign(headers, clientIpHeader(request));
   if (options.token) headers.authorization = `Bearer ${options.token}`;
   if (options.relay)
     headers["x-dms-oauth-relay"] = process.env.DMS_OAUTH_RELAY_SECRET ?? "";
