@@ -112,13 +112,15 @@ export interface DmsServerEvent {
   /**
    * Calls the backend, JSON in and out. A refusal throws an error carrying
    * the status and the backend's public `error.*` message, which the server
-   * answers as is when the handler lets it through.
+   * answers as is when the handler lets it through. A redirect is not
+   * followed: it throws a 502.
    */
   backend<T = unknown>(path: string, init?: DmsBackendRequest): Promise<T>;
   /**
    * The backend URL of an absolute path, for a call `backend` cannot make (a
    * raw response, no relayed header): always on the backend's origin,
-   * whatever the path holds.
+   * whatever the path holds. Fetch it with `redirect: "manual"` to relay a
+   * backend redirect: the browser then follows it.
    */
   backendUrl(path: string): URL;
   /**

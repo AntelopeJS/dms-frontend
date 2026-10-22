@@ -37,7 +37,11 @@ import { documentStyleTags } from "./server/dev-styles.mjs";
 import { watchEmailBundle } from "./server/email.mjs";
 import { withFaviconPlaceholder } from "./server/favicon.mjs";
 import { DEV_FS_DENY, denyPrivateFiles } from "./server/dev-private-files.mjs";
-import { ownerLabel, requestOwner } from "./server/request-routing.mjs";
+import {
+  ownerLabel,
+  reachesBackend,
+  requestOwner,
+} from "./server/request-routing.mjs";
 import { routingReport } from "./server/backend-proxies.mjs";
 import { routeRuleFor, ruleHeaders } from "./server/route-rules.mjs";
 import {
@@ -205,8 +209,12 @@ function redirectSignedOutPrivatePage(request, response, props, auth) {
   return true;
 }
 
-/** Sends a request to the backend through the proxy it reached. */
-async function proxy(request, response, backendProxy) {
+/**
+ * Sends a request to the backend through the proxy it reached.
+ * `isProxiedPath` says which backend paths a relayed `Location` may name on
+ * the frontend's origin.
+ */
+async function proxy(request, response, backendProxy, isProxiedPath) {
   const access = proxyAccess(request, SAFE_METHODS, backendProxy);
   if (access.isRefused) {
     refuseCrossOrigin(response);
@@ -221,6 +229,8 @@ async function proxy(request, response, backendProxy) {
   response.once("close", () => abandoned.abort());
   const init = {
     signal: abandoned.signal,
+    // The browser follows a redirect, not the proxy (see proxy-redirects.mjs).
+    redirect: "manual",
     method: request.method,
     headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
     duplex: "half",
@@ -232,7 +242,10 @@ async function proxy(request, response, backendProxy) {
     (body) => fetch(backendUrl(request.url), { ...init, body }),
   );
   if (!upstream) return true;
-  await relayAnswer(request, response, upstream, { fetched: true });
+  await relayAnswer(request, response, upstream, {
+    fetched: true,
+    isProxiedPath,
+  });
 }
 
 /**
@@ -431,15 +444,16 @@ export async function handleRequest(request, response) {
   if (localRoute) return localRoute[1](request, response);
   const devServer = await developmentServer();
   const modules = await loadServerModules(devServer);
-  const owner = requestOwner(request.method, pathname, modules, (path) =>
-    hasRendererFile(devServer, path),
-  );
+  const hasFile = (path) => hasRendererFile(devServer, path);
+  const owner = requestOwner(request.method, pathname, modules, hasFile);
   if (devServer) response.setHeader("x-dms-route-owner", ownerLabel(owner));
   if (owner.kind === "renderer")
     return serveRendererFile(devServer, request, response, pathname);
   if (owner.kind === "module")
     return handleModuleRoute(request, response, pathname, modules);
-  if (owner.kind === "backend") return proxy(request, response, owner.proxy);
+  const isProxiedPath = (path) => reachesBackend(path, modules, hasFile);
+  if (owner.kind === "backend")
+    return proxy(request, response, owner.proxy, isProxiedPath);
   if (owner.kind === "not-found") return writeNotFound(response);
   if (requestFailure.hasMalformedPath(request.url))
     return requestFailure.writeBadRequest(response);
