@@ -23,6 +23,7 @@ const MAX_BODY_BYTES = 4 * MEBIBYTE;
 const TOO_LARGE_BYTES = 5 * MEBIBYTE;
 const CHUNK_BYTES = 64 * 1024;
 const TOKEN = "query-token-never-logged";
+const RELATIVE_LOCATION = "/media/asset-id/photo%20one.png?v=2";
 const UNREACHABLE_STORAGE_URL = `http://127.0.0.1:1/file-storage/files/key?token=${TOKEN}`;
 const STORAGE_PROXIES = JSON.stringify([
   ...JSON.parse(DMS_BACKEND_PROXIES),
@@ -86,6 +87,14 @@ describe("the proxy streams large file-storage transfers", () => {
       completed: false,
     };
     requests.push(seen);
+    if (request.url?.startsWith("/api/relative-redirect")) {
+      // Media's canonical link, relative, with a cookie the backend sets.
+      response.writeHead(302, {
+        location: RELATIVE_LOCATION,
+        "set-cookie": ["first=1; Path=/; HttpOnly", "second=2; Path=/"],
+      });
+      return response.end();
+    }
     if (request.url?.startsWith("/api/redirect")) {
       // Media's link to a file: the storage's signed URL, on an origin the
       // frontend server cannot reach.
@@ -229,6 +238,19 @@ describe("the proxy streams large file-storage transfers", () => {
     });
     assert.equal(response.status, 302);
     assert.equal(response.headers.get("location"), UNREACHABLE_STORAGE_URL);
+    await response.arrayBuffer();
+  });
+
+  it("relays a relative Location and every Set-Cookie unchanged", async () => {
+    const response = await fetch(`${frontendUrl}/api/relative-redirect`, {
+      redirect: "manual",
+    });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), RELATIVE_LOCATION);
+    assert.deepEqual(response.headers.getSetCookie(), [
+      "first=1; Path=/; HttpOnly",
+      "second=2; Path=/",
+    ]);
     await response.arrayBuffer();
   });
 
