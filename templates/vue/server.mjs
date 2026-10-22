@@ -17,7 +17,6 @@ import {
   redirectAccessRefusal,
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
-import { fetchWaking } from "./server/backend-wake.mjs";
 import { handleClientError } from "./server/client-error.mjs";
 import {
   reportListenError,
@@ -155,10 +154,9 @@ function serverComponentFetch(request) {
 }
 
 async function backendJson(path, request) {
-  const response = await fetchWaking(
-    new URL(path, process.env.DMS_API_BASE_URL),
-    { headers: backendHeaders(request), signal: request.dmsAbandoned },
-  );
+  const response = await fetch(new URL(path, process.env.DMS_API_BASE_URL), {
+    headers: backendHeaders(request),
+  });
   if (!response.ok) {
     throw await backendResponseError(response);
   }
@@ -223,7 +221,7 @@ async function proxy(request, response, backendProxy) {
     request,
     response,
     backendProxy.maxBodyBytes,
-    (body) => fetchWaking(backendUrl(request.url), { ...init, body }),
+    (body) => fetch(backendUrl(request.url), { ...init, body }),
   );
   if (!upstream) return true;
   await relayAnswer(request, response, upstream, { fetched: true });
@@ -343,9 +341,6 @@ async function writeBackendError(error, request, response) {
   if (await redirectAccessRefusal(error, request, response, loadRenderer))
     return;
   console.error("DMS backend request failed", error);
-  const retryHeaders = error?.retryAfter
-    ? { "retry-after": error.retryAfter }
-    : {};
   if (isFrontendVisit(request)) {
     const props = {
       path: pathname,
@@ -359,24 +354,18 @@ async function writeBackendError(error, request, response) {
         request,
         response,
         status,
-        { ...inertiaHeaders(page.version), ...retryHeaders },
+        inertiaHeaders(page.version),
         JSON.stringify(page),
       );
     }
     const { html } = await renderRequestHtml(page, request);
-    return writeContent(
-      request,
-      response,
-      status,
-      { ...htmlHeaders(), ...retryHeaders },
-      html,
-    );
+    return writeContent(request, response, status, htmlHeaders(), html);
   }
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
       ? { message: error.message }
       : UNEXPECTED_ERROR_BODY;
-  response.writeHead(status, { "content-type": JSON_TYPE, ...retryHeaders });
+  response.writeHead(status, { "content-type": JSON_TYPE });
   response.end(JSON.stringify(payload));
 }
 
@@ -498,19 +487,7 @@ async function writeRequestFailure(error, request, response) {
   await writeBackendError(error, request, response);
 }
 
-/**
- * Aborted once the client is gone, ending a wait for a waking backend. An
- * embedder's response that emits no events never aborts it.
- */
-function abandonedSignal(response) {
-  const abandoned = new AbortController();
-  if (typeof response.once === "function")
-    response.once("close", () => abandoned.abort());
-  return abandoned.signal;
-}
-
 export async function handleRequestSafely(request, response) {
-  request.dmsAbandoned = abandonedSignal(response);
   try {
     if (refuseForeignTarget(request, response)) return;
     await handleRequest(request, response);

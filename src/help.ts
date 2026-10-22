@@ -75,10 +75,6 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "DMS_BACKEND_PROXIES",
     "More backend prefixes the server proxies, as a JSON array of { path, auth? }",
   ],
-  [
-    "DMS_BACKEND_WAKE_BUDGET_MS",
-    "How long a GET or HEAD waits out a waking or starting backend's 503, in ms (default: 30000; 0: never)",
-  ],
   ["DMS_CLIENT_BASE_URL", "Public frontend URL used in links and e-mails"],
   ["NO_COLOR", "Same as --no-color"],
   ["ANTELOPEJS_VERBOSE", "Same as --verbose"],
