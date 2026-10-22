@@ -216,7 +216,7 @@ export async function reportFrontendReadyOnceAnswered(
   bootstrapSecret?: string,
   retry: ReadyRetry = DEFAULT_READY_RETRY,
 ): Promise<boolean> {
-  for (let delayMs = retry.firstDelayMs; ; ) {
+  for (let delayMs = retry.firstDelayMs; ;) {
     try {
       const response = await postReadyReport(
         backendUrl,
