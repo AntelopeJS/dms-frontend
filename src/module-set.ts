@@ -4,6 +4,7 @@
 // tells the backend which modules it serves once it is ready, which is how
 // the Modules page knows when to reload.
 
+import { setTimeout as sleep } from "node:timers/promises";
 import { backendEndpoint, fetchManifest } from "./manifest";
 import { bootstrapHeaders, type ManifestModule } from "./workspace";
 
@@ -12,7 +13,8 @@ export const MODULE_SET_POLL_INTERVAL_MS = 3000;
 const READY_ENDPOINT = "/dms/frontend/ready";
 const READY_TIMEOUT_MS = 5000;
 const JSON_CONTENT_TYPE = "application/json";
-const OWN_RELEASE: { version: string } = require("../package.json");
+/** The dms-frontend release reporting, as the ready report names it. */
+export const OWN_RELEASE: { version: string } = require("../package.json");
 
 /** What a module set is compared on. */
 export type ModuleSetMember = Pick<
@@ -122,81 +124,112 @@ export function followModuleSet(options: ModuleSetFollowOptions): () => void {
   };
 }
 
+/** A frontend module a server serves, and the package version it ships in. */
+export interface ServedModule {
+  name: string;
+  version?: string;
+}
+
 /**
- * Tells the backend which frontend modules the server that just became ready
- * serves, and which dms-frontend version runs it: the module store checks a
- * module version's supported dms-frontend range against it. Best effort: a
- * backend that predates the endpoint answers 404, one that predates the
- * version ignores it, and nothing in the frontend depends on the answer.
+ * How long one report may take: longer than a platform holds a request while
+ * it wakes the backend (60 s), so a held report is not cut short.
+ */
+const READY_WAKE_TIMEOUT_MS = 90_000;
+/** The first pause before reporting again to a backend that did not answer. */
+const READY_FIRST_RETRY_MS = 2_000;
+/** The longest pause between two reports to a backend that does not answer. */
+const READY_MAX_RETRY_MS = 60_000;
+const SERVER_ERROR = 500;
+
+/** Pauses between reports to a backend that does not answer yet. */
+export interface ReadyRetry {
+  firstDelayMs: number;
+  maxDelayMs: number;
+  timeoutMs: number;
+}
+
+const DEFAULT_READY_RETRY: ReadyRetry = {
+  firstDelayMs: READY_FIRST_RETRY_MS,
+  maxDelayMs: READY_MAX_RETRY_MS,
+  timeoutMs: READY_WAKE_TIMEOUT_MS,
+};
+
+/** Posts the ready report; rejects when the backend does not answer. */
+async function postReadyReport(
+  backendUrl: string,
+  modules: readonly ServedModule[],
+  bootstrapSecret: string | undefined,
+  timeoutMs: number,
+): Promise<Response> {
+  const response = await fetch(backendEndpoint(backendUrl, READY_ENDPOINT), {
+    method: "POST",
+    headers: {
+      ...bootstrapHeaders(bootstrapSecret),
+      "content-type": JSON_CONTENT_TYPE,
+    },
+    body: JSON.stringify({ modules, version: OWN_RELEASE.version }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  await response.body?.cancel();
+  return response;
+}
+
+/**
+ * Tells the backend which frontend modules, at which versions, the server
+ * that just became ready serves, and which dms-frontend version runs it: the
+ * backend warns when its own module versions differ, and the module store
+ * checks a module version's supported dms-frontend range. Best effort:
+ * nothing in the frontend depends on the answer.
  *
  * @returns Whether the backend took the report
  */
 export async function reportFrontendReady(
   backendUrl: string,
-  moduleNames: readonly string[],
+  modules: readonly ServedModule[],
   bootstrapSecret?: string,
 ): Promise<boolean> {
   try {
-    const response = await fetch(backendEndpoint(backendUrl, READY_ENDPOINT), {
-      method: "POST",
-      headers: {
-        ...bootstrapHeaders(bootstrapSecret),
-        "content-type": JSON_CONTENT_TYPE,
-      },
-      body: JSON.stringify({
-        modules: moduleNames,
-        version: OWN_RELEASE.version,
-      }),
-      signal: AbortSignal.timeout(READY_TIMEOUT_MS),
-    });
+    const response = await postReadyReport(
+      backendUrl,
+      modules,
+      bootstrapSecret,
+      READY_TIMEOUT_MS,
+    );
     return response.ok;
   } catch {
     return false;
   }
 }
 
-/** How long `start` waits for the manifest it compares its build with. */
-const DRIFT_CHECK_TIMEOUT_MS = 10_000;
-
-/** How a build compares with the module set its backend serves now. */
-export type BuildDrift =
-  | { status: "matches"; served: string }
-  | { status: "drifted"; served: string }
-  | { status: "unknown"; reason: string };
-
 /**
- * Compares the module set a build was made from with the one the backend
- * serves now, once, after the server is ready: a snapshot kept with the
- * project ages as the backend's modules change. Never retried and never
- * awaited by the server, so a backend that sleeps or is down delays nothing.
+ * {@link reportFrontendReady}, once the backend first answers: on a platform
+ * that wakes the backend with the frontend, that is after the server is
+ * ready. Reports again, with a growing pause, while the backend is asleep,
+ * starting (a 5xx) or out of reach, on timers that never keep the process
+ * alive; any other answer ends it. Never awaited by the server.
  *
- * @param backendUrl Backend the server proxies to
- * @param builtDigest `manifestDigest` of the build's modules
- * @param digestOf Digest of a served manifest's modules
- * @param bootstrapSecret Credential for the manifest, when the server has one
+ * @param retry Pauses between reports, for tests
+ * @returns Whether the backend took the report
  */
-export async function compareWithBackend(
+export async function reportFrontendReadyOnceAnswered(
   backendUrl: string,
-  builtDigest: string,
-  digestOf: (modules: readonly ManifestModule[]) => string,
+  modules: readonly ServedModule[],
   bootstrapSecret?: string,
-): Promise<BuildDrift> {
-  try {
-    const manifest = await Promise.race([
-      fetchManifest(backendUrl, undefined, bootstrapSecret),
-      new Promise<never>((_resolve, reject) =>
-        setTimeout(
-          () => reject(new Error("the backend did not answer in time")),
-          DRIFT_CHECK_TIMEOUT_MS,
-        ).unref(),
-      ),
-    ]);
-    const served = digestOf(manifest.modules);
-    return { status: served === builtDigest ? "matches" : "drifted", served };
-  } catch (error) {
-    return {
-      status: "unknown",
-      reason: error instanceof Error ? error.message : String(error),
-    };
+  retry: ReadyRetry = DEFAULT_READY_RETRY,
+): Promise<boolean> {
+  for (let delayMs = retry.firstDelayMs; ;) {
+    try {
+      const response = await postReadyReport(
+        backendUrl,
+        modules,
+        bootstrapSecret,
+        retry.timeoutMs,
+      );
+      if (response.status < SERVER_ERROR) return response.ok;
+    } catch {
+      // Asleep, waking or out of reach: report again.
+    }
+    await sleep(delayMs, undefined, { ref: false });
+    delayMs = Math.min(retry.maxDelayMs, delayMs * 2);
   }
 }

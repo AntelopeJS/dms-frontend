@@ -42,7 +42,6 @@ export interface FrontendModuleOptions {
 
 export interface ManifestModule {
   name: string;
-  archiveName: string;
   renderer?: { name: string; version: string };
   /**
    * Absolute source directory on the backend machine. Only served by a
@@ -94,6 +93,8 @@ export interface BackendProxyDeclaration {
    * frontend's `Origin` on a state-changing request; `none` sends neither.
    */
   auth?: "session" | "none";
+  /** The largest request body, in bytes, streamed to the backend (`413` above). */
+  maxBodyBytes?: number;
 }
 
 /** A backend route a module serves to anyone, as the manifest names it. */
@@ -107,7 +108,6 @@ export interface PublicEndpointDeclaration {
 }
 
 export interface Manifest {
-  pack: string;
   modules: ManifestModule[];
   /**
    * The backend is changing its set of modules (its module store runs an
@@ -118,7 +118,6 @@ export interface Manifest {
 
 export interface FrontendManifest {
   version: number;
-  archive: string;
   modules: ManifestModule[];
   settling?: boolean;
 }
@@ -387,7 +386,7 @@ export function writeWorkspaceMeta(
 
 const BOOTSTRAP_HEADER = "x-dms-bootstrap";
 const UNAUTHORIZED_STATUSES = [401, 403];
-export const FRONTEND_MANIFEST_VERSION = 1;
+export const FRONTEND_MANIFEST_VERSION = 2;
 
 export function bootstrapHeaders(secret?: string): Record<string, string> {
   return secret ? { [BOOTSTRAP_HEADER]: secret } : {};

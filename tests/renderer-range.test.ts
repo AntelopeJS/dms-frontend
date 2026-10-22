@@ -228,12 +228,10 @@ interface Backend {
 
 function serveManifest(layerPath: string): Promise<Backend> {
   const manifest = {
-    version: 1,
-    archive: "/dms/frontend/modules",
+    version: 2,
     modules: [
       {
         name: "excluding-module",
-        archiveName: "excluding-module",
         priority: 0,
         renderer: { name: "vue", version: "3" },
         path: layerPath,

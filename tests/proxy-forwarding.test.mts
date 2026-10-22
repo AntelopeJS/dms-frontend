@@ -168,6 +168,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(response.status, 200);
     await response.arrayBuffer();
     assert.equal(received["x-forwarded-for"], "203.0.113.7");
+    assert.equal(received["x-client-ip"], "203.0.113.7");
     assert.equal(received["x-forwarded-proto"], "https");
     assert.equal(received["x-forwarded-host"], "app.example.test");
   });
@@ -184,6 +185,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(response.status, 200);
     await response.arrayBuffer();
     assert.equal(received["x-forwarded-for"], "127.0.0.1");
+    assert.equal(received["x-client-ip"], "127.0.0.1");
     assert.equal(received["x-forwarded-proto"], "http");
     assert.equal(received["x-forwarded-host"], new URL(frontendUrl).host);
   });
@@ -199,6 +201,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(response.status, 200);
     await response.arrayBuffer();
     assert.equal(received["x-forwarded-for"], "127.0.0.1");
+    assert.equal(received["x-client-ip"], undefined);
     assert.equal(received["x-forwarded-proto"], "http");
     assert.equal(received["x-forwarded-host"], new URL(frontendUrl).host);
   });

@@ -25,6 +25,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ],
   ["DMS_OFFLINE", "Same as --offline, unless 0, false, no or off"],
   ["DMS_WORKSPACE_DIR", "Same as build and start --workspace"],
+  [
+    "ANTELOPEJS_LAUNCH_ENV",
+    "AntelopeJS environment build and start evaluate the project in, same as -e",
+  ],
   ["DMS_PREPARE_STRICT", "Same as prepare --strict, read like DMS_OFFLINE"],
   ["PORT", "Same as -p"],
   [
@@ -74,10 +78,6 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   [
     "DMS_BACKEND_PROXIES",
     "More backend prefixes the server proxies, as a JSON array of { path, auth? }",
-  ],
-  [
-    "DMS_BACKEND_WAKE_BUDGET_MS",
-    "How long a GET or HEAD waits out a waking or starting backend's 503, in ms (default: 30000; 0: never)",
   ],
   ["DMS_CLIENT_BASE_URL", "Public frontend URL used in links and e-mails"],
   ["NO_COLOR", "Same as --no-color"],

@@ -55,6 +55,7 @@ import {
   mergeLayerAppConfigs,
   withAppConfigChanges,
 } from "./layer-app-config";
+import type { DmsPublicOptionsById } from "./public-options";
 
 export interface DmsPageRoute {
   displayName?: string;
@@ -457,10 +458,33 @@ export interface DmsFrontendModule {
   setup(sdk: DmsFrontendSdk): void | Promise<void>;
 }
 export interface DmsFrontendModuleRegistration {
+  /** The module's id in the generated module registry. */
+  id?: string;
   /** The module's manifest name, which collision warnings name it by. */
   name?: string;
   module: DmsFrontendModule;
   options: DmsModuleOptions;
+}
+
+/**
+ * The registrations with the public options the server runs with in place of
+ * the build's: `ajs dms start` computes them from the project's configuration
+ * and the deployment's variables. Unset, the build's options stand.
+ */
+export function withPublicOptions(
+  registrations: DmsFrontendModuleRegistration[],
+  byId: DmsPublicOptionsById | undefined,
+): DmsFrontendModuleRegistration[] {
+  if (!byId) return registrations;
+  return registrations.map((registration) => {
+    const options = registration.id ? byId[registration.id] : undefined;
+    return options
+      ? {
+          ...registration,
+          options: { ...registration.options, public: options },
+        }
+      : registration;
+  });
 }
 /** A layer's `app/app.config.ts`, as `app-configs.generated.ts` lists them. */
 export interface DmsLayerAppConfig {
