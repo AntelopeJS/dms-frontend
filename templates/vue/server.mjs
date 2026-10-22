@@ -208,6 +208,9 @@ async function proxy(request, response, backendProxy) {
     refuseCrossOrigin(response);
     return true;
   }
+  // A client that left while the request was routed closed the response
+  // already, and would never abort the request below.
+  if (response.closed) return;
   // Cancelling the body alone misses a client that leaves before the backend
   // answers: its stream, an SSE feed above all, then stayed open for good.
   const abandoned = new AbortController();
