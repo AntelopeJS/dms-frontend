@@ -23,6 +23,7 @@ const MAX_BODY_BYTES = 4 * MEBIBYTE;
 const TOO_LARGE_BYTES = 5 * MEBIBYTE;
 const CHUNK_BYTES = 64 * 1024;
 const TOKEN = "query-token-never-logged";
+const UNREACHABLE_STORAGE_URL = `http://127.0.0.1:1/file-storage/files/key?token=${TOKEN}`;
 const STORAGE_PROXIES = JSON.stringify([
   ...JSON.parse(DMS_BACKEND_PROXIES),
   {
@@ -85,6 +86,12 @@ describe("the proxy streams large file-storage transfers", () => {
       completed: false,
     };
     requests.push(seen);
+    if (request.url?.startsWith("/api/redirect")) {
+      // Media's link to a file: the storage's signed URL, on an origin the
+      // frontend server cannot reach.
+      response.writeHead(302, { location: UNREACHABLE_STORAGE_URL });
+      return response.end();
+    }
     if (request.method === "GET") {
       response.writeHead(200, {
         "content-type": "application/octet-stream",
@@ -214,6 +221,15 @@ describe("the proxy streams large file-storage transfers", () => {
     const [seen] = requests;
     assert.equal(seen?.completed, false);
     assert.ok((seen?.bytes ?? 0) <= MAX_BODY_BYTES);
+  });
+
+  it("hands a backend redirect to the client instead of following it", async () => {
+    const response = await fetch(`${frontendUrl}/api/redirect`, {
+      redirect: "manual",
+    });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), UNREACHABLE_STORAGE_URL);
+    await response.arrayBuffer();
   });
 
   it("keeps the token out of the logs when the backend is down", async () => {

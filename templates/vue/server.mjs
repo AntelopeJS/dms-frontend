@@ -217,6 +217,10 @@ async function proxy(request, response, backendProxy) {
     method: request.method,
     headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
     duplex: "half",
+    // A backend redirect is the browser's to follow: Media sends a file's
+    // link to the storage's signed URL, on the public origin the server
+    // itself may not reach, which turned every download into a 502.
+    redirect: "manual",
   };
   const upstream = await sendWithinLimit(
     request,
