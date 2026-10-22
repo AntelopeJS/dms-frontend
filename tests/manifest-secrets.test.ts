@@ -1,6 +1,14 @@
 import * as assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -21,6 +29,9 @@ const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST_SECRET = "manifest-render-secret";
 const RELAY_SECRET = "manifest-relay-secret";
 const SESSION_SECRET = "html-render-secret-test-session-secret";
+const OWN_VERSION: string = JSON.parse(
+  readFileSync(join(REPOSITORY, "package.json"), "utf8"),
+).version;
 
 function dmsModule(
   serviceSecret: unknown,
@@ -246,6 +257,7 @@ describe("the server secrets report", () => {
 describe("ajs dms start", () => {
   const BACKEND_URL = "http://127.0.0.1:5010";
   const PUBLIC_KEY_VARIABLE = "FIXTURE_PUBLIC_KEY";
+  const SERVER_LIFETIME_MS = 1000;
 
   interface StartReport {
     secret?: string;
@@ -302,6 +314,7 @@ describe("ajs dms start", () => {
   async function start(
     env: Record<string, string>,
     serverOptions?: Record<string, unknown>,
+    backendUrl = BACKEND_URL,
   ): Promise<{ report: StartReport; log: string }> {
     const project = mkdtempSync(join(tmpdir(), "dms-manifest-secrets-"));
     try {
@@ -318,7 +331,9 @@ describe("ajs dms start", () => {
         join(workspace, "server.mjs"),
         'process.send({ type: "dms:ready", address: "127.0.0.1", port: 3321 });\n' +
           "console.log(JSON.stringify({ secret: process.env.DMS_HTML_RENDER_SECRET, " +
-          "relay: process.env.DMS_OAUTH_RELAY_SECRET, publicOptions: process.env.DMS_PUBLIC_OPTIONS }));\n",
+          "relay: process.env.DMS_OAUTH_RELAY_SECRET, publicOptions: process.env.DMS_PUBLIC_OPTIONS }));\n" +
+          // Up long enough for the CLI to hear the backend take its report.
+          `setTimeout(() => {}, ${SERVER_LIFETIME_MS});\n`,
       );
 
       const environment: NodeJS.ProcessEnv = {
@@ -345,7 +360,7 @@ describe("ajs dms start", () => {
           join(REPOSITORY, "src", "index.ts"),
           "start",
           "-b",
-          BACKEND_URL,
+          backendUrl,
         ],
         { cwd: project, env: environment },
       );
@@ -377,6 +392,41 @@ describe("ajs dms start", () => {
         },
       },
     });
+  });
+
+  it("says whether the backend took or refused the ready report", async () => {
+    const backend = createServer((request, response) => {
+      const isAuthorized = request.headers["x-dms-bootstrap"] === "right";
+      response.statusCode = isAuthorized ? 204 : 401;
+      response.end();
+    });
+    await new Promise<void>((done) => backend.listen(0, "127.0.0.1", done));
+    const { port } = backend.address() as AddressInfo;
+    const backendUrl = `http://127.0.0.1:${port}`;
+    try {
+      const taken = await start(
+        { DMS_BOOTSTRAP_SECRET: "right" },
+        undefined,
+        backendUrl,
+      );
+      assert.match(
+        taken.log,
+        new RegExp(
+          `\\[DMS\\] Reported 1 modules to the backend \\(dms-frontend ${OWN_VERSION.replace(/\\./g, "\\\\.")}\\)\\n`,
+        ),
+      );
+      const refused = await start(
+        { DMS_BOOTSTRAP_SECRET: "wrong" },
+        undefined,
+        backendUrl,
+      );
+      assert.match(
+        refused.log,
+        /▲ \[DMS\] The backend refused the ready report: it cannot check this build's module versions\n {2}→ Set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret/,
+      );
+    } finally {
+      backend.close();
+    }
   });
 
   it("hands the server the secrets of its environment, and names their source", async () => {

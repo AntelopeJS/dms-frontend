@@ -13,7 +13,8 @@ export const MODULE_SET_POLL_INTERVAL_MS = 3000;
 const READY_ENDPOINT = "/dms/frontend/ready";
 const READY_TIMEOUT_MS = 5000;
 const JSON_CONTENT_TYPE = "application/json";
-const OWN_RELEASE: { version: string } = require("../package.json");
+/** The dms-frontend release reporting, as the ready report names it. */
+export const OWN_RELEASE: { version: string } = require("../package.json");
 
 /** What a module set is compared on. */
 export type ModuleSetMember = Pick<

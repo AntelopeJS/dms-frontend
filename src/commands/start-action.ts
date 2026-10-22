@@ -19,7 +19,7 @@ import {
 import { reservePort } from "../ports";
 import { readyLines, runServer } from "../server-process";
 import { reportAvailableUpdate } from "../update-check";
-import { reportFrontendReadyOnceAnswered } from "../module-set";
+import { OWN_RELEASE, reportFrontendReadyOnceAnswered } from "../module-set";
 import {
   type ProjectFrontendModule,
   readProjectFrontendModules,
@@ -136,6 +136,43 @@ function publicOptionsById(
   );
 }
 
+/**
+ * Tells the backend which module versions this build serves, once it first
+ * answers: the backend compares them with the ones it runs, and its module
+ * store reads which modules the build serves. It warns only on a difference,
+ * so the outcome is said here: that is the one trace the check ran.
+ */
+async function reportServedModules(
+  backendUrl: string,
+  modules: ProjectFrontendModule[],
+): Promise<void> {
+  const isTaken = await reportFrontendReadyOnceAnswered(
+    backendUrl,
+    modules.map(({ layer, version }) => ({
+      name: layer.name ?? layer.path,
+      version,
+    })),
+    process.env.DMS_BOOTSTRAP_SECRET,
+  );
+  const ui = getProcessUi();
+  if (isTaken) {
+    ui.message(
+      "info",
+      `[DMS] Reported ${modules.length} modules to the backend (dms-frontend ${OWN_RELEASE.version})`,
+    );
+    return;
+  }
+  ui.message(
+    "warn",
+    "[DMS] The backend refused the ready report: it cannot check this build's module versions",
+    {
+      details: [
+        `${ui.symbols.levels.hint} Set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret`,
+      ],
+    },
+  );
+}
+
 export async function runStart(options: StartOptions): Promise<void> {
   const startedAt = Date.now();
   const workspaceDir = resolve(productionWorkspace(options));
@@ -220,16 +257,7 @@ export async function runStart(options: StartOptions): Promise<void> {
         ]),
         footer: "Ctrl+C to stop",
       });
-      // The backend compares these versions with the ones it runs, and its
-      // module store reads which modules this build serves.
-      void reportFrontendReadyOnceAnswered(
-        backendUrl,
-        modules.map(({ layer, version }) => ({
-          name: layer.name ?? layer.path,
-          version,
-        })),
-        process.env.DMS_BOOTSTRAP_SECRET,
-      );
+      void reportServedModules(backendUrl, modules);
       void reportAvailableUpdate({ isFollowed: true });
     },
   });
