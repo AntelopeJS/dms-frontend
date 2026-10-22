@@ -2,7 +2,13 @@ import * as assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -23,6 +29,9 @@ const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST_SECRET = "manifest-render-secret";
 const RELAY_SECRET = "manifest-relay-secret";
 const SESSION_SECRET = "html-render-secret-test-session-secret";
+const OWN_VERSION: string = JSON.parse(
+  readFileSync(join(REPOSITORY, "package.json"), "utf8"),
+).version;
 
 function dmsModule(
   serviceSecret: unknown,
@@ -402,7 +411,9 @@ describe("ajs dms start", () => {
       );
       assert.match(
         taken.log,
-        /The backend took the ready report: it checks the versions of the 1 modules served\n/,
+        new RegExp(
+          `\\[DMS\\] Reported 1 modules to the backend \\(dms-frontend ${OWN_VERSION.replace(/\\./g, "\\\\.")}\\)\\n`,
+        ),
       );
       const refused = await start(
         { DMS_BOOTSTRAP_SECRET: "wrong" },
@@ -411,7 +422,7 @@ describe("ajs dms start", () => {
       );
       assert.match(
         refused.log,
-        /▲ The backend refused the ready report: it cannot check this build's module versions\n {2}→ Set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret/,
+        /▲ \[DMS\] The backend refused the ready report: it cannot check this build's module versions\n {2}→ Set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret/,
       );
     } finally {
       backend.close();

@@ -19,7 +19,7 @@ import {
 import { reservePort } from "../ports";
 import { readyLines, runServer } from "../server-process";
 import { reportAvailableUpdate } from "../update-check";
-import { reportFrontendReadyOnceAnswered } from "../module-set";
+import { OWN_RELEASE, reportFrontendReadyOnceAnswered } from "../module-set";
 import {
   type ProjectFrontendModule,
   readProjectFrontendModules,
@@ -158,13 +158,13 @@ async function reportServedModules(
   if (isTaken) {
     ui.message(
       "info",
-      `The backend took the ready report: it checks the versions of the ${modules.length} modules served`,
+      `[DMS] Reported ${modules.length} modules to the backend (dms-frontend ${OWN_RELEASE.version})`,
     );
     return;
   }
   ui.message(
     "warn",
-    "The backend refused the ready report: it cannot check this build's module versions",
+    "[DMS] The backend refused the ready report: it cannot check this build's module versions",
     {
       details: [
         `${ui.symbols.levels.hint} Set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret`,
