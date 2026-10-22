@@ -4,7 +4,13 @@
 // tells the backend which modules it serves once it is ready, which is how
 // the Modules page knows when to reload.
 
-import { backendEndpoint, fetchManifest } from "./manifest";
+import { setTimeout as sleep } from "node:timers/promises";
+import {
+  BackendResponseError,
+  BackendUnreachableError,
+  backendEndpoint,
+  fetchManifest,
+} from "./manifest";
 import { bootstrapHeaders, type ManifestModule } from "./workspace";
 
 /** How often `dev` reads the manifest to notice a module set change. */
@@ -155,8 +161,16 @@ export async function reportFrontendReady(
   }
 }
 
-/** How long `start` waits for the manifest it compares its build with. */
-const DRIFT_CHECK_TIMEOUT_MS = 10_000;
+/**
+ * How long one read of the manifest may take: longer than a platform holds a
+ * request while it wakes the backend (60 s), so a held read is not cut short.
+ */
+const DRIFT_READ_TIMEOUT_MS = 90_000;
+/** The first pause before reading again a backend that did not answer. */
+const DRIFT_FIRST_RETRY_MS = 2_000;
+/** The longest pause between two reads of a backend that does not answer. */
+const DRIFT_MAX_RETRY_MS = 60_000;
+const SERVER_ERROR = 500;
 
 /** How a build compares with the module set its backend serves now. */
 export type BuildDrift =
@@ -164,39 +178,80 @@ export type BuildDrift =
   | { status: "drifted"; served: string }
   | { status: "unknown"; reason: string };
 
+/** Pauses between reads of a backend that does not answer yet. */
+export interface DriftRetry {
+  firstDelayMs: number;
+  maxDelayMs: number;
+  readTimeoutMs: number;
+}
+
+const DEFAULT_DRIFT_RETRY: DriftRetry = {
+  firstDelayMs: DRIFT_FIRST_RETRY_MS,
+  maxDelayMs: DRIFT_MAX_RETRY_MS,
+  readTimeoutMs: DRIFT_READ_TIMEOUT_MS,
+};
+
+/**
+ * Whether a failed read means the backend has not answered yet, asleep,
+ * starting or out of reach, rather than that it answered something the
+ * comparison cannot use.
+ */
+function isNotAnsweringYet(error: unknown): boolean {
+  if (error instanceof BackendUnreachableError) return true;
+  if (error instanceof BackendResponseError)
+    return error.status >= SERVER_ERROR;
+  return error instanceof Error && error.name === "TimeoutError";
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    sleep(timeoutMs, undefined, { ref: false }).then(() => {
+      throw Object.assign(new Error("the backend did not answer in time"), {
+        name: "TimeoutError",
+      });
+    }),
+  ]);
+}
+
 /**
  * Compares the module set a build was made from with the one the backend
- * serves now, once, after the server is ready: a snapshot kept with the
- * project ages as the backend's modules change. Never retried and never
- * awaited by the server, so a backend that sleeps or is down delays nothing.
+ * serves, once the backend first answers: on a platform that wakes the
+ * backend with the frontend, that is after the server is ready. Reads again,
+ * with a growing pause, while the backend is asleep, starting or out of
+ * reach, on timers that never keep the process alive. Never awaited by the
+ * server, so it delays nothing.
  *
  * @param backendUrl Backend the server proxies to
  * @param builtDigest `manifestDigest` of the build's modules
  * @param digestOf Digest of a served manifest's modules
  * @param bootstrapSecret Credential for the manifest, when the server has one
+ * @param retry Pauses between reads, for tests
  */
 export async function compareWithBackend(
   backendUrl: string,
   builtDigest: string,
   digestOf: (modules: readonly ManifestModule[]) => string,
   bootstrapSecret?: string,
+  retry: DriftRetry = DEFAULT_DRIFT_RETRY,
 ): Promise<BuildDrift> {
-  try {
-    const manifest = await Promise.race([
-      fetchManifest(backendUrl, undefined, bootstrapSecret),
-      new Promise<never>((_resolve, reject) =>
-        setTimeout(
-          () => reject(new Error("the backend did not answer in time")),
-          DRIFT_CHECK_TIMEOUT_MS,
-        ).unref(),
-      ),
-    ]);
-    const served = digestOf(manifest.modules);
-    return { status: served === builtDigest ? "matches" : "drifted", served };
-  } catch (error) {
-    return {
-      status: "unknown",
-      reason: error instanceof Error ? error.message : String(error),
-    };
+  for (let delayMs = retry.firstDelayMs; ;) {
+    try {
+      const manifest = await withTimeout(
+        fetchManifest(backendUrl, undefined, bootstrapSecret),
+        retry.readTimeoutMs,
+      );
+      const served = digestOf(manifest.modules);
+      return { status: served === builtDigest ? "matches" : "drifted", served };
+    } catch (error) {
+      if (!isNotAnsweringYet(error)) {
+        return {
+          status: "unknown",
+          reason: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
+    await sleep(delayMs, undefined, { ref: false });
+    delayMs = Math.min(retry.maxDelayMs, delayMs * 2);
   }
 }

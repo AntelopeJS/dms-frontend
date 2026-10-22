@@ -218,6 +218,9 @@ export function describeManifestVersion(version: unknown): CliProblem {
  * the URL does not lead to a DMS backend's endpoint.
  */
 export class BackendResponseError extends CliError {
+  /** The status the backend answered with. */
+  readonly status: number;
+
   constructor(
     subject: string,
     url: string | URL,
@@ -244,6 +247,7 @@ export class BackendResponseError extends CliError {
           };
     super(problem);
     this.name = "BackendResponseError";
+    this.status = status;
   }
 }
 
