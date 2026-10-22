@@ -712,8 +712,8 @@ describe("Module server routes in the production server", () => {
       method: "POST",
       headers: {
         origin: frontendUrl,
-        "x-time-zone": "Europe/Brussels",
         "x-realtime-connection": "connection-7",
+        "x-time-zone": "Europe/Brussels",
         "x-custom": "dropped",
       },
     });
@@ -722,8 +722,8 @@ describe("Module server routes in the production server", () => {
     assert.equal(call.url, "/api/echo");
     assert.equal(call.headers["x-forwarded-for"], "127.0.0.1");
     // The client headers the proxy relays reach a module's backend call too.
-    assert.equal(call.headers["x-time-zone"], "Europe/Brussels");
     assert.equal(call.headers["x-realtime-connection"], "connection-7");
+    assert.equal(call.headers["x-time-zone"], undefined);
     assert.equal(call.headers["x-custom"], undefined);
     assert.equal(call.headers["x-fixture"], "yes");
     assert.equal(call.headers.authorization, "Bearer module-token");

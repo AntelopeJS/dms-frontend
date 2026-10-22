@@ -2,16 +2,14 @@ import { clientCountryHeader, clientIp } from "./client-ip.mjs";
 
 /**
  * The client headers every backend request carries, the proxy's and a module
- * route's alike: the browser's user agent, the interface language, the
- * browser's time zone and every realtime header (`x-realtime-session`, the
- * connection id of a shared stream, …). A name ending in `*` matches every
- * header that starts with what precedes it.
+ * route's alike: the browser's user agent, the interface language, and the
+ * realtime session and the browser connection it rides on.
  */
 export const CLIENT_HEADERS = [
   "user-agent",
   "x-content-language",
-  "x-time-zone",
-  "x-realtime-*",
+  "x-realtime-session",
+  "x-realtime-connection",
 ];
 
 export class UpstreamError extends Error {
@@ -37,21 +35,15 @@ export function publicBackendMessage(data) {
  * The headers of a client request the server relays to the backend.
  *
  * @param request The client request
- * @param names Lowercase names of the request headers to copy when present;
- *   a name ending in `*` copies every header starting with its prefix
+ * @param names Lowercase names of the request headers to copy when present
  * @returns The client country header, then the copied headers
  */
 export function relayedHeaders(request, names) {
-  const prefixes = names
-    .filter((name) => name.endsWith("*"))
-    .map((name) => name.slice(0, -1));
-  const isRelayed = (name) =>
-    names.includes(name) || prefixes.some((prefix) => name.startsWith(prefix));
   return {
     ...clientCountryHeader(request),
     ...Object.fromEntries(
-      Object.entries(request.headers).filter(
-        ([name, value]) => value && isRelayed(name),
+      names.flatMap((name) =>
+        request.headers[name] ? [[name, request.headers[name]]] : [],
       ),
     ),
   };

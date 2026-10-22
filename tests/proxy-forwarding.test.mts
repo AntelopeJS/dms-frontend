@@ -143,22 +143,22 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received["x-forwarded-host"], "app.example.test");
   });
 
-  it("relays the time zone and every realtime header, and no other custom header", async () => {
+  it("relays the realtime session and connection by name, and no other custom header", async () => {
     const response = await fetch(`${frontendUrl}/api/items`, {
       headers: {
-        "x-time-zone": "Europe/Brussels",
         "x-realtime-session": "session-1",
         "x-realtime-connection": "connection-7",
-        "x-realtimeish": "not a realtime header",
+        "x-realtime-other": "not relayed",
+        "x-time-zone": "Europe/Brussels",
         "x-custom": "dropped",
       },
     });
     assert.equal(response.status, 200);
     await response.arrayBuffer();
-    assert.equal(received["x-time-zone"], "Europe/Brussels");
     assert.equal(received["x-realtime-session"], "session-1");
     assert.equal(received["x-realtime-connection"], "connection-7");
-    assert.equal(received["x-realtimeish"], undefined);
+    assert.equal(received["x-realtime-other"], undefined);
+    assert.equal(received["x-time-zone"], undefined);
     assert.equal(received["x-custom"], undefined);
   });
 
