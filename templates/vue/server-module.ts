@@ -276,6 +276,13 @@ export interface DmsBackendProxyOptions {
    * needed.
    */
   auth?: "session" | "none";
+  /**
+   * The largest request body, in bytes, the server streams to the backend.
+   * A larger declared `Content-Length` gets a `413` before any byte is read;
+   * a chunked body is cut off with a `413` as soon as it goes over. No limit
+   * by default: the backend applies its own.
+   */
+  maxBodyBytes?: number;
 }
 
 export type DmsServerSetup = (server: DmsServer) => void;

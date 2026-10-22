@@ -94,6 +94,8 @@ export interface BackendProxyDeclaration {
    * frontend's `Origin` on a state-changing request; `none` sends neither.
    */
   auth?: "session" | "none";
+  /** The largest request body, in bytes, streamed to the backend (`413` above). */
+  maxBodyBytes?: number;
 }
 
 /** A backend route a module serves to anyone, as the manifest names it. */
