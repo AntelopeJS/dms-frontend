@@ -37,8 +37,8 @@ const ENVIRONMENT = [
 ] as const;
 const REDIRECT_STATUSES = [302, 303, 307] as const;
 const BACKEND_COOKIE = "backend=1; Path=/";
-/** A URL the backend signs and serves itself, on a path no proxy covers. */
-const SIGNED_FILE = "/file-storage/files/report.pdf?token=signed";
+/** A URL the backend serves itself, on a path no proxy covers. */
+const UNPROXIED_URL = "/exports/report.pdf?token=signed";
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -71,7 +71,7 @@ describe("backend redirects", () => {
       "/api/internal": `${backendUrl}/api/target?from=internal#top`,
       "/api/relative": "target?from=relative",
       "/api/climbing": `${backendUrl}//elsewhere.test/x`,
-      "/api/signed": `${backendUrl}${SIGNED_FILE}`,
+      "/api/unproxied": `${backendUrl}${UNPROXIED_URL}`,
     }[url.pathname];
     if (location) {
       response.writeHead(status, { location, "set-cookie": BACKEND_COOKIE });
@@ -159,11 +159,11 @@ describe("backend redirects", () => {
     });
 
     it("keeps a backend path the frontend does not proxy on the backend", async () => {
-      const response = await visit("/api/signed");
+      const response = await visit("/api/unproxied");
       assert.equal(response.status, 302);
       assert.equal(
         response.headers.get("location"),
-        `${backendUrl}${SIGNED_FILE}`,
+        `${backendUrl}${UNPROXIED_URL}`,
       );
     });
 
@@ -217,8 +217,10 @@ describe("backend redirects", () => {
                   redirect: "manual",
                 }),
               );
-              server.registerRoute("GET", "/api/_relay/signed", (event) =>
-                fetch(event.backendUrl("/api/signed"), { redirect: "manual" }),
+              server.registerRoute("GET", "/api/_relay/unproxied", (event) =>
+                fetch(event.backendUrl("/api/unproxied"), {
+                  redirect: "manual",
+                }),
               );
               server.registerRoute("GET", "/api/_relay/followed", (event) =>
                 fetch(event.backendUrl("/api/maps?status=302")),
@@ -271,13 +273,13 @@ describe("backend redirects", () => {
     });
 
     it("keeps a route's backend redirect to a path the frontend does not proxy on the backend", async () => {
-      const response = await fetch(`${served?.url}/api/_relay/signed`, {
+      const response = await fetch(`${served?.url}/api/_relay/unproxied`, {
         redirect: "manual",
       });
       assert.equal(response.status, 302);
       assert.equal(
         response.headers.get("location"),
-        `${backendUrl}${SIGNED_FILE}`,
+        `${backendUrl}${UNPROXIED_URL}`,
       );
     });
 
@@ -319,12 +321,12 @@ describe("relayedLocation", () => {
 
   it("keeps a backend path the frontend does not proxy absolute", () => {
     assert.equal(
-      relayedLocation(`${backend}${SIGNED_FILE}`, fetched, proxied),
-      `${backend}${SIGNED_FILE}`,
+      relayedLocation(`${backend}${UNPROXIED_URL}`, fetched, proxied),
+      `${backend}${UNPROXIED_URL}`,
     );
     assert.equal(
-      relayedLocation(SIGNED_FILE, fetched, proxied),
-      `${backend}${SIGNED_FILE}`,
+      relayedLocation(UNPROXIED_URL, fetched, proxied),
+      `${backend}${UNPROXIED_URL}`,
     );
   });
 

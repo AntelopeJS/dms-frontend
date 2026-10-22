@@ -28,8 +28,8 @@ export function isBackendUrl(
  * `fetchedUrl`. The proxy keeps the path, so a location on the backend's
  * origin becomes the same path on the frontend's when the frontend sends that
  * path to the backend: the backend's origin is often unreachable from the
- * browser. A backend path the frontend does not proxy (a signed file URL the
- * backend serves itself) stays an absolute backend URL, which the browser
+ * browser. A backend path the frontend does not proxy (a route outside every
+ * declared backend proxy) stays an absolute backend URL, which the browser
  * follows to the backend. Another site's location is kept.
  *
  * @param location The backend's `Location`
