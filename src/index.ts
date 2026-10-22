@@ -17,7 +17,6 @@ import { cmdBuild } from "./commands/build";
 import { cmdClean } from "./commands/clean";
 import { cmdDev } from "./commands/dev";
 import { cmdPrepare } from "./commands/prepare";
-import { cmdSnapshot } from "./commands/snapshot";
 import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
 import { cmdWorkspaces } from "./commands/workspaces";
@@ -50,12 +49,13 @@ const ROOT_EXAMPLES: HelpExample[] = [
     command: "ajs dms dev",
   },
   {
-    description: "Build for production, then serve the build",
-    command: "ajs dms build -b https://dms.example.com",
+    description:
+      "Build for production from the project root, without a backend",
+    command: "ajs dms build",
   },
   {
-    description: "Serve it on another port",
-    command: "ajs dms start -b https://dms.example.com -p 3001",
+    description: "Serve the build against its backend, on another port",
+    command: "ajs dms start -b https://api.example.com -p 3001",
   },
 ];
 
@@ -200,7 +200,6 @@ const runCLI = async () => {
   program.addCommand(cmdDev());
   program.addCommand(cmdBuild());
   program.addCommand(cmdStart());
-  program.addCommand(cmdSnapshot());
   program.addCommand(cmdPrepare());
   program.addCommand(cmdWorkspaces());
   program.addCommand(cmdClean());

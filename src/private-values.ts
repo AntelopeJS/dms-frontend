@@ -3,11 +3,7 @@
 // environment, so nothing a build writes keeps their values.
 
 import { UsageError } from "./config";
-import type {
-  FrontendModuleOptions,
-  FrontendModuleValue,
-  ManifestModule,
-} from "./workspace";
+import type { FrontendModuleOptions, FrontendModuleValue } from "./workspace";
 
 function emptied(value: FrontendModuleValue): FrontendModuleValue {
   if (typeof value === "string") return "";
@@ -16,27 +12,17 @@ function emptied(value: FrontendModuleValue): FrontendModuleValue {
   return value;
 }
 
-function emptiedOptions(options: FrontendModuleOptions): FrontendModuleOptions {
+/**
+ * Private options with every string emptied. The shape stays: the generated
+ * server fills an empty secret from its environment (`DMS_HTML_RENDER_SECRET`,
+ * `DMS_OAUTH_RELAY_SECRET`, or any of them from `DMS_PRIVATE_OPTIONS`), and
+ * only a section that exists can be filled.
+ */
+export function emptiedOptions(
+  options: FrontendModuleOptions,
+): FrontendModuleOptions {
   return Object.fromEntries(
     Object.entries(options).map(([key, value]) => [key, emptied(value)]),
-  );
-}
-
-/**
- * The modules with every string of their private options emptied. The shape
- * stays: the generated server fills an empty secret from its environment
- * (`DMS_HTML_RENDER_SECRET`, `DMS_OAUTH_RELAY_SECRET`, or any of them from
- * `DMS_PRIVATE_OPTIONS`), and only a section that exists can be filled.
- *
- * @param modules Modules as the backend served them
- */
-export function withoutPrivateValues(
-  modules: readonly ManifestModule[],
-): ManifestModule[] {
-  return modules.map((module) =>
-    module.privateOptions
-      ? { ...module, privateOptions: emptiedOptions(module.privateOptions) }
-      : { ...module },
   );
 }
 

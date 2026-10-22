@@ -17,7 +17,6 @@ import {
   redirectAccessRefusal,
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
-import { fetchWaking } from "./server/backend-wake.mjs";
 import { handleClientError } from "./server/client-error.mjs";
 import {
   reportListenError,
@@ -45,6 +44,7 @@ import {
   loadServerModules,
 } from "./server/module-server.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
+import { publicOptionsScript } from "./server/public-options.mjs";
 import { loadPageProps } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import { listenHost } from "./server/listen-host.mjs";
@@ -55,6 +55,7 @@ import {
   relayAnswer,
 } from "./server/proxy-compression.mjs";
 import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
+import { sendWithinLimit, SERVER_OPTIONS } from "./server/proxy-transfers.mjs";
 import {
   createInertiaPage,
   htmlHeaders,
@@ -154,10 +155,9 @@ function serverComponentFetch(request) {
 }
 
 async function backendJson(path, request) {
-  const response = await fetchWaking(
-    new URL(path, process.env.DMS_API_BASE_URL),
-    { headers: backendHeaders(request), signal: request.dmsAbandoned },
-  );
+  const response = await fetch(new URL(path, process.env.DMS_API_BASE_URL), {
+    headers: backendHeaders(request),
+  });
   if (!response.ok) {
     throw await backendResponseError(response);
   }
@@ -212,13 +212,19 @@ async function proxy(request, response, backendProxy) {
   // answers: its stream, an SSE feed above all, then stayed open for good.
   const abandoned = new AbortController();
   response.once("close", () => abandoned.abort());
-  const upstream = await fetchWaking(backendUrl(request.url), {
+  const init = {
     signal: abandoned.signal,
     method: request.method,
     headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
-    body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
-  });
+  };
+  const upstream = await sendWithinLimit(
+    request,
+    response,
+    backendProxy.maxBodyBytes,
+    (body) => fetch(backendUrl(request.url), { ...init, body }),
+  );
+  if (!upstream) return true;
   await relayAnswer(request, response, upstream, { fetched: true });
 }
 
@@ -290,11 +296,9 @@ export async function renderHtml(
       : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
-  const preloads = await documentStyleTags(
-    devServer,
-    rendered.modules,
-    template,
-  );
+  const headEnd =
+    (await documentStyleTags(devServer, rendered.modules, template)) +
+    publicOptionsScript();
   const html = template
     .replace("<title>Antelope DMS</title>", () =>
       withFaviconPlaceholder(rendered.head.headTags),
@@ -303,7 +307,7 @@ export async function renderHtml(
       htmlTag(attributes, rendered.head.htmlAttrs),
     )
     .replace("<body", `<body ${rendered.head.bodyAttrs}`)
-    .replace("</head>", `${preloads}</head>`)
+    .replace("</head>", `${headEnd}</head>`)
     .replace(
       '<div id="dms-overlays" class="isolate"></div>',
       `<div id="dms-overlays" class="isolate">${rendered.overlays}</div>`,
@@ -336,9 +340,6 @@ async function writeBackendError(error, request, response) {
   if (await redirectAccessRefusal(error, request, response, loadRenderer))
     return;
   console.error("DMS backend request failed", error);
-  const retryHeaders = error?.retryAfter
-    ? { "retry-after": error.retryAfter }
-    : {};
   if (isFrontendVisit(request)) {
     const props = {
       path: pathname,
@@ -352,24 +353,18 @@ async function writeBackendError(error, request, response) {
         request,
         response,
         status,
-        { ...inertiaHeaders(page.version), ...retryHeaders },
+        inertiaHeaders(page.version),
         JSON.stringify(page),
       );
     }
     const { html } = await renderRequestHtml(page, request);
-    return writeContent(
-      request,
-      response,
-      status,
-      { ...htmlHeaders(), ...retryHeaders },
-      html,
-    );
+    return writeContent(request, response, status, htmlHeaders(), html);
   }
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
       ? { message: error.message }
       : UNEXPECTED_ERROR_BODY;
-  response.writeHead(status, { "content-type": JSON_TYPE, ...retryHeaders });
+  response.writeHead(status, { "content-type": JSON_TYPE });
   response.end(JSON.stringify(payload));
 }
 
@@ -491,19 +486,7 @@ async function writeRequestFailure(error, request, response) {
   await writeBackendError(error, request, response);
 }
 
-/**
- * Aborted once the client is gone, ending a wait for a waking backend. An
- * embedder's response that emits no events never aborts it.
- */
-function abandonedSignal(response) {
-  const abandoned = new AbortController();
-  if (typeof response.once === "function")
-    response.once("close", () => abandoned.abort());
-  return abandoned.signal;
-}
-
 export async function handleRequestSafely(request, response) {
-  request.dmsAbandoned = abandonedSignal(response);
   try {
     if (refuseForeignTarget(request, response)) return;
     await handleRequest(request, response);
@@ -519,7 +502,7 @@ if (
   process.argv[1] &&
   import.meta.url === new URL(`file://${process.argv[1]}`).href
 ) {
-  frontendHttpServer = createServer(handleRequestSafely);
+  frontendHttpServer = createServer(SERVER_OPTIONS, handleRequestSafely);
   frontendHttpServer.on("clientError", (error, socket) =>
     handleClientError(error, socket, maxHeaderSize),
   );

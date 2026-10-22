@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { publicOptionsOf } from "./public-options.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const REGISTRY_PATH = join(PROJECT_ROOT, "generated-frontend-modules.json");
@@ -26,7 +27,9 @@ function findHomepage(options) {
     .find((homepage) => homepage !== undefined);
 }
 
+const OPTIONS = publicOptionsOf(REGISTRY);
+
 export const HOMEPAGE =
   REGISTRY.modules
-    .map((module) => findHomepage(module.options))
+    .map((module) => findHomepage(OPTIONS[module.id]))
     .find(Boolean) ?? "/";

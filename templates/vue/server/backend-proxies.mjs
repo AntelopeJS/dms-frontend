@@ -39,6 +39,11 @@ export function proxyRejection(pattern, options) {
     return "its options are not an object";
   if (options?.auth !== undefined && !PROXY_AUTH_MODES.includes(options.auth))
     return `auth is not one of ${PROXY_AUTH_MODES.map((mode) => `"${mode}"`).join(", ")}`;
+  if (
+    options?.maxBodyBytes !== undefined &&
+    !(Number.isSafeInteger(options.maxBodyBytes) && options.maxBodyBytes > 0)
+  )
+    return "maxBodyBytes is not a positive whole number of bytes";
   return undefined;
 }
 
@@ -48,6 +53,7 @@ function compileProxy(pattern, options, owner) {
     path: pattern,
     owner,
     auth: options?.auth ?? DEFAULT_AUTH,
+    maxBodyBytes: options?.maxBodyBytes,
   };
 }
 
@@ -56,7 +62,8 @@ function compileProxy(pattern, options, owner) {
  *
  * @param declared `{ id, pattern, options }` per `registerBackendProxy` call,
  *   from the highest-priority module down
- * @param manifest `{ module, path, auth? }` per backend module declaration
+ * @param manifest `{ module, path, auth?, maxBodyBytes? }` per backend
+ *   module declaration
  * @param warn Reports a declaration problem
  * @returns The proxies, the most specific pattern first: a request reaches
  *   the first that matches
@@ -77,7 +84,11 @@ export function resolveBackendProxies(declared, manifest, warn) {
   for (const { id, pattern, options } of declared)
     add(pattern, options, `Frontend module ${id}`);
   for (const entry of manifest)
-    add(entry?.path, { auth: entry?.auth }, `Backend module ${entry?.module}`);
+    add(
+      entry?.path,
+      { auth: entry?.auth, maxBodyBytes: entry?.maxBodyBytes },
+      `Backend module ${entry?.module}`,
+    );
   return [...kept.values()].sort(
     (left, right) => right.pattern.specificity - left.pattern.specificity,
   );

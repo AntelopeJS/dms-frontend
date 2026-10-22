@@ -67,6 +67,7 @@ export function forwardedHeaders(request) {
   const headers = {
     "x-forwarded-for": forwardedFor(request),
     "x-forwarded-proto": requestScheme(request),
+    ...clientIpHeader(request),
   };
   const host = requestHost(request);
   if (host) headers["x-forwarded-host"] = host;
@@ -84,6 +85,17 @@ function forwardedFor(request) {
         .filter(Boolean)
     : [];
   return [...incoming, socketIp].join(", ");
+}
+
+/**
+ * The `DMS_CLIENT_IP_HEADER` header of a backend request, set to the client
+ * address this server resolved, so the backend reads the same address
+ * without counting hops. Always written, never relayed: a value the caller
+ * sent is replaced. None when the variable is unset.
+ */
+export function clientIpHeader(request) {
+  const name = headerName(process.env.DMS_CLIENT_IP_HEADER);
+  return name ? { [name]: clientIp(request) } : {};
 }
 
 export function isSameOrigin(request) {

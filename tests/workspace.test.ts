@@ -148,11 +148,9 @@ after(() => {
 });
 
 const cachedManifest: Manifest = {
-  pack: "/dms/modules",
   modules: [
     {
       name: "@scope/dms-frontend-module",
-      archiveName: "@scope-dms-frontend-module",
       path: "/srv/layers/dms",
       priority: 0,
       privateOptions: { oauth: { relaySecret: "s3cret" } },
@@ -197,7 +195,7 @@ describe("manifest cache", () => {
       manifest: cachedManifest,
       fetchedAt: "2026-08-06T10:00:00Z",
     });
-    assert.equal(readCachedManifest(dir)?.manifest.pack, cachedManifest.pack);
+    assert.deepEqual(readCachedManifest(dir)?.manifest, cachedManifest);
   });
 
   it("ignores a file that is not a cache entry", () => {
@@ -208,8 +206,8 @@ describe("manifest cache", () => {
 describe("layer paths withheld by the backend", () => {
   const backendUrl = "http://127.0.0.1:5010";
   const pathless: ManifestModule[] = [
-    { name: "@scope/dms-frontend-module", archiveName: "a", priority: 0 },
-    { name: "@scope/other-module", archiveName: "b", priority: 0 },
+    { name: "@scope/dms-frontend-module", priority: 0 },
+    { name: "@scope/other-module", priority: 0 },
   ];
 
   function messageFor(
