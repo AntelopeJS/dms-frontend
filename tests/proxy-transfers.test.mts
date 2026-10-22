@@ -23,7 +23,8 @@ const MAX_BODY_BYTES = 4 * MEBIBYTE;
 const TOO_LARGE_BYTES = 5 * MEBIBYTE;
 const CHUNK_BYTES = 64 * 1024;
 const TOKEN = "query-token-never-logged";
-const RELATIVE_LOCATION = "/media/asset-id/photo%20one.png?v=2";
+// On a proxied prefix, so the proxy keeps it relative (see proxy-redirects.mjs).
+const RELATIVE_LOCATION = "/file-storage/files/photo%20one.png?token=t";
 const UNREACHABLE_STORAGE_URL = `http://127.0.0.1:1/file-storage/files/key?token=${TOKEN}`;
 const STORAGE_PROXIES = JSON.stringify([
   ...JSON.parse(DMS_BACKEND_PROXIES),
@@ -88,7 +89,7 @@ describe("the proxy streams large file-storage transfers", () => {
     };
     requests.push(seen);
     if (request.url?.startsWith("/api/relative-redirect")) {
-      // Media's canonical link, relative, with a cookie the backend sets.
+      // A relative link on a proxied prefix, with cookies the backend sets.
       response.writeHead(302, {
         location: RELATIVE_LOCATION,
         "set-cookie": ["first=1; Path=/; HttpOnly", "second=2; Path=/"],
