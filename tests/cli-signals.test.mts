@@ -1,6 +1,5 @@
 import * as assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -142,27 +141,23 @@ async function assertTreeGone(pids: number[]) {
 }
 
 /**
- * A home holding what `ajs dms build` leaves behind for `start`, with the
+ * A project holding what `ajs dms build` leaves behind for `start`, with the
  * process-tree fixture standing in for the generated server.
  */
-function builtHome(backendUrl: string): string {
-  const home = mkdtempSync(join(scratch, "home-"));
-  const workspace = join(
-    home,
-    ".antelopejs/dms-frontend",
-    createHash("sha256").update(backendUrl).digest("hex"),
-  );
+function builtProject(): string {
+  const project = signalsProject();
+  const workspace = join(project, ".dms-frontend");
   mkdirSync(join(workspace, "dist/client"), { recursive: true });
   writeFileSync(join(workspace, "dist/client/index.html"), "<html></html>");
   copyFileSync(PROCESS_TREE, join(workspace, "server.mjs"));
-  return home;
+  return project;
 }
 
 /** Starts `start`, resolving once the CLI printed the server's ready block. */
 async function startServer(backendUrl: string, ownGroup = false) {
   const run = startCli({
-    args: ["start", "-b", backendUrl, "-p", "0"],
-    env: { HOME: builtHome(backendUrl), DMS_SESSION_SECRET: SESSION_SECRET },
+    args: ["start", "-b", backendUrl, "-p", "0", "--project", builtProject()],
+    env: { DMS_SESSION_SECRET: SESSION_SECRET },
     ownGroup,
   });
   await waitFor(
@@ -297,7 +292,8 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
 
   it("prints a due update notice once, under the ready block", async () => {
     const backendUrl = "http://127.0.0.1:9";
-    const home = builtHome(backendUrl);
+    const home = mkdtempSync(join(scratch, "home-"));
+    mkdirSync(join(home, ".antelopejs/dms-frontend"), { recursive: true });
     writeFileSync(
       join(home, ".antelopejs/dms-frontend/update-check.json"),
       JSON.stringify({
@@ -307,7 +303,7 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
       }),
     );
     const run = startCli({
-      args: ["start", "-b", backendUrl, "-p", "0"],
+      args: ["start", "-b", backendUrl, "-p", "0", "--project", builtProject()],
       entry: ["--import", TERMINAL_STDERR, CLI],
       env: {
         HOME: home,
@@ -338,8 +334,17 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
   it("shows only the local URL of a quiet run, and no stop line", async () => {
     const backendUrl = "http://127.0.0.1:9";
     const run = startCli({
-      args: ["start", "-b", backendUrl, "-p", "0", "-q"],
-      env: { HOME: builtHome(backendUrl), DMS_SESSION_SECRET: SESSION_SECRET },
+      args: [
+        "start",
+        "-b",
+        backendUrl,
+        "-p",
+        "0",
+        "-q",
+        "--project",
+        builtProject(),
+      ],
+      env: { DMS_SESSION_SECRET: SESSION_SECRET },
       ownGroup: true,
     });
     await waitFor(

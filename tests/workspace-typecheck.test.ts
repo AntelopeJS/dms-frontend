@@ -72,6 +72,7 @@ function shippedRuntimeWorkspace(moduleFiles: Record<string, string>): string {
   const workspace = generatedWorkspace(moduleFiles);
   for (const file of [
     "frontend-module.ts",
+    "public-options.ts",
     "layer-app-config.ts",
     "ui-app-config.ts",
     "globals.d.ts",
