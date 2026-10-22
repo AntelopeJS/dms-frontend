@@ -55,6 +55,7 @@ import {
   relayAnswer,
 } from "./server/proxy-compression.mjs";
 import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
+import { sendWithinLimit, SERVER_OPTIONS } from "./server/proxy-transfers.mjs";
 import {
   createInertiaPage,
   htmlHeaders,
@@ -212,13 +213,19 @@ async function proxy(request, response, backendProxy) {
   // answers: its stream, an SSE feed above all, then stayed open for good.
   const abandoned = new AbortController();
   response.once("close", () => abandoned.abort());
-  const upstream = await fetchWaking(backendUrl(request.url), {
+  const init = {
     signal: abandoned.signal,
     method: request.method,
     headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
-    body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
-  });
+  };
+  const upstream = await sendWithinLimit(
+    request,
+    response,
+    backendProxy.maxBodyBytes,
+    (body) => fetchWaking(backendUrl(request.url), { ...init, body }),
+  );
+  if (!upstream) return true;
   await relayAnswer(request, response, upstream, { fetched: true });
 }
 
@@ -519,7 +526,7 @@ if (
   process.argv[1] &&
   import.meta.url === new URL(`file://${process.argv[1]}`).href
 ) {
-  frontendHttpServer = createServer(handleRequestSafely);
+  frontendHttpServer = createServer(SERVER_OPTIONS, handleRequestSafely);
   frontendHttpServer.on("clientError", (error, socket) =>
     handleClientError(error, socket, maxHeaderSize),
   );

@@ -40,6 +40,15 @@ describe("Backend proxy declarations", () => {
       /auth is not one of "session", "none"/,
     );
     assert.equal(proxyRejection("/api/**", { auth: "none" }), undefined);
+    for (const maxBodyBytes of [0, -1, 1.5, "1024"])
+      assert.match(
+        proxyRejection("/upload/**", { maxBodyBytes }) ?? "",
+        /maxBodyBytes is not a positive whole number/,
+      );
+    assert.equal(
+      proxyRejection("/upload/**", { maxBodyBytes: 1024 }),
+      undefined,
+    );
     assert.equal(proxyRejection("/media", undefined), undefined);
   });
 
