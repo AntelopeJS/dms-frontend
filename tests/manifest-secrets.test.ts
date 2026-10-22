@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
   collectManifestSecrets,
@@ -339,6 +339,7 @@ describe("ajs dms start", () => {
       const environment: NodeJS.ProcessEnv = {
         ...process.env,
         HOME: project,
+        USERPROFILE: project,
         NO_UPDATE_NOTIFIER: "1",
         // start reserves its port before spawning the server: ask for any
         // free one, so the suite does not depend on 3001 being free.
@@ -356,7 +357,7 @@ describe("ajs dms start", () => {
         process.execPath,
         [
           "--import",
-          require.resolve("tsx"),
+          pathToFileURL(require.resolve("tsx")).href,
           join(REPOSITORY, "src", "index.ts"),
           "start",
           "-b",
