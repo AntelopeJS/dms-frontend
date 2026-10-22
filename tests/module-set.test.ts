@@ -6,10 +6,10 @@ import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  compareWithBackend,
   followModuleSet,
   moduleSetFingerprint,
   reportFrontendReady,
+  reportFrontendReadyOnceAnswered,
 } from "../src/module-set";
 
 const ownVersion: string = JSON.parse(
@@ -44,11 +44,9 @@ type ServedModule = typeof dmsModule & {
 
 function manifestOf(modules: ServedModule[]) {
   return {
-    version: 1,
-    archive: "/dms/frontend/modules",
+    version: 2,
     modules: modules.map((module) => ({
       ...module,
-      archiveName: module.name,
       renderer: { name: "vue", version: "3" },
     })),
   };
@@ -232,10 +230,10 @@ describe("module set", () => {
     assert.equal(changes, 0);
   });
 
-  it("reports the served modules and its own version with the bootstrap credential", async () => {
+  it("reports the served modules' versions and its own with the bootstrap credential", async () => {
     const isTaken = await reportFrontendReady(
       backendUrl,
-      [dmsModule.name],
+      [{ name: dmsModule.name, version: "0.9.8" }, { name: "unversioned" }],
       "secret",
     );
     const report = requests.find((request) =>
@@ -245,35 +243,39 @@ describe("module set", () => {
     assert.equal(report?.method, "POST");
     assert.equal(report?.headers["x-dms-bootstrap"], "secret");
     assert.deepEqual(JSON.parse(report?.body ?? "{}"), {
-      modules: [dmsModule.name],
+      modules: [
+        { name: dmsModule.name, version: "0.9.8" },
+        { name: "unversioned" },
+      ],
       version: ownVersion,
     });
   });
 
   it("does not fail when the backend cannot take the report", async () => {
-    assert.equal(await reportFrontendReady("http://127.0.0.1:1", ["x"]), false);
+    assert.equal(
+      await reportFrontendReady("http://127.0.0.1:1", [{ name: "x" }]),
+      false,
+    );
   });
 });
 
-describe("comparing a build with its backend", () => {
-  const retry = { firstDelayMs: 10, maxDelayMs: 40, readTimeoutMs: 200 };
-  const digestOf = (modules: readonly { name: string }[]) =>
-    modules.map((module) => module.name).join(",");
+describe("reporting to a backend that is waking", () => {
+  const retry = { firstDelayMs: 10, maxDelayMs: 40, timeoutMs: 200 };
   let answers: ((response: import("node:http").ServerResponse) => void)[];
-  let reads = 0;
+  let reports = 0;
   let server: Server;
   let backendUrl: string;
 
   before(async () => {
     server = createServer((_request, response) => {
-      reads += 1;
+      reports += 1;
       const answer = answers.shift();
       if (answer) {
         answer(response);
         return;
       }
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify(manifestOf([dmsModule])));
+      response.statusCode = 204;
+      response.end();
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
     backendUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -284,8 +286,8 @@ describe("comparing a build with its backend", () => {
     server.close();
   });
 
-  it("still compares when the backend answers only after the read timeout, then while starting", async () => {
-    reads = 0;
+  it("reports again until a backend that timed out, then was starting, takes it", async () => {
+    reports = 0;
     answers = [
       (response) => setTimeout(() => response.end(), 500),
       (response) => {
@@ -294,57 +296,34 @@ describe("comparing a build with its backend", () => {
       },
     ];
 
-    const drift = await compareWithBackend(
+    const isTaken = await reportFrontendReadyOnceAnswered(
       backendUrl,
-      dmsModule.name,
-      digestOf,
+      [{ name: dmsModule.name, version: "0.9.8" }],
       undefined,
       retry,
     );
 
-    assert.deepEqual(drift, { status: "matches", served: dmsModule.name });
-    assert.equal(reads, 3);
+    assert.equal(isTaken, true);
+    assert.equal(reports, 3);
   });
 
-  it("reports a drift found once the backend answers", async () => {
-    reads = 0;
+  it("does not report again to a backend that refused the report", async () => {
+    reports = 0;
     answers = [
       (response) => {
-        response.statusCode = 504;
+        response.statusCode = 401;
         response.end();
       },
     ];
 
-    const drift = await compareWithBackend(
+    const isTaken = await reportFrontendReadyOnceAnswered(
       backendUrl,
-      langModule.name,
-      digestOf,
+      [{ name: dmsModule.name }],
       undefined,
       retry,
     );
 
-    assert.deepEqual(drift, { status: "drifted", served: dmsModule.name });
-    assert.equal(reads, 2);
-  });
-
-  it("does not read again a backend that answered with a refusal", async () => {
-    reads = 0;
-    answers = [
-      (response) => {
-        response.statusCode = 404;
-        response.end();
-      },
-    ];
-
-    const drift = await compareWithBackend(
-      backendUrl,
-      dmsModule.name,
-      digestOf,
-      undefined,
-      retry,
-    );
-
-    assert.equal(drift.status, "unknown");
-    assert.equal(reads, 1);
+    assert.equal(isTaken, false);
+    assert.equal(reports, 1);
   });
 });

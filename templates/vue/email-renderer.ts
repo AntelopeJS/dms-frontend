@@ -6,6 +6,7 @@ import { appConfigs } from "./app-configs.generated";
 import moduleRegistry from "./generated-frontend-modules.json";
 import { loadEmailLocaleMessages } from "./email-locales";
 import { stripSsrMarkers } from "./email-markup";
+import { parsePublicOptions } from "./public-options";
 
 interface EmailModule {
   default: Component;
@@ -19,6 +20,8 @@ interface EmailRegistry {
 interface EmailRenderOptions {
   locale?: string;
 }
+
+const runtimeOptions = parsePublicOptions(process.env.DMS_PUBLIC_OPTIONS);
 
 const registries = import.meta.glob<EmailRegistry>(
   "/frontend-modules/*/dms.email.ts",
@@ -157,7 +160,9 @@ export async function renderEmail(
   app.provide("dmsEmailAppConfig", defu({}, ...emailAppConfigs));
   const publicConfig = defu(
     {},
-    ...moduleRegistry.modules.map((module) => module.options),
+    ...moduleRegistry.modules.map(
+      (module) => runtimeOptions?.[module.id] ?? module.options,
+    ),
   );
   app.provide("dmsEmailRuntimeConfig", {
     public: defu(

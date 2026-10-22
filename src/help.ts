@@ -25,6 +25,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ],
   ["DMS_OFFLINE", "Same as --offline, unless 0, false, no or off"],
   ["DMS_WORKSPACE_DIR", "Same as build and start --workspace"],
+  [
+    "ANTELOPEJS_LAUNCH_ENV",
+    "AntelopeJS environment build and start evaluate the project in, same as -e",
+  ],
   ["DMS_PREPARE_STRICT", "Same as prepare --strict, read like DMS_OFFLINE"],
   ["PORT", "Same as -p"],
   [

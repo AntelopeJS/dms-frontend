@@ -76,8 +76,7 @@
     "chokidar": "^4.0.3",
     "commander": "^13.1.0",
     "ignore": "^7.0.5",
-    "semver": "^7.7.4",
-    "unzipper": "^0.12.3"
+    "semver": "^7.7.4"
   },
   "devDependencies": {
     "@antelopejs/core": "^1.16.0",
@@ -87,7 +86,6 @@
     "@inertiajs/vue3": "^3.7.1",
     "@types/node": "^24.8.1",
     "@types/semver": "^7.7.1",
-    "@types/unzipper": "^0.10.11",
     "@unhead/vue": "^2.1.4",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/server-renderer": "^3.5.25",
