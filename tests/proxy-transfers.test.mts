@@ -33,6 +33,9 @@ const STORAGE_PROXIES = JSON.stringify([
     maxBodyBytes: MAX_BODY_BYTES,
   },
   { path: "/file-storage/files/**", auth: "none" },
+  // dms-media's MEDIA_DELIVERY_PROXY: a relative Location on it stays a
+  // frontend path (see proxy-redirects.mjs).
+  { path: "/media/**", auth: "session" },
 ]);
 
 async function listen(server: Server): Promise<number> {

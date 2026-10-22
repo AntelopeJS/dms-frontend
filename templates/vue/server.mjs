@@ -229,8 +229,6 @@ async function proxy(request, response, backendProxy, isProxiedPath) {
   response.once("close", () => abandoned.abort());
   const init = {
     signal: abandoned.signal,
-    // The browser follows a redirect, not the proxy (see proxy-redirects.mjs).
-    redirect: "manual",
     method: request.method,
     headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
     duplex: "half",
