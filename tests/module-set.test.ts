@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  compareWithBackend,
   followModuleSet,
   moduleSetFingerprint,
   reportFrontendReady,
@@ -251,5 +252,99 @@ describe("module set", () => {
 
   it("does not fail when the backend cannot take the report", async () => {
     assert.equal(await reportFrontendReady("http://127.0.0.1:1", ["x"]), false);
+  });
+});
+
+describe("comparing a build with its backend", () => {
+  const retry = { firstDelayMs: 10, maxDelayMs: 40, readTimeoutMs: 200 };
+  const digestOf = (modules: readonly { name: string }[]) =>
+    modules.map((module) => module.name).join(",");
+  let answers: ((response: import("node:http").ServerResponse) => void)[];
+  let reads = 0;
+  let server: Server;
+  let backendUrl: string;
+
+  before(async () => {
+    server = createServer((_request, response) => {
+      reads += 1;
+      const answer = answers.shift();
+      if (answer) {
+        answer(response);
+        return;
+      }
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(manifestOf([dmsModule])));
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    backendUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+
+  it("still compares when the backend answers only after the read timeout, then while starting", async () => {
+    reads = 0;
+    answers = [
+      (response) => setTimeout(() => response.end(), 500),
+      (response) => {
+        response.statusCode = 503;
+        response.end("error.server_starting");
+      },
+    ];
+
+    const drift = await compareWithBackend(
+      backendUrl,
+      dmsModule.name,
+      digestOf,
+      undefined,
+      retry,
+    );
+
+    assert.deepEqual(drift, { status: "matches", served: dmsModule.name });
+    assert.equal(reads, 3);
+  });
+
+  it("reports a drift found once the backend answers", async () => {
+    reads = 0;
+    answers = [
+      (response) => {
+        response.statusCode = 504;
+        response.end();
+      },
+    ];
+
+    const drift = await compareWithBackend(
+      backendUrl,
+      langModule.name,
+      digestOf,
+      undefined,
+      retry,
+    );
+
+    assert.deepEqual(drift, { status: "drifted", served: dmsModule.name });
+    assert.equal(reads, 2);
+  });
+
+  it("does not read again a backend that answered with a refusal", async () => {
+    reads = 0;
+    answers = [
+      (response) => {
+        response.statusCode = 404;
+        response.end();
+      },
+    ];
+
+    const drift = await compareWithBackend(
+      backendUrl,
+      dmsModule.name,
+      digestOf,
+      undefined,
+      retry,
+    );
+
+    assert.equal(drift.status, "unknown");
+    assert.equal(reads, 1);
   });
 });
