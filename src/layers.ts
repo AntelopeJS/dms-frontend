@@ -4,21 +4,11 @@
 //
 // Split out of common.ts, which stays the barrel every command imports from.
 
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { Readable } from "node:stream";
-import { buffer } from "node:stream/consumers";
 import { CliError } from "@antelopejs/core/cli";
-import {
-  backendEndpoint,
-  BackendResponseError,
-  displayUrl,
-  fetchFromBackend,
-  ServedWithPath,
-} from "./manifest";
+import { displayUrl, ServedWithPath } from "./manifest";
 import { ManifestModule, ResolvedLayer } from "./workspace";
-import { syncDirectories } from "./fs-sync";
 import { LAYERS_SUBDIR } from "./config";
 import { formatAge } from "./output";
 
@@ -28,7 +18,7 @@ import { formatAge } from "./output";
 
 /** What the user does when a backend never sends layer source paths. */
 const BUILD_FIX =
-  "A remote or production backend never sends them: use `ajs dms build` against it";
+  "A remote or production backend never sends them: build the frontend from the project instead, with `ajs dms build`";
 
 /** Where a manifest without layer source paths came from. */
 interface PathlessManifestSource {
@@ -87,28 +77,6 @@ export function assertLayerPathsServed(
   });
 }
 
-/**
- * Build-mode counterpart of `assertCachedLayerPathsExist`: the extracted
- * `.layers-cache` can be left incomplete by an interrupted download, and
- * `buildLayersFromCache` silently skips manifest entries whose archive
- * directory is absent — an offline build would then proceed against a
- * partial (possibly empty) layer set with no warning.
- */
-export function assertCachedArchivesExist(
-  modules: ManifestModule[],
-  cacheDir: string,
-  fetchedAt?: string,
-): void {
-  const present = new Set(readdirSync(cacheDir));
-  const missing = modules.filter((mod) => !present.has(mod.archiveName));
-  if (missing.length === 0) return;
-  throw new CliError({
-    title: `The cached layers archive is missing entries listed in the manifest${fetchedAt ? ` (fetched ${formatAge(fetchedAt)})` : ""}`,
-    fixes: ["Run once with the backend reachable to download the layers again"],
-    details: missing.map((mod) => `${mod.name}: ${mod.archiveName}`),
-  });
-}
-
 // ============================================================================
 // Layer Resolution
 // ============================================================================
@@ -124,6 +92,8 @@ function sortModulesByPriority<T extends ManifestModule>(modules: T[]): T[] {
 export interface LayerPackage {
   name?: unknown;
   engines?: Record<string, unknown>;
+  /** The module's frontend registration file, see `project-modules.ts`. */
+  dmsFrontend?: unknown;
 }
 
 /**
@@ -173,77 +143,6 @@ export function buildLayersFromPaths(
   return sortModulesByPriority(modules).map((mod) =>
     resolveLayer(mod.path, mod),
   );
-}
-
-/**
- * Download and extract the layers ZIP archive from the backend
- */
-export async function downloadAndExtractLayers(
-  backendUrl: string,
-  packUrl: string,
-  cacheDir: string,
-  force: boolean,
-  bootstrapSecret?: string,
-): Promise<void> {
-  const url = backendEndpoint(backendUrl, packUrl);
-  const response = await fetchFromBackend(backendUrl, url, bootstrapSecret);
-  if (!response.ok) {
-    throw new BackendResponseError("the layers archive", url, response);
-  }
-  if (!response.body) {
-    throw new Error(
-      `The layers archive from ${displayUrl(url)} came without a body`,
-    );
-  }
-
-  const modulesBlob = await buffer(Readable.fromWeb(response.body as any));
-  // Only build needs it, and it is the heaviest module the CLI loads.
-  const { Open } = await import("unzipper");
-
-  const cacheExists = existsSync(cacheDir);
-
-  if (force || !cacheExists) {
-    if (cacheExists) {
-      rmSync(cacheDir, { recursive: true, force: true });
-    }
-    await (await Open.buffer(modulesBlob)).extract({ path: cacheDir });
-    return;
-  }
-
-  const tempDir = `${cacheDir}_temp`;
-  if (existsSync(tempDir)) {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
-  await (await Open.buffer(modulesBlob)).extract({ path: tempDir });
-
-  const tempEntries = readdirSync(tempDir);
-  for (const entry of tempEntries) {
-    syncDirectories(join(tempDir, entry), join(cacheDir, entry));
-  }
-
-  rmSync(tempDir, { recursive: true, force: true });
-}
-
-/**
- * Build a list of ResolvedLayer from an extracted cache directory (build mode).
- * Skips manifest entries whose archive directory is not present in the cache.
- */
-export async function buildLayersFromCache(
-  modules: ManifestModule[],
-  cacheDir: string,
-): Promise<ResolvedLayer[]> {
-  if (!existsSync(cacheDir)) return [];
-
-  const layerFiles = await readdir(cacheDir);
-  const layers: ResolvedLayer[] = [];
-
-  for (const mod of sortModulesByPriority(modules)) {
-    if (!layerFiles.includes(mod.archiveName)) continue;
-    const layerPath = join(cacheDir, mod.archiveName);
-    layers.push(resolveLayer(layerPath, mod));
-  }
-
-  return layers;
 }
 
 // ============================================================================

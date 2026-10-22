@@ -182,14 +182,16 @@ describe("private files the development server refuses", () => {
       );
       assert.equal(entry.secret, SECRET);
       assert.equal(handler.sign, SECRET);
-      // A client transform of the same files fails, however it is reached.
+      // A client transform of the same files fails, however it is reached:
+      // by the load guard, or, since Vite 8.3 closed the `?import&raw` gap
+      // `dev-private-files.mjs` describes, by Vite's own deny list.
       for (const url of [
         "/frontend-modules/shop/layers/base/server/sign.ts",
         "/generated-server-options.json?import&raw",
       ])
         await assert.rejects(
           vite.transformRequest(url),
-          /is private to the server/,
+          /is private to the server|Denied ID/,
           url,
         );
     } finally {

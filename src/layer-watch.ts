@@ -8,6 +8,7 @@ import { join, relative, sep } from "node:path";
 import { getProcessUi, isQuietRun, type Ui } from "@antelopejs/core/cli";
 import chokidar, { type FSWatcher } from "chokidar";
 import { createPathMapper, type PathMapper } from "./child-output";
+import { FRONTEND_BUILD_ENTRY } from "./config";
 import { getLayerWorkspacePath } from "./layers";
 import {
   createFrontendModuleRegistry,
@@ -29,6 +30,7 @@ import {
   applyContent,
   applyFile,
   isBlocklistedCopyPath,
+  sanitizedBuildDeclaration,
   sanitizedPackageContent,
 } from "./fs-sync";
 
@@ -146,6 +148,12 @@ function createLayerSync(
         // an unchanged package.json doesn't churn the dest mtime.
         applyContent(
           sanitizedPackageContent(readFileSync(srcPath, "utf-8")),
+          destPath,
+        );
+      } else if (rel === FRONTEND_BUILD_ENTRY) {
+        // The workspace holds the rewritten form, see the function.
+        applyContent(
+          sanitizedBuildDeclaration(readFileSync(srcPath, "utf-8")),
           destPath,
         );
       } else {

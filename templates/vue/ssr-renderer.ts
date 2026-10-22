@@ -28,7 +28,9 @@ import {
   setDmsServerRuntimeResolver,
   setupFrontendModules,
   trackDmsServerScopes,
+  withPublicOptions,
 } from "./frontend-module";
+import { parsePublicOptions } from "./public-options";
 import { frontendModules } from "./frontend-modules.generated";
 import {
   SSR_ICONS_ID,
@@ -53,6 +55,12 @@ export interface DmsSsrResult {
   body: string;
   head: DmsSsrHead;
   overlays: string;
+  /**
+   * The id of every single-file component the render created, its path from
+   * the workspace root as the client manifest keys it: the server links their
+   * stylesheets.
+   */
+  modules: string[];
   error?: DmsErrorData;
   redirect?: string;
 }
@@ -64,6 +72,8 @@ export interface DmsSsrHead {
 }
 
 interface DmsSsrContext {
+  /** Filled by `@vitejs/plugin-vue`: each component adds its id as it sets up. */
+  modules?: Set<string>;
   teleports?: Record<string, string>;
 }
 
@@ -122,7 +132,13 @@ function iconsScript(names: Set<string>): string {
   return `<script id="${SSR_ICONS_ID}" type="application/json">${value}</script>`;
 }
 
-await setupFrontendModules(frontendModules, appConfigs);
+await setupFrontendModules(
+  withPublicOptions(
+    frontendModules,
+    parsePublicOptions(process.env.DMS_PUBLIC_OPTIONS),
+  ),
+  appConfigs,
+);
 
 export function isDmsFrontendPage(path: string): boolean {
   return hasDmsPage(path);
@@ -208,6 +224,7 @@ async function renderDmsPageWithRuntime(
         body: "",
         head: { bodyAttrs: "", headTags: "", htmlAttrs: "" },
         overlays: "",
+        modules: [],
         redirect: runtime.serverRedirect,
       };
     }
@@ -238,6 +255,7 @@ async function renderDmsPageWithRuntime(
         htmlAttrs: renderedHead.htmlAttrs,
       },
       overlays: ssrContext.teleports?.["#dms-overlays"] ?? "",
+      modules: [...(ssrContext.modules ?? [])],
     };
   } finally {
     // Only once the head and the async data are serialized: both still read

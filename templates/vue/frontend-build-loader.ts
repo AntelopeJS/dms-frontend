@@ -1,6 +1,6 @@
 import { isAbsolute, posix, resolve } from "node:path";
 import { normalizePath } from "vite";
-import type { DmsFrontendBuildSetup } from "./frontend-build";
+import type { DmsFrontendBuildSetup } from "./frontend-build.ts";
 
 /** A module's `dms.frontend.build.ts`, as the generated loader imports it. */
 export interface FrontendBuildDeclaration {

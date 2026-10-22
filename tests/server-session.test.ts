@@ -44,6 +44,39 @@ describe("client of a request", () => {
     );
   });
 
+  it("believes only the platform's client IP header, whatever the hops", () => {
+    process.env.DMS_CLIENT_IP_HEADER = "X-Client-IP";
+    process.env.DMS_TRUSTED_PROXY_HOPS = "1";
+    try {
+      assert.equal(
+        clientIp({
+          headers: {
+            "x-client-ip": "2001:db8::7",
+            "x-forwarded-for": "198.51.100.66, 10.0.0.1",
+          },
+          socket: { remoteAddress: "10.0.0.2" },
+        }),
+        "2001:db8::7",
+      );
+      assert.equal(
+        isSameOrigin({
+          headers: {
+            host: "127.0.0.1:32099",
+            origin: "https://dms.example.test",
+            "x-client-ip": "2001:db8::7",
+            "x-forwarded-host": "dms.example.test",
+            "x-forwarded-proto": "https",
+          },
+          socket: {},
+        }),
+        true,
+      );
+    } finally {
+      delete process.env.DMS_CLIENT_IP_HEADER;
+      delete process.env.DMS_TRUSTED_PROXY_HOPS;
+    }
+  });
+
   it("uses the rightmost untrusted address behind configured proxies", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "2";
     try {

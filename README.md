@@ -44,11 +44,11 @@ In a DMS project started with `ajs project run -w`, serve the dashboard with hot
 pnpm exec ajs dms dev
 ```
 
-For production, build against the backend, then start the frontend server, with `DMS_SESSION_SECRET` and `DMS_BOOTSTRAP_SECRET` set:
+For production, build from the project root, without the backend, then start the frontend server with `DMS_SESSION_SECRET` and the backend's secrets set:
 
 ```bash
-pnpm exec ajs dms build -b https://dms.example.com
-pnpm exec ajs dms start -b https://dms.example.com -p 3001
+pnpm exec ajs dms build
+pnpm exec ajs dms start -b https://api.example.com -p 3001
 ```
 
 `ajs dms --help` lists every command, and `ajs dms help environment` every environment variable.
@@ -61,7 +61,7 @@ pnpm exec ajs dms start -b https://dms.example.com -p 3001
 | 0.9.0 | `>=0.6.0 <0.7.0` |
 | 0.6.0 – 0.8.3 | 0.5 (exact floor per release in the full table) |
 
-The 0.6 line needs Node.js 20.12 or later and `@antelopejs/core` `>=1.13.2 <2`. The [compatibility table](https://dms.antelopejs.com/docs/frontend/introduction#compatibility) lists every release.
+The 0.6 line needs Node.js 20.19 or later and `@antelopejs/core` `>=1.13.2 <2`. The [compatibility table](https://dms.antelopejs.com/docs/frontend/introduction#compatibility) lists every release.
 
 ## Documentation
 

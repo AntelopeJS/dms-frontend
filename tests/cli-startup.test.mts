@@ -33,16 +33,17 @@ function loadedModules(args: string[]): string[] {
   return JSON.parse(readFileSync(record, "utf8"));
 }
 
+/** AntelopeJS's config loader, which only build and start read a project with. */
+const CONFIG_LOADER = /[\\/]@antelopejs[\\/]core[\\/]dist[\\/]index\.js$/;
+
 /** What only a running command needs, and `--help` must not pay for. */
 const COMMAND_MODULES = [
   /-action\.js$/,
   /[\\/]dist[\\/]common\.js$/,
-  /[\\/]node_modules[\\/]unzipper[\\/]/,
+  CONFIG_LOADER,
   /[\\/]node_modules[\\/]semver[\\/]/,
   /[\\/]node_modules[\\/]chokidar[\\/]/,
 ];
-
-const UNZIPPER = /[\\/]node_modules[\\/]unzipper[\\/]/;
 
 describe("CLI startup", () => {
   it("loads no command implementation for help and version", () => {
@@ -58,7 +59,7 @@ describe("CLI startup", () => {
     }
   });
 
-  it("loads the command that runs, without the archive reader", () => {
+  it("loads the command that runs, without the config loader", () => {
     const loaded = loadedModules(["clean", "--all"]);
     assert.deepEqual(
       loaded
@@ -68,7 +69,7 @@ describe("CLI startup", () => {
       ["clean-action.js", "workspaces-action.js"],
     );
     assert.equal(
-      loaded.some((path) => UNZIPPER.test(path)),
+      loaded.some((path) => CONFIG_LOADER.test(path)),
       false,
     );
   });

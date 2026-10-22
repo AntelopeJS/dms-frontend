@@ -9,6 +9,7 @@ import {
   followModuleSet,
   moduleSetFingerprint,
   reportFrontendReady,
+  reportFrontendReadyOnceAnswered,
 } from "../src/module-set";
 
 const ownVersion: string = JSON.parse(
@@ -43,11 +44,9 @@ type ServedModule = typeof dmsModule & {
 
 function manifestOf(modules: ServedModule[]) {
   return {
-    version: 1,
-    archive: "/dms/frontend/modules",
+    version: 2,
     modules: modules.map((module) => ({
       ...module,
-      archiveName: module.name,
       renderer: { name: "vue", version: "3" },
     })),
   };
@@ -231,10 +230,10 @@ describe("module set", () => {
     assert.equal(changes, 0);
   });
 
-  it("reports the served modules and its own version with the bootstrap credential", async () => {
+  it("reports the served modules' versions and its own with the bootstrap credential", async () => {
     const isTaken = await reportFrontendReady(
       backendUrl,
-      [dmsModule.name],
+      [{ name: dmsModule.name, version: "0.9.8" }, { name: "unversioned" }],
       "secret",
     );
     const report = requests.find((request) =>
@@ -244,12 +243,87 @@ describe("module set", () => {
     assert.equal(report?.method, "POST");
     assert.equal(report?.headers["x-dms-bootstrap"], "secret");
     assert.deepEqual(JSON.parse(report?.body ?? "{}"), {
-      modules: [dmsModule.name],
+      modules: [
+        { name: dmsModule.name, version: "0.9.8" },
+        { name: "unversioned" },
+      ],
       version: ownVersion,
     });
   });
 
   it("does not fail when the backend cannot take the report", async () => {
-    assert.equal(await reportFrontendReady("http://127.0.0.1:1", ["x"]), false);
+    assert.equal(
+      await reportFrontendReady("http://127.0.0.1:1", [{ name: "x" }]),
+      false,
+    );
+  });
+});
+
+describe("reporting to a backend that is waking", () => {
+  const retry = { firstDelayMs: 10, maxDelayMs: 40, timeoutMs: 200 };
+  let answers: ((response: import("node:http").ServerResponse) => void)[];
+  let reports = 0;
+  let server: Server;
+  let backendUrl: string;
+
+  before(async () => {
+    server = createServer((_request, response) => {
+      reports += 1;
+      const answer = answers.shift();
+      if (answer) {
+        answer(response);
+        return;
+      }
+      response.statusCode = 204;
+      response.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    backendUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+
+  it("reports again until a backend that timed out, then was starting, takes it", async () => {
+    reports = 0;
+    answers = [
+      (response) => setTimeout(() => response.end(), 500),
+      (response) => {
+        response.statusCode = 503;
+        response.end("error.server_starting");
+      },
+    ];
+
+    const isTaken = await reportFrontendReadyOnceAnswered(
+      backendUrl,
+      [{ name: dmsModule.name, version: "0.9.8" }],
+      undefined,
+      retry,
+    );
+
+    assert.equal(isTaken, true);
+    assert.equal(reports, 3);
+  });
+
+  it("does not report again to a backend that refused the report", async () => {
+    reports = 0;
+    answers = [
+      (response) => {
+        response.statusCode = 401;
+        response.end();
+      },
+    ];
+
+    const isTaken = await reportFrontendReadyOnceAnswered(
+      backendUrl,
+      [{ name: dmsModule.name }],
+      undefined,
+      retry,
+    );
+
+    assert.equal(isTaken, false);
+    assert.equal(reports, 1);
   });
 });

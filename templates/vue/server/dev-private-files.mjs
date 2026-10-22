@@ -5,7 +5,7 @@
 // written, and the modules' server code is materialized under it. Vite serves
 // any file under its root, as is, `?raw`, `?import` or `?url`. Its
 // `server.fs.deny` list covers most of these, but not every query combination
-// (`?import&raw` gets through in Vite 7.2), so a middleware ahead of Vite's own
+// (`?import&raw` got through in Vite 7.2; Vite 8.3 refuses it itself), so a middleware ahead of Vite's own
 // answers 403 by path, whatever the query, and a load guard refuses them to
 // any client request that reaches the transform pipeline another way.
 // `ssrLoadModule`, which loads the server modules, is left alone.

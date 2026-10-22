@@ -59,7 +59,7 @@ async function buildClient(
       emptyOutDir: true,
       write: true,
       ssr: ssr ? entry : false,
-      rollupOptions: ssr ? undefined : { input: entry },
+      rolldownOptions: ssr ? undefined : { input: entry },
     },
   });
 }

@@ -110,7 +110,6 @@ function writeLayer(dir: string): void {
 
 const MODULE = {
   name: "framed-layer",
-  archiveName: "framed-layer",
   priority: 0,
   renderer: { name: "vue", version: "3" },
 };
@@ -120,8 +119,7 @@ function serveManifest(
   layer: string,
 ): Promise<{ server: Server; url: string }> {
   const manifest = {
-    version: 1,
-    archive: "/dms/frontend/modules",
+    version: 2,
     modules: [{ ...MODULE, path: layer }],
   };
   return new Promise((settle) => {
@@ -138,53 +136,51 @@ function serveManifest(
   });
 }
 
-/** A URL nothing listens on. */
-function closedBackendUrl(): Promise<string> {
-  return new Promise((settle) => {
-    const server = createServer().listen({ port: 0, host: "127.0.0.1" }, () => {
-      const address = server.address();
-      if (address === null || typeof address === "string")
-        throw new Error("No address");
-      server.close(() => settle(`http://127.0.0.1:${address.port}`));
-    });
-  });
-}
-
 /**
- * A home holding the manifest and the layers archive a previous build
- * downloaded from `backendUrl`, so `build --offline` runs without a backend.
- * The manifest names `<sandbox>/frontend-vue` as the layer's source.
+ * A home holding the manifest a previous dev run cached from `backendUrl`,
+ * without the layer source paths a production backend withholds.
  */
-function cachedBuildHome(
-  sandbox: string,
-  backendUrl: string,
-  hasSourcePath = true,
-): void {
+function pathlessDevHome(sandbox: string, backendUrl: string): void {
   const workspace = join(
     sandbox,
     ".antelopejs/dms-frontend",
     createHash("sha256").update(backendUrl).digest("hex"),
   );
-  const source = join(sandbox, "frontend-vue");
-  writeLayer(source);
-  writeLayer(join(workspace, ".layers-cache", MODULE.archiveName));
+  mkdirSync(workspace, { recursive: true });
   writeFileSync(
     join(workspace, ".manifest-cache.json"),
     JSON.stringify({
-      manifest: {
-        pack: "/dms/frontend/modules",
-        modules: [hasSourcePath ? { ...MODULE, path: source } : MODULE],
-      },
+      manifest: { modules: [MODULE] },
       fetchedAt: new Date().toISOString(),
     }),
   );
 }
 
-function offlineBuildHome(sandbox: string): void {
-  cachedBuildHome(sandbox, OFFLINE_BACKEND);
+/**
+ * A project whose one module declares its frontend, `<sandbox>/frontend-vue`,
+ * with `dmsFrontend`: what `build` reads, without any backend.
+ */
+function projectHome(sandbox: string): void {
+  writeLayer(join(sandbox, "frontend-vue"));
+  writeFileSync(
+    join(sandbox, "package.json"),
+    JSON.stringify({ name: "framed-project", dmsFrontend: "frontend.js" }),
+  );
+  writeFileSync(
+    join(sandbox, "frontend.js"),
+    `exports.frontendModule = () => ({
+  name: ${JSON.stringify(MODULE.name)},
+  sourcePath: require("node:path").join(__dirname, "frontend-vue"),
+  renderer: { name: "vue", version: "3" },
+});\n`,
+  );
+  writeFileSync(
+    join(sandbox, "antelope.config.ts"),
+    `export default { name: "framed", modules: { framed: { source: { type: "local", path: "." } } } };\n`,
+  );
 }
 
-const offlineBuild = ["build", "-b", OFFLINE_BACKEND, "--offline"];
+const projectBuild = ["build"];
 
 // The fake pnpm is a shell script, like the one cli-signals puts on PATH.
 const describePosix = process.platform === "win32" ? describe.skip : describe;
@@ -267,7 +263,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("builds step by step and lists Vite's warnings where logs are read later", async () => {
-    const run = await runCli(offlineBuild, { setUp: offlineBuildHome });
+    const run = await runCli(projectBuild, { setUp: projectHome });
 
     assert.equal(run.code, 0, run.stderr);
     assert.match(
@@ -288,10 +284,10 @@ describePosix("framing pnpm install and the production build", () => {
       new RegExp(
         [
           "",
-          "Built the production frontend → \\./\\.antelopejs/dms-frontend/[0-9a-f]{64}/dist · \\d+(?:ms|\\.\\ds)",
+          "Built the production frontend → \\./\\.dms-frontend/dist · \\d+(?:ms|\\.\\ds)",
           "",
           "Next steps",
-          `  ajs dms start -b ${OFFLINE_BACKEND.replaceAll(".", "\\.")}  with DMS_SESSION_SECRET and the server's secrets in its environment`,
+          "  ajs dms start -b <backend>  from the project, with DMS_SESSION_SECRET, the server's secrets and the deployment's variables in its environment",
           "",
         ].join("\n") + "$",
       ),
@@ -311,8 +307,8 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("keeps only the warnings of a quiet build", async () => {
-    const run = await runCli([...offlineBuild, "-q"], {
-      setUp: offlineBuildHome,
+    const run = await runCli([...projectBuild, "-q"], {
+      setUp: projectHome,
     });
 
     assert.equal(run.code, 0, run.stderr);
@@ -337,7 +333,7 @@ describePosix("framing pnpm install and the production build", () => {
   it("says the cached manifest has no layer paths when dev runs offline", async () => {
     const run = await runCli(
       ["dev", "-b", OFFLINE_BACKEND, "-p", "0", "--offline"],
-      { setUp: (sandbox) => cachedBuildHome(sandbox, OFFLINE_BACKEND, false) },
+      { setUp: (sandbox) => pathlessDevHome(sandbox, OFFLINE_BACKEND) },
     );
 
     assert.equal(run.code, 1);
@@ -349,46 +345,22 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("ends a build in ASCII on a dumb terminal", async () => {
-    const run = await runCli(offlineBuild, {
-      setUp: offlineBuildHome,
+    const run = await runCli(projectBuild, {
+      setUp: projectHome,
       env: { TERM: "dumb" },
     });
 
     assert.equal(run.code, 0, run.stderr);
     assert.match(
       run.stderr,
-      /\nBuilt the production frontend > \.\/\.antelopejs\/dms-frontend\/[0-9a-f]{64}\/dist - \d+(?:ms|\.\ds)\n/,
+      /\nBuilt the production frontend > \.\/\.dms-frontend\/dist - \d+(?:ms|\.\ds)\n/,
     );
     assert.doesNotMatch(run.stderr, /[^\n -~]/);
   });
 
-  it("fails when the backend is down instead of building from the cache", async () => {
-    const backendUrl = await closedBackendUrl();
-    const run = await runCli(["build", "-b", backendUrl], {
-      setUp: (sandbox) => cachedBuildHome(sandbox, backendUrl),
-    });
-
-    assert.equal(run.code, 1);
-    assert.equal(run.stdout, "");
-    assert.match(
-      run.stderr,
-      new RegExp(
-        [
-          `✖ Cannot reach the DMS backend at ${backendUrl.replaceAll(".", "\\.")}`,
-          "  Connection refused \\(ECONNREFUSED\\)\\. A manifest cached just now exists; a build uses it only with --offline\\.",
-          "  Run with --verbose for the full trace\\.",
-          "  → Start the backend .*",
-          `  → Or build from the cache on purpose: ajs dms build -b ${backendUrl.replaceAll(".", "\\.")} --offline`,
-        ].join("\n"),
-      ),
-    );
-    assert.doesNotMatch(run.stderr, /Built|Workspace generated/);
-    assert.deepEqual(run.calls, []);
-  });
-
   it("reports a Vite error once, at the layer source, without the stack", async () => {
-    const run = await runCli(offlineBuild, {
-      setUp: offlineBuildHome,
+    const run = await runCli(projectBuild, {
+      setUp: projectHome,
       scenario: "ssr-fails",
     });
 
@@ -399,19 +371,6 @@ describePosix("framing pnpm install and the production build", () => {
     );
     assert.doesNotMatch(run.stderr, /at constructor|frontend-modules/);
     assert.doesNotMatch(run.stderr, /e-mail bundle/);
-  });
-
-  it("names the file inside its package when the backend served no source path", async () => {
-    const run = await runCli(offlineBuild, {
-      setUp: (sandbox) => cachedBuildHome(sandbox, OFFLINE_BACKEND, false),
-      scenario: "ssr-fails",
-    });
-
-    assert.equal(run.code, 1);
-    assert.match(
-      run.stderr,
-      /✖ Vite could not compile app\/components\/Callout\.vue:10:50 in framed-layer\n {2}\[vue\/compiler-sfc\] Unexpected token\n/,
-    );
   });
 });
 

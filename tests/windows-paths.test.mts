@@ -42,7 +42,9 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
     "const session = useDmsUserSession();",
     "/workspace/frontend-modules/dms__ai/app/plugins/ai.client.ts",
   );
-  const emitted = (typeof result === "string" ? result : result?.code) ?? "";
+  // Vite 8 types `code` as a string or a Rolldown magic string.
+  const code = typeof result === "string" ? result : result?.code;
+  const emitted = typeof code === "string" ? code : String(code ?? "");
   const literal = emitted.match(/from\s+('[^']*'|"[^"]*")/)?.[1];
   assert.ok(literal, `no import was injected into:\n${emitted}`);
   return runInNewContext(literal) as string;
@@ -72,11 +74,11 @@ describe("Windows paths inlined into generated code", () => {
   it("normalizes both auto-import keys in the generated Vite configs", () => {
     assert.match(
       readFileSync(join("templates", "vue", "vite.config.ts"), "utf8"),
-      /\[normalizePath\(resolve\(__dirname, "frontend-module\.ts"\)\)\]/,
+      /\[normalizePath\(resolve\(import\.meta\.dirname, "frontend-module\.ts"\)\)\]/,
     );
     assert.match(
       readFileSync(join("templates", "vue", "vite.email.config.ts"), "utf8"),
-      /\[normalizePath\(resolve\(__dirname, "email-runtime\.ts"\)\)\]/,
+      /\[normalizePath\(resolve\(import\.meta\.dirname, "email-runtime\.ts"\)\)\]/,
     );
   });
 

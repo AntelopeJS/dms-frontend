@@ -36,6 +36,7 @@ import {
   moduleSetFingerprint,
   reportFrontendReady,
 } from "../module-set";
+import { readShippingVersion } from "../project-modules";
 import { setUpWorkspace } from "./workspace-task";
 
 export interface DevOptions {
@@ -227,7 +228,10 @@ function servedModules(setup: DevSetup): ModuleSetMember[] {
 function reportServed(session: DevSession, setup: DevSetup): Promise<boolean> {
   return reportFrontendReady(
     session.backendUrl,
-    servedModules(setup).map((module) => module.name),
+    servedModules(setup).map((module) => ({
+      name: module.name,
+      version: module.path ? readShippingVersion(module.path) : undefined,
+    })),
     session.bootstrapSecret,
   );
 }

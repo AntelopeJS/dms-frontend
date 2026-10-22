@@ -83,6 +83,28 @@ export function sanitizedPackageContent(raw: string): string {
 }
 
 /**
+ * The public specifier a module's `dms.frontend.build.ts` imports its helper
+ * from, and the module root's path to the file that answers it.
+ */
+const BUILD_HELPER_IMPORT = /(["'])#dms\/frontend-build\1/g;
+const BUILD_HELPER_FROM_MODULE_ROOT = "../../frontend-build.ts";
+
+/**
+ * A module's `dms.frontend.build.ts` as the workspace holds it. The file runs
+ * while Vite loads `vite.config.ts`, which Vite 8 bundles without reading the
+ * workspace's tsconfig `paths` (Vite 7 did), so the `#dms/frontend-build`
+ * alias the file imports would stay unresolved. The copy imports the
+ * workspace's file by its path instead, from the module root
+ * (`frontend-modules/<module>/`); the source keeps the public specifier.
+ */
+export function sanitizedBuildDeclaration(raw: string): string {
+  return raw.replace(
+    BUILD_HELPER_IMPORT,
+    (_, quote: string) => `${quote}${BUILD_HELPER_FROM_MODULE_ROOT}${quote}`,
+  );
+}
+
+/**
  * True when `srcPath` and `destPath` both exist as files holding
  * byte-identical content. Lets callers skip rewrites that would only
  * churn the destination's mtime: a no-op rewrite of a module entry, an email

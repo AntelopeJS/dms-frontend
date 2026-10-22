@@ -159,7 +159,7 @@ function writeFrontendModuleLoader(
   const registrations = modules
     .map(
       (module, index) =>
-        `{ name: ${JSON.stringify(module.name)}, module: module${index}, options: { public: ${JSON.stringify(module.options)} } }`,
+        `{ id: ${JSON.stringify(module.id)}, name: ${JSON.stringify(module.name)}, module: module${index}, options: { public: ${JSON.stringify(module.options)} } }`,
     )
     .join(", ");
   const content = `${imports}\n\nimport type { DmsFrontendModuleRegistration } from "./frontend-module";\n\nexport const frontendModules: DmsFrontendModuleRegistration[] = [${registrations}];\n`;
@@ -192,7 +192,7 @@ function writeFrontendBuildLoader(
         `{ id: ${JSON.stringify(module.id)}, setup: build${index} }`,
     )
     .join(", ");
-  const content = `${imports}\n\nimport type { FrontendBuildDeclaration } from "./frontend-build-loader";\n\nexport const frontendBuilds: FrontendBuildDeclaration[] = [${declarations}];\n`;
+  const content = `${imports}\n\nimport type { FrontendBuildDeclaration } from "./frontend-build-loader.ts";\n\nexport const frontendBuilds: FrontendBuildDeclaration[] = [${declarations}];\n`;
   return applyContent(
     content,
     join(workspaceDir, "frontend-builds.generated.ts"),
