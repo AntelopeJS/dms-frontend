@@ -83,7 +83,7 @@ it("hydrates a server render with exactly the data its HTML shows", async (conte
     );
     writeFileSync(
       join(workspace, "locales.generated.ts"),
-      'export const localeMessages={en:{},fr:{}};export const supportedLocales=["en","fr"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
+      'export const localeMessages={en:{},fr:{}};export const supportedLocales=["en","fr"];export const catalogLocale=(locale)=>locale.slice(0,2);export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );
     writeFileSync(
       join(workspace, "ui-stub.ts"),

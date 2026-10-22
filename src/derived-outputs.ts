@@ -371,8 +371,21 @@ export function affectsLocaleMessages(relativePath: string): boolean {
 }
 
 /**
- * The module the application imports its catalogs from: English bundled as
- * the fallback, every other locale loaded on first use.
+ * The locale every catalog falls back to: the generated catalog of any other
+ * locale carries its messages wherever that locale has none.
+ */
+const FALLBACK_LOCALE = "en";
+
+/**
+ * The module the application imports its catalogs from: every locale,
+ * English included, is a file of its own that the application loads when a
+ * page needs it. None is part of the client entry, which every page loads
+ * first: the messages of every module of the application weigh hundreds of
+ * kilobytes there, and a page shows a few dozen of them. The server
+ * preloads the catalog of the page it renders, next to the entry.
+ *
+ * Each catalog is complete (see `writeLocaleMessages`), so a page needs one
+ * file: a French page no longer loads English as well for its fallback.
  *
  * In development the layer watcher regenerates the catalogs while the app
  * runs, and this module accepts its own hot updates. The application keeps
@@ -386,15 +399,14 @@ export function affectsLocaleMessages(relativePath: string): boolean {
  * set up with, so that update falls back to a full reload.
  */
 function localeModuleSource(supportedLocales: string[]): string {
-  const loaders = supportedLocales
-    .filter((locale) => locale !== "en")
-    .map(
-      (locale) =>
-        `  ${JSON.stringify(locale)}: () => import(${JSON.stringify(`./locales.generated/${locale}`)}),`,
-    );
-  return `import defaultMessages from "./locales.generated/en";
-
-type LocaleMessages = Record<string, unknown>;
+  const loaders = supportedLocales.map(
+    (locale) =>
+      `  ${JSON.stringify(locale)}: () => import(${JSON.stringify(`./locales.generated/${locale}`)}),`,
+  );
+  const fallback = supportedLocales.includes(FALLBACK_LOCALE)
+    ? FALLBACK_LOCALE
+    : supportedLocales[0];
+  return `type LocaleMessages = Record<string, unknown>;
 type LocaleLoader = () => Promise<{ default: LocaleMessages }>;
 interface LocaleMessagesTarget {
   setLocaleMessage(locale: string, messages: LocaleMessages): void;
@@ -406,13 +418,13 @@ interface LocaleState {
 }
 
 export const supportedLocales = ${JSON.stringify(supportedLocales)};
+const fallbackLocale: string | undefined = ${JSON.stringify(fallback)};
 const localeLoaders: Record<string, LocaleLoader> = {
-  "en": async () => ({ default: defaultMessages }),
 ${loaders.join("\n")}
 };
 const shared: LocaleState | undefined = import.meta.hot?.data.state;
 const state: LocaleState = shared ?? {
-  messages: { en: defaultMessages },
+  messages: {},
   targets: new Set(),
   version: 0,
 };
@@ -422,11 +434,20 @@ async function readLocaleMessages(locale: string): Promise<LocaleMessages> {
   return (await localeLoaders[locale]()).default;
 }
 
-export async function loadLocaleMessages(locale: string): Promise<LocaleMessages> {
+/**
+ * The catalog that serves \`locale\`: its own when the application has one,
+ * else the fallback locale's.
+ */
+export function catalogLocale(locale: string): string | undefined {
   const normalized = locale.slice(0, 2);
-  if (!localeLoaders[normalized]) return localeMessages.en;
-  localeMessages[normalized] ??= await readLocaleMessages(normalized);
-  return localeMessages[normalized];
+  return normalized in localeLoaders ? normalized : fallbackLocale;
+}
+
+export async function loadLocaleMessages(locale: string): Promise<LocaleMessages> {
+  const catalog = catalogLocale(locale);
+  if (!catalog) return {};
+  localeMessages[catalog] ??= await readLocaleMessages(catalog);
+  return localeMessages[catalog];
 }
 
 /** Development only: applies every regenerated catalog to \`target\`. */
@@ -465,6 +486,12 @@ if (import.meta.hot) {
  * the email bundle import: `locales.generated/<locale>.{json,ts}`,
  * `locales.generated.ts` and `email-locales.generated.json`.
  *
+ * The application's catalog of a locale (`<locale>.ts`) is complete: the
+ * English messages fill every key the locale lacks, here, once, rather than
+ * through a second catalog the page would load for its fallback. The email
+ * bundle keeps each locale's own messages (`<locale>.json`), as it resolves
+ * its fallback itself.
+ *
  * Materialization writes them once; in development the layer watcher writes
  * them again whenever a locale file changes. Every catalog is read before
  * anything is written, so a file saved half-written keeps the previous
@@ -485,11 +512,16 @@ export function writeLocaleMessages(
     changed = applyContent(content, path) || changed;
   };
   mkdirSync(outputDir, { recursive: true });
+  const fallback = messages[FALLBACK_LOCALE] ?? {};
   for (const [locale, value] of Object.entries(messages)) {
     const catalog = JSON.stringify(value);
+    const complete =
+      locale === FALLBACK_LOCALE
+        ? catalog
+        : JSON.stringify(mergeLocaleMessages(fallback, value));
     apply(catalog, join(outputDir, `${locale}.json`));
     apply(
-      `const messages = ${catalog};\nexport default messages;\n`,
+      `const messages = ${complete};\nexport default messages;\n`,
       join(outputDir, `${locale}.ts`),
     );
     outputs.add(`${locale}.json`).add(`${locale}.ts`);

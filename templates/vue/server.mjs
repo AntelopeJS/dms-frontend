@@ -25,7 +25,10 @@ import {
 } from "./server/cli-report.mjs";
 import { publicBuildFile } from "./server/built-files.mjs";
 import { serveStaticFile } from "./server/static-files.mjs";
-import { productionHtmlTemplate } from "./server/client-manifest.mjs";
+import {
+  localeCatalogPreloadTag,
+  productionHtmlTemplate,
+} from "./server/client-manifest.mjs";
 import { writeContent } from "./server/content.mjs";
 import {
   captureViteErrors,
@@ -298,6 +301,7 @@ export async function renderHtml(
     return { html: "", status: 200, redirect: rendered.redirect };
   const headEnd =
     (await documentStyleTags(devServer, rendered.modules, template)) +
+    (devServer ? "" : localeCatalogPreloadTag(rendered.catalogLocale)) +
     publicOptionsScript();
   const html = template
     .replace("<title>Antelope DMS</title>", () =>

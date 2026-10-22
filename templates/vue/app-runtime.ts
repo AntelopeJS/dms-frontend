@@ -58,6 +58,7 @@ import {
   drawLoadedIconsAtOnce,
 } from "./icon-hydration";
 import {
+  catalogLocale,
   loadLocaleMessages,
   localeMessages,
   supportedLocales,
@@ -85,6 +86,8 @@ export interface DmsAppOptions {
 }
 
 export interface DmsConfiguredApp {
+  /** The locale of the catalog the app shows its messages from now. */
+  catalogLocale: () => string | undefined;
   mounted: () => Promise<void>;
   runtime: ReturnType<typeof createDmsFrontendRuntime>;
 }
@@ -348,7 +351,11 @@ export async function configureDmsApp(
     loadLocaleMessages as DmsLocaleLoader,
     supportedLocales,
   );
-  return { mounted, runtime };
+  return {
+    catalogLocale: () => catalogLocale(i18n.global.locale.value),
+    mounted,
+    runtime,
+  };
 }
 
 export { trackDmsAsyncComponents };

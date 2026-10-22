@@ -63,6 +63,11 @@ export interface DmsSsrResult {
   modules: string[];
   error?: DmsErrorData;
   redirect?: string;
+  /**
+   * The locale of the catalog the page was rendered with: the server preloads
+   * that catalog's file, which the browser loads before it hydrates.
+   */
+  catalogLocale?: string;
 }
 
 export interface DmsSsrHead {
@@ -189,6 +194,7 @@ async function renderDmsPageWithRuntime(
     let icons = new Set<string>();
     let iconSymbols = new Map<string, string>();
     let payload: DmsPayload = { data: {}, errors: {}, state: {} };
+    let catalogLocale: (() => string | undefined) | undefined;
     const inertiaResult = await createInertiaApp({
       page,
       // Read as the HTML is complete: data a run settles afterwards was never
@@ -214,6 +220,7 @@ async function renderDmsPageWithRuntime(
           runtime,
           serverFetch,
         });
+        catalogLocale = configured.catalogLocale;
         return app;
       },
     });
@@ -256,6 +263,7 @@ async function renderDmsPageWithRuntime(
       },
       overlays: ssrContext.teleports?.["#dms-overlays"] ?? "",
       modules: [...(ssrContext.modules ?? [])],
+      catalogLocale: catalogLocale?.(),
     };
   } finally {
     // Only once the head and the async data are serialized: both still read
