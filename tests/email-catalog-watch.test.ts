@@ -61,7 +61,10 @@ it("rebuilds the email catalogs when they are regenerated during a watch-mode bu
     materializeLayers(workspace, [layer]);
     writeFrontendModuleRegistry(workspace, [layer]);
     for (const file of readdirSync("templates/vue").filter(
-      (name) => name.startsWith("email-") || name === "vite.email.config.ts",
+      (name) =>
+        name.startsWith("email-") ||
+        name === "public-options.ts" ||
+        name === "vite.email.config.ts",
     ))
       cpSync(join("templates/vue", file), join(workspace, file));
 

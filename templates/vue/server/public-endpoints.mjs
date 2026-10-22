@@ -54,7 +54,7 @@ export function readDeclaredPublicEndpoints(file = DECLARED_ENDPOINTS_FILE) {
 
 /**
  * The backend proxies the backend modules declared in the manifest, as
- * `{ module, path, auth? }`, unchecked.
+ * `{ module, path, auth?, maxBodyBytes? }`, unchecked.
  *
  * @param file Generated file to read
  */
@@ -74,7 +74,7 @@ export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
 
 /**
  * The backend proxies `DMS_BACKEND_PROXIES` adds: a JSON array of
- * `{ path, auth? }`, as the manifest's `backendProxies`, for an operator.
+ * `{ path, auth?, maxBodyBytes? }`, as the manifest's `backendProxies`, for an operator.
  *
  * @param declaration The variable's value
  */

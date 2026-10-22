@@ -9,11 +9,14 @@ import {
   configureDmsApp,
   resolveDmsInertiaPage,
 } from "./app-runtime";
-import { setupFrontendModules } from "./frontend-module";
+import { setupFrontendModules, withPublicOptions } from "./frontend-module";
+import { parsePublicOptions } from "./public-options";
 import { frontendModules } from "./frontend-modules.generated";
 import { sameOriginIconProvider } from "./icon-api.mjs";
 
 const DEV_STYLE_ATTRIBUTE = "data-dms-dev-style";
+/** Mirrors `PUBLIC_OPTIONS_ELEMENT_ID` in `server/public-options.mjs`. */
+const PUBLIC_OPTIONS_ELEMENT_ID = "dms-public-options";
 
 /**
  * Hand each development stylesheet over to Vite.
@@ -67,7 +70,13 @@ addAPIProvider("", sameOriginIconProvider(location.origin));
  * browser requested one by one.
  */
 async function startDmsApp(): Promise<void> {
-  await setupFrontendModules(frontendModules, appConfigs);
+  const runtimeOptions = parsePublicOptions(
+    document.getElementById(PUBLIC_OPTIONS_ELEMENT_ID)?.textContent,
+  );
+  await setupFrontendModules(
+    withPublicOptions(frontendModules, runtimeOptions),
+    appConfigs,
+  );
   // A layer's app config edited during development reaches the page without a
   // reload. A server render imports the new configs instead.
   syncAppConfigs(applyLayerAppConfigs);

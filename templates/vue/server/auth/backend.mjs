@@ -1,10 +1,16 @@
 import { REDIRECT_STATUSES } from "../proxy-redirects.mjs";
-import { clientCountryHeader, clientIp } from "./client-ip.mjs";
+import { clientCountryHeader, clientIp, clientIpHeader } from "./client-ip.mjs";
 
-const FORWARDED_HEADERS = [
+/**
+ * The client headers every backend request carries, the proxy's and a module
+ * route's alike: the browser's user agent, the interface language, and the
+ * realtime session and the browser connection it rides on.
+ */
+export const CLIENT_HEADERS = [
   "user-agent",
   "x-content-language",
   "x-realtime-session",
+  "x-realtime-connection",
 ];
 
 export class UpstreamError extends Error {
@@ -58,8 +64,9 @@ export async function backend(path, request, options = {}) {
       String(value),
     ]),
   );
-  Object.assign(headers, relayedHeaders(request, FORWARDED_HEADERS));
+  Object.assign(headers, relayedHeaders(request, CLIENT_HEADERS));
   headers["x-forwarded-for"] = clientIp(request);
+  Object.assign(headers, clientIpHeader(request));
   if (options.token) headers.authorization = `Bearer ${options.token}`;
   if (options.relay)
     headers["x-dms-oauth-relay"] = process.env.DMS_OAUTH_RELAY_SECRET ?? "";

@@ -44,11 +44,11 @@ In a DMS project started with `ajs project run -w`, serve the dashboard with hot
 pnpm exec ajs dms dev
 ```
 
-For production, build against the backend, then start the frontend server, with `DMS_SESSION_SECRET` and `DMS_BOOTSTRAP_SECRET` set:
+For production, build from the project root, without the backend, then start the frontend server with `DMS_SESSION_SECRET` and the backend's secrets set:
 
 ```bash
-pnpm exec ajs dms build -b https://dms.example.com
-pnpm exec ajs dms start -b https://dms.example.com -p 3001
+pnpm exec ajs dms build
+pnpm exec ajs dms start -b https://api.example.com -p 3001
 ```
 
 `ajs dms --help` lists every command, and `ajs dms help environment` every environment variable.

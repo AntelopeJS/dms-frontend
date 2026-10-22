@@ -4,7 +4,6 @@
 // allows.
 
 import { GENERIC_ERROR_MESSAGE } from "./auth/backend.mjs";
-import { isWaitable } from "./backend-wake.mjs";
 import { isFrontendVisit, redirectFrontendVisit } from "./inertia.mjs";
 
 // What a JSON caller gets when the backend fails: the generic i18n key of the
@@ -20,13 +19,10 @@ const FORBIDDEN = 403;
 const FRONTEND_ORIGIN = "http://frontend.local";
 
 export class BackendResponseError extends Error {
-  constructor(status, code, retryAfter) {
+  constructor(status, code) {
     super(`DMS backend returned ${status}`);
     this.status = status;
     this.code = code;
-    // Set only for a cold-start answer, so the visitor is told when to try
-    // again instead of getting an opaque failure.
-    this.retryAfter = retryAfter;
   }
 }
 
@@ -47,14 +43,7 @@ async function refusalCode(response) {
 
 /** The error for a failed backend response, with its typed code if any. */
 export async function backendResponseError(response) {
-  const retryAfter = isWaitable(response)
-    ? (response.headers.get("retry-after") ?? undefined)
-    : undefined;
-  return new BackendResponseError(
-    response.status,
-    await refusalCode(response),
-    retryAfter,
-  );
+  return new BackendResponseError(response.status, await refusalCode(response));
 }
 
 /**

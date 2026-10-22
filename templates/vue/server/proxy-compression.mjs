@@ -1,7 +1,6 @@
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { acceptedEncoder, MINIMUM_COMPRESSION_BYTES } from "./content.mjs";
 import { writeProxyHeaders } from "./proxy-headers.mjs";
+import { pipeWebBody } from "./web-body.mjs";
 
 /**
  * Asks the backend for its answer uncompressed. fetch decodes a compressed
@@ -104,7 +103,6 @@ export async function relayAnswer(
     isProxiedPath,
   );
   if (!upstream.body || request.method === "HEAD") return response.end();
-  const body = Readable.fromWeb(upstream.body);
-  if (encoder) await pipeline(body, encoder.stream, response);
-  else await pipeline(body, response);
+  if (encoder) await pipeWebBody(upstream.body, encoder.stream, response);
+  else await pipeWebBody(upstream.body, response);
 }
