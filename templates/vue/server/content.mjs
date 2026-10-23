@@ -65,6 +65,16 @@ function responseEncoder(request, content) {
   return acceptedEncoder(request);
 }
 
+/**
+ * `headers` varying also on `names`: the request headers a server render
+ * read.
+ */
+export function withVary(headers, names) {
+  if (!names.length) return headers;
+  const vary = [headers.vary, ...names].filter(Boolean).join(", ");
+  return { ...headers, vary };
+}
+
 /** Send a generated body, compressed when the client accepts it. */
 export async function writeContent(
   request,

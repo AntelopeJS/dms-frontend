@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createServer, maxHeaderSize } from "node:http";
-import { extname, join, resolve, sep } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ofetch } from "ofetch";
 import {
@@ -24,15 +24,13 @@ import {
   reportReady,
   reportStartError,
 } from "./server/cli-report.mjs";
-import { publicBuildFile } from "./server/built-files.mjs";
-import { serveStaticFile } from "./server/static-files.mjs";
-import { productionHtmlTemplate } from "./server/client-manifest.mjs";
-import { writeContent } from "./server/content.mjs";
 import {
-  captureViteErrors,
-  runViteMiddlewares,
-  writeViteError,
-} from "./server/vite-errors.mjs";
+  hasRendererFile,
+  serveRendererFile,
+} from "./server/renderer-files.mjs";
+import { productionHtmlTemplate } from "./server/client-manifest.mjs";
+import { withVary, writeContent } from "./server/content.mjs";
+import { captureViteErrors } from "./server/vite-errors.mjs";
 import { documentStyleTags } from "./server/dev-styles.mjs";
 import { watchEmailBundle } from "./server/email.mjs";
 import { withFaviconPlaceholder } from "./server/favicon.mjs";
@@ -250,20 +248,6 @@ async function proxy(request, response, backendProxy, isProxiedPath) {
   });
 }
 
-/**
- * Send the built file `pathname` names, or `false` when the build has none
- * there. `publicBuildFile` decides which file that is; `serveStaticFile` how
- * it goes out.
- */
-function serveAsset(pathname, request, response) {
-  const file = publicBuildFile(CLIENT_ROOT, pathname);
-  if (!file) return false;
-  serveStaticFile(file, request, response, {
-    immutable: pathname.startsWith("/assets/"),
-  });
-  return true;
-}
-
 async function ssrRenderer(devServer) {
   const renderer = devServer
     ? await devServer.ssrLoadModule("/ssr-renderer.ts")
@@ -281,10 +265,11 @@ function clientRenderedShell(page) {
   };
 }
 
-async function serverRendered(page, serverFetch, requestCookies, devServer) {
+async function serverRendered(page, serverFetch, request, devServer) {
   try {
     const renderer = await ssrRenderer(devServer);
-    return await renderer.renderDmsPage(page, serverFetch, requestCookies);
+    const { cookies, headers } = request;
+    return await renderer.renderDmsPage(page, serverFetch, cookies, headers);
   } catch (error) {
     console.error(
       "DMS SSR render failed; falling back to client rendering",
@@ -296,7 +281,8 @@ async function serverRendered(page, serverFetch, requestCookies, devServer) {
 
 /**
  * Renders a page document. With `{ ssr: false }` (a route rule), the client
- * renders the page from the shell instead.
+ * renders the page from the shell instead. `requestHeaders` are the ones the
+ * render may read; `vary` names those it read.
  */
 export async function renderHtml(
   page,
@@ -312,10 +298,11 @@ export async function renderHtml(
   const template = devServer
     ? await devServer.transformIndexHtml(requestUrl, rawTemplate)
     : rawTemplate;
+  const request = { cookies: requestCookies, headers: options.requestHeaders };
   const rendered =
     options.ssr === false
       ? clientRenderedShell(page)
-      : await serverRendered(page, serverFetch, requestCookies, devServer);
+      : await serverRendered(page, serverFetch, request, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
   const headEnd =
@@ -335,13 +322,15 @@ export async function renderHtml(
       `<div id="dms-overlays" class="isolate">${rendered.overlays}</div>`,
     )
     .replace("__DMS_APP__", () => rendered.body);
-  return { html, status: rendered.error?.statusCode ?? 200 };
+  const vary = rendered.varyHeaders ?? [];
+  return { html, status: rendered.error?.statusCode ?? 200, vary };
 }
 
 function renderRequestHtml(page, request, rule = {}) {
   const fetch = serverComponentFetch(request);
   return renderHtml(page, request.url, fetch, request.headers.cookie, {
     ssr: rule.ssr,
+    requestHeaders: request.headers,
   });
 }
 
@@ -379,8 +368,14 @@ async function writeBackendError(error, request, response) {
         JSON.stringify(page),
       );
     }
-    const { html } = await renderRequestHtml(page, request);
-    return writeContent(request, response, status, htmlHeaders(), html);
+    const { html, vary } = await renderRequestHtml(page, request);
+    return writeContent(
+      request,
+      response,
+      status,
+      withVary(htmlHeaders(), vary),
+      html,
+    );
   }
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
@@ -388,50 +383,6 @@ async function writeBackendError(error, request, response) {
       : UNEXPECTED_ERROR_BODY;
   response.writeHead(status, { "content-type": JSON_TYPE });
   response.end(JSON.stringify(payload));
-}
-
-async function answeredByVite(devServer, request, response) {
-  const result = await runViteMiddlewares(devServer, request, response);
-  if (result.status === "failed") writeViteError(response, result.error);
-  return result.status !== "unhandled";
-}
-
-/**
- * Whether the renderer has a file at `pathname`: a development source Vite
- * serves (under the workspace or its `public/`), or a built asset the
- * production server serves. Only a path with an extension names one.
- */
-function hasRendererFile(devServer, requested) {
-  let pathname;
-  try {
-    // As Vite and the asset server read it: `%2E` is a dot.
-    pathname = decodeURIComponent(requested);
-  } catch {
-    return false;
-  }
-  if (extname(pathname) === "") return false;
-  if (!devServer) return publicBuildFile(CLIENT_ROOT, requested) !== undefined;
-  const roots = [devServer.config.root, devServer.config.publicDir].filter(
-    Boolean,
-  );
-  return roots.some((root) => {
-    const file = resolve(root, `.${pathname}`);
-    return (
-      file.startsWith(`${resolve(root)}${sep}`) &&
-      existsSync(file) &&
-      statSync(file).isFile()
-    );
-  });
-}
-
-/** Vite's files in development, the build's in production; else a 404. */
-async function serveRendererFile(devServer, request, response, pathname) {
-  const answered = devServer
-    ? await answeredByVite(devServer, request, response)
-    : serveAsset(pathname, request, response);
-  if (answered) return;
-  response.writeHead(404, { "content-type": "text/plain" });
-  response.end("Not found");
 }
 
 function writeNotFound(response) {
@@ -446,11 +397,17 @@ export async function handleRequest(request, response) {
   if (localRoute) return localRoute[1](request, response);
   const devServer = await developmentServer();
   const modules = await loadServerModules(devServer);
-  const hasFile = (path) => hasRendererFile(devServer, path);
+  const hasFile = (path) => hasRendererFile(devServer, CLIENT_ROOT, path);
   const owner = requestOwner(request.method, pathname, modules, hasFile);
   if (devServer) response.setHeader("x-dms-route-owner", ownerLabel(owner));
   if (owner.kind === "renderer")
-    return serveRendererFile(devServer, request, response, pathname);
+    return serveRendererFile(
+      devServer,
+      CLIENT_ROOT,
+      request,
+      response,
+      pathname,
+    );
   if (owner.kind === "module")
     return handleModuleRoute(request, response, pathname, modules);
   const isProxiedPath = (path) => reachesBackend(path, modules, hasFile);
@@ -482,11 +439,12 @@ export async function handleRequest(request, response) {
     redirectFrontendVisit(request, response, rendered.redirect);
     return;
   }
+  const headers = { ...htmlHeaders(), ...headersFor(rendered.status) };
   return writeContent(
     request,
     response,
     rendered.status,
-    { ...htmlHeaders(), ...headersFor(rendered.status) },
+    withVary(headers, rendered.vary),
     rendered.html,
   );
 }

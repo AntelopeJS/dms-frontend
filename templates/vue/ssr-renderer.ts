@@ -63,6 +63,11 @@ export interface DmsSsrResult {
   modules: string[];
   error?: DmsErrorData;
   redirect?: string;
+  /**
+   * The request headers the render read through `useDmsRequestHeader`, by
+   * lower-case name: the answer varies on them.
+   */
+  varyHeaders?: string[];
 }
 
 export interface DmsSsrHead {
@@ -152,12 +157,14 @@ export async function renderDmsPage(
   page: DmsSsrPage,
   serverFetch?: DmsServerFetch,
   requestCookies?: string,
+  requestHeaders?: Readonly<Record<string, string | string[] | undefined>>,
 ): Promise<DmsSsrResult> {
   const runtime = createDmsFrontendRuntime(
     serverFetch as typeof import("ofetch").ofetch,
     {},
     true,
     requestCookies,
+    requestHeaders,
   );
   runtime.runAsyncDataHandler = (run) => asyncDataHandlerStorage.run(true, run);
   runtime.inAsyncDataHandler = () =>
@@ -167,9 +174,16 @@ export async function renderDmsPage(
   runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
   const store = { runtime };
   try {
-    return await runtimeStorage.run(store, () =>
+    const result = await runtimeStorage.run(store, () =>
       renderDmsPageWithRuntime(page, runtime, serverFetch),
     );
+    // An error page varies on what its own render read, and on what the
+    // failed render read before it.
+    const varyHeaders = new Set([
+      ...runtime.readRequestHeaders,
+      ...(result.varyHeaders ?? []),
+    ]);
+    return { ...result, varyHeaders: [...varyHeaders] };
   } finally {
     store.runtime = undefined;
   }
@@ -243,6 +257,7 @@ async function renderDmsPageWithRuntime(
         { ...page, props: { ...page.props, error } },
         serverFetch,
         runtime.requestCookies,
+        runtime.requestHeaders,
       );
     }
     const renderedHead = await renderSSRHead(head);

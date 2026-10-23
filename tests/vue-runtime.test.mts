@@ -32,6 +32,7 @@ import {
   useDmsError,
   useDmsRuntimeHooks,
   useDmsCookie,
+  useDmsRequestHeader,
   useDmsState,
   useDmsFetch,
   useDmsRoute,
@@ -820,6 +821,83 @@ describe("Cookie refs", () => {
       ),
       "normal",
     );
+  });
+});
+
+describe("Request headers", () => {
+  const serverRuntime = (headers?: Record<string, string | string[]>) => {
+    const app = createSSRApp({ render: () => null });
+    const runtime = createDmsFrontendRuntime(
+      undefined,
+      {},
+      true,
+      "dms_session=sealed",
+      headers,
+    );
+    provideDmsFrontendRuntime(app, runtime);
+    return { app, runtime };
+  };
+
+  it("reads the rendered request's headers by any case, isolated per request, and records what it read", () => {
+    const mac = serverRuntime({
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      "sec-ch-ua-platform": '"macOS"',
+      "accept-language": ["fr", "en"],
+    });
+    const linux = serverRuntime({ "user-agent": "Mozilla/5.0 (X11; Linux)" });
+    assert.equal(
+      mac.app.runWithContext(() => useDmsRequestHeader("User-Agent")),
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    );
+    assert.equal(
+      mac.app.runWithContext(() => useDmsRequestHeader("accept-language")),
+      "fr, en",
+    );
+    assert.equal(
+      linux.app.runWithContext(() => useDmsRequestHeader("user-agent")),
+      "Mozilla/5.0 (X11; Linux)",
+    );
+    assert.equal(
+      linux.app.runWithContext(() => useDmsRequestHeader("Sec-CH-UA-Platform")),
+      undefined,
+    );
+    assert.deepEqual(
+      [...mac.runtime.readRequestHeaders],
+      ["user-agent", "accept-language"],
+    );
+    assert.deepEqual(
+      [...linux.runtime.readRequestHeaders],
+      ["user-agent", "sec-ch-ua-platform"],
+    );
+  });
+
+  it("never hands out the cookies or the credentials, nor varies on them", () => {
+    const { app, runtime } = serverRuntime({
+      cookie: "dms_session=sealed",
+      Authorization: "Bearer secret-token",
+      "proxy-authorization": "Basic c2VjcmV0",
+    });
+    for (const name of ["cookie", "authorization", "Proxy-Authorization"])
+      assert.equal(
+        app.runWithContext(() => useDmsRequestHeader(name)),
+        undefined,
+        name,
+      );
+    assert.deepEqual(Object.keys(runtime.requestHeaders ?? {}), []);
+    assert.equal(runtime.readRequestHeaders.size, 0);
+  });
+
+  it("reads nothing in the browser, which has no request", () => {
+    const app = createSSRApp({ render: () => null });
+    const runtime = createDmsFrontendRuntime(undefined, {}, false, undefined, {
+      "user-agent": "ignored",
+    });
+    provideDmsFrontendRuntime(app, runtime);
+    assert.equal(
+      app.runWithContext(() => useDmsRequestHeader("user-agent")),
+      undefined,
+    );
+    assert.equal(runtime.readRequestHeaders.size, 0);
   });
 });
 
