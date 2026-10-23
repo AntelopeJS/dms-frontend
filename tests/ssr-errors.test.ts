@@ -11,9 +11,16 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
   const previousBackend = process.env.DMS_API_BASE_URL;
   const previousSecret = process.env.DMS_SESSION_SECRET;
   const unreadCountPath = "/settings/user/notifications/unread-count";
+  const backendReads: string[] = [];
   const backend = createServer((request, response) => {
     const url = new URL(request.url!, "http://fixture");
+    backendReads.push(`${url.pathname}${url.search}`);
     response.setHeader("content-type", "application/json");
+    if (url.pathname === "/fixture/counted") {
+      const count = backendReads.filter((read) => read === "/fixture/counted");
+      response.end(JSON.stringify({ count: count.length }));
+      return;
+    }
     if (url.pathname === unreadCountPath) {
       response.end('{"unreadCount":7}');
       return;
@@ -57,7 +64,7 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
       join(workspace, "frontend-modules.generated.ts"),
       `
 import {defineComponent,h} from 'vue';
-import {createDmsError,defineDmsPageMeta,navigateDms,useDmsUserSession,useI18n,useDmsState} from './frontend-module';
+import {createDmsError,defineDmsPageMeta,navigateDms,useDmsFetch,useDmsRoute,useDmsRouter,useDmsUserSession,useI18n,useDmsState} from './frontend-module';
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 let exactPreloads=0;
 let catchAllPreloads=0;
@@ -84,6 +91,7 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
  sdk.registerPage('requires-onboarding-a',RequiresOnboarding);
  sdk.registerPage('requires-onboarding-b',RequiresOnboarding);
  sdk.registerPage('onboarding',defineComponent({setup(){return()=>h('p','Onboarding')}}));
+ sdk.registerPage('fill-query',defineComponent({async setup(){const route=useDmsRoute();const router=useDmsRouter();const {data}=await useDmsFetch('/fixture/counted');if(!route.query.workspace)await router.replace(route.query.loop?'/fill-query?loop='+(Number(route.query.loop)+1):'/fill-query?workspace=default');return()=>h('p','Fill:'+route.query.workspace+':'+data.value?.count)}}));
  sdk.registerPage('throws',defineComponent({setup(){throw createDmsError({statusCode:400,message:'Missing required token parameter'})},render(){throw new Error('secondary render failure')}}));
  sdk.registerPage('fetch-not-found',defineComponent({async setup(){await Promise.resolve();throw Object.assign(new Error('[GET] "http://10.0.0.5:5010/api/secret": 404 Not Found'),{name:'FetchError',statusCode:404,statusMessage:'Not Found'})}}));
  sdk.registerPage('async-throws',defineComponent({async setup(){await Promise.resolve();throw new Error('private database hostname')}}));
@@ -232,6 +240,41 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       guardRedirect.headers.get("location"),
       "/onboarding?source=guard",
     );
+    // A page that completes its query as it renders is rendered at that query
+    // in the same request: no redirect, the reads of the first render reused,
+    // and only the page read again for the new query.
+    backendReads.length = 0;
+    const filled = await fetch(`${base}/fill-query`, {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    assert.equal(filled.status, 200);
+    assert.equal(
+      filled.headers.get("content-location"),
+      "/fill-query?workspace=default",
+    );
+    const filledHtml = await filled.text();
+    assert.match(filledHtml, /Fill:default:1/);
+    assert.match(filledHtml, /\/fill-query\?workspace=default/);
+    assert.deepEqual(
+      backendReads.filter((read) => read.startsWith("/fixture/")),
+      ["/fixture/counted"],
+    );
+    assert.deepEqual(
+      backendReads.filter((read) => read.startsWith("/dms/page")),
+      [
+        "/dms/page?path=%2Ffill-query",
+        "/dms/page?path=%2Ffill-query&workspace=default&shared=false",
+      ],
+    );
+    // A page that keeps changing its query is answered with a redirect after
+    // a few renders, as before.
+    const looping = await fetch(`${base}/fill-query?loop=0`, {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    assert.equal(looping.status, 302);
+    assert.equal(looping.headers.get("location"), "/fill-query?loop=3");
     const asyncRuntimeResponses = await Promise.all([
       fetch(`${base}/async-runtime-a`, { headers: { accept: "text/html" } }),
       fetch(`${base}/async-runtime-b`, { headers: { accept: "text/html" } }),
