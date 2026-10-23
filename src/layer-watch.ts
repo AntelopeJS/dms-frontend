@@ -15,8 +15,8 @@ import {
   DERIVED_OUTPUTS,
   type DerivedOutput,
   type FrontendModuleRegistry,
-  InvalidLocaleFileError,
 } from "./derived-outputs";
+import { InvalidLocaleFileError } from "./locale-files";
 
 import {
   failureDetails,
@@ -238,7 +238,7 @@ function describeOutputFailure(
     const file = reporter.show(err.path);
     return {
       text: `${file} is not a valid locale file`,
-      options: { details: [err.reason, kept] },
+      options: { details: [...err.reason.split("\n"), kept] },
       fixed: [`${file} fixed`, `${output.name} regenerated`].join(
         getProcessUi().symbols.separator,
       ),
