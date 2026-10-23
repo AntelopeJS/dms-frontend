@@ -14,14 +14,18 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 // The very unimport the auto-import plugin scans with, so both read the
-// directories the same way.
-const unimportPath = createRequire(
-  createRequire(import.meta.url).resolve("unplugin-auto-import/package.json"),
-).resolve("unimport");
+// directories the same way. Imported by URL, not by path: on Windows,
+// `import()` reads `C:\...` as a URL whose scheme is `c:` and refuses it.
+const unimportUrl = pathToFileURL(
+  createRequire(
+    createRequire(import.meta.url).resolve("unplugin-auto-import/package.json"),
+  ).resolve("unimport"),
+);
 const { builtinPresets, resolvePreset, scanDirExports } = await import(
-  unimportPath
+  unimportUrl.href
 );
 
 const HEADER =
