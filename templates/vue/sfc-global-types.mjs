@@ -12,7 +12,7 @@
 // compiles anything, and rewrites them when a dev server sees a module's
 // declared directories change.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
@@ -35,8 +35,11 @@ const HEADER =
 const withoutExtension = (path) => path.replace(/\.[cm]?[jt]sx?$/, "");
 
 /**
- * The ambient aliases of the auto-imported types: one per name, the first
- * source winning, as the auto-imports themselves do.
+ * The ambient aliases of the auto-imported types: one per name, in the order
+ * the auto-import plugin reads them (Vue's preset, then the scanned
+ * directories), the last one winning, as unimport's own deduplication keeps
+ * the last of two imports of the same name. A module that exports its own
+ * `Component` thus shadows Vue's, for the compiler as for TypeScript.
  *
  * @param {(string | { glob: string, types?: boolean })[]} dirs the auto-import
  *   directories, as handed to the auto-import plugin
@@ -45,17 +48,17 @@ const withoutExtension = (path) => path.replace(/\.[cm]?[jt]sx?$/, "");
 export async function sfcGlobalTypes(dirs, cwd) {
   const vue = await resolvePreset(builtinPresets.vue);
   const scanned = await scanDirExports(dirs, { cwd, types: true });
-  const seen = new Set();
-  const lines = [];
+  const aliases = new Map();
   for (const entry of [...vue, ...scanned]) {
     if (!entry.type) continue;
     const name = entry.as ?? entry.name;
-    if (seen.has(name)) continue;
-    seen.add(name);
     const source = JSON.stringify(withoutExtension(entry.from));
-    lines.push(`declare type ${name} = import(${source}).${entry.name};`);
+    aliases.set(
+      name,
+      `declare type ${name} = import(${source}).${entry.name};`,
+    );
   }
-  return `${HEADER}${lines.join("\n")}\n`;
+  return `${HEADER}${[...aliases.values()].join("\n")}\n`;
 }
 
 function writeIfChanged(file, content) {
@@ -66,7 +69,12 @@ function writeIfChanged(file, content) {
     current = undefined;
   }
   if (current === content) return false;
-  writeFileSync(file, content);
+  // Through a temporary file: a build starting meanwhile reads the previous
+  // declarations or the new ones, never a half-written file the compiler
+  // would then keep in its cache.
+  const temporary = `${file}.${process.pid}.tmp`;
+  writeFileSync(temporary, content);
+  renameSync(temporary, file);
   return true;
 }
 
@@ -92,9 +100,16 @@ export function sfcGlobalTypesWatcher(dirs, cwd, file) {
         pending = setTimeout(() => {
           // The file is under the workspace, which Vite watches: rewriting it
           // is the change the Vue plugin reloads the dependent components on.
-          void sfcGlobalTypes(dirs, cwd).then((content) =>
-            writeIfChanged(file, content),
-          );
+          // A failed scan or write keeps the previous declarations: it must
+          // not end the dev server.
+          sfcGlobalTypes(dirs, cwd)
+            .then((content) => writeIfChanged(file, content))
+            .catch((error) =>
+              server.config.logger.warn(
+                `Could not update ${file}, the types Vue's SFC compiler ` +
+                  `reads: ${error instanceof Error ? error.message : error}`,
+              ),
+            );
         }, 100);
       };
       for (const event of ["add", "change", "unlink"])

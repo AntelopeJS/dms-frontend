@@ -169,6 +169,21 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
     assert.doesNotMatch(declarations, /InternalRule/);
   });
 
+  it("lets a module's type shadow Vue's of the same name, as the auto-imports do", async () => {
+    const { root, module, dirs } = workspace();
+    writeFixture(
+      module,
+      "app/types/component.ts",
+      "export interface Component { slot: string }\n",
+    );
+    const declarations = await sfcGlobalTypes(dirs, root);
+    assert.match(
+      declarations,
+      /^declare type Component = import\(".*\/frontend-modules\/acme\/app\/types\/component"\)\.Component;$/m,
+    );
+    assert.doesNotMatch(declarations, /import\("vue"\)\.Component;/);
+  });
+
   it("follows a type file added to a dev server's workspace", async () => {
     const { root, module, dirs, file } = workspace();
     await writeSfcGlobalTypes(dirs, root, file);
@@ -187,6 +202,24 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
 
     assert.match(readFileSync(file, "utf8"), /declare type LaterRule = /);
     invalidateTypeCache(file);
+  });
+
+  it("warns, rather than ending the dev server, when it cannot rewrite them", async () => {
+    const { root, module, dirs } = workspace();
+    const file = join(root, "missing", "sfc-global-types.generated.d.ts");
+    const warnings: string[] = [];
+    const watcher = new EventEmitter();
+    const plugin = sfcGlobalTypesWatcher(dirs, root, file);
+    (plugin.configureServer as (server: unknown) => void)({
+      watcher,
+      config: { logger: { warn: (message: string) => warnings.push(message) } },
+    });
+
+    watcher.emit("change", join(module, "app/types/action.ts"));
+    await delay(400);
+
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? "", /Could not update .*sfc-global-types/);
   });
 
   it("is what the Vite config hands the Vue plugin, before it compiles", () => {
