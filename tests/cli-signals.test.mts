@@ -150,6 +150,10 @@ function builtProject(): string {
   const workspace = join(project, ".dms-frontend");
   mkdirSync(join(workspace, "dist/client"), { recursive: true });
   writeFileSync(join(workspace, "dist/client/index.html"), "<html></html>");
+  writeFileSync(
+    join(workspace, "generated-frontend-modules.json"),
+    JSON.stringify({ modules: [{ id: "signals", name: "signals-layer" }] }),
+  );
   copyFileSync(PROCESS_TREE, join(workspace, "server.mjs"));
   return project;
 }
