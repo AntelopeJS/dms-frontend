@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import { connect } from "node:net";
 import { after, afterEach, before, describe, it } from "node:test";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
 
@@ -233,6 +234,52 @@ describe("the proxy streams large file-storage transfers", () => {
     const [seen] = requests;
     assert.equal(seen?.completed, false);
     assert.ok((seen?.bytes ?? 0) <= MAX_BODY_BYTES);
+  });
+
+  /**
+   * Sends an upload of `TOO_LARGE_BYTES` over a raw socket, the rest of the
+   * body only once the answer arrived, as a client does that keeps sending
+   * while the server answers: the connection must stay up for it.
+   */
+  async function uploadPastTheAnswer(headers: string) {
+    const url = new URL(frontendUrl);
+    const socket = connect(Number(url.port), url.hostname);
+    let answer = "";
+    const errors: string[] = [];
+    socket.on("error", (error: NodeJS.ErrnoException) =>
+      errors.push(error.code ?? error.message),
+    );
+    const answered = new Promise<void>((resolve) =>
+      socket.on("data", (chunk: Buffer) => {
+        answer += chunk.toString("latin1");
+        if (answer.includes("Payload Too Large")) resolve();
+      }),
+    );
+    const closed = new Promise<void>((resolve) => socket.on("close", resolve));
+    socket.write(
+      `PUT /file-storage/upload/key?token=${TOKEN} HTTP/1.1\r\nhost: ${url.host}\r\n${headers}\r\n`,
+    );
+    socket.write(new Uint8Array(MAX_BODY_BYTES / 4));
+    await answered;
+    return { socket, errors, closed, answer: () => answer };
+  }
+
+  it("reads the rest of a refused upload before it closes, so the client gets its 413", async () => {
+    const declared = await uploadPastTheAnswer(
+      `content-length: ${TOO_LARGE_BYTES}\r\n`,
+    );
+    const rest = TOO_LARGE_BYTES - MAX_BODY_BYTES / 4;
+    await new Promise<void>((resolve) =>
+      declared.socket.write(new Uint8Array(rest), () => resolve()),
+    );
+    await declared.closed;
+    assert.match(declared.answer(), /^HTTP\/1\.1 413 /);
+    assert.deepEqual(
+      declared.errors,
+      [],
+      "the server did not reset the upload",
+    );
+    assert.deepEqual(requests, []);
   });
 
   it("hands a backend redirect to the client instead of following it", async () => {
