@@ -2578,6 +2578,80 @@ export const DmsLink: Component = defineComponent({
   },
 });
 
+/** How a keyboard hint prints its modifiers: macOS symbols, or PC key names. */
+export type DmsKbdPlatform = "mac" | "other";
+/**
+ * Where Nuxt UI's key hints read the platform: called in the setup of each
+ * component that prints one, it returns the platform that component renders.
+ * It must read on the server the platform it renders there, and keep it while
+ * its caller hydrates, so the browser's first render matches the server's.
+ */
+export type DmsKbdPlatformSource = () => Readonly<Ref<DmsKbdPlatform>>;
+
+const KBD_PLATFORM_KEY: InjectionKey<DmsKbdPlatformSource> =
+  Symbol("dms:kbd-platform");
+const MODIFIER_KBD_KEYS: Record<
+  DmsKbdPlatform,
+  Record<"meta" | "ctrl" | "alt", string>
+> = {
+  mac: { meta: "⌘", ctrl: "⌃", alt: "⌥" },
+  other: { meta: "Ctrl", ctrl: "Ctrl", alt: "Alt" },
+};
+const isModifierKbdKey = (value: string): value is "meta" | "ctrl" | "alt" =>
+  value === "meta" || value === "ctrl" || value === "alt";
+
+/**
+ * Gives Nuxt UI's key hints (`UKbd`, the `kbds` of its menus, the dashboard
+ * search button) the application's keyboard platform, so the server prints
+ * `meta` as "⌘" or "Ctrl" from the first render instead of a blank the
+ * browser fills in after mounting.
+ */
+export function provideDmsKbdPlatform(
+  app: App,
+  source: DmsKbdPlatformSource,
+): void {
+  app.provide(KBD_PLATFORM_KEY, source);
+}
+
+interface NuxtUiKbd {
+  macOS: ComputedRef<unknown>;
+  getKbdKey: (value?: string) => string | undefined;
+}
+
+/**
+ * Nuxt UI's `useKbd` as the DMS runs it (`ui-kbd.mjs` routes it here): a hint
+ * renders the same on the server and in the hydrating browser. Nuxt UI prints
+ * `meta`, `ctrl` and `alt` from a map shared by every hint and filled by the
+ * first one's `onMounted`, so a hint hydrating after that (in an async
+ * component) printed "⌘" over the server's blank. Each hint now keeps the
+ * server's value until its own `onMounted`; with a platform provided
+ * (`provideDmsKbdPlatform`), that value is the platform's from the start.
+ *
+ * @internal
+ */
+export function useDmsKbd(
+  shared: () => NuxtUiKbd,
+  keys: Readonly<Record<string, string>>,
+): NuxtUiKbd {
+  const { macOS } = shared();
+  const instance = getCurrentInstance();
+  const source = instance ? inject(KBD_PLATFORM_KEY, null) : null;
+  const platform = source ? source() : null;
+  // A hydrating component's vnode is bound to its server node before setup.
+  const hydrating = ref(!!instance?.vnode.el);
+  if (hydrating.value) onMounted(() => (hydrating.value = false));
+  return {
+    macOS,
+    getKbdKey(value) {
+      if (!value) return undefined;
+      if (!isModifierKbdKey(value)) return keys[value] || value;
+      if (platform) return MODIFIER_KBD_KEYS[platform.value][value];
+      if (typeof window === "undefined" || hydrating.value) return " ";
+      return MODIFIER_KBD_KEYS[macOS.value ? "mac" : "other"][value];
+    },
+  };
+}
+
 export const DmsClientOnly = defineComponent({
   name: "DmsClientOnly",
   setup(_, { slots }) {

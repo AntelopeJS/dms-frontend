@@ -12,6 +12,7 @@ import {
 import { clientCodeSplitting, onBuildLog } from "./client-chunking.mjs";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { uiInertiaPage } from "./ui-inertia-page.mjs";
+import { uiKbd } from "./ui-kbd.mjs";
 import { uiRequestState } from "./ui-request-state.mjs";
 import { autoImportDirectories } from "./frontend-build-loader.ts";
 import { frontendBuilds } from "./frontend-builds.generated.ts";
@@ -160,6 +161,7 @@ export default defineConfig({
         return id === uiLinkImport ? uiInertiaLinkImport : null;
       },
     },
+    uiKbd(isNuxtUiFile),
     uiInertiaPage(isNuxtUiFile),
     uiRequestState(isNuxtUiFile),
     vue(),
@@ -225,6 +227,7 @@ export default defineConfig({
                 "DmsClientOnly",
                 "DmsLink",
                 "useDmsUserSession",
+                "provideDmsKbdPlatform",
               ],
           },
         ],
