@@ -214,6 +214,7 @@ export default defineConfig({
                 "useDmsError",
                 "useDmsPagedData",
                 "useDmsPageLoading",
+                "isDmsHydrating",
                 "useDmsApp",
                 "useDmsRoute",
                 "useDmsRouter",
