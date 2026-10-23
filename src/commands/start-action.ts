@@ -19,7 +19,11 @@ import {
 import { reservePort } from "../ports";
 import { readyLines, runServer } from "../server-process";
 import { reportAvailableUpdate } from "../update-check";
-import { OWN_RELEASE, reportFrontendReadyOnceAnswered } from "../module-set";
+import {
+  OWN_RELEASE,
+  reportFrontendReadyOnceAnswered,
+  type ServedModule,
+} from "../module-set";
 import {
   type ProjectFrontendModule,
   readProjectFrontendModules,
@@ -31,6 +35,7 @@ import {
   parsePrivateOptions,
   unfilledPrivateValues,
 } from "../private-values";
+import type { FrontendModuleRegistryEntry } from "../derived-outputs";
 import type { FrontendModuleOptions } from "../workspace";
 import { productionWorkspace } from "./build-action";
 
@@ -137,6 +142,62 @@ function publicOptionsById(
 }
 
 /**
+ * The modules the build serves, from the registry its server reads: the
+ * report names these, whatever the current variables would build. None when
+ * the registry is unreadable.
+ */
+function builtModules(workspaceDir: string): ServedModule[] {
+  try {
+    const { modules } = JSON.parse(
+      readFileSync(
+        join(workspaceDir, "generated-frontend-modules.json"),
+        "utf8",
+      ),
+    ) as { modules?: FrontendModuleRegistryEntry[] };
+    return (modules ?? []).map((module) => ({
+      name: module.name ?? module.id,
+      version: module.version,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Warns when the current variables give the project other modules than the
+ * build serves: the server keeps serving the build's, so only a rebuild
+ * brings in a module a variable turned on, or drops one it turned off.
+ */
+function reportModuleSetDrift(
+  built: ServedModule[],
+  modules: ProjectFrontendModule[],
+): void {
+  const builtNames = new Set(built.map(({ name }) => name));
+  const currentNames = new Set(
+    modules.map(({ layer }) => layer.name ?? layer.path),
+  );
+  const added = [...currentNames].filter((name) => !builtNames.has(name));
+  const removed = [...builtNames].filter((name) => !currentNames.has(name));
+  if (added.length === 0 && removed.length === 0) return;
+  const ui = getProcessUi();
+  ui.message(
+    "warn",
+    "The project's modules differ from the ones the build serves: rebuild to apply them",
+    {
+      details: [
+        ...(added.length > 0
+          ? [`Not in the build: ${added.sort().join(", ")}`]
+          : []),
+        ...(removed.length > 0
+          ? [`Built, no longer in the project: ${removed.sort().join(", ")}`]
+          : []),
+        `${ui.symbols.levels.hint} Build again with the deployment's variables: ajs dms build`,
+      ],
+    },
+  );
+}
+
+/**
  * Tells the backend which module versions this build serves, once it first
  * answers: the backend compares them with the ones it runs, and its module
  * store reads which modules the build serves. It warns only on a difference,
@@ -144,14 +205,11 @@ function publicOptionsById(
  */
 async function reportServedModules(
   backendUrl: string,
-  modules: ProjectFrontendModule[],
+  modules: ServedModule[],
 ): Promise<void> {
   const isTaken = await reportFrontendReadyOnceAnswered(
     backendUrl,
-    modules.map(({ layer, version }) => ({
-      name: layer.name ?? layer.path,
-      version,
-    })),
+    modules,
     process.env.DMS_BOOTSTRAP_SECRET,
   );
   const ui = getProcessUi();
@@ -218,6 +276,8 @@ export async function runStart(options: StartOptions): Promise<void> {
     projectDir: options.project,
     environment: options.env,
   });
+  const built = builtModules(workspaceDir);
+  reportModuleSetDrift(built, modules);
   // The private values are secrets the server reads from its environment:
   // the project's configuration never holds them.
   const secrets = resolveManifestSecrets({ published: {}, conflicts: [] });
@@ -257,7 +317,7 @@ export async function runStart(options: StartOptions): Promise<void> {
         ]),
         footer: "Ctrl+C to stop",
       });
-      void reportServedModules(backendUrl, modules);
+      void reportServedModules(backendUrl, built);
       void reportAvailableUpdate({ isFollowed: true });
     },
   });

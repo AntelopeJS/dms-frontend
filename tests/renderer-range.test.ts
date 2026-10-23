@@ -252,6 +252,26 @@ function serveManifest(layerPath: string): Promise<Backend> {
   });
 }
 
+/** A project in `dir` whose one module declares `layerPath` as its frontend. */
+function writeProject(dir: string, layerPath: string): void {
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({ name: "range-project", dmsFrontend: "frontend.js" }),
+  );
+  writeFileSync(
+    join(dir, "frontend.js"),
+    `exports.frontendModule = () => ({
+  name: "excluding-module",
+  sourcePath: ${JSON.stringify(layerPath)},
+  renderer: { name: "vue", version: "3" },
+});\n`,
+  );
+  writeFileSync(
+    join(dir, "antelope.config.ts"),
+    `export default { name: "range", modules: { range: { source: { type: "local", path: "." } } } };\n`,
+  );
+}
+
 function closeServer(server: Server): Promise<void> {
   return new Promise((resolveClose) => server.close(() => resolveClose()));
 }
@@ -311,6 +331,7 @@ describe("commands refusing a module that does not support this release", () => 
     });
     const backend = await serveManifest(layerPath);
     const home = temporaryDir("dms-renderer-range-home-");
+    writeProject(home, layerPath);
     const dev = ["dev", "-b", backend.url, "-p", "0"];
     try {
       for (const args of [dev, [...dev, "--offline"]]) {
