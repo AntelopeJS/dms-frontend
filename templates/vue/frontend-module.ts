@@ -2818,6 +2818,17 @@ export function useDmsPageLoading(): Readonly<Ref<boolean>> {
 }
 
 /**
+ * Whether the browser is hydrating the page the server rendered, whose first
+ * render must match the server's HTML: from the start of the application to
+ * the tick the page's `<Suspense>` resolves. False on the server, in a page
+ * the server did not render, and after a client navigation. As Nuxt's
+ * `nuxtApp.isHydrating`; read once, it is not reactive.
+ */
+export function isDmsHydrating(): boolean {
+  return useDmsRuntime().hydrating;
+}
+
+/**
  * The props of the `<Suspense>` around the page that keep `useDmsPageLoading`
  * in step with it. Cleared before the boundary unmounts, so a page left while
  * pending never leaves the state set.
