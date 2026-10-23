@@ -322,6 +322,18 @@ describe("ajs dms start", () => {
       const workspace = join(project, ".dms-frontend");
       mkdirSync(join(workspace, "dist", "client"), { recursive: true });
       writeFileSync(join(workspace, "dist", "client", "index.html"), "");
+      writeFileSync(
+        join(workspace, "generated-frontend-modules.json"),
+        JSON.stringify({
+          modules: [
+            {
+              id: "fixture__module-frontend-vue",
+              name: "@fixture/module-frontend-vue",
+              version: "1.2.3",
+            },
+          ],
+        }),
+      );
       if (serverOptions)
         writeFileSync(
           join(workspace, "generated-server-options.json"),
