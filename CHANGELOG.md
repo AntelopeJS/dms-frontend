@@ -4,6 +4,16 @@
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.8.0...v0.9.0)
 
+### Upgrade notes
+
+- **Breaking:** `${@<module>.<VAR>}` references in `antelope.config.ts` are resolved, at `ajs dms build` and `ajs dms start`, by the pure `configVars(config)` that the provider declares as `antelopeJs.configVarsFile` ([#192](https://github.com/AntelopeJS/dms-frontend/pull/192)). The hard-coded copy of the api module's logic is gone. With `@antelopejs/api` ≤ 1.4.0 the `${@api.*}` references stay unresolved, the build warns (`api declares no antelopeJs.configVarsFile…`), and dms falls back to its default `apiBaseUrl`. **Migration:** upgrade `@antelopejs/api` to ≥ 1.5.0 together with this release.
+- **Breaking:** `ajs dms dev` reads the frontend modules from the project, as `build` does (`antelope.config.ts`, then each module's `frontendModule(config, { dev: true })`) ([#193](https://github.com/AntelopeJS/dms-frontend/pull/193)). The backend only supplies the declared private values (secrets) and `originRewrites`. **Migration:** run `ajs dms dev` from the project, or pass `--project` when you run `ajs dms dev -b <url>` outside it. `-e/--env` selects the environment.
+- `ajs dms build` and the start of `ajs dms dev` refuse a catalog message vue-i18n cannot compile, naming the source file, the key and the fix ([#190](https://github.com/AntelopeJS/dms-frontend/pull/190)).
+- `isDmsHydrating()` tells whether the browser is hydrating the page the server rendered ([#189](https://github.com/AntelopeJS/dms-frontend/pull/189)).
+- `ajs dms start` reports the modules the build serves (names and versions), and warns when the project now gives others ([#191](https://github.com/AntelopeJS/dms-frontend/pull/191)). A build made before 0.9.0 reports names without versions until rebuilt.
+- Every locale catalog is kept out of the client entry ([#181](https://github.com/AntelopeJS/dms-frontend/pull/181)); the build reports what each frontend module adds to the client entry ([#182](https://github.com/AntelopeJS/dms-frontend/pull/182)).
+- Frontend modules implementing dms-frontend move their range to `>=0.9.0 <0.10.0`.
+
 ### 🚀 Enhancements
 
 - **build:** ⚠️  Resolve ${@module.VAR} with the function its provider declares ([#192](https://github.com/AntelopeJS/dms-frontend/pull/192))
