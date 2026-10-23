@@ -1,6 +1,5 @@
 import * as assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -74,6 +73,7 @@ function startCli({
     env: {
       ...process.env,
       HOME: home,
+      USERPROFILE: home,
       NO_UPDATE_NOTIFIER: "1",
       DMS_API_BASE_URL: "",
       DMS_TEST_PID_FILE: pidFile,
@@ -142,27 +142,23 @@ async function assertTreeGone(pids: number[]) {
 }
 
 /**
- * A home holding what `ajs dms build` leaves behind for `start`, with the
+ * A project holding what `ajs dms build` leaves behind for `start`, with the
  * process-tree fixture standing in for the generated server.
  */
-function builtHome(backendUrl: string): string {
-  const home = mkdtempSync(join(scratch, "home-"));
-  const workspace = join(
-    home,
-    ".antelopejs/dms-frontend",
-    createHash("sha256").update(backendUrl).digest("hex"),
-  );
+function builtProject(): string {
+  const project = signalsProject();
+  const workspace = join(project, ".dms-frontend");
   mkdirSync(join(workspace, "dist/client"), { recursive: true });
   writeFileSync(join(workspace, "dist/client/index.html"), "<html></html>");
   copyFileSync(PROCESS_TREE, join(workspace, "server.mjs"));
-  return home;
+  return project;
 }
 
 /** Starts `start`, resolving once the CLI printed the server's ready block. */
 async function startServer(backendUrl: string, ownGroup = false) {
   const run = startCli({
-    args: ["start", "-b", backendUrl, "-p", "0"],
-    env: { HOME: builtHome(backendUrl), DMS_SESSION_SECRET: SESSION_SECRET },
+    args: ["start", "-b", backendUrl, "-p", "0", "--project", builtProject()],
+    env: { DMS_SESSION_SECRET: SESSION_SECRET },
     ownGroup,
   });
   await waitFor(
@@ -180,12 +176,10 @@ function serveManifest(): Promise<{ server: Server; url: string }> {
     JSON.stringify({ name: "signals-layer" }),
   );
   const manifest = {
-    version: 1,
-    archive: "/dms/frontend/modules",
+    version: 2,
     modules: [
       {
         name: "signals-layer",
-        archiveName: "signals-layer",
         priority: 0,
         renderer: { name: "vue", version: "3" },
         path: layer,
@@ -223,40 +217,34 @@ function hangingPnpm(installs = false): string {
 }
 
 /**
- * A home holding the manifest and the layers archive an earlier build
- * downloaded from `backendUrl`, so `build --offline` needs no backend.
+ * A project whose one module declares its frontend with `dmsFrontend`, so
+ * `build` needs no backend.
  */
-function offlineBuildHome(backendUrl: string): string {
-  const home = mkdtempSync(join(scratch, "home-"));
-  const workspace = join(
-    home,
-    ".antelopejs/dms-frontend",
-    createHash("sha256").update(backendUrl).digest("hex"),
-  );
-  const layer = join(workspace, ".layers-cache/signals-layer");
+function signalsProject(): string {
+  const project = mkdtempSync(join(scratch, "project-"));
+  const layer = join(project, "frontend-vue");
   mkdirSync(layer, { recursive: true });
   writeFileSync(
     join(layer, "package.json"),
     JSON.stringify({ name: "signals-layer" }),
   );
   writeFileSync(
-    join(workspace, ".manifest-cache.json"),
-    JSON.stringify({
-      manifest: {
-        pack: "/dms/frontend/modules",
-        modules: [
-          {
-            name: "signals-layer",
-            archiveName: "signals-layer",
-            priority: 0,
-            renderer: { name: "vue", version: "3" },
-          },
-        ],
-      },
-      fetchedAt: new Date().toISOString(),
-    }),
+    join(project, "package.json"),
+    JSON.stringify({ name: "signals-project", dmsFrontend: "frontend.js" }),
   );
-  return home;
+  writeFileSync(
+    join(project, "frontend.js"),
+    `exports.frontendModule = () => ({
+  name: "signals-layer",
+  sourcePath: require("node:path").join(__dirname, "frontend-vue"),
+  renderer: { name: "vue", version: "3" },
+});\n`,
+  );
+  writeFileSync(
+    join(project, "antelope.config.ts"),
+    `export default { name: "signals", modules: { signals: { source: { type: "local", path: "." } } } };\n`,
+  );
+  return project;
 }
 
 // Process groups are a POSIX notion; on Windows runCommand kills the tree
@@ -305,7 +293,8 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
 
   it("prints a due update notice once, under the ready block", async () => {
     const backendUrl = "http://127.0.0.1:9";
-    const home = builtHome(backendUrl);
+    const home = mkdtempSync(join(scratch, "home-"));
+    mkdirSync(join(home, ".antelopejs/dms-frontend"), { recursive: true });
     writeFileSync(
       join(home, ".antelopejs/dms-frontend/update-check.json"),
       JSON.stringify({
@@ -315,7 +304,7 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
       }),
     );
     const run = startCli({
-      args: ["start", "-b", backendUrl, "-p", "0"],
+      args: ["start", "-b", backendUrl, "-p", "0", "--project", builtProject()],
       entry: ["--import", TERMINAL_STDERR, CLI],
       env: {
         HOME: home,
@@ -346,8 +335,17 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
   it("shows only the local URL of a quiet run, and no stop line", async () => {
     const backendUrl = "http://127.0.0.1:9";
     const run = startCli({
-      args: ["start", "-b", backendUrl, "-p", "0", "-q"],
-      env: { HOME: builtHome(backendUrl), DMS_SESSION_SECRET: SESSION_SECRET },
+      args: [
+        "start",
+        "-b",
+        backendUrl,
+        "-p",
+        "0",
+        "-q",
+        "--project",
+        builtProject(),
+      ],
+      env: { DMS_SESSION_SECRET: SESSION_SECRET },
       ownGroup: true,
     });
     await waitFor(
@@ -426,11 +424,9 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
   });
 
   it("keeps the interrupted build step and names the stopped build on Ctrl+C", async () => {
-    const backendUrl = "http://127.0.0.1:9";
     const run = startCli({
-      args: ["build", "-b", backendUrl, "--offline"],
+      args: ["build", "--project", signalsProject()],
       env: {
-        HOME: offlineBuildHome(backendUrl),
         PATH: hangingPnpm(true),
         DMS_SESSION_SECRET: SESSION_SECRET,
         NO_COLOR: "1",

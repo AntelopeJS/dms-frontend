@@ -28,7 +28,9 @@ import {
   setDmsServerRuntimeResolver,
   setupFrontendModules,
   trackDmsServerScopes,
+  withPublicOptions,
 } from "./frontend-module";
+import { parsePublicOptions } from "./public-options";
 import { frontendModules } from "./frontend-modules.generated";
 import {
   SSR_ICONS_ID,
@@ -130,7 +132,13 @@ function iconsScript(names: Set<string>): string {
   return `<script id="${SSR_ICONS_ID}" type="application/json">${value}</script>`;
 }
 
-await setupFrontendModules(frontendModules, appConfigs);
+await setupFrontendModules(
+  withPublicOptions(
+    frontendModules,
+    parsePublicOptions(process.env.DMS_PUBLIC_OPTIONS),
+  ),
+  appConfigs,
+);
 
 export function isDmsFrontendPage(path: string): boolean {
   return hasDmsPage(path);

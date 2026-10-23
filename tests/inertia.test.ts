@@ -94,7 +94,7 @@ describe("Inertia HTTP protocol", () => {
     assert.match(source, /vitePromise = undefined/);
     assert.match(
       source,
-      /frontendHttpServer = createServer\(handleRequestSafely\)/,
+      /frontendHttpServer = createServer\(SERVER_OPTIONS, handleRequestSafely\)/,
     );
   });
 

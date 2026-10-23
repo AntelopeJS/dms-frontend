@@ -19,17 +19,15 @@ import {
 } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
 
-const manifest: Manifest = { pack: "/dms/frontend/modules", modules: [] };
+const manifest: Manifest = { modules: [] };
 
 interface FrontendManifest {
   version: number;
-  archive: string;
   modules: Manifest["modules"];
 }
 
 const frontendManifest: FrontendManifest = {
-  version: 1,
-  archive: manifest.pack,
+  version: 2,
   modules: manifest.modules,
 };
 
@@ -112,7 +110,6 @@ describe("fetchManifest", () => {
     frontendManifest.modules = [
       {
         name: "vue-module",
-        archiveName: "vue-module",
         priority: 0,
         renderer: { name: "vue", version: "3" },
       },
@@ -156,12 +153,12 @@ describe("fetchManifest", () => {
 
   it("fails closed when the backend protocol version is unsupported", async () => {
     const previousVersion = frontendManifest.version;
-    frontendManifest.version = 2;
+    frontendManifest.version = 3;
     const { server, baseUrl } = await startBackend();
     try {
       await assert.rejects(
         () => fetchManifest(baseUrl),
-        /serves frontend manifest version 2, which @antelopejs\/dms-frontend \S+ cannot read/,
+        /serves frontend manifest version 3, which @antelopejs\/dms-frontend \S+ cannot read/,
       );
     } finally {
       frontendManifest.version = previousVersion;
@@ -177,17 +174,17 @@ describe("fetchManifest", () => {
       ),
     );
     assert.equal(
-      problemText(new ManifestRefusedError(describeManifestVersion(2))),
+      problemText(new ManifestRefusedError(describeManifestVersion(3))),
       [
-        `✖ The backend serves frontend manifest version 2, which @antelopejs/dms-frontend ${version} cannot read`,
-        "  This loader reads version 1; the backend's @antelopejs/dms is newer than this loader.",
-        "  → Upgrade the loader (ajs update dms) to a release that reads version 2",
+        `✖ The backend serves frontend manifest version 3, which @antelopejs/dms-frontend ${version} cannot read`,
+        "  This loader reads version 2; the backend's @antelopejs/dms is newer than this loader.",
+        "  → Upgrade the loader (ajs update dms) to a release that reads version 3",
         "",
       ].join("\n"),
     );
     assert.match(
-      problemText(new ManifestRefusedError(describeManifestVersion(0))),
-      /older than this loader\.\n {2}→ Upgrade @antelopejs\/dms on the backend, or use a @antelopejs\/dms-frontend release that reads version 0\n$/,
+      problemText(new ManifestRefusedError(describeManifestVersion(1))),
+      /older than this loader\.\n {2}→ Upgrade @antelopejs\/dms on the backend, or use a @antelopejs\/dms-frontend release that reads version 1\n$/,
     );
     assert.match(
       problemText(new ManifestRefusedError(describeManifestVersion(undefined))),
@@ -224,7 +221,6 @@ describe("fetchManifest", () => {
     frontendManifest.modules = [
       {
         name: "wrong",
-        archiveName: "wrong",
         priority: 0,
         renderer: { name: "react", version: "19" },
       },
@@ -419,13 +415,13 @@ describe("resolveManifest with a cached manifest", () => {
   it("refuses an unsupported protocol version instead of replaying the cache", async () => {
     await withCachedWorkspace(async (workspace) => {
       const previousVersion = frontendManifest.version;
-      frontendManifest.version = 2;
+      frontendManifest.version = 1;
       try {
         await assert.rejects(
           () => resolveAgainst(workspace),
           (err: Error) =>
             err instanceof ManifestRefusedError &&
-            /serves frontend manifest version 2/.test(err.message),
+            /serves frontend manifest version 1/.test(err.message),
         );
       } finally {
         frontendManifest.version = previousVersion;
@@ -439,7 +435,6 @@ describe("resolveManifest with a cached manifest", () => {
       frontendManifest.modules = [
         {
           name: "wrong",
-          archiveName: "wrong",
           priority: 0,
           renderer: { name: "react", version: "19" },
         },
@@ -488,53 +483,12 @@ describe("resolveManifest with a cached manifest", () => {
     });
   });
 
-  it("fails an unreachable backend when the cache must not be used, and offers it", async () => {
-    await withCachedWorkspace(async (workspace) => {
-      const backendUrl = await closedBackendUrl();
-      await assert.rejects(
-        () => resolveManifest(workspace, backendUrl, "never"),
-        (err: Error) => {
-          assert.ok(err instanceof CliError);
-          assert.ok(err.cause instanceof BackendUnreachableError);
-          assert.equal(err.exitCode, 1);
-          assert.equal(
-            problemText(err),
-            [
-              `✖ Cannot reach the DMS backend at ${backendUrl}`,
-              "  Connection refused (ECONNREFUSED). A manifest cached just now exists; a build uses it only with --offline.",
-              "  → Start the backend (`ajs project dev` for a local one), or pass its URL with -b <url>",
-              `  → Or build from the cache on purpose: ajs dms build -b ${backendUrl} --offline`,
-              "",
-            ].join("\n"),
-          );
-          return true;
-        },
-      );
-    });
-  });
-
-  it("fails a failing backend when the cache must not be used", async () => {
-    await withCachedWorkspace(async (workspace) => {
-      await assert.rejects(
-        () => resolveAgainst(workspace, 503, "never"),
-        (err: Error) => {
-          assert.ok(err instanceof CliError);
-          assert.match(
-            problemText(err),
-            /^✖ The DMS backend failed to serve the frontend manifest \(HTTP 503 Service Unavailable\)\n {2}\S+ answered 503: the backend failed on the request\. A manifest cached just now exists; a build uses it only with --offline\.\n {2}→ Check the backend logs .*\n {2}→ Or build from the cache on purpose: ajs dms build -b \S+ --offline\n$/,
-          );
-          return true;
-        },
-      );
-    });
-  });
-
-  it("leaves the failure as it is when there is no cache to offer", async () => {
+  it("leaves the failure as it is when there is no cache to replay", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-manifest-cache-"));
     try {
       await assert.rejects(
         async () =>
-          resolveManifest(workspace, await closedBackendUrl(), "never"),
+          resolveManifest(workspace, await closedBackendUrl(), "fallback"),
         BackendUnreachableError,
       );
     } finally {

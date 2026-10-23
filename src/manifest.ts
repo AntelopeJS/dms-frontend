@@ -10,14 +10,8 @@ import {
   type CliProblem,
   FAILURE_EXIT_CODE,
 } from "@antelopejs/core/cli";
-import {
-  parseBackendUrl,
-  UsageError,
-  writeSecretBearingFile,
-  writeShareableFile,
-} from "./config";
-import { withoutPrivateValues } from "./private-values";
-import { cachedAge, formatAge } from "./output";
+import { parseBackendUrl, UsageError, writeSecretBearingFile } from "./config";
+import { formatAge } from "./output";
 import {
   Manifest,
   bootstrapHeaders,
@@ -218,6 +212,9 @@ export function describeManifestVersion(version: unknown): CliProblem {
  * the URL does not lead to a DMS backend's endpoint.
  */
 export class BackendResponseError extends CliError {
+  /** The status the backend answered with. */
+  readonly status: number;
+
   constructor(
     subject: string,
     url: string | URL,
@@ -244,6 +241,7 @@ export class BackendResponseError extends CliError {
           };
     super(problem);
     this.name = "BackendResponseError";
+    this.status = status;
   }
 }
 
@@ -304,10 +302,7 @@ export async function fetchManifest(
       `Frontend manifest contains incompatible renderer modules: ${incompatible.map((module) => module.name).join(", ")}`,
     );
   }
-  const resolved: Manifest = {
-    pack: manifest.archive,
-    modules: manifest.modules,
-  };
+  const resolved: Manifest = { modules: manifest.modules };
   if (manifest.settling) resolved.settling = true;
   return resolved;
 }
@@ -348,35 +343,31 @@ export function readCachedManifest(
   }
 }
 
+/** The cache holds the private values a dev backend serves: owner-only. */
 export function writeCachedManifest(
   workspaceDir: string,
   manifest: Manifest,
-  privateValues: PrivateValues,
   fetchedAt = new Date().toISOString(),
 ): void {
   const entry: ManifestCacheEntry = { manifest, fetchedAt };
-  const write =
-    privateValues === "keep" ? writeSecretBearingFile : writeShareableFile;
-  write(
+  writeSecretBearingFile(
     join(workspaceDir, MANIFEST_CACHE_FILE),
     `${JSON.stringify(entry, null, 2)}\n`,
   );
 }
 
 /**
- * Whether the private values the backend serves stay in the manifest the
- * workspace keeps: `dev` keeps them, a build, whose workspace is deployed,
- * drops them (the server reads them from its environment).
- */
-export type PrivateValues = "keep" | "drop";
-
-/**
  * When the cached manifest stands in for the backend: `fallback` replays it
- * when the backend cannot be reached or fails (dev, prepare), `offline`
- * without asking the backend, and `never` fails instead (build, whose output
- * is deployed: a stale frontend must be asked for with --offline).
+ * when the backend cannot be reached or fails, `offline` without asking the
+ * backend.
  */
-export type ManifestCacheUse = "fallback" | "offline" | "never";
+export type ManifestCacheUse = "fallback" | "offline";
+
+/** What a dev run tells the backend when it asks for the manifest. */
+export interface ManifestRequest {
+  clientUrl?: string;
+  bootstrapSecret?: string;
+}
 
 export interface ResolvedManifest {
   manifest: Manifest;
@@ -387,7 +378,7 @@ export interface ResolvedManifest {
 /**
  * Get the manifest, preferring the live backend. On fetch failure we fall
  * back to the cached copy (with `fromCache: true` so callers can surface a
- * warning), unless `cacheUse` is `never`. With `offline` we skip the network
+ * warning). With `offline` we skip the network
  * call entirely.
  *
  * Note the workspace directory is derived from the backend URL hash, so a
@@ -411,86 +402,37 @@ export async function resolveManifest(
   workspaceDir: string,
   backendUrl: string,
   cacheUse: ManifestCacheUse,
-  {
-    clientUrl,
-    bootstrapSecret,
-    privateValues = "keep",
-  }: {
-    clientUrl?: string;
-    bootstrapSecret?: string;
-    privateValues?: PrivateValues;
-  } = {},
+  { clientUrl, bootstrapSecret }: ManifestRequest = {},
 ): Promise<ResolvedManifest> {
   if (cacheUse !== "offline") {
     try {
-      const served = await fetchManifest(
+      const manifest = await fetchManifest(
         backendUrl,
         clientUrl,
         bootstrapSecret,
       );
-      const manifest =
-        privateValues === "keep"
-          ? served
-          : { ...served, modules: withoutPrivateValues(served.modules) };
-      writeCachedManifest(workspaceDir, manifest, privateValues);
+      writeCachedManifest(workspaceDir, manifest);
       return { manifest, fromCache: false };
     } catch (err) {
       if (err instanceof ManifestUnauthorizedError) throw err;
       if (err instanceof ManifestRefusedError) throw err;
       const cached = readCachedManifest(workspaceDir);
       if (!cached) throw err;
-      if (cacheUse === "never") throw cacheNotUsed(err, backendUrl, cached);
-      return fromCachedEntry(workspaceDir, cached, privateValues);
+      return fromCachedEntry(cached);
     }
   }
 
   const cached = readCachedManifest(workspaceDir);
   if (!cached) throw new NoCachedManifestError();
-  return fromCachedEntry(workspaceDir, cached, privateValues);
+  return fromCachedEntry(cached);
 }
 
-/**
- * The backend failure a build stops on when a cache could have replaced it:
- * the failure itself, then how to build from the cache on purpose.
- */
-function cacheNotUsed(
-  failure: unknown,
-  backendUrl: string,
-  cached: ManifestCacheEntry,
-): CliError {
-  const problem =
-    failure instanceof CliError
-      ? failure.problem
-      : { title: errorMessage(failure) };
-  const cache = `A manifest${cachedAge(cached.fetchedAt)} exists; a build uses it only with --offline.`;
-  return new CliError(
-    {
-      ...problem,
-      reason: problem.reason ? `${problem.reason} ${cache}` : cache,
-      fixes: [
-        ...(problem.fixes ?? []),
-        `Or build from the cache on purpose: ajs dms build -b ${displayUrl(backendUrl)} --offline`,
-      ],
-    },
-    { cause: failure },
-  );
-}
-
-/**
- * A cache written before builds dropped private values can still hold them:
- * a build replaying it drops them, from the file too.
- */
-function fromCachedEntry(
-  workspaceDir: string,
-  cached: ManifestCacheEntry,
-  privateValues: PrivateValues,
-): ResolvedManifest {
-  let { manifest } = cached;
-  if (privateValues === "drop") {
-    manifest = { ...manifest, modules: withoutPrivateValues(manifest.modules) };
-    writeCachedManifest(workspaceDir, manifest, "drop", cached.fetchedAt);
-  }
-  return { manifest, fromCache: true, fetchedAt: cached.fetchedAt };
+function fromCachedEntry(cached: ManifestCacheEntry): ResolvedManifest {
+  return {
+    manifest: cached.manifest,
+    fromCache: true,
+    fetchedAt: cached.fetchedAt,
+  };
 }
 
 /**
