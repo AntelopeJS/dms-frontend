@@ -27,8 +27,14 @@ import { assertLayerPathsServed, buildLayersFromPaths } from "./layers";
 import {
   assertCachedLayerPathsExist,
   type ManifestCacheUse,
+  type ResolvedManifest,
   resolveManifest,
 } from "./manifest";
+import {
+  readProjectModulesFresh,
+  warnModuleDrift,
+  withBackendValues,
+} from "./dev-modules";
 import {
   type ProjectFrontendModule,
   type ProjectModulesOptions,
@@ -390,7 +396,11 @@ export async function runFramedCommand(
 
 export interface SetupWorkspaceOptions {
   force: boolean;
-  /** "dev" reads the backend's manifest, "build" the project itself */
+  /**
+   * "build" reads the project itself; "dev" reads the project too when
+   * `project` is set, completed by the backend's manifest, and the manifest
+   * alone otherwise (`prepare`)
+   */
   mode: "dev" | "build";
   /** The backend whose manifest a dev workspace follows */
   backendUrl?: string;
@@ -411,7 +421,7 @@ export interface SetupWorkspaceOptions {
    * backend under the loader home: a build that ships with the project.
    */
   workspaceDir?: string;
-  /** The project a build reads its modules from. Build mode only. */
+  /** The project the modules are read from: always in build, optional in dev. */
   project?: ProjectModulesOptions;
   /** Called before `pnpm install` starts, e.g. to end the task that set the workspace up */
   beforeInstall?: () => Promise<void>;
@@ -448,6 +458,54 @@ async function projectLayers(
   };
 }
 
+/** The manifest a development backend serves, or the one cached from it. */
+function servedManifest(
+  opts: SetupWorkspaceOptions,
+  backendUrl: string,
+  workspaceDir: string,
+): Promise<ResolvedManifest> {
+  const { offline, clientUrl, bootstrapSecret } = opts;
+  const cacheUse: ManifestCacheUse = offline ? "offline" : "fallback";
+  return resolveManifest(workspaceDir, backendUrl, cacheUse, {
+    clientUrl,
+    bootstrapSecret,
+  });
+}
+
+/**
+ * The project's modules, read with `dev: true`, with the secrets and the
+ * development origins of the backend's manifest. The manifest is still
+ * fetched, and cached: it hands the backend the dev server's address, and
+ * `dev` follows its module set to rebuild when the module store changes it.
+ */
+async function projectLayersInDev(
+  opts: SetupWorkspaceOptions,
+  project: ProjectModulesOptions,
+  backendUrl: string,
+  workspaceDir: string,
+): Promise<WorkspaceSource> {
+  const { manifest, fromCache, fetchedAt } = await servedManifest(
+    opts,
+    backendUrl,
+    workspaceDir,
+  );
+  const modules = await readProjectModulesFresh({ ...project, dev: true });
+  const layers = withBackendValues(modules, manifest);
+  warnModuleDrift(layers, manifest);
+  return {
+    fromCache,
+    fetchedAt,
+    layers,
+    secrets: collectManifestSecrets(
+      layers.map((layer) => ({
+        name: layer.name ?? "",
+        priority: layer.priority ?? 0,
+        privateOptions: layer.privateOptions,
+      })),
+    ),
+  };
+}
+
 /**
  * The manifest and source paths a development backend serves, or the ones
  * cached from it.
@@ -457,13 +515,11 @@ async function servedLayers(
   backendUrl: string,
   workspaceDir: string,
 ): Promise<WorkspaceSource> {
-  const { offline, clientUrl, bootstrapSecret } = opts;
-  const cacheUse: ManifestCacheUse = offline ? "offline" : "fallback";
-  const { manifest, fromCache, fetchedAt } = await resolveManifest(
-    workspaceDir,
+  const { bootstrapSecret } = opts;
+  const { manifest, fromCache, fetchedAt } = await servedManifest(
+    opts,
     backendUrl,
-    cacheUse,
-    { clientUrl, bootstrapSecret },
+    workspaceDir,
   );
   assertLayerPathsServed(manifest.modules, backendUrl, {
     bootstrapSecret,
@@ -503,13 +559,21 @@ function workspaceSource(
     if (!opts.project) throw new Error("A build reads a project");
     return projectLayers(opts.project);
   }
+  if (opts.project)
+    return projectLayersInDev(
+      opts,
+      opts.project,
+      requireDevBackend(opts),
+      workspaceDir,
+    );
   return servedLayers(opts, requireDevBackend(opts), workspaceDir);
 }
 
 /**
- * Full workspace setup: resolve the frontend modules (from the backend's
- * manifest in dev, from the project in build), check that each supports
- * this loader release, copy templates, write the workspace package.json
+ * Full workspace setup: resolve the frontend modules (from the project in
+ * build and dev, completed in dev by the backend's manifest; from the
+ * manifest alone for `prepare`), check that each supports this loader
+ * release, copy templates, write the workspace package.json
  * with `workspace:*` deps, materialize each module under
  * `<workspace>/frontend-modules/<safeName>/`, write the generated module
  * registry and dms-main.css, and install deps.
