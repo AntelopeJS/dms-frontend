@@ -14,6 +14,7 @@ import {
   type App,
   type AppConfig,
   type Component,
+  type ComponentInternalInstance,
   type ComponentPublicInstance,
   type ComputedRef,
   camelize,
@@ -2505,12 +2506,16 @@ const SETUP_FUNCTION_ERROR = "setup function";
  * or render function" for the comment Vue renders in its place). The error
  * page replaces that output (a server renders the page again, the browser
  * swaps it), and the failure itself is already reported.
+ *
+ * Walks internal instances: a `<script setup>` component exposes itself, so
+ * its children's `$parent` is an expose proxy, not the proxy `errorHandler`
+ * received.
  */
 function withinFailedSetup(
-  instance: ComponentPublicInstance | null,
-  failedSetups: WeakSet<ComponentPublicInstance>,
+  instance: ComponentInternalInstance | null,
+  failedSetups: WeakSet<ComponentInternalInstance>,
 ): boolean {
-  for (let current = instance; current; current = current.$parent)
+  for (let current = instance; current; current = current.parent)
     if (failedSetups.has(current)) return true;
   return false;
 }
@@ -3479,7 +3484,7 @@ export async function installDmsPlugins(
       if (browserRuntime === runtime) browserRuntime = undefined;
     });
   }
-  const failedSetups = new WeakSet<ComponentPublicInstance>();
+  const failedSetups = new WeakSet<ComponentInternalInstance>();
   const warnOutsideFailedSetups: AppConfig["warnHandler"] = (
     message,
     instance,
@@ -3487,16 +3492,19 @@ export async function installDmsPlugins(
   ) => {
     // The comment Vue renders in place of an `undefined` component has no
     // public instance: the template rendering it is the one that failed.
-    const source = instance ?? getCurrentInstance()?.proxy ?? null;
+    const source = instance?.$ ?? getCurrentInstance();
     if (!withinFailedSetup(source, failedSetups))
       console.warn(`[Vue warn]: ${message}${trace ? `\n${trace}` : ""}`);
   };
   app.config.errorHandler = (reason, instance, info) => {
     if (instance && info === SETUP_FUNCTION_ERROR) {
-      failedSetups.add(instance);
+      failedSetups.add(instance.$);
       // From the first failure on only: until then Vue keeps its own output,
-      // whose component trace shows the props. A server renders a single page
-      // per app, and an app that already has a handler keeps it.
+      // whose component trace shows the props. An app that already has a
+      // handler keeps it. A server renders a single page per app; in the
+      // browser the app outlives Inertia visits, so once a page has failed
+      // the handler stays for the session and later warnings print as plain
+      // text (no inspectable objects), still all of them.
       app.config.warnHandler ??= warnOutsideFailedSetups;
     }
     failPage(runtime, reason);

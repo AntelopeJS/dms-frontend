@@ -77,14 +77,26 @@ const Untidy = defineComponent({
   setup: () => () => h(defineComponent({ name: "Blank" })),
 });
 
+/**
+ * A failing page whose template uses a globally registered component: that
+ * child resolves and renders, and warns from its own render.
+ */
+const pageWithChild = `<script setup>
+const props = defineProps({ token: String });
+if (!props.token) throw Object.assign(new Error("Missing required authentication parameters"), { statusCode: 400 });
+</script>
+<template><section><UntidyChild /></section></template>`;
+
 let SyncPage: Component;
 let AsyncPage: Component;
+let ParentPage: Component;
 
 before(async () => {
   await setupFrontendModules([]);
   await devComponent("StageCard", card);
   SyncPage = await devComponent("SyncPage", page(""));
   AsyncPage = await devComponent("AsyncPage", page("await Promise.resolve();"));
+  ParentPage = await devComponent("ParentPage", pageWithChild);
 });
 
 async function render(context: TestContext, ...children: Array<() => unknown>) {
@@ -106,6 +118,7 @@ async function render(context: TestContext, ...children: Array<() => unknown>) {
   });
   const runtime = createDmsFrontendRuntime(undefined, {}, true);
   provideDmsFrontendRuntime(app, runtime);
+  app.component("UntidyChild", Untidy);
   const i18n = createI18n({ legacy: false, locale: "en", messages: {} });
   await installDmsPlugins(app, i18n.global, runtime, async () => ({}), ["en"]);
   await renderToString(app);
@@ -147,6 +160,14 @@ describe("a page whose setup fails", () => {
       '<section class="neutral"><!--[--><p>false</p><!--]--></section>',
     );
     assert.equal(runtime.currentError.value, null);
+    assert.deepEqual(warnings, []);
+  });
+
+  it("drops the warnings of a component rendered under the failed page", async (context) => {
+    // A `<script setup>` page exposes itself, so its children see it through
+    // an expose proxy rather than the proxy `errorHandler` receives.
+    const { warnings, error } = await render(context, () => h(ParentPage));
+    assert.equal(error?.statusCode, 400);
     assert.deepEqual(warnings, []);
   });
 
