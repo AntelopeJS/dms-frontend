@@ -114,6 +114,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["compress-assets.mjs", "compress-assets.mjs"],
   ["head-order.mjs", "head-order.mjs"],
   ["client-chunking.mjs", "client-chunking.mjs"],
+  ["entry-weight.mjs", "entry-weight.mjs"],
   ["client-server-guard.mjs", "client-server-guard.mjs"],
   ["ui-inertia-page.mjs", "ui-inertia-page.mjs"],
   ["ui-request-state.mjs", "ui-request-state.mjs"],

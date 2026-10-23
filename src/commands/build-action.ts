@@ -30,6 +30,7 @@ import {
   viteLogLevel,
   ViteWarnings,
 } from "../vite-output";
+import { entryWeightThreshold, reportEntryWeight } from "../entry-weight";
 import { setUpWorkspace } from "./workspace-task";
 
 export interface BuildOptions {
@@ -209,6 +210,8 @@ async function buildProduction(
   options: BuildOptions,
   startedAt: number,
 ): Promise<void> {
+  // Read before the build, so that a value it cannot use fails at once.
+  entryWeightThreshold(process.env);
   const ui = getProcessUi();
   const workspace = productionWorkspace(options);
 
@@ -240,6 +243,7 @@ async function buildProduction(
   };
   for (const step of BUILD_STEPS) await runBuildStep(step, context);
   reportViteWarnings(context.warnings, isVerbose, ui);
+  reportEntryWeight(ui, workspaceDir, process.env);
 
   writeBlankLine();
   ui.summary({

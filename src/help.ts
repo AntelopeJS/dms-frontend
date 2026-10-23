@@ -30,6 +30,10 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     "AntelopeJS environment dev, build and start evaluate the project in, same as -e",
   ],
   ["DMS_PREPARE_STRICT", "Same as prepare --strict, read like DMS_OFFLINE"],
+  [
+    "DMS_ENTRY_WEIGHT_WARNING",
+    "KB of Brotli a module may add to the client entry before build warns (default: 50; 0: never)",
+  ],
   ["PORT", "Same as -p"],
   [
     "HOST",
