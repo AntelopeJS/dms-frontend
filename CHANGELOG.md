@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.9.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.8.0...v0.9.0)
+
+### 🚀 Enhancements
+
+- **build:** ⚠️  Resolve ${@module.VAR} with the function its provider declares ([#192](https://github.com/AntelopeJS/dms-frontend/pull/192))
+- **dev:** ⚠️  Read the frontend modules from the project, as build does ([#193](https://github.com/AntelopeJS/dms-frontend/pull/193))
+- **locales:** Refuse a catalog message vue-i18n cannot compile ([#190](https://github.com/AntelopeJS/dms-frontend/pull/190))
+- **runtime:** IsDmsHydrating(), whether the browser hydrates the page ([#189](https://github.com/AntelopeJS/dms-frontend/pull/189))
+- **build:** Report what each frontend module adds to the client entry ([#182](https://github.com/AntelopeJS/dms-frontend/pull/182))
+
+### 🔥 Performance
+
+- **vue:** Stop useColorMode from re-applying the color mode on boot ([#168](https://github.com/AntelopeJS/dms-frontend/pull/168))
+- **i18n:** Keep every locale catalog out of the client entry, each one complete ([#181](https://github.com/AntelopeJS/dms-frontend/pull/181))
+- **vue:** Render a page that completes its query in place of redirecting ([#194](https://github.com/AntelopeJS/dms-frontend/pull/194))
+
+### 🩹 Fixes
+
+- **start:** Report the modules the build serves, and warn when the project now gives others ([#191](https://github.com/AntelopeJS/dms-frontend/pull/191))
+- **server:** Let a client read its 413 before the proxy closes the connection ([#185](https://github.com/AntelopeJS/dms-frontend/pull/185))
+- **vue:** Render Nuxt UI key hints the same on the server and in the browser ([#172](https://github.com/AntelopeJS/dms-frontend/pull/172))
+- **vue:** Keep a failed page setup from warning about its own template ([#169](https://github.com/AntelopeJS/dms-frontend/pull/169))
+- **vue:** Compile props typed with auto-imported types to their runtime type ([#171](https://github.com/AntelopeJS/dms-frontend/pull/171))
+
+### ✅ Tests
+
+- **server:** Stop the servers a test started before removing their directory ([#184](https://github.com/AntelopeJS/dms-frontend/pull/184))
+- Check that the workspace receives every template file the application loads ([#183](https://github.com/AntelopeJS/dms-frontend/pull/183))
+
+#### ⚠️ Breaking Changes
+
+- **build:** ⚠️  Resolve ${@module.VAR} with the function its provider declares ([#192](https://github.com/AntelopeJS/dms-frontend/pull/192))
+- **dev:** ⚠️  Read the frontend modules from the project, as build does ([#193](https://github.com/AntelopeJS/dms-frontend/pull/193))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+- Alessandro Aloisio ([@alessaloisio](http://github.com/alessaloisio))
+
 ## v0.8.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.7.1...v0.8.0)
