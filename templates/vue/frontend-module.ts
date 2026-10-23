@@ -12,7 +12,9 @@ import { defu } from "defu";
 import { type FetchOptions, ofetch } from "ofetch";
 import {
   type App,
+  type AppConfig,
   type Component,
+  type ComponentInternalInstance,
   type ComponentPublicInstance,
   type ComputedRef,
   camelize,
@@ -2488,6 +2490,35 @@ export function defineDmsPageMeta(meta: Record<string, unknown>): void {
     onServerPrefetch(() => navigation.then(ignoreSettlement, ignoreSettlement));
 }
 function ignoreSettlement(): void {}
+/**
+ * What Vue's development build passes `errorHandler` for an error thrown by a
+ * component's `setup`, sync or async (production passes a link instead; it has
+ * no warnings to scope either).
+ */
+const SETUP_FUNCTION_ERROR = "setup function";
+/**
+ * Whether a Vue warning comes from a component whose `setup` failed, or from
+ * under it. Vue still renders such a component, against the setup state that
+ * never came: in development, where a single-file component's template is
+ * compiled apart from its setup, the template reads the missing bindings, and
+ * every component it uses becomes `undefined` ("Invalid vnode type when
+ * creating vnode: undefined", then "Component <Anonymous> is missing template
+ * or render function" for the comment Vue renders in its place). The error
+ * page replaces that output (a server renders the page again, the browser
+ * swaps it), and the failure itself is already reported.
+ *
+ * Walks internal instances: a `<script setup>` component exposes itself, so
+ * its children's `$parent` is an expose proxy, not the proxy `errorHandler`
+ * received.
+ */
+function withinFailedSetup(
+  instance: ComponentInternalInstance | null,
+  failedSetups: WeakSet<ComponentInternalInstance>,
+): boolean {
+  for (let current = instance; current; current = current.parent)
+    if (failedSetups.has(current)) return true;
+  return false;
+}
 /** Shows the error page in place of the page, keeping the first failure. */
 function failPage(runtime: DmsFrontendRuntime, reason: unknown): void {
   runtime.currentError.value ??=
@@ -3453,7 +3484,31 @@ export async function installDmsPlugins(
       if (browserRuntime === runtime) browserRuntime = undefined;
     });
   }
-  app.config.errorHandler = (reason) => failPage(runtime, reason);
+  const failedSetups = new WeakSet<ComponentInternalInstance>();
+  const warnOutsideFailedSetups: AppConfig["warnHandler"] = (
+    message,
+    instance,
+    trace,
+  ) => {
+    // The comment Vue renders in place of an `undefined` component has no
+    // public instance: the template rendering it is the one that failed.
+    const source = instance?.$ ?? getCurrentInstance();
+    if (!withinFailedSetup(source, failedSetups))
+      console.warn(`[Vue warn]: ${message}${trace ? `\n${trace}` : ""}`);
+  };
+  app.config.errorHandler = (reason, instance, info) => {
+    if (instance && info === SETUP_FUNCTION_ERROR) {
+      failedSetups.add(instance.$);
+      // From the first failure on only: until then Vue keeps its own output,
+      // whose component trace shows the props. An app that already has a
+      // handler keeps it. A server renders a single page per app; in the
+      // browser the app outlives Inertia visits, so once a page has failed
+      // the handler stays for the session and later warnings print as plain
+      // text (no inspectable objects), still all of them.
+      app.config.warnHandler ??= warnOutsideFailedSetups;
+    }
+    failPage(runtime, reason);
+  };
   app.config.globalProperties.$dms = appContext;
   Reflect.set(app, "$dms", appContext);
   Reflect.set(app, "$i18n", i18n);
