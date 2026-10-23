@@ -42,7 +42,6 @@ export interface FrontendModuleOptions {
 
 export interface ManifestModule {
   name: string;
-  archiveName: string;
   renderer?: { name: string; version: string };
   /**
    * Absolute source directory on the backend machine. Only served by a
@@ -94,6 +93,8 @@ export interface BackendProxyDeclaration {
    * frontend's `Origin` on a state-changing request; `none` sends neither.
    */
   auth?: "session" | "none";
+  /** The largest request body, in bytes, streamed to the backend (`413` above). */
+  maxBodyBytes?: number;
 }
 
 /** A backend route a module serves to anyone, as the manifest names it. */
@@ -106,21 +107,35 @@ export interface PublicEndpointDeclaration {
   headers?: string[];
 }
 
+/**
+ * An origin a development backend replaced in every module's options: its
+ * configured API or client base URL, by the one the dev server reaches it on.
+ */
+export interface OriginRewrite {
+  from: string;
+  to: string;
+}
+
 export interface Manifest {
-  pack: string;
   modules: ManifestModule[];
   /**
    * The backend is changing its set of modules (its module store runs an
    * operation): a follower waits for the set to settle.
    */
   settling?: boolean;
+  /**
+   * The origins a development backend rewrote in the options it serves, for
+   * `dev` to apply the same to the options it computes from the project.
+   * Absent from a production backend, and from a DMS that predates the field.
+   */
+  originRewrites?: OriginRewrite[];
 }
 
 export interface FrontendManifest {
   version: number;
-  archive: string;
   modules: ManifestModule[];
   settling?: boolean;
+  originRewrites?: OriginRewrite[];
 }
 
 /**
@@ -387,7 +402,7 @@ export function writeWorkspaceMeta(
 
 const BOOTSTRAP_HEADER = "x-dms-bootstrap";
 const UNAUTHORIZED_STATUSES = [401, 403];
-export const FRONTEND_MANIFEST_VERSION = 1;
+export const FRONTEND_MANIFEST_VERSION = 2;
 
 export function bootstrapHeaders(secret?: string): Record<string, string> {
   return secret ? { [BOOTSTRAP_HEADER]: secret } : {};

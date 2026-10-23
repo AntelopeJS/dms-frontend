@@ -541,6 +541,29 @@ describe("Async data in the browser", () => {
     assert.equal(runtime.pageLoading.value, false);
   });
 
+  it("says whether the browser hydrates: until the page has, and never in a page the server did not render", async () => {
+    const hydrated = createDmsFrontendRuntime(undefined, {});
+    const { app } = clientApp(hydrated);
+    const isHydrating = () => app.runWithContext(runtimeModule.isDmsHydrating);
+    const suspense = app.runWithContext(() =>
+      runtimeModule.dmsPageSuspenseProps(),
+    );
+
+    assert.equal(isHydrating(), true);
+    suspense.onResolve();
+    assert.equal(isHydrating(), true);
+    await nextTick();
+    assert.equal(isHydrating(), false);
+
+    for (const runtime of [
+      createDmsFrontendRuntime(),
+      createDmsFrontendRuntime(undefined, {}, true),
+    ]) {
+      const other = clientApp(runtime).app;
+      assert.equal(other.runWithContext(runtimeModule.isDmsHydrating), false);
+    }
+  });
+
   it("clears the data and aborts its run", async () => {
     const { app } = clientApp();
     let signal: AbortSignal | undefined;

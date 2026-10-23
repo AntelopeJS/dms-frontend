@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.8.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.7.1...v0.8.0)
+
+### 🚀 Enhancements
+
+- **server:** Trust the client address header the hosting platform writes (DMS_CLIENT_IP_HEADER) ([#167](https://github.com/AntelopeJS/dms-frontend/pull/167))
+- **server:** Set DMS_CLIENT_IP_HEADER on backend requests to the client resolved ([#173](https://github.com/AntelopeJS/dms-frontend/pull/173))
+- **server:** Cap a proxied body with maxBodyBytes (413) and allow hour-long transfers ([#174](https://github.com/AntelopeJS/dms-frontend/pull/174))
+- **build:** ⚠️  Build the frontend from the project, without a backend or snapshot ([#177](https://github.com/AntelopeJS/dms-frontend/pull/177))
+- **start:** Say whether the backend took the ready report ([#180](https://github.com/AntelopeJS/dms-frontend/pull/180))
+
+### 🩹 Fixes
+
+- **server:** Compile a component's style block before inlining it in the dev document ([#160](https://github.com/AntelopeJS/dms-frontend/pull/160))
+- **ssr:** Link the CSS of every component the server rendered ([#162](https://github.com/AntelopeJS/dms-frontend/pull/162))
+- **server:** ⚠️  Stop waiting out a backend's 503 (revert #156 and #158) ([#175](https://github.com/AntelopeJS/dms-frontend/pull/175), [#156](https://github.com/AntelopeJS/dms-frontend/issues/156), [#158](https://github.com/AntelopeJS/dms-frontend/issues/158))
+- **start:** Compare the build with the backend once it first answers, not only within 10 s ([#178](https://github.com/AntelopeJS/dms-frontend/pull/178))
+- **server:** Keep a backend stream that fails from ending the server ([#150](https://github.com/AntelopeJS/dms-frontend/pull/150))
+- **server:** Relay the client's time zone and every realtime header to the backend ([#164](https://github.com/AntelopeJS/dms-frontend/pull/164))
+- **server:** ⚠️  A session outlives the browser only when written persistent ([#165](https://github.com/AntelopeJS/dms-frontend/pull/165))
+- **server:** Import the built SSR renderer by file URL on Windows ([#163](https://github.com/AntelopeJS/dms-frontend/pull/163))
+- **server:** Relay backend redirects instead of following them ([#151](https://github.com/AntelopeJS/dms-frontend/pull/151))
+- **server:** Relay a backend redirect to the client instead of following it ([#186](https://github.com/AntelopeJS/dms-frontend/pull/186))
+- **server:** One redirect option after #151 and #186, and a proxied path in the relative Location test ([#187](https://github.com/AntelopeJS/dms-frontend/pull/187), [#151](https://github.com/AntelopeJS/dms-frontend/issues/151), [#186](https://github.com/AntelopeJS/dms-frontend/issues/186))
+- **server:** Drop the duplicate redirect option and proxy /media in the redirect test ([#188](https://github.com/AntelopeJS/dms-frontend/pull/188))
+
+### 📖 Documentation
+
+- **production:** Uploads stop at 100 MB at the Cloudflare edge on AntelopeJS Cloud ([#176](https://github.com/AntelopeJS/dms-frontend/pull/176))
+
+### 🏡 Chore
+
+- ⚠️  Build the renderer with Vite 8 (Rolldown), entry kept in one file ([#161](https://github.com/AntelopeJS/dms-frontend/pull/161))
+
+#### ⚠️ Breaking Changes
+
+- **build:** ⚠️  Build the frontend from the project, without a backend or snapshot ([#177](https://github.com/AntelopeJS/dms-frontend/pull/177))
+- **server:** ⚠️  Stop waiting out a backend's 503 (revert #156 and #158) ([#175](https://github.com/AntelopeJS/dms-frontend/pull/175), [#156](https://github.com/AntelopeJS/dms-frontend/issues/156), [#158](https://github.com/AntelopeJS/dms-frontend/issues/158))
+- **server:** ⚠️  A session outlives the browser only when written persistent ([#165](https://github.com/AntelopeJS/dms-frontend/pull/165))
+- ⚠️  Build the renderer with Vite 8 (Rolldown), entry kept in one file ([#161](https://github.com/AntelopeJS/dms-frontend/pull/161))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+- Maxime Westhoven <maxime@altab.be>
+- Alessandro Aloisio
+
 ## v0.7.1
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.7.0...v0.7.1)

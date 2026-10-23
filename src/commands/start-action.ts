@@ -2,20 +2,15 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { CliError, formatDuration, getProcessUi } from "@antelopejs/core/cli";
 import {
-  canonicalizeBackendUrl,
-  getWorkspaceDir,
-  collectManifestSecrets,
   describeSecretSources,
+  getLayerSafeName,
   parsePort,
-  readCachedManifest,
   reportManifestSecrets,
   requireBackendUrl,
   resolveManifestSecrets,
   resolveSessionSecret,
-  writeWorkspaceMeta,
 } from "../common";
 import {
-  cachedAge,
   formatAge,
   showWorkspace,
   writeHeader,
@@ -24,8 +19,15 @@ import {
 import { reservePort } from "../ports";
 import { readyLines, runServer } from "../server-process";
 import { reportAvailableUpdate } from "../update-check";
-import { compareWithBackend, reportFrontendReady } from "../module-set";
-import { type BuildOrigin, manifestDigest, readBuildOrigin } from "../snapshot";
+import {
+  OWN_RELEASE,
+  reportFrontendReadyOnceAnswered,
+  type ServedModule,
+} from "../module-set";
+import {
+  type ProjectFrontendModule,
+  readProjectFrontendModules,
+} from "../project-modules";
 import { SERVER_OPTIONS_FILE } from "../config";
 import { MANIFEST_SECRET_ENV } from "../manifest-secrets";
 import {
@@ -33,9 +35,11 @@ import {
   parsePrivateOptions,
   unfilledPrivateValues,
 } from "../private-values";
+import type { FrontendModuleRegistryEntry } from "../derived-outputs";
 import type { FrontendModuleOptions } from "../workspace";
+import { productionWorkspace } from "./build-action";
 
-const BUILD_TIME_MANIFEST = "the build-time manifest";
+const PUBLIC_OPTIONS_VARIABLE = "DMS_PUBLIC_OPTIONS";
 
 /** The private options by module id the build wrote, none when unreadable. */
 function builtPrivateOptions(
@@ -111,72 +115,117 @@ function serverNodeEnv(): string {
 export interface StartOptions {
   backendUrl?: string;
   port: string;
-  /** Workspace the build was made in, when it is not the one under the home. */
+  /** The AntelopeJS project the build was made from. */
+  project: string;
+  /** The AntelopeJS environment whose configuration applies. */
+  env: string;
+  /** Workspace the build was made in, `<project>/.dms-frontend` by default. */
   workspace?: string;
 }
 
 /**
- * Says, once the server is ready, whether the backend still serves the
- * module set the build was made from, and how to refresh a snapshot that
- * aged. The server never waits for it.
+ * The public options of each module by its id in the build's registry, as
+ * the project's configuration gives them with the current variables.
  */
-async function reportDrift(
-  backendUrl: string,
-  origin: BuildOrigin | undefined,
-): Promise<void> {
-  const ui = getProcessUi();
-  const bootstrapSecret = process.env.DMS_BOOTSTRAP_SECRET?.trim();
-  if (!origin) return;
-  if (origin.authenticated === false) {
-    ui.message(
-      "info",
-      `Built from modules ${origin.digest}; not compared with the backend`,
-      {
-        detail:
-          "The build read the manifest without DMS_BOOTSTRAP_SECRET, which leaves out the backend proxies.",
-      },
-    );
-    return;
-  }
-  if (!bootstrapSecret) {
-    ui.message(
-      "info",
-      `Built from modules ${origin.digest}; not compared with the backend`,
-      { detail: "Set DMS_BOOTSTRAP_SECRET to have start compare them." },
-    );
-    return;
-  }
-  const drift = await compareWithBackend(
-    backendUrl,
-    origin.digest,
-    manifestDigest,
-    bootstrapSecret,
+function publicOptionsById(
+  modules: ProjectFrontendModule[],
+): Record<string, FrontendModuleOptions> {
+  return Object.fromEntries(
+    modules.map(({ layer }) => {
+      const options = layer.options ?? {};
+      return [
+        getLayerSafeName(layer),
+        layer.configKey ? { [layer.configKey]: options } : options,
+      ];
+    }),
   );
-  if (drift.status === "matches") {
-    ui.message(
-      "info",
-      `The backend serves the modules ${origin.digest} this build was made from`,
-    );
-    return;
+}
+
+/**
+ * The modules the build serves, from the registry its server reads: the
+ * report names these, whatever the current variables would build. None when
+ * the registry is unreadable.
+ */
+function builtModules(workspaceDir: string): ServedModule[] {
+  try {
+    const { modules } = JSON.parse(
+      readFileSync(
+        join(workspaceDir, "generated-frontend-modules.json"),
+        "utf8",
+      ),
+    ) as { modules?: FrontendModuleRegistryEntry[] };
+    return (modules ?? []).map((module) => ({
+      name: module.name ?? module.id,
+      version: module.version,
+    }));
+  } catch {
+    return [];
   }
-  if (drift.status === "unknown") {
-    ui.message(
-      "info",
-      `Built from modules ${origin.digest}; not compared with the backend: ${drift.reason}`,
-    );
-    return;
-  }
-  const refresh =
-    origin.source === "snapshot"
-      ? `Refresh the snapshot and rebuild: ajs dms snapshot -b ${backendUrl} -o <dir>, then ajs dms build --from <dir>`
-      : `Rebuild: ajs dms build -b ${backendUrl}`;
+}
+
+/**
+ * Warns when the current variables give the project other modules than the
+ * build serves: the server keeps serving the build's, so only a rebuild
+ * brings in a module a variable turned on, or drops one it turned off.
+ */
+function reportModuleSetDrift(
+  built: ServedModule[],
+  modules: ProjectFrontendModule[],
+): void {
+  const builtNames = new Set(built.map(({ name }) => name));
+  const currentNames = new Set(
+    modules.map(({ layer }) => layer.name ?? layer.path),
+  );
+  const added = [...currentNames].filter((name) => !builtNames.has(name));
+  const removed = [...builtNames].filter((name) => !currentNames.has(name));
+  if (added.length === 0 && removed.length === 0) return;
+  const ui = getProcessUi();
   ui.message(
     "warn",
-    `The backend serves modules ${drift.served}; this build was made from ${origin.digest} (${origin.source}${cachedAge(origin.takenAt)})`,
+    "The project's modules differ from the ones the build serves: rebuild to apply them",
     {
       details: [
-        "Pages of modules added or removed since, or whose routes changed, are missing or stale.",
-        `${ui.symbols.levels.hint} ${refresh}`,
+        ...(added.length > 0
+          ? [`Not in the build: ${added.sort().join(", ")}`]
+          : []),
+        ...(removed.length > 0
+          ? [`Built, no longer in the project: ${removed.sort().join(", ")}`]
+          : []),
+        `${ui.symbols.levels.hint} Build again with the deployment's variables: ajs dms build`,
+      ],
+    },
+  );
+}
+
+/**
+ * Tells the backend which module versions this build serves, once it first
+ * answers: the backend compares them with the ones it runs, and its module
+ * store reads which modules the build serves. It warns only on a difference,
+ * so the outcome is said here: that is the one trace the check ran.
+ */
+async function reportServedModules(
+  backendUrl: string,
+  modules: ServedModule[],
+): Promise<void> {
+  const isTaken = await reportFrontendReadyOnceAnswered(
+    backendUrl,
+    modules,
+    process.env.DMS_BOOTSTRAP_SECRET,
+  );
+  const ui = getProcessUi();
+  if (isTaken) {
+    ui.message(
+      "info",
+      `[DMS] Reported ${modules.length} modules to the backend (dms-frontend ${OWN_RELEASE.version})`,
+    );
+    return;
+  }
+  ui.message(
+    "warn",
+    "[DMS] The backend refused the ready report: it cannot check this build's module versions",
+    {
+      details: [
+        `${ui.symbols.levels.hint} Set DMS_BOOTSTRAP_SECRET to the backend's frontend.bootstrapSecret`,
       ],
     },
   );
@@ -184,47 +233,29 @@ async function reportDrift(
 
 export async function runStart(options: StartOptions): Promise<void> {
   const startedAt = Date.now();
-  const explicitWorkspace = options.workspace
-    ? resolve(options.workspace)
-    : undefined;
-  const origin = explicitWorkspace
-    ? readBuildOrigin(explicitWorkspace)
-    : undefined;
-  const backendUrl = requireBackendUrl(
-    options.backendUrl ?? origin?.backendUrl,
-  );
+  const workspaceDir = resolve(productionWorkspace(options));
+  const backendUrl = requireBackendUrl(options.backendUrl);
   const requestedPort = parsePort(options.port);
   const sessionSecret = resolveSessionSecret("start");
-  const workspaceDir = explicitWorkspace ?? getWorkspaceDir(backendUrl);
   const serverPath = join(workspaceDir, "server.mjs");
   const clientPath = join(workspaceDir, "dist", "client", "index.html");
 
   if (!existsSync(serverPath) || !existsSync(clientPath)) {
     throw new CliError({
-      title: `No production build for ${backendUrl}`,
+      title: "No production build to serve",
       reason: `${showWorkspace(workspaceDir)} has no built server or client.`,
       fixes: [
-        explicitWorkspace
-          ? `Build it first: ajs dms build --from <snapshot> --workspace ${options.workspace}`
-          : `Build it first: ajs dms build -b ${backendUrl}`,
+        options.workspace
+          ? `Build it first: ajs dms build --workspace ${options.workspace}`
+          : "Build it first: ajs dms build",
       ],
     });
   }
 
-  // Serving from the workspace is a use, which `workspaces` reports. One the
-  // caller named is not listed there, and may be read-only (an image): start
-  // writes nothing into it.
-  if (!explicitWorkspace) {
-    writeWorkspaceMeta(
-      workspaceDir,
-      backendUrl,
-      canonicalizeBackendUrl(backendUrl),
-    );
-  }
   const builtAt = statSync(clientPath).mtime.toISOString();
   writeHeader("start", [
     backendUrl,
-    "production",
+    options.env,
     `built ${formatAge(builtAt)}`,
   ]);
 
@@ -241,24 +272,22 @@ export async function runStart(options: StartOptions): Promise<void> {
   }
   const port = reserved.port;
 
-  // The build cached the manifest it was made from, without private values
-  // since builds drop them: the server's secrets come from the environment.
-  // A workspace built before keeps the ones it cached.
-  const secrets = resolveManifestSecrets(
-    collectManifestSecrets(
-      readCachedManifest(workspaceDir)?.manifest.modules ?? [],
-    ),
-  );
+  const modules = await readProjectFrontendModules({
+    projectDir: options.project,
+    environment: options.env,
+  });
+  const built = builtModules(workspaceDir);
+  reportModuleSetDrift(built, modules);
+  // The private values are secrets the server reads from its environment:
+  // the project's configuration never holds them.
+  const secrets = resolveManifestSecrets({ published: {}, conflicts: [] });
   reportManifestSecrets(
     secrets,
     (count) =>
       `Set ${count === 1 ? "it" : "them"} in the server's environment, with the value${count === 1 ? "" : "s"} the backend uses`,
   );
   reportUnfilledPrivateValues(workspaceDir);
-  const secretSources = describeSecretSources(
-    secrets.sources,
-    BUILD_TIME_MANIFEST,
-  );
+  const secretSources = describeSecretSources(secrets.sources);
   const nodeEnv = serverNodeEnv();
 
   await reserved.release();
@@ -272,6 +301,7 @@ export async function runStart(options: StartOptions): Promise<void> {
       PORT: String(port),
       DMS_API_BASE_URL: backendUrl,
       DMS_SESSION_SECRET: sessionSecret,
+      [PUBLIC_OPTIONS_VARIABLE]: JSON.stringify(publicOptionsById(modules)),
       ...secrets.env,
       DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "true",
     },
@@ -287,17 +317,8 @@ export async function runStart(options: StartOptions): Promise<void> {
         ]),
         footer: "Ctrl+C to stop",
       });
-      // The backend's module store reads it to tell the Modules page which
-      // modules this build serves.
-      void reportFrontendReady(
-        backendUrl,
-        (readCachedManifest(workspaceDir)?.manifest.modules ?? []).map(
-          (module) => module.name,
-        ),
-        process.env.DMS_BOOTSTRAP_SECRET,
-      );
+      void reportServedModules(backendUrl, built);
       void reportAvailableUpdate({ isFollowed: true });
-      void reportDrift(backendUrl, origin ?? readBuildOrigin(workspaceDir));
     },
   });
 

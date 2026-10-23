@@ -71,6 +71,23 @@ describe("renderer dependency patches", () => {
     assert.ok(shipped.length > 0);
     assert.deepEqual(declared, shipped);
   });
+
+  it("pins every patched dependency to the version its patch targets", () => {
+    // A range would let a fresh install resolve a newer release, which pnpm
+    // then refuses to install because the patch no longer has a target.
+    const template = join("templates", "vue");
+    const { dependencies } = JSON.parse(
+      readFileSync(join(template, "package.json"), "utf8"),
+    );
+    const config = readFileSync(join(template, "pnpm-workspace.yaml"), "utf8");
+    const patched = [
+      ...config.matchAll(/^\s+"(@?[^@"]+)@([^"]+)":\s*patches\/\S+$/gm),
+    ];
+    assert.ok(patched.length > 0);
+    for (const [, name, version] of patched) {
+      assert.equal(dependencies[name], version, name);
+    }
+  });
 });
 
 describe("workspace identity", () => {
@@ -131,11 +148,9 @@ after(() => {
 });
 
 const cachedManifest: Manifest = {
-  pack: "/dms/modules",
   modules: [
     {
       name: "@scope/dms-frontend-module",
-      archiveName: "@scope-dms-frontend-module",
       path: "/srv/layers/dms",
       priority: 0,
       privateOptions: { oauth: { relaySecret: "s3cret" } },
@@ -180,7 +195,7 @@ describe("manifest cache", () => {
       manifest: cachedManifest,
       fetchedAt: "2026-08-06T10:00:00Z",
     });
-    assert.equal(readCachedManifest(dir)?.manifest.pack, cachedManifest.pack);
+    assert.deepEqual(readCachedManifest(dir)?.manifest, cachedManifest);
   });
 
   it("ignores a file that is not a cache entry", () => {
@@ -191,8 +206,8 @@ describe("manifest cache", () => {
 describe("layer paths withheld by the backend", () => {
   const backendUrl = "http://127.0.0.1:5010";
   const pathless: ManifestModule[] = [
-    { name: "@scope/dms-frontend-module", archiveName: "a", priority: 0 },
-    { name: "@scope/other-module", archiveName: "b", priority: 0 },
+    { name: "@scope/dms-frontend-module", priority: 0 },
+    { name: "@scope/other-module", priority: 0 },
   ];
 
   function messageFor(

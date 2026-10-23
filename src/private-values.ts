@@ -3,11 +3,7 @@
 // environment, so nothing a build writes keeps their values.
 
 import { UsageError } from "./config";
-import type {
-  FrontendModuleOptions,
-  FrontendModuleValue,
-  ManifestModule,
-} from "./workspace";
+import type { FrontendModuleOptions, FrontendModuleValue } from "./workspace";
 
 function emptied(value: FrontendModuleValue): FrontendModuleValue {
   if (typeof value === "string") return "";
@@ -16,27 +12,49 @@ function emptied(value: FrontendModuleValue): FrontendModuleValue {
   return value;
 }
 
-function emptiedOptions(options: FrontendModuleOptions): FrontendModuleOptions {
+/**
+ * Private options with every string emptied. The shape stays: the generated
+ * server fills an empty secret from its environment (`DMS_HTML_RENDER_SECRET`,
+ * `DMS_OAUTH_RELAY_SECRET`, or any of them from `DMS_PRIVATE_OPTIONS`), and
+ * only a section that exists can be filled.
+ */
+export function emptiedOptions(
+  options: FrontendModuleOptions,
+): FrontendModuleOptions {
   return Object.fromEntries(
     Object.entries(options).map(([key, value]) => [key, emptied(value)]),
   );
 }
 
+function filled(
+  shape: FrontendModuleValue,
+  value: FrontendModuleValue | undefined,
+): FrontendModuleValue {
+  if (typeof shape === "string") return typeof value === "string" ? value : "";
+  if (Array.isArray(shape))
+    return shape.map((item, index) =>
+      filled(item, Array.isArray(value) ? value[index] : undefined),
+    );
+  if (shape !== null && typeof shape === "object")
+    return filledOptions(shape, isOptions(value) ? value : undefined);
+  return shape;
+}
+
 /**
- * The modules with every string of their private options emptied. The shape
- * stays: the generated server fills an empty secret from its environment
- * (`DMS_HTML_RENDER_SECRET`, `DMS_OAUTH_RELAY_SECRET`, or any of them from
- * `DMS_PRIVATE_OPTIONS`), and only a section that exists can be filled.
- *
- * @param modules Modules as the backend served them
+ * Private options in the shape a module's `frontendModule` returns, each
+ * string taken from `values` at the same path: what `start` fills from its
+ * environment, `dev` fills from the backend. A value outside the shape is
+ * left out, as it would be in production.
  */
-export function withoutPrivateValues(
-  modules: readonly ManifestModule[],
-): ManifestModule[] {
-  return modules.map((module) =>
-    module.privateOptions
-      ? { ...module, privateOptions: emptiedOptions(module.privateOptions) }
-      : { ...module },
+export function filledOptions(
+  shape: FrontendModuleOptions,
+  values: FrontendModuleOptions | undefined,
+): FrontendModuleOptions {
+  return Object.fromEntries(
+    Object.entries(shape).map(([key, value]) => [
+      key,
+      filled(value, values?.[key]),
+    ]),
   );
 }
 

@@ -114,15 +114,18 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["compress-assets.mjs", "compress-assets.mjs"],
   ["head-order.mjs", "head-order.mjs"],
   ["client-chunking.mjs", "client-chunking.mjs"],
+  ["entry-weight.mjs", "entry-weight.mjs"],
   ["client-server-guard.mjs", "client-server-guard.mjs"],
   ["ui-inertia-page.mjs", "ui-inertia-page.mjs"],
   ["ui-request-state.mjs", "ui-request-state.mjs"],
   ["icon-api.mjs", "icon-api.mjs"],
   ["icon-scan.mjs", "icon-scan.mjs"],
+  ["ui-kbd.mjs", "ui-kbd.mjs"],
   ["email-renderer.ts", "email-renderer.ts"],
   ["email-runtime.ts", "email-runtime.ts"],
   ["email-locales.ts", "email-locales.ts"],
   ["email-markup.ts", "email-markup.ts"],
+  ["public-options.ts", "public-options.ts"],
   ["tsconfig.json", "tsconfig.json"],
   ["typecheck-loader.mjs", "typecheck-loader.mjs"],
   ["prepare-types.mjs", "prepare-types.mjs"],
@@ -344,6 +347,18 @@ export const Options = {
       "DMS_WORKSPACE_DIR",
     );
   },
+
+  project: new Option(
+    "--project <dir>",
+    "The AntelopeJS project whose antelope.config.ts and installed modules make the frontend",
+  ).default("."),
+
+  env: new Option(
+    "-e, --env <environment>",
+    "The AntelopeJS environment whose configuration applies, as ajs project start -e",
+  )
+    .default("production")
+    .env("ANTELOPEJS_LAUNCH_ENV"),
 
   bootstrapSecret(discovery?: string): Option {
     return new Option(

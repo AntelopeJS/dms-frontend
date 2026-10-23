@@ -1,0 +1,24 @@
+diff --git a/dist/index.js b/dist/index.js
+index 772a5e9..d433a57 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2047,11 +2047,16 @@ function useColorMode(options = {}) {
+ 		let attributeToChange = null;
+ 		if (attribute === "class") {
+ 			const current = value.split(/\s/g);
++			// Patched by @antelopejs/dms-frontend until vueuse ships the fix: only
++			// the classes `el` lacks or still carries count as a change, so a mode
++			// already applied (by the server render, another instance or the
++			// mount re-run) skips the forced style recalculation below.
+ 			Object.values(modes).flatMap((i) => (i || "").split(/\s/g)).filter(Boolean).forEach((v) => {
+-				if (current.includes(v)) classesToAdd.add(v);
+-				else classesToRemove.add(v);
++				if (current.includes(v)) {
++					if (!el.classList.contains(v)) classesToAdd.add(v);
++				} else if (el.classList.contains(v)) classesToRemove.add(v);
+ 			});
+-		} else attributeToChange = {
++		} else if (el.getAttribute(attribute) !== value) attributeToChange = {
+ 			key: attribute,
+ 			value
+ 		};

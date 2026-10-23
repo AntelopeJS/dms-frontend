@@ -14,20 +14,10 @@ import {
 } from "../child-output";
 import {
   CancelledError,
-  flagOrEnv,
   type FramedCommandResult,
-  normalizeBootstrapSecret,
-  parseBackendUrl,
-  requireBackendUrl,
   runFramedCommand,
 } from "../common";
 import {
-  type FrontendSnapshot,
-  readSnapshot,
-  writeBuildOrigin,
-} from "../snapshot";
-import {
-  cachedAge,
   endInterruptedTask,
   showWorkspace,
   writeBlankLine,
@@ -40,44 +30,28 @@ import {
   viteLogLevel,
   ViteWarnings,
 } from "../vite-output";
+import { entryWeightThreshold, reportEntryWeight } from "../entry-weight";
 import { setUpWorkspace } from "./workspace-task";
 
 export interface BuildOptions {
-  backendUrl?: string;
-  force?: boolean;
-  offline?: boolean;
-  bootstrapSecret?: string;
-  /** Snapshot directory to build from, without the backend. */
-  from?: string;
-  /** Workspace directory to build into, instead of the one under the home. */
+  /** The AntelopeJS project the modules are read from. */
+  project: string;
+  /** The AntelopeJS environment whose configuration applies. */
+  env: string;
+  /** Workspace directory to build into, `<project>/.dms-frontend` by default. */
   workspace?: string;
+  force?: boolean;
 }
 
-/**
- * The snapshot a build reads, and the backend URL it is for: the one given,
- * or the one the snapshot was taken from.
- */
-function buildSource(options: BuildOptions): {
-  backendUrl: string;
-  snapshot?: { dir: string; snapshot: FrontendSnapshot };
-} {
-  if (!options.from) {
-    return { backendUrl: requireBackendUrl(options.backendUrl) };
-  }
-  if (options.offline) {
-    throw new CliError({
-      title: "--from and --offline cannot be combined",
-      reason: "A snapshot build never asks the backend already.",
-      fixes: ["Drop --offline"],
-    });
-  }
-  const snapshot = readSnapshot(options.from);
-  return {
-    backendUrl: options.backendUrl
-      ? parseBackendUrl(options.backendUrl)
-      : snapshot.backendUrl,
-    snapshot: { dir: options.from, snapshot },
-  };
+/** Where a project's production frontend is built, unless --workspace names one. */
+export const DEFAULT_WORKSPACE_DIR = ".dms-frontend";
+
+/** The workspace a production command uses for a project. */
+export function productionWorkspace(options: {
+  project: string;
+  workspace?: string;
+}): string {
+  return options.workspace ?? join(options.project, DEFAULT_WORKSPACE_DIR);
 }
 
 interface BuildStep {
@@ -236,42 +210,18 @@ async function buildProduction(
   options: BuildOptions,
   startedAt: number,
 ): Promise<void> {
-  const { backendUrl, snapshot } = buildSource(options);
-  const bootstrapSecret = snapshot
-    ? undefined
-    : normalizeBootstrapSecret(options.bootstrapSecret);
+  // Read before the build, so that a value it cannot use fails at once.
+  entryWeightThreshold(process.env);
   const ui = getProcessUi();
+  const workspace = productionWorkspace(options);
 
-  writeHeader("build", [backendUrl, "production"]);
-  const {
-    workspaceDir,
-    layers,
-    manifestFromCache,
-    manifestFetchedAt,
-    buildOrigin,
-  } = await setUpWorkspace({
-    backendUrl,
+  writeHeader("build", [options.project, options.env]);
+  const { workspaceDir, layers } = await setUpWorkspace({
     force: !!options.force,
     mode: "build",
-    offline: snapshot ? false : flagOrEnv(options.offline, "DMS_OFFLINE"),
-    bootstrapSecret,
-    workspaceDir: options.workspace,
-    snapshot,
+    workspaceDir: workspace,
+    project: { projectDir: options.project, environment: options.env },
   });
-
-  if (snapshot) {
-    ui.message(
-      "info",
-      `Building from the snapshot of ${snapshot.snapshot.backendUrl}${cachedAge(snapshot.snapshot.takenAt)}`,
-      { detail: `Modules digest ${snapshot.snapshot.digest}` },
-    );
-  } else if (manifestFromCache) {
-    ui.message(
-      "warn",
-      `Building from the manifest and layers archive${cachedAge(manifestFetchedAt)}`,
-      { detail: "The output may not match the current backend." },
-    );
-  }
 
   ui.message("info", "Building for production", {
     detail: `Workspace  ${showWorkspace(workspaceDir)}`,
@@ -292,10 +242,8 @@ async function buildProduction(
     },
   };
   for (const step of BUILD_STEPS) await runBuildStep(step, context);
-  // Recorded once the build succeeded: a failed one leaves the previous
-  // build in dist, which the previous origin still describes.
-  writeBuildOrigin(workspaceDir, buildOrigin);
   reportViteWarnings(context.warnings, isVerbose, ui);
+  reportEntryWeight(ui, workspaceDir, process.env);
 
   writeBlankLine();
   ui.summary({
@@ -305,10 +253,10 @@ async function buildProduction(
     nextSteps: [
       {
         command: options.workspace
-          ? `ajs dms start -b ${backendUrl} --workspace ${options.workspace}`
-          : `ajs dms start -b ${backendUrl}`,
+          ? `ajs dms start -b <backend> --workspace ${options.workspace}`
+          : "ajs dms start -b <backend>",
         description:
-          "with DMS_SESSION_SECRET and the server's secrets in its environment",
+          "from the project, with DMS_SESSION_SECRET, the server's secrets and the deployment's variables in its environment",
       },
     ],
   });

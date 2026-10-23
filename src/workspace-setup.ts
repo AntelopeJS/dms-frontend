@@ -23,19 +23,23 @@ import {
   stripAnsi,
   writeChildLine,
 } from "./child-output";
-import {
-  assertLayerPathsServed,
-  buildLayersFromCache,
-  buildLayersFromPaths,
-  downloadAndExtractLayers,
-  assertCachedArchivesExist,
-} from "./layers";
+import { assertLayerPathsServed, buildLayersFromPaths } from "./layers";
 import {
   assertCachedLayerPathsExist,
   type ManifestCacheUse,
+  type ResolvedManifest,
   resolveManifest,
-  writeCachedManifest,
 } from "./manifest";
+import {
+  readProjectModulesFresh,
+  warnModuleDrift,
+  withBackendValues,
+} from "./dev-modules";
+import {
+  type ProjectFrontendModule,
+  type ProjectModulesOptions,
+  readProjectFrontendModules,
+} from "./project-modules";
 import {
   collectManifestSecrets,
   type ManifestSecrets,
@@ -51,19 +55,13 @@ import {
 import {
   ensureExplicitWorkspace,
   ensureWorkspace,
-  type Manifest,
   ResolvedLayer,
   writeWorkspaceMeta,
 } from "./workspace";
-import {
-  type BuildOrigin,
-  type FrontendSnapshot,
-  manifestDigest,
-  SNAPSHOT_LAYERS_DIR,
-} from "./snapshot";
 import { CancelledError, exitCodeForSignal } from "./cancellation";
 import { endInterruptedTask } from "./output";
 import { canonicalizeBackendUrl, DEPS_HASH_FILE } from "./config";
+import { InvalidLocaleFileError } from "./locale-files";
 
 // ============================================================================
 // Constants
@@ -398,10 +396,15 @@ export async function runFramedCommand(
 // ============================================================================
 
 export interface SetupWorkspaceOptions {
-  backendUrl: string;
   force: boolean;
-  /** "dev" uses direct paths, "build" downloads ZIP */
+  /**
+   * "build" reads the project itself; "dev" reads the project too when
+   * `project` is set, completed by the backend's manifest, and the manifest
+   * alone otherwise (`prepare`)
+   */
   mode: "dev" | "build";
+  /** The backend whose manifest a dev workspace follows */
+  backendUrl?: string;
   /** Skip the backend fetch and reuse the cached manifest */
   offline?: boolean;
   /** Frontend URL forwarded to the backend on the manifest fetch (dev) */
@@ -419,11 +422,8 @@ export interface SetupWorkspaceOptions {
    * backend under the loader home: a build that ships with the project.
    */
   workspaceDir?: string;
-  /**
-   * Build from this snapshot, without the backend: its manifest and the layers
-   * under `<dir>/layers`. Build mode only.
-   */
-  snapshot?: { dir: string; snapshot: FrontendSnapshot };
+  /** The project the modules are read from: always in build, optional in dev. */
+  project?: ProjectModulesOptions;
   /** Called before `pnpm install` starts, e.g. to end the task that set the workspace up */
   beforeInstall?: () => Promise<void>;
 }
@@ -437,147 +437,170 @@ export interface SetupWorkspaceResult {
   manifestFetchedAt?: string;
   /** Server secrets the backend published in the manifest */
   manifestSecrets: ManifestSecrets;
-  /** What the workspace is made from, for `build` to record once it built */
-  buildOrigin: BuildOrigin;
-}
-
-/** A build is deployed, so only --offline lets it use the cache. */
-function manifestCacheUse(
-  mode: SetupWorkspaceOptions["mode"],
-  offline?: boolean,
-): ManifestCacheUse {
-  if (offline) return "offline";
-  return mode === "build" ? "never" : "fallback";
 }
 
 interface WorkspaceSource {
-  manifest: Manifest;
   fromCache: boolean;
   fetchedAt?: string;
   layers: ResolvedLayer[];
+  secrets: ManifestSecrets;
 }
 
-/** The manifest and layers of a snapshot: no backend is asked. */
-async function snapshotLayers(
-  { dir, snapshot }: NonNullable<SetupWorkspaceOptions["snapshot"]>,
+/** The project's modules, from its configuration: no backend is asked. */
+async function projectLayers(
+  project: ProjectModulesOptions,
+): Promise<WorkspaceSource> {
+  const modules: ProjectFrontendModule[] =
+    await readProjectFrontendModules(project);
+  return {
+    fromCache: false,
+    layers: modules.map((module) => module.layer),
+    secrets: { published: {}, conflicts: [] },
+  };
+}
+
+/** The manifest a development backend serves, or the one cached from it. */
+function servedManifest(
+  opts: SetupWorkspaceOptions,
+  backendUrl: string,
+  workspaceDir: string,
+): Promise<ResolvedManifest> {
+  const { offline, clientUrl, bootstrapSecret } = opts;
+  const cacheUse: ManifestCacheUse = offline ? "offline" : "fallback";
+  return resolveManifest(workspaceDir, backendUrl, cacheUse, {
+    clientUrl,
+    bootstrapSecret,
+  });
+}
+
+/**
+ * The project's modules, read with `dev: true`, with the secrets and the
+ * development origins of the backend's manifest. The manifest is still
+ * fetched, and cached: it hands the backend the dev server's address, and
+ * `dev` follows its module set to rebuild when the module store changes it.
+ */
+async function projectLayersInDev(
+  opts: SetupWorkspaceOptions,
+  project: ProjectModulesOptions,
+  backendUrl: string,
   workspaceDir: string,
 ): Promise<WorkspaceSource> {
-  const { manifest, takenAt } = snapshot;
-  const cacheDir = join(dir, SNAPSHOT_LAYERS_DIR);
-  assertCachedArchivesExist(manifest.modules, cacheDir, takenAt);
-  // `start` reads the module set the build serves from the cached manifest.
-  writeCachedManifest(workspaceDir, manifest, "drop", takenAt);
+  const { manifest, fromCache, fetchedAt } = await servedManifest(
+    opts,
+    backendUrl,
+    workspaceDir,
+  );
+  const modules = await readProjectModulesFresh({ ...project, dev: true });
+  const layers = withBackendValues(modules, manifest);
+  warnModuleDrift(layers, manifest);
   return {
-    manifest,
-    fromCache: false,
-    layers: await buildLayersFromCache(manifest.modules, cacheDir),
+    fromCache,
+    fetchedAt,
+    layers,
+    secrets: collectManifestSecrets(
+      layers.map((layer) => ({
+        name: layer.name ?? "",
+        priority: layer.priority ?? 0,
+        privateOptions: layer.privateOptions,
+      })),
+    ),
   };
 }
 
 /**
- * The manifest and layers the backend serves, or the workspace cached from
- * it: their paths in dev, the extracted archive in build.
+ * The manifest and source paths a development backend serves, or the ones
+ * cached from it.
  */
 async function servedLayers(
   opts: SetupWorkspaceOptions,
+  backendUrl: string,
   workspaceDir: string,
 ): Promise<WorkspaceSource> {
-  const { backendUrl, force, mode, offline, clientUrl, bootstrapSecret } = opts;
-  const resolved = await resolveManifest(
-    workspaceDir,
+  const { bootstrapSecret } = opts;
+  const { manifest, fromCache, fetchedAt } = await servedManifest(
+    opts,
     backendUrl,
-    manifestCacheUse(mode, offline),
-    {
-      clientUrl,
-      bootstrapSecret,
-      privateValues: mode === "build" ? "drop" : "keep",
-    },
+    workspaceDir,
   );
-  const { manifest, fromCache, fetchedAt } = resolved;
-
-  if (mode === "dev") {
-    assertLayerPathsServed(manifest.modules, backendUrl, {
-      bootstrapSecret,
-      cache: fromCache ? { fetchedAt } : undefined,
-    });
-    if (fromCache) {
-      assertCachedLayerPathsExist(manifest.modules, fetchedAt);
-    }
-    return { ...resolved, layers: buildLayersFromPaths(manifest.modules) };
-  }
-  const cacheDir = join(workspaceDir, ".layers-cache");
+  assertLayerPathsServed(manifest.modules, backendUrl, {
+    bootstrapSecret,
+    cache: fromCache ? { fetchedAt } : undefined,
+  });
   if (fromCache) {
-    // --offline: reuse the layers extracted by the last online run, after
-    // checking the extraction is complete — `buildLayersFromCache`
-    // silently skips missing archives.
-    if (!existsSync(cacheDir)) {
-      throw new CliError({
-        title: "No layers archive was downloaded for this workspace",
-        fixes: [
-          "Run once without --offline, with the backend reachable, first",
-        ],
-      });
-    }
-    assertCachedArchivesExist(manifest.modules, cacheDir, fetchedAt);
-  } else {
-    await downloadAndExtractLayers(
-      backendUrl,
-      manifest.pack,
-      cacheDir,
-      force,
-      bootstrapSecret,
-    );
+    assertCachedLayerPathsExist(manifest.modules, fetchedAt);
   }
   return {
-    ...resolved,
-    layers: await buildLayersFromCache(manifest.modules, cacheDir),
+    fromCache,
+    fetchedAt,
+    layers: buildLayersFromPaths(manifest.modules),
+    secrets: collectManifestSecrets(manifest.modules),
   };
 }
 
+function workspaceDirFor(opts: SetupWorkspaceOptions): string {
+  if (opts.workspaceDir) return ensureExplicitWorkspace(opts.workspaceDir);
+  const backendUrl = requireDevBackend(opts);
+  const workspaceKey = opts.workspaceKey ?? canonicalizeBackendUrl(backendUrl);
+  const workspaceDir = ensureWorkspace(workspaceKey);
+  writeWorkspaceMeta(workspaceDir, backendUrl, workspaceKey);
+  return workspaceDir;
+}
+
+function requireDevBackend(opts: SetupWorkspaceOptions): string {
+  if (!opts.backendUrl)
+    throw new Error("A dev workspace is set up from a backend URL");
+  return opts.backendUrl;
+}
+
+function workspaceSource(
+  opts: SetupWorkspaceOptions,
+  workspaceDir: string,
+): Promise<WorkspaceSource> {
+  if (opts.mode === "build") {
+    if (!opts.project) throw new Error("A build reads a project");
+    return projectLayers(opts.project);
+  }
+  if (opts.project)
+    return projectLayersInDev(
+      opts,
+      opts.project,
+      requireDevBackend(opts),
+      workspaceDir,
+    );
+  return servedLayers(opts, requireDevBackend(opts), workspaceDir);
+}
+
 /**
- * Full workspace setup: fetch the manifest, resolve frontend modules, check
- * that each supports this loader release, copy templates, write the workspace
- * package.json with `workspace:*` deps, materialize each module under
+ * Full workspace setup: resolve the frontend modules (from the project in
+ * build and dev, completed in dev by the backend's manifest; from the
+ * manifest alone for `prepare`), check that each supports this loader
+ * release, copy templates, write the workspace package.json
+ * with `workspace:*` deps, materialize each module under
  * `<workspace>/frontend-modules/<safeName>/`, write the generated module
  * registry and dms-main.css, and install deps.
  */
 export async function setupWorkspace(
   opts: SetupWorkspaceOptions,
 ): Promise<SetupWorkspaceResult> {
-  const { backendUrl, force } = opts;
-
-  const workspaceKey = opts.workspaceKey ?? canonicalizeBackendUrl(backendUrl);
-  const workspaceDir = opts.workspaceDir
-    ? ensureExplicitWorkspace(opts.workspaceDir)
-    : ensureWorkspace(workspaceKey);
-  writeWorkspaceMeta(workspaceDir, backendUrl, workspaceKey);
-
-  const { manifest, fromCache, fetchedAt, layers } = opts.snapshot
-    ? await snapshotLayers(opts.snapshot, workspaceDir)
-    : await servedLayers(opts, workspaceDir);
-  const buildOrigin: BuildOrigin = {
-    source: opts.snapshot ? "snapshot" : "backend",
-    backendUrl: canonicalizeBackendUrl(backendUrl),
-    takenAt:
-      opts.snapshot?.snapshot.takenAt ?? fetchedAt ?? new Date().toISOString(),
-    digest: manifestDigest(manifest.modules),
-    // A cached manifest may have been read without it.
-    authenticated: !!opts.snapshot || (!!opts.bootstrapSecret && !fromCache),
-  };
+  const workspaceDir = workspaceDirFor(opts);
+  const { fromCache, fetchedAt, layers, secrets } = await workspaceSource(
+    opts,
+    workspaceDir,
+  );
 
   assertLayersSupportRenderer(layers, { workspaceDir });
 
   copyStaticTemplates(workspaceDir);
   writeWorkspacePackageJson(workspaceDir, layers);
   materializeLayers(workspaceDir, layers);
-  writeFrontendModuleRegistry(workspaceDir, layers);
+  writeDerivedOutputs(workspaceDir, layers);
   writeDmsMainCss(workspaceDir, layers);
 
   const layerPaths = layers.map((layer) => layer.path);
-  const shouldInstall = needsInstall(workspaceDir, layerPaths, force);
+  const shouldInstall = needsInstall(workspaceDir, layerPaths, opts.force);
 
   // `materializeLayers` always wipes `<workspace>/frontend-modules/` and
-  // re-creates it from the current manifest. It must run before
+  // re-creates it from the current module set. It must run before
   // `pnpm install` so pnpm sees the workspace packages.
   if (shouldInstall) {
     await opts.beforeInstall?.();
@@ -590,8 +613,7 @@ export async function setupWorkspace(
     layers,
     manifestFromCache: fromCache,
     manifestFetchedAt: fetchedAt,
-    manifestSecrets: collectManifestSecrets(manifest.modules),
-    buildOrigin,
+    manifestSecrets: secrets,
   };
 }
 
@@ -604,3 +626,20 @@ export async function setupWorkspace(
 // ============================================================================
 
 /** Debounce window for coalescing a burst of watcher events into one apply. */
+
+/**
+ * The registry and what derives from it. A locale file it refuses is named at
+ * its source, the file to edit, rather than at its copy in the workspace.
+ */
+function writeDerivedOutputs(
+  workspaceDir: string,
+  layers: ResolvedLayer[],
+): void {
+  try {
+    writeFrontendModuleRegistry(workspaceDir, layers);
+  } catch (error) {
+    if (!(error instanceof InvalidLocaleFileError)) throw error;
+    const showSource = createPathMapper(workspaceDir, layers);
+    throw new InvalidLocaleFileError(showSource(error.path), error.reason);
+  }
+}

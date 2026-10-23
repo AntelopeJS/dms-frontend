@@ -4,6 +4,7 @@ import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ofetch } from "ofetch";
 import {
+  CLIENT_HEADERS,
   relayedHeaders,
   RequestBodyError,
   UpstreamError,
@@ -17,7 +18,6 @@ import {
   redirectAccessRefusal,
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
-import { fetchWaking } from "./server/backend-wake.mjs";
 import { handleClientError } from "./server/client-error.mjs";
 import {
   reportListenError,
@@ -37,7 +37,11 @@ import { documentStyleTags } from "./server/dev-styles.mjs";
 import { watchEmailBundle } from "./server/email.mjs";
 import { withFaviconPlaceholder } from "./server/favicon.mjs";
 import { DEV_FS_DENY, denyPrivateFiles } from "./server/dev-private-files.mjs";
-import { ownerLabel, requestOwner } from "./server/request-routing.mjs";
+import {
+  ownerLabel,
+  reachesBackend,
+  requestOwner,
+} from "./server/request-routing.mjs";
 import { routingReport } from "./server/backend-proxies.mjs";
 import { routeRuleFor, ruleHeaders } from "./server/route-rules.mjs";
 import {
@@ -45,6 +49,7 @@ import {
   loadServerModules,
 } from "./server/module-server.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
+import { publicOptionsScript } from "./server/public-options.mjs";
 import { loadPageProps } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import { listenHost } from "./server/listen-host.mjs";
@@ -55,6 +60,7 @@ import {
   relayAnswer,
 } from "./server/proxy-compression.mjs";
 import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
+import { sendWithinLimit, SERVER_OPTIONS } from "./server/proxy-transfers.mjs";
 import {
   createInertiaPage,
   htmlHeaders,
@@ -73,7 +79,12 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const CLIENT_ROOT = join(PROJECT_ROOT, "dist/client");
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
-const BUILT_SSR_RENDERER_PATH = join(PROJECT_ROOT, "dist/ssr/ssr-renderer.js");
+// A URL, not a path: on Windows, `import()` reads `C:\...` as a URL whose
+// scheme is `c:` and refuses it.
+const BUILT_SSR_RENDERER_URL = new URL(
+  "dist/ssr/ssr-renderer.js",
+  import.meta.url,
+);
 // The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
 // which reads compile-time flags only a bundler replaces. Vite inlines them in
 // the client bundle; without the same value here, installing vue-i18n under
@@ -126,9 +137,7 @@ function backendHeaders(request, access = { anonymous: false, headers: [] }) {
       "if-match",
       "origin",
       "referer",
-      "user-agent",
-      "x-content-language",
-      "x-realtime-session",
+      ...CLIENT_HEADERS,
       ...access.headers,
     ]),
     ...forwardedHeaders(request),
@@ -154,10 +163,9 @@ function serverComponentFetch(request) {
 }
 
 async function backendJson(path, request) {
-  const response = await fetchWaking(
-    new URL(path, process.env.DMS_API_BASE_URL),
-    { headers: backendHeaders(request), signal: request.dmsAbandoned },
-  );
+  const response = await fetch(new URL(path, process.env.DMS_API_BASE_URL), {
+    headers: backendHeaders(request),
+  });
   if (!response.ok) {
     throw await backendResponseError(response);
   }
@@ -201,25 +209,45 @@ function redirectSignedOutPrivatePage(request, response, props, auth) {
   return true;
 }
 
-/** Sends a request to the backend through the proxy it reached. */
-async function proxy(request, response, backendProxy) {
+/**
+ * Sends a request to the backend through the proxy it reached.
+ * `isProxiedPath` says which backend paths a relayed `Location` may name on
+ * the frontend's origin.
+ */
+async function proxy(request, response, backendProxy, isProxiedPath) {
   const access = proxyAccess(request, SAFE_METHODS, backendProxy);
   if (access.isRefused) {
     refuseCrossOrigin(response);
     return true;
   }
+  // A client that left while the request was routed closed the response
+  // already, and would never abort the request below.
+  if (response.closed) return;
   // Cancelling the body alone misses a client that leaves before the backend
   // answers: its stream, an SSE feed above all, then stayed open for good.
   const abandoned = new AbortController();
   response.once("close", () => abandoned.abort());
-  const upstream = await fetchWaking(backendUrl(request.url), {
+  const init = {
     signal: abandoned.signal,
     method: request.method,
     headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
-    body: ["GET", "HEAD"].includes(request.method) ? undefined : request,
     duplex: "half",
+    // A backend redirect is the browser's to follow: Media sends a file's
+    // link to the storage's signed URL, on the public origin the server
+    // itself may not reach, which turned every download into a 502.
+    redirect: "manual",
+  };
+  const upstream = await sendWithinLimit(
+    request,
+    response,
+    backendProxy.maxBodyBytes,
+    (body) => fetch(backendUrl(request.url), { ...init, body }),
+  );
+  if (!upstream) return true;
+  await relayAnswer(request, response, upstream, {
+    fetched: true,
+    isProxiedPath,
   });
-  await relayAnswer(request, response, upstream, { fetched: true });
 }
 
 /**
@@ -239,7 +267,7 @@ function serveAsset(pathname, request, response) {
 async function ssrRenderer(devServer) {
   const renderer = devServer
     ? await devServer.ssrLoadModule("/ssr-renderer.ts")
-    : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_PATH));
+    : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_URL.href));
   await icons.provideIconCollections(renderer);
   return renderer;
 }
@@ -290,11 +318,9 @@ export async function renderHtml(
       : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
-  const preloads = await documentStyleTags(
-    devServer,
-    rendered.modules,
-    template,
-  );
+  const headEnd =
+    (await documentStyleTags(devServer, rendered.modules, template)) +
+    publicOptionsScript();
   const html = template
     .replace("<title>Antelope DMS</title>", () =>
       withFaviconPlaceholder(rendered.head.headTags),
@@ -303,7 +329,7 @@ export async function renderHtml(
       htmlTag(attributes, rendered.head.htmlAttrs),
     )
     .replace("<body", `<body ${rendered.head.bodyAttrs}`)
-    .replace("</head>", `${preloads}</head>`)
+    .replace("</head>", `${headEnd}</head>`)
     .replace(
       '<div id="dms-overlays" class="isolate"></div>',
       `<div id="dms-overlays" class="isolate">${rendered.overlays}</div>`,
@@ -336,9 +362,6 @@ async function writeBackendError(error, request, response) {
   if (await redirectAccessRefusal(error, request, response, loadRenderer))
     return;
   console.error("DMS backend request failed", error);
-  const retryHeaders = error?.retryAfter
-    ? { "retry-after": error.retryAfter }
-    : {};
   if (isFrontendVisit(request)) {
     const props = {
       path: pathname,
@@ -352,24 +375,18 @@ async function writeBackendError(error, request, response) {
         request,
         response,
         status,
-        { ...inertiaHeaders(page.version), ...retryHeaders },
+        inertiaHeaders(page.version),
         JSON.stringify(page),
       );
     }
     const { html } = await renderRequestHtml(page, request);
-    return writeContent(
-      request,
-      response,
-      status,
-      { ...htmlHeaders(), ...retryHeaders },
-      html,
-    );
+    return writeContent(request, response, status, htmlHeaders(), html);
   }
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
       ? { message: error.message }
       : UNEXPECTED_ERROR_BODY;
-  response.writeHead(status, { "content-type": JSON_TYPE, ...retryHeaders });
+  response.writeHead(status, { "content-type": JSON_TYPE });
   response.end(JSON.stringify(payload));
 }
 
@@ -429,15 +446,16 @@ export async function handleRequest(request, response) {
   if (localRoute) return localRoute[1](request, response);
   const devServer = await developmentServer();
   const modules = await loadServerModules(devServer);
-  const owner = requestOwner(request.method, pathname, modules, (path) =>
-    hasRendererFile(devServer, path),
-  );
+  const hasFile = (path) => hasRendererFile(devServer, path);
+  const owner = requestOwner(request.method, pathname, modules, hasFile);
   if (devServer) response.setHeader("x-dms-route-owner", ownerLabel(owner));
   if (owner.kind === "renderer")
     return serveRendererFile(devServer, request, response, pathname);
   if (owner.kind === "module")
     return handleModuleRoute(request, response, pathname, modules);
-  if (owner.kind === "backend") return proxy(request, response, owner.proxy);
+  const isProxiedPath = (path) => reachesBackend(path, modules, hasFile);
+  if (owner.kind === "backend")
+    return proxy(request, response, owner.proxy, isProxiedPath);
   if (owner.kind === "not-found") return writeNotFound(response);
   if (requestFailure.hasMalformedPath(request.url))
     return requestFailure.writeBadRequest(response);
@@ -491,19 +509,7 @@ async function writeRequestFailure(error, request, response) {
   await writeBackendError(error, request, response);
 }
 
-/**
- * Aborted once the client is gone, ending a wait for a waking backend. An
- * embedder's response that emits no events never aborts it.
- */
-function abandonedSignal(response) {
-  const abandoned = new AbortController();
-  if (typeof response.once === "function")
-    response.once("close", () => abandoned.abort());
-  return abandoned.signal;
-}
-
 export async function handleRequestSafely(request, response) {
-  request.dmsAbandoned = abandonedSignal(response);
   try {
     if (refuseForeignTarget(request, response)) return;
     await handleRequest(request, response);
@@ -519,7 +525,7 @@ if (
   process.argv[1] &&
   import.meta.url === new URL(`file://${process.argv[1]}`).href
 ) {
-  frontendHttpServer = createServer(handleRequestSafely);
+  frontendHttpServer = createServer(SERVER_OPTIONS, handleRequestSafely);
   frontendHttpServer.on("clientError", (error, socket) =>
     handleClientError(error, socket, maxHeaderSize),
   );

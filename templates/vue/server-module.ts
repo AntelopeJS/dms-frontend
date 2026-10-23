@@ -29,8 +29,8 @@ export interface DmsSession {
   refreshToken?: string;
   accountId?: string;
   activeTenantId?: string;
-  /** False when the session ends with the browser. */
-  persistent?: boolean;
+  /** True when the session outlives the browser (30 days), false when it ends with it. */
+  persistent: boolean;
   /** Stamped by the frontend server on every write. */
   updatedAt?: number;
   [key: string]: unknown;
@@ -84,8 +84,8 @@ export interface DmsServerEvent {
      */
     view(): DmsPublicSession;
     /**
-     * Writes the session cookie, stamped with `updatedAt`; it ends with the
-     * browser unless `persistent` is true or unset.
+     * Writes the session cookie, stamped with `updatedAt`. It lasts 30 days
+     * when `persistent` is true and ends with the browser when it is false.
      */
     write(session: DmsSession): void;
     clear(): void;
@@ -112,13 +112,15 @@ export interface DmsServerEvent {
   /**
    * Calls the backend, JSON in and out. A refusal throws an error carrying
    * the status and the backend's public `error.*` message, which the server
-   * answers as is when the handler lets it through.
+   * answers as is when the handler lets it through. A redirect is not
+   * followed: it throws a 502.
    */
   backend<T = unknown>(path: string, init?: DmsBackendRequest): Promise<T>;
   /**
    * The backend URL of an absolute path, for a call `backend` cannot make (a
    * raw response, no relayed header): always on the backend's origin,
-   * whatever the path holds.
+   * whatever the path holds. Fetch it with `redirect: "manual"` to relay a
+   * backend redirect: the browser then follows it.
    */
   backendUrl(path: string): URL;
   /**
@@ -276,6 +278,13 @@ export interface DmsBackendProxyOptions {
    * needed.
    */
   auth?: "session" | "none";
+  /**
+   * The largest request body, in bytes, the server streams to the backend.
+   * A larger declared `Content-Length` gets a `413` before any byte is read;
+   * a chunked body is cut off with a `413` as soon as it goes over. No limit
+   * by default: the backend applies its own.
+   */
+  maxBodyBytes?: number;
 }
 
 export type DmsServerSetup = (server: DmsServer) => void;

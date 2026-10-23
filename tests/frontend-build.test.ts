@@ -193,7 +193,7 @@ describe("The generated build declarations loader", () => {
     );
     assert.match(
       loader,
-      /\{ name: "@acme\/billing-frontend", module: module0, options: /,
+      /\{ id: "[^"]+", name: "@acme\/billing-frontend", module: module0, options: /,
     );
   });
 

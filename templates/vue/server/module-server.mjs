@@ -20,7 +20,9 @@ import {
   environmentBackendProxies,
   readDeclaredBackendProxies,
 } from "./public-endpoints.mjs";
+import { reachesBackend } from "./request-routing.mjs";
 
+import { publicOptionsOf } from "./public-options.mjs";
 const WORKSPACE_ROOT = new URL("../", import.meta.url);
 const SOURCE_LOADER = "/server-modules.generated.ts";
 const BUILT_LOADER = new URL(
@@ -148,10 +150,7 @@ function readPrivateOptions(env = process.env) {
 }
 
 function readPublicOptions() {
-  const registry = readJsonFile(REGISTRY_FILE, { modules: [] });
-  return Object.fromEntries(
-    registry.modules.map((module) => [module.id, module.options]),
-  );
+  return publicOptionsOf(readJsonFile(REGISTRY_FILE, { modules: [] }));
 }
 
 async function loadDeclarations(devServer) {
@@ -281,6 +280,7 @@ export async function handleModuleRoute(request, response, pathname, modules) {
     route: reached.route,
     params: reached.params,
     view: modules.serverAuth.view,
+    isProxiedPath: (path) => reachesBackend(path, modules),
     ...modules.context(reached.route.id),
   });
   return true;

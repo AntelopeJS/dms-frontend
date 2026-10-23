@@ -146,6 +146,25 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received["x-forwarded-host"], "app.example.test");
   });
 
+  it("relays the realtime session and connection by name, and no other custom header", async () => {
+    const response = await fetch(`${frontendUrl}/api/items`, {
+      headers: {
+        "x-realtime-session": "session-1",
+        "x-realtime-connection": "connection-7",
+        "x-realtime-other": "not relayed",
+        "x-time-zone": "Europe/Brussels",
+        "x-custom": "dropped",
+      },
+    });
+    assert.equal(response.status, 200);
+    await response.arrayBuffer();
+    assert.equal(received["x-realtime-session"], "session-1");
+    assert.equal(received["x-realtime-connection"], "connection-7");
+    assert.equal(received["x-realtime-other"], undefined);
+    assert.equal(received["x-time-zone"], undefined);
+    assert.equal(received["x-custom"], undefined);
+  });
+
   it("sets the client alone on a request no proxy forwarded", async () => {
     const response = await fetch(`${frontendUrl}/api/items`);
     assert.equal(response.status, 200);
@@ -168,6 +187,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(response.status, 200);
     await response.arrayBuffer();
     assert.equal(received["x-forwarded-for"], "203.0.113.7");
+    assert.equal(received["x-client-ip"], "203.0.113.7");
     assert.equal(received["x-forwarded-proto"], "https");
     assert.equal(received["x-forwarded-host"], "app.example.test");
   });
@@ -184,6 +204,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(response.status, 200);
     await response.arrayBuffer();
     assert.equal(received["x-forwarded-for"], "127.0.0.1");
+    assert.equal(received["x-client-ip"], "127.0.0.1");
     assert.equal(received["x-forwarded-proto"], "http");
     assert.equal(received["x-forwarded-host"], new URL(frontendUrl).host);
   });
@@ -199,6 +220,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(response.status, 200);
     await response.arrayBuffer();
     assert.equal(received["x-forwarded-for"], "127.0.0.1");
+    assert.equal(received["x-client-ip"], undefined);
     assert.equal(received["x-forwarded-proto"], "http");
     assert.equal(received["x-forwarded-host"], new URL(frontendUrl).host);
   });
