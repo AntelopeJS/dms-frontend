@@ -383,7 +383,15 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     const backend = await serveManifest();
     try {
       const run = startCli({
-        args: ["dev", "-b", backend.url, "-p", "0"],
+        args: [
+          "dev",
+          "-b",
+          backend.url,
+          "-p",
+          "0",
+          "--project",
+          signalsProject(),
+        ],
         env: { PATH: hangingPnpm() },
         ownGroup: true,
       });
@@ -407,7 +415,15 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     const backend = await serveManifest();
     try {
       const run = startCli({
-        args: ["dev", "-b", backend.url, "-p", "0"],
+        args: [
+          "dev",
+          "-b",
+          backend.url,
+          "-p",
+          "0",
+          "--project",
+          signalsProject(),
+        ],
         env: { PATH: hangingPnpm(), ANTELOPEJS_QUIET: "1" },
         ownGroup: true,
       });

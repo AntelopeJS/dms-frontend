@@ -45,7 +45,14 @@ export interface DevOptions {
   force?: boolean;
   offline?: boolean;
   bootstrapSecret?: string;
+  /** The project the modules are read from; the discovered one by default. */
+  project?: string;
+  /** The AntelopeJS environment the backend runs, as `ajs project dev -e`. */
+  env?: string;
 }
+
+/** The environment `ajs project dev` runs without `-e`. */
+const BASE_ENVIRONMENT = "default";
 
 /**
  * Host advertised to the backend in `clientUrl`. The frontend server honors the HOST
@@ -100,6 +107,10 @@ export async function runDev(options: DevOptions): Promise<void> {
   const offline = flagOrEnv(options.offline, "DMS_OFFLINE");
   const sessionSecret = resolveSessionSecret("dev");
   const { backendUrl, workspaceKey, projectDir } = resolveBackend(options);
+  const project = {
+    projectDir: options.project ?? projectDir ?? process.cwd(),
+    environment: options.env ?? BASE_ENVIRONMENT,
+  };
   const bootstrapSecret = resolveBootstrapSecret(
     options.bootstrapSecret,
     backendUrl,
@@ -135,6 +146,7 @@ export async function runDev(options: DevOptions): Promise<void> {
     clientUrl,
     workspaceKey,
     bootstrapSecret,
+    project,
   });
 
   // Reported once the setup succeeded: a failed setup makes the
@@ -188,6 +200,7 @@ export async function runDev(options: DevOptions): Promise<void> {
       clientUrl,
       workspaceKey,
       bootstrapSecret: session.bootstrapSecret,
+      project,
     });
   }
 }
@@ -218,19 +231,20 @@ interface ServedRun {
 }
 
 /**
- * The modules the workspace was materialized from, as the manifest it cached
- * lists them: what `followModuleSet` compares the backend's manifest with.
+ * The backend's module set when the workspace was set up, as the manifest it
+ * cached lists them: what `followModuleSet` compares the backend's manifest
+ * with. The backend only signals a change; the rebuild reads the project.
  */
-function servedModules(setup: DevSetup): ModuleSetMember[] {
+function backendModuleSet(setup: DevSetup): ModuleSetMember[] {
   return readCachedManifest(setup.workspaceDir)?.manifest.modules ?? [];
 }
 
 function reportServed(session: DevSession, setup: DevSetup): Promise<boolean> {
   return reportFrontendReady(
     session.backendUrl,
-    servedModules(setup).map((module) => ({
-      name: module.name,
-      version: module.path ? readShippingVersion(module.path) : undefined,
+    setup.layers.map((layer) => ({
+      name: layer.name ?? layer.path,
+      version: readShippingVersion(layer.path),
     })),
     session.bootstrapSecret,
   );
@@ -256,7 +270,7 @@ async function serveWorkspace(
           session.bootstrapSecret = session.refreshBootstrapSecret();
           return session.bootstrapSecret;
         },
-        fingerprint: moduleSetFingerprint(servedModules(setup)),
+        fingerprint: moduleSetFingerprint(backendModuleSet(setup)),
         onChange: () => restart.abort(),
         onUnchanged: () => void reportServed(session, setup),
       });
