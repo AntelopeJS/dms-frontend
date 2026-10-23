@@ -116,48 +116,49 @@ function reachedFiles(roots: Iterable<string>): Map<string, string> {
 const relativeName = (file: string) =>
   relative(TEMPLATE_DIR, file).split(/[\\/]/).join(posix.sep);
 
+/**
+ * The template files the application loads that `copied` leaves out, each
+ * with the file that loads it. package.json is written from its template
+ * rather than copied.
+ */
+function missingFiles(copied: Set<string>): string[] {
+  const roots = [
+    ...CONVENTIONAL.map((name) => join(TEMPLATE_DIR, name)),
+    join(TEMPLATE_DIR, "package.json"),
+  ];
+  return [...reachedFiles(roots)]
+    .filter(([file]) => !copied.has(file) && !file.endsWith("package.json"))
+    .map(
+      ([file, from]) =>
+        `${relativeName(file)} (loaded by ${relativeName(from)})`,
+    );
+}
+
 describe("the workspace's template files", () => {
   it("copies every file of templates/vue the application loads", () => {
     const copied = copiedFiles();
-    // package.json is written from its template rather than copied.
-    const roots = [
-      ...CONVENTIONAL.map((name) => join(TEMPLATE_DIR, name)),
-      join(TEMPLATE_DIR, "package.json"),
-    ];
     for (const name of CONVENTIONAL)
       assert.ok(
         copied.has(join(TEMPLATE_DIR, name)),
         `list ${name} in TEMPLATE_FILES (src/config.ts): the tools load it by convention`,
       );
-    const missing = [...reachedFiles(roots)]
-      .filter(([file]) => !copied.has(file) && !file.endsWith("package.json"))
-      .map(
-        ([file, from]) =>
-          `${relativeName(file)} (loaded by ${relativeName(from)})`,
-      );
     assert.deepEqual(
-      missing,
+      missingFiles(copied),
       [],
       "list these files in TEMPLATE_FILES (src/config.ts): a workspace would not have them",
     );
   });
 
   it("finds what an entry left out of TEMPLATE_FILES leaves behind", () => {
-    // The check itself: without network-error.ts, app-runtime.ts imports a
-    // file the workspace would not have.
     const copied = copiedFiles();
-    const withoutOne = [...copied].filter(
-      (file) => relativeName(file) !== "network-error.ts",
+    const withoutOne = new Set(
+      [...copied].filter((file) => relativeName(file) !== "network-error.ts"),
     );
-    assert.ok(withoutOne.length < copied.size);
-    const reached = reachedFiles([
-      ...CONVENTIONAL.map((name) => join(TEMPLATE_DIR, name)),
-      join(TEMPLATE_DIR, "package.json"),
-    ]);
-    const networkError = join(TEMPLATE_DIR, "network-error.ts");
-    assert.equal(
-      reached.get(networkError),
-      join(TEMPLATE_DIR, "app-runtime.ts"),
+    assert.equal(withoutOne.size, copied.size - 1);
+    const missing = missingFiles(withoutOne);
+    assert.ok(
+      missing.some((entry) => entry.startsWith("network-error.ts ")),
+      `network-error.ts left out goes unnoticed: ${JSON.stringify(missing)}`,
     );
   });
 });
