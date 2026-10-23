@@ -369,6 +369,19 @@ describe("Auth hooks in the production server", () => {
     assert.equal(body.account.accountId, ACCOUNT_ID);
   });
 
+  it("keeps only a session written persistent for 30 days", () => {
+    const written: string[] = [];
+    const response = {
+      getHeader: () => undefined,
+      setHeader: (_name: string, value: string) => written.push(value),
+    };
+    sessions.writeSession(response, { accessToken: "a", persistent: true });
+    sessions.writeSession(response, { accessToken: "b" });
+    assert.match(written[0] ?? "", /; Max-Age=2592000/);
+    // No flag is no promise to outlive the browser.
+    assert.doesNotMatch(written[1] ?? "", /Max-Age/);
+  });
+
   it("writes the session cookie, ending with the browser when not persistent", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
       method: "POST",

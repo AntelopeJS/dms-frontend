@@ -1,7 +1,6 @@
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { acceptedEncoder, MINIMUM_COMPRESSION_BYTES } from "./content.mjs";
 import { writeProxyHeaders } from "./proxy-headers.mjs";
+import { pipeWebBody } from "./web-body.mjs";
 
 /**
  * Asks the backend for its answer uncompressed. fetch decodes a compressed
@@ -50,12 +49,15 @@ function proxyEncoder(request, upstream) {
     : undefined;
 }
 
-/** Relays a backend answer to the client, compressed when it should be. */
+/**
+ * Relays a backend answer to the client, compressed when it should be.
+ * `isProxiedPath` decides which backend `Location` becomes a frontend path.
+ */
 export async function relayAnswer(
   request,
   response,
   upstream,
-  { fetched = false } = {},
+  { fetched = false, isProxiedPath } = {},
 ) {
   // Only native fetch bodies are decoded. Synthetic/opaque responses may
   // still contain the encoded bytes, and unknown coding chains stay opaque.
@@ -85,7 +87,12 @@ export async function relayAnswer(
     headers.delete("content-length");
     const etag = headers.get("etag");
     if (etag && !etag.startsWith("W/")) headers.set("etag", `W/${etag}`);
-    upstream = { status: upstream.status, headers, body: upstream.body };
+    upstream = {
+      status: upstream.status,
+      headers,
+      body: upstream.body,
+      url: upstream.url,
+    };
   }
   const encoder = proxyEncoder(request, upstream);
   writeProxyHeaders(
@@ -93,9 +100,9 @@ export async function relayAnswer(
     upstream,
     encoder?.encoding,
     isCompressible(request, upstream),
+    isProxiedPath,
   );
   if (!upstream.body || request.method === "HEAD") return response.end();
-  const body = Readable.fromWeb(upstream.body);
-  if (encoder) await pipeline(body, encoder.stream, response);
-  else await pipeline(body, response);
+  if (encoder) await pipeWebBody(upstream.body, encoder.stream, response);
+  else await pipeWebBody(upstream.body, response);
 }

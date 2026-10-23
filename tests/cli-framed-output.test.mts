@@ -65,6 +65,7 @@ function runCli(args: string[], options: RunOptions = {}): Promise<Run> {
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
     HOME: sandbox,
+    USERPROFILE: sandbox,
     NO_COLOR: "1",
     NO_UPDATE_NOTIFIER: "1",
     DMS_API_BASE_URL: "",
@@ -229,6 +230,7 @@ describePosix("framing pnpm install and the production build", () => {
 
   it("replays the end of a failed install, with paths at their source", async () => {
     const run = await runCli(["dev", "-b", backend.url, "-p", "0"], {
+      setUp: projectHome,
       scenario: "install-fails",
     });
 
@@ -240,7 +242,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.match(run.stderr, /install output line 8\n/);
     assert.doesNotMatch(run.stderr, /install output line 7\n/);
     assert.match(run.stderr, / ERR_PNPM_FETCH_404 /);
-    assert.ok(run.stderr.includes(`  ${layer}:\n`), run.stderr);
+    assert.match(run.stderr, /\n {2}\.\/frontend-vue:\n/);
     assert.doesNotMatch(run.stderr, /frontend-modules|DEP0169|Progress:/);
     assert.match(run.stderr, /Run with --verbose for the full output\.\n$/);
   });
@@ -248,7 +250,7 @@ describePosix("framing pnpm install and the production build", () => {
   it("streams everything behind a gutter in a verbose run", async () => {
     const run = await runCli(
       ["dev", "-b", backend.url, "-p", "0", "--verbose"],
-      { scenario: "install-fails" },
+      { setUp: projectHome, scenario: "install-fails" },
     );
 
     assert.equal(run.code, 1);
@@ -329,9 +331,9 @@ describePosix("framing pnpm install and the production build", () => {
     assert.doesNotMatch(run.stderr, /Prepared the workspace/);
   });
 
-  it("says the cached manifest has no layer paths when dev runs offline", async () => {
+  it("says the cached manifest has no layer paths when prepare runs offline", async () => {
     const run = await runCli(
-      ["dev", "-b", OFFLINE_BACKEND, "-p", "0", "--offline"],
+      ["prepare", "-b", OFFLINE_BACKEND, "--offline", "--strict"],
       { setUp: (sandbox) => pathlessDevHome(sandbox, OFFLINE_BACKEND) },
     );
 

@@ -92,16 +92,9 @@ function attributes(maxAge, path = "/") {
   return `Path=${path}; HttpOnly; SameSite=Lax${lifetime}${secure}`;
 }
 
-/**
- * Whether a session outlives the browser. Only a session written with
- * `persistent: false` says no.
- */
-function isPersistent(session) {
-  return session?.persistent !== false;
-}
-
-function lifetime(persistent) {
-  return persistent ? MAX_AGE : undefined;
+/** A session outlives the browser only when it is written `persistent: true`. */
+function lifetime(session) {
+  return session.persistent === true ? MAX_AGE : undefined;
 }
 
 function appendCookie(response, name, value, cookieAttributes) {
@@ -130,7 +123,7 @@ export function writeSession(response, session) {
     response,
     SESSION_COOKIE,
     encode(session),
-    attributes(lifetime(isPersistent(session))),
+    attributes(lifetime(session)),
   );
 }
 

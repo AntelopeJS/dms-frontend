@@ -26,6 +26,38 @@ export function emptiedOptions(
   );
 }
 
+function filled(
+  shape: FrontendModuleValue,
+  value: FrontendModuleValue | undefined,
+): FrontendModuleValue {
+  if (typeof shape === "string") return typeof value === "string" ? value : "";
+  if (Array.isArray(shape))
+    return shape.map((item, index) =>
+      filled(item, Array.isArray(value) ? value[index] : undefined),
+    );
+  if (shape !== null && typeof shape === "object")
+    return filledOptions(shape, isOptions(value) ? value : undefined);
+  return shape;
+}
+
+/**
+ * Private options in the shape a module's `frontendModule` returns, each
+ * string taken from `values` at the same path: what `start` fills from its
+ * environment, `dev` fills from the backend. A value outside the shape is
+ * left out, as it would be in production.
+ */
+export function filledOptions(
+  shape: FrontendModuleOptions,
+  values: FrontendModuleOptions | undefined,
+): FrontendModuleOptions {
+  return Object.fromEntries(
+    Object.entries(shape).map(([key, value]) => [
+      key,
+      filled(value, values?.[key]),
+    ]),
+  );
+}
+
 /** The variable that carries any module's private options to the server. */
 export const PRIVATE_OPTIONS_VARIABLE = "DMS_PRIVATE_OPTIONS";
 

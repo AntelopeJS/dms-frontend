@@ -29,9 +29,11 @@ function writeFailure(error, response) {
  * @param declarations `{ id, priority?, setup }` per module, `setup` being
  *   the default export of its `dms.server.ts`
  * @param deployment `{ publicOptions?, privateOptions?, authEstablishEndpoints?,
- *   publicEndpoints? }`, options by module id. The private options are used
- *   as given, as the server uses the manifest's: no environment variable
- *   replaces a secret they hold
+ *   publicEndpoints?, backendProxies? }`, options by module id, and the
+ *   manifest's backend proxies (`{ module, path, auth? }`), which decide
+ *   the backend redirects relayed as frontend paths. The private options are
+ *   used as given, as the server uses the manifest's: no environment
+ *   variable replaces a secret they hold
  * @returns `{ url, modules, warnings, close() }`
  */
 export async function serveModuleRoutes(declarations, deployment = {}) {

@@ -61,7 +61,8 @@ const TERMINAL_STDERR = import.meta.resolve("./fixtures/terminal-stderr.mjs");
 
 /**
  * Run the CLI the way a user outside any DMS project would: an empty cwd and
- * an empty HOME, so `clean --all` can never reach the real workspaces.
+ * an empty home (HOME, and USERPROFILE, which Windows reads it from), so
+ * `clean --all` can never reach the real workspaces.
  */
 async function runCli(
   args: string[],
@@ -75,6 +76,7 @@ async function runCli(
   const env: Record<string, string | undefined> = {
     ...process.env,
     HOME: sandbox,
+    USERPROFILE: sandbox,
     NO_UPDATE_NOTIFIER: "1",
     DMS_API_BASE_URL: "",
     // What the output looks like depends on these: pin them to a plain
@@ -648,6 +650,65 @@ describe("validating options before any work", () => {
     });
     assert.equal(result.code, 0);
     assert.equal(result.stdout, `server port ${port}\n`);
+  });
+
+  it("reports the modules the build serves, and warns when the project now gives others", async () => {
+    let report: unknown;
+    const backend = createHttpServer((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => (body += chunk));
+      request.on("end", () => {
+        if (request.url === "/dms/frontend/ready") report = JSON.parse(body);
+        response.end(request.url === "/reported" ? String(!!report) : "{}");
+      });
+    });
+    await new Promise<void>((resolve) => backend.listen(0, resolve));
+    const backendUrl = `http://127.0.0.1:${(backend.address() as { port: number }).port}`;
+    try {
+      const result = await runCli(["start", "-b", backendUrl, "-p", "0"], {
+        files: {
+          ...builtWorkspace(),
+          // A variable turns the builder on, after a build made without it.
+          "antelope.config.ts":
+            "export default { name: 'sandbox', modules: { builder: " +
+            "{ source: { type: 'local', path: './builder' }, " +
+            "config: { enabled: process.env.BUILDER_ENABLED === '1' } } } };\n",
+          "builder/package.json": JSON.stringify({
+            name: "demo-builder",
+            version: "2.0.0",
+            dmsFrontend: "frontend.cjs",
+          }),
+          "builder/frontend.cjs":
+            "exports.frontendModule = (config) => config.enabled ? " +
+            "{ name: 'demo-builder', sourcePath: __dirname + '/frontend-vue', " +
+            "renderer: { name: 'vue', version: '3' } } : undefined;\n",
+          [join(PRODUCTION_WORKSPACE, "generated-frontend-modules.json")]:
+            JSON.stringify({
+              modules: [
+                { id: "demo-lang", name: "demo-lang", version: "1.4.0" },
+              ],
+            }),
+          [join(PRODUCTION_WORKSPACE, "server.mjs")]:
+            "process.send({ type: 'dms:ready', address: '127.0.0.1', port: 1 });\n" +
+            "const poll = setInterval(async () => {\n" +
+            "  const response = await fetch(`${process.env.DMS_API_BASE_URL}/reported`);\n" +
+            "  if ((await response.text()) === 'true') { clearInterval(poll); process.exit(0); }\n" +
+            "}, 20);\n",
+        },
+        env: { DMS_SESSION_SECRET: SESSION_SECRET, BUILDER_ENABLED: "1" },
+      });
+      assert.equal(result.code, 0, result.stderr);
+      assert.deepEqual(report, {
+        modules: [{ name: "demo-lang", version: "1.4.0" }],
+        version: packageJson.version,
+      });
+      assert.match(
+        result.stderr,
+        /▲ The project's modules differ from the ones the build serves: rebuild to apply them\n {2}Not in the build: demo-builder\n {2}Built, no longer in the project: demo-lang\n {2}→ Build again with the deployment's variables: ajs dms build\n/,
+      );
+    } finally {
+      backend.close();
+    }
   });
 
   /** A built workspace whose server prints the NODE_ENV it was given. */

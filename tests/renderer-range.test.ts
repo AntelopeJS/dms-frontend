@@ -12,7 +12,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
   assertLayersSupportRenderer,
@@ -252,6 +252,26 @@ function serveManifest(layerPath: string): Promise<Backend> {
   });
 }
 
+/** A project in `dir` whose one module declares `layerPath` as its frontend. */
+function writeProject(dir: string, layerPath: string): void {
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({ name: "range-project", dmsFrontend: "frontend.js" }),
+  );
+  writeFileSync(
+    join(dir, "frontend.js"),
+    `exports.frontendModule = () => ({
+  name: "excluding-module",
+  sourcePath: ${JSON.stringify(layerPath)},
+  renderer: { name: "vue", version: "3" },
+});\n`,
+  );
+  writeFileSync(
+    join(dir, "antelope.config.ts"),
+    `export default { name: "range", modules: { range: { source: { type: "local", path: "." } } } };\n`,
+  );
+}
+
 function closeServer(server: Server): Promise<void> {
   return new Promise((resolveClose) => server.close(() => resolveClose()));
 }
@@ -278,10 +298,21 @@ async function runTypeScript(
   try {
     const { stdout, stderr } = await promisify(execFile)(
       process.execPath,
-      ["--import", require.resolve("tsx"), join(REPOSITORY, entry), ...args],
+      [
+        "--import",
+        pathToFileURL(require.resolve("tsx")).href,
+        join(REPOSITORY, entry),
+        ...args,
+      ],
       {
         cwd: home,
-        env: { ...process.env, HOME: home, NO_UPDATE_NOTIFIER: "1", ...env },
+        env: {
+          ...process.env,
+          HOME: home,
+          USERPROFILE: home,
+          NO_UPDATE_NOTIFIER: "1",
+          ...env,
+        },
       },
     );
     return { status: 0, output: `${stdout}${stderr}` };
@@ -300,6 +331,7 @@ describe("commands refusing a module that does not support this release", () => 
     });
     const backend = await serveManifest(layerPath);
     const home = temporaryDir("dms-renderer-range-home-");
+    writeProject(home, layerPath);
     const dev = ["dev", "-b", backend.url, "-p", "0"];
     try {
       for (const args of [dev, [...dev, "--offline"]]) {

@@ -29,6 +29,39 @@ interface StartOptions {
   host?: string | null;
 }
 
+/** The servers each test started, stopped before anything else is cleaned up. */
+const startedServers = new WeakMap<TestContext, Started[]>();
+
+/** Stops every server `context` started and waits for each to exit. */
+async function stopServers(context: TestContext): Promise<void> {
+  const servers = startedServers.get(context) ?? [];
+  startedServers.delete(context);
+  await Promise.all(
+    servers.map(async ({ server, exited }) => {
+      if (server.exitCode !== null || server.signalCode !== null) return;
+      server.kill();
+      const forced = setTimeout(() => server.kill("SIGKILL"), 5_000);
+      await exited;
+      clearTimeout(forced);
+    }),
+  );
+}
+
+/**
+ * A directory a server runs in, removed once the test is over. The servers
+ * are stopped first: a development server keeps writing Vite's cache into
+ * its directory, and a removal that fails then must fail the test, not leave
+ * the server running and the whole suite waiting for it.
+ */
+function serverDirectory(context: TestContext, prefix: string): string {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  context.after(async () => {
+    await stopServers(context);
+    rmSync(root, { recursive: true, force: true });
+  });
+  return root;
+}
+
 /** Starts the server as the CLI does when `ipc` is set, on its own otherwise. */
 function startServer(
   context: TestContext,
@@ -48,14 +81,19 @@ function startServer(
     env,
     stdio: ["ignore", "pipe", "pipe", ...(ipc ? ["ipc" as const] : [])],
   });
-  context.after(() => server.kill());
   let output = "";
   server.stdout!.on("data", (chunk: Buffer) => (output += chunk));
   server.stderr!.on("data", (chunk: Buffer) => (output += chunk));
   const exited = new Promise<number | null>((settle) =>
     server.on("exit", (code) => settle(code)),
   );
-  return { server, output: () => output, exited };
+  const started = { server, output: () => output, exited };
+  startedServers.set(context, [
+    ...(startedServers.get(context) ?? []),
+    started,
+  ]);
+  context.after(() => stopServers(context));
+  return started;
 }
 
 /** The first message the server sends over IPC. */
@@ -109,8 +147,7 @@ describe("Frontend server address", () => {
     "starts the development server on the loopback address without HOST",
     { timeout: 30_000 },
     async (context) => {
-      const root = mkdtempSync(join(tmpdir(), "dms-dev-host-"));
-      context.after(() => rmSync(root, { recursive: true, force: true }));
+      const root = serverDirectory(context, "dms-dev-host-");
       writeFileSync(join(root, "vite.config.mjs"), "export default {};\n");
       const started = startServer(context, 0, true, {
         cwd: root,
@@ -200,8 +237,7 @@ describe("Frontend server startup", () => {
     "reports a Vite that could not start, where it failed, then exits",
     { timeout: 30_000 },
     async (context) => {
-      const root = mkdtempSync(join(tmpdir(), "dms-vite-start-"));
-      context.after(() => rmSync(root, { recursive: true, force: true }));
+      const root = serverDirectory(context, "dms-vite-start-");
       const config = join(root, "vite.config.ts");
       writeFileSync(config, "export default {\n  plugins: [,\n  broken(\n};\n");
 
@@ -221,8 +257,7 @@ describe("Frontend server startup", () => {
     "says why Vite could not start when started on its own",
     { timeout: 30_000 },
     async (context) => {
-      const root = mkdtempSync(join(tmpdir(), "dms-vite-start-"));
-      context.after(() => rmSync(root, { recursive: true, force: true }));
+      const root = serverDirectory(context, "dms-vite-start-");
       writeFileSync(
         join(root, "vite.config.ts"),
         'throw new Error("config boom");\nexport default {};\n',
