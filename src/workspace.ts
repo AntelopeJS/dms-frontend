@@ -107,6 +107,15 @@ export interface PublicEndpointDeclaration {
   headers?: string[];
 }
 
+/**
+ * An origin a development backend replaced in every module's options: its
+ * configured API or client base URL, by the one the dev server reaches it on.
+ */
+export interface OriginRewrite {
+  from: string;
+  to: string;
+}
+
 export interface Manifest {
   modules: ManifestModule[];
   /**
@@ -114,12 +123,19 @@ export interface Manifest {
    * operation): a follower waits for the set to settle.
    */
   settling?: boolean;
+  /**
+   * The origins a development backend rewrote in the options it serves, for
+   * `dev` to apply the same to the options it computes from the project.
+   * Absent from a production backend, and from a DMS that predates the field.
+   */
+  originRewrites?: OriginRewrite[];
 }
 
 export interface FrontendManifest {
   version: number;
   modules: ManifestModule[];
   settling?: boolean;
+  originRewrites?: OriginRewrite[];
 }
 
 /**

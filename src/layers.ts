@@ -94,6 +94,8 @@ export interface LayerPackage {
   engines?: Record<string, unknown>;
   /** The module's frontend registration file, see `project-modules.ts`. */
   dmsFrontend?: unknown;
+  /** AntelopeJS's manifest block, whose config variables `project-modules.ts` reads. */
+  antelopeJs?: unknown;
 }
 
 /**

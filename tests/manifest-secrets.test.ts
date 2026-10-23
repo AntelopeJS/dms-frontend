@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
   collectManifestSecrets,
@@ -291,7 +291,28 @@ describe("ajs dms start", () => {
   sourcePath: require("node:path").join(__dirname, "frontend-vue"),
   renderer: { name: "vue", version: "3" },
   configKey: "fixture",
-  options: { key: config.key, api: config.api, dev: context.dev },
+  options: { key: config.key, api: config.api, undeclared: config.undeclared, dev: context.dev },
+});\n`,
+    );
+    // The api module as it ships: the pure function its provide() reuses.
+    const api = join(project, "modules", "api");
+    mkdirSync(api, { recursive: true });
+    writeFileSync(
+      join(api, "package.json"),
+      JSON.stringify({
+        name: "@fixture/api",
+        version: "1.0.0",
+        antelopeJs: {
+          configVars: ["API_PUBLIC_BASE_URL"],
+          configVarsFile: "config-vars.js",
+        },
+      }),
+    );
+    writeFileSync(
+      join(api, "config-vars.js"),
+      `exports.configVars = (config) => ({
+  API_PUBLIC_BASE_URL: config.publicBaseUrl.replace(/\\/+$/, ""),
+  UNDECLARED: "not published",
 });\n`,
     );
     writeFileSync(
@@ -300,7 +321,7 @@ describe("ajs dms start", () => {
   name: "fixture",
   envOverrides: { ${PUBLIC_KEY_VARIABLE}: "modules.fixture.config.key" },
   modules: {
-    fixture: { source: { type: "local", path: "modules/fixture" }, config: { key: "from-config", api: "\${@api.API_PUBLIC_BASE_URL}/api" } },
+    fixture: { source: { type: "local", path: "modules/fixture" }, config: { key: "from-config", api: "\${@api.API_PUBLIC_BASE_URL}/api", undeclared: "\${@api.UNDECLARED}" } },
     api: { source: { type: "local", path: "modules/api" }, config: { publicBaseUrl: "https://api.example.com/", servers: [{ protocol: "http", port: 5010 }] } },
   },
 };\n`,
@@ -322,6 +343,18 @@ describe("ajs dms start", () => {
       const workspace = join(project, ".dms-frontend");
       mkdirSync(join(workspace, "dist", "client"), { recursive: true });
       writeFileSync(join(workspace, "dist", "client", "index.html"), "");
+      writeFileSync(
+        join(workspace, "generated-frontend-modules.json"),
+        JSON.stringify({
+          modules: [
+            {
+              id: "fixture__module-frontend-vue",
+              name: "@fixture/module-frontend-vue",
+              version: "1.2.3",
+            },
+          ],
+        }),
+      );
       if (serverOptions)
         writeFileSync(
           join(workspace, "generated-server-options.json"),
@@ -339,6 +372,7 @@ describe("ajs dms start", () => {
       const environment: NodeJS.ProcessEnv = {
         ...process.env,
         HOME: project,
+        USERPROFILE: project,
         NO_UPDATE_NOTIFIER: "1",
         // start reserves its port before spawning the server: ask for any
         // free one, so the suite does not depend on 3001 being free.
@@ -356,7 +390,7 @@ describe("ajs dms start", () => {
         process.execPath,
         [
           "--import",
-          require.resolve("tsx"),
+          pathToFileURL(require.resolve("tsx")).href,
           join(REPOSITORY, "src", "index.ts"),
           "start",
           "-b",

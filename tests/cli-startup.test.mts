@@ -23,6 +23,7 @@ function loadedModules(args: string[]): string[] {
       env: {
         ...process.env,
         HOME: sandbox,
+        USERPROFILE: sandbox,
         NO_UPDATE_NOTIFIER: "1",
         DMS_TEST_LOADED_MODULES: record,
       },

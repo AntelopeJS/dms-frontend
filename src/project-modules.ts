@@ -3,6 +3,9 @@
 // the packages of its modules. Each module declares in its package.json, as
 // `dmsFrontend`, a file exporting `frontendModule(config, context)`: the pure
 // function its backend passes to `AddFrontendModule`. No backend is asked.
+// The `${@<module>.<VAR>}` references resolve the same way: each provider
+// declares, as `antelopeJs.configVarsFile`, a file exporting the pure
+// `configVars(config)` its own `provide` publishes from.
 
 import { existsSync, readFileSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
@@ -23,10 +26,8 @@ const FRONTEND_SOURCE_DIR = "frontend-vue";
 const RENDERER = { name: "vue", version: "3" };
 const CONFIG_VAR_PATTERN = /\$\{@([^.}]+)\.([^}]+)\}/g;
 const PURE_CONFIG_VAR = /^\$\{@([^.}]+)\.([^}]+)\}$/;
-const TRAILING_SLASHES = /\/+$/;
-const DEFAULT_API_PORT = 80;
-const LOOPBACK_HOST = "127.0.0.1";
-const WILDCARD_HOSTS = new Set(["0.0.0.0", "::", "[::]"]);
+/** AntelopeJS's file that replaces the `antelopeJs` block of package.json. */
+const MODULE_MANIFEST_FILE = "antelope.module.json";
 
 /** What a module's `frontendModule` returns: `AddFrontendModuleOptions`. */
 export interface FrontendRegistration {
@@ -61,6 +62,8 @@ interface ModuleSource {
 interface ProjectModule {
   source: ModuleSource;
   config: unknown;
+  /** Where the module's package is installed, if it is. */
+  folder?: string;
 }
 
 interface ProjectConfig {
@@ -102,54 +105,121 @@ const NODE_FILE_SYSTEM = {
     fsPromises.rename(oldPath, newPath),
 };
 
-type ConfigVars = Record<string, string | number>;
+/** What a provider publishes, as AntelopeJS types it. */
+type ConfigVars = Record<string, string | number | boolean>;
 
-interface ApiServer {
-  protocol?: string;
-  host?: string;
-  port?: number;
+type ConfigVarsFunction = (config: unknown) => ConfigVars;
+
+/** The `antelopeJs` fields of a provider the config variables come from. */
+interface ConfigVarsManifest {
+  configVars?: unknown;
+  configVarsFile?: unknown;
 }
 
-interface ApiConfig {
-  publicBaseUrl?: string;
-  servers?: ApiServer[];
+interface ConfigVarsProvider {
+  declared: string[];
+  configVars: ConfigVarsFunction;
 }
 
-function apiLocalBaseUrl(server: ApiServer): string {
-  const host =
-    !server.host || WILDCARD_HOSTS.has(server.host)
-      ? LOOPBACK_HOST
-      : server.host;
-  const protocol = server.protocol ?? "http";
-  return `${protocol}://${host}:${server.port ?? DEFAULT_API_PORT}`;
+type ConfigVarLookup = (
+  module: string,
+  name: string,
+) => ConfigVars[string] | undefined;
+
+/** A module's `antelopeJs` block, from antelope.module.json when it has one, as AntelopeJS reads it. */
+function readAntelopeManifest(folder: string): ConfigVarsManifest | undefined {
+  const dedicated = join(folder, MODULE_MANIFEST_FILE);
+  if (existsSync(dedicated))
+    return JSON.parse(readFileSync(dedicated, "utf-8")) as ConfigVarsManifest;
+  return readLayerPackage(folder)?.antelopeJs as ConfigVarsManifest | undefined;
+}
+
+function warnUndeclaredConfigVars(id: string): void {
+  getProcessUi().message(
+    "warn",
+    `${id} declares no antelopeJs.configVarsFile in its package.json: the \${@${id}.<VAR>} references are left unresolved`,
+    { detail: `Upgrade ${id} to a version that declares it` },
+  );
+}
+
+function configVarsProvider(
+  id: string,
+  folder: string,
+): ConfigVarsProvider | undefined {
+  const manifest = readAntelopeManifest(folder);
+  const file = manifest?.configVarsFile;
+  if (typeof file !== "string") {
+    warnUndeclaredConfigVars(id);
+    return undefined;
+  }
+  const { configVars } = require(join(folder, file)) as {
+    configVars?: ConfigVarsFunction;
+  };
+  if (typeof configVars !== "function") {
+    throw new CliError({
+      title: `${id}: ${file} exports no configVars function`,
+      fixes: [`Export configVars(config) from ${file}`],
+    });
+  }
+  const declared = Array.isArray(manifest?.configVars)
+    ? manifest.configVars.filter((name) => typeof name === "string")
+    : [];
+  return { declared, configVars };
+}
+
+function computeConfigVars(
+  id: string,
+  provider: ConfigVarsProvider,
+  config: unknown,
+): ConfigVars {
+  let computed: ConfigVars;
+  try {
+    computed = provider.configVars(config) ?? {};
+  } catch (error) {
+    throw new CliError(
+      {
+        title: `${id}: could not compute its config variables`,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      { cause: error },
+    );
+  }
+  // Only the declared ones, as AntelopeJS publishes them.
+  return Object.fromEntries(
+    provider.declared
+      .filter((name) => name in computed)
+      .map((name) => [name, computed[name]]),
+  );
 }
 
 /**
- * The config variables of the providers a frontend configuration may read,
- * computed from the provider's configuration as its `provide()` does: core
- * leaves `${@<module>.<VAR>}` to the provider, which never runs here.
+ * Looks up `${@<module>.<VAR>}` in the variables its provider computes from
+ * its own configuration, itself resolved first. A provider is only read once
+ * referenced; one that is not installed, declares no `configVarsFile` or
+ * takes part in a cycle leaves its references unresolved.
  */
-const CONFIG_VAR_PROVIDERS: Record<string, (config: unknown) => ConfigVars> = {
-  api: (config): ConfigVars => {
-    const api = (config ?? {}) as ApiConfig;
-    const server = api.servers?.[0];
-    if (!server) return {};
-    const local = apiLocalBaseUrl(server);
-    return {
-      API_PORT: server.port ?? DEFAULT_API_PORT,
-      API_LOCAL_BASE_URL: local,
-      API_PUBLIC_BASE_URL:
-        api.publicBaseUrl?.trim().replace(TRAILING_SLASHES, "") || local,
-    };
-  },
-};
-
-function projectConfigVars(config: ProjectConfig): Record<string, ConfigVars> {
-  return Object.fromEntries(
-    Object.entries(CONFIG_VAR_PROVIDERS)
-      .filter(([id]) => config.modules[id])
-      .map(([id, provide]) => [id, provide(config.modules[id].config)]),
-  );
+function configVarLookup(
+  modules: Record<string, ProjectModule>,
+): ConfigVarLookup {
+  const published = new Map<string, ConfigVars | undefined>();
+  const lookup: ConfigVarLookup = (id, name) => {
+    if (!published.has(id)) {
+      published.set(id, undefined);
+      const module = modules[id];
+      const provider = module?.folder && configVarsProvider(id, module.folder);
+      if (provider)
+        published.set(
+          id,
+          computeConfigVars(
+            id,
+            provider,
+            substituteConfigVars(module.config, lookup),
+          ),
+        );
+    }
+    return published.get(id)?.[name];
+  };
+  return lookup;
 }
 
 /**
@@ -158,23 +228,23 @@ function projectConfigVars(config: ProjectConfig): Record<string, ConfigVars> {
  */
 function substituteConfigVars(
   value: unknown,
-  vars: Record<string, ConfigVars>,
+  lookup: ConfigVarLookup,
 ): unknown {
   if (typeof value === "string") {
     const pure = value.match(PURE_CONFIG_VAR);
-    if (pure) return vars[pure[1]]?.[pure[2]];
+    if (pure) return lookup(pure[1], pure[2]);
     return value.replace(CONFIG_VAR_PATTERN, (token, module, name) => {
-      const resolved = vars[module]?.[name];
+      const resolved = lookup(module, name);
       return resolved === undefined ? token : String(resolved);
     });
   }
   if (Array.isArray(value))
-    return value.map((item) => substituteConfigVars(item, vars));
+    return value.map((item) => substituteConfigVars(item, lookup));
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
-        substituteConfigVars(item, vars),
+        substituteConfigVars(item, lookup),
       ]),
     );
   }
@@ -184,7 +254,7 @@ function substituteConfigVars(
 /**
  * The project's configuration for an environment, as `ajs project start -e`
  * reads it: environment section, module JSON files and `envOverrides` from
- * the current variables.
+ * the current variables. Each module comes with its installed folder.
  */
 export async function loadProjectConfig(
   projectDir: string,
@@ -206,13 +276,22 @@ export async function loadProjectConfig(
       { cause: error },
     );
   }
-  const vars = projectConfigVars(loaded);
+  const located: Record<string, ProjectModule> = Object.fromEntries(
+    Object.entries(loaded.modules).map(([id, module]) => [
+      id,
+      {
+        ...module,
+        folder: moduleFolder(projectDir, loaded.cacheFolder, module.source),
+      },
+    ]),
+  );
+  const lookup = configVarLookup(located);
   return {
     cacheFolder: loaded.cacheFolder,
     modules: Object.fromEntries(
-      Object.entries(loaded.modules).map(([id, module]) => [
+      Object.entries(located).map(([id, module]) => [
         id,
-        { ...module, config: substituteConfigVars(module.config, vars) },
+        { ...module, config: substituteConfigVars(module.config, lookup) },
       ]),
     ),
   };
@@ -345,11 +424,7 @@ export async function readProjectFrontendModules(
   const context: FrontendModuleContext = { dev: !!options.dev };
   const registrations = Object.entries(config.modules).flatMap(
     ([id, module]) => {
-      const folder = moduleFolder(
-        projectDir,
-        config.cacheFolder,
-        module.source,
-      );
+      const folder = module.folder;
       if (!folder) {
         warnMissingModule(id);
         return [];

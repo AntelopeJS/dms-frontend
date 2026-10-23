@@ -10,8 +10,10 @@ import {
   type Plugin,
 } from "vite";
 import { clientCodeSplitting, onBuildLog } from "./client-chunking.mjs";
+import { recordEntryWeight } from "./entry-weight.mjs";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { uiInertiaPage } from "./ui-inertia-page.mjs";
+import { uiKbd } from "./ui-kbd.mjs";
 import { uiRequestState } from "./ui-request-state.mjs";
 import { autoImportDirectories } from "./frontend-build-loader.ts";
 import { frontendBuilds } from "./frontend-builds.generated.ts";
@@ -20,6 +22,8 @@ import { iconScanGlobs } from "./icon-scan.mjs";
 
 interface FrontendModuleRegistryEntry {
   id: string;
+  name?: string;
+  packageName?: string;
   root: string;
   priority: number;
 }
@@ -153,6 +157,8 @@ export default defineConfig({
     // Fails a client build that imports a dms.server.ts or a file under a
     // module's server/ directory, however it is imported.
     rejectServerSourcesInClient(moduleRoots),
+    // What each module adds to the client entry, which `ajs dms build` reports.
+    recordEntryWeight(registry.modules),
     {
       name: "dms-ui-inertia-link",
       enforce: "pre",
@@ -160,6 +166,7 @@ export default defineConfig({
         return id === uiLinkImport ? uiInertiaLinkImport : null;
       },
     },
+    uiKbd(isNuxtUiFile),
     uiInertiaPage(isNuxtUiFile),
     uiRequestState(isNuxtUiFile),
     vue(),
@@ -214,6 +221,7 @@ export default defineConfig({
                 "useDmsError",
                 "useDmsPagedData",
                 "useDmsPageLoading",
+                "isDmsHydrating",
                 "useDmsApp",
                 "useDmsRoute",
                 "useDmsRouter",
@@ -224,6 +232,7 @@ export default defineConfig({
                 "DmsClientOnly",
                 "DmsLink",
                 "useDmsUserSession",
+                "provideDmsKbdPlatform",
               ],
           },
         ],

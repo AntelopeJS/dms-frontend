@@ -73,6 +73,7 @@ function startCli({
     env: {
       ...process.env,
       HOME: home,
+      USERPROFILE: home,
       NO_UPDATE_NOTIFIER: "1",
       DMS_API_BASE_URL: "",
       DMS_TEST_PID_FILE: pidFile,
@@ -149,6 +150,10 @@ function builtProject(): string {
   const workspace = join(project, ".dms-frontend");
   mkdirSync(join(workspace, "dist/client"), { recursive: true });
   writeFileSync(join(workspace, "dist/client/index.html"), "<html></html>");
+  writeFileSync(
+    join(workspace, "generated-frontend-modules.json"),
+    JSON.stringify({ modules: [{ id: "signals", name: "signals-layer" }] }),
+  );
   copyFileSync(PROCESS_TREE, join(workspace, "server.mjs"));
   return project;
 }
@@ -382,7 +387,15 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     const backend = await serveManifest();
     try {
       const run = startCli({
-        args: ["dev", "-b", backend.url, "-p", "0"],
+        args: [
+          "dev",
+          "-b",
+          backend.url,
+          "-p",
+          "0",
+          "--project",
+          signalsProject(),
+        ],
         env: { PATH: hangingPnpm() },
         ownGroup: true,
       });
@@ -406,7 +419,15 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     const backend = await serveManifest();
     try {
       const run = startCli({
-        args: ["dev", "-b", backend.url, "-p", "0"],
+        args: [
+          "dev",
+          "-b",
+          backend.url,
+          "-p",
+          "0",
+          "--project",
+          signalsProject(),
+        ],
         env: { PATH: hangingPnpm(), ANTELOPEJS_QUIET: "1" },
         ownGroup: true,
       });

@@ -304,6 +304,8 @@ export async function fetchManifest(
   }
   const resolved: Manifest = { modules: manifest.modules };
   if (manifest.settling) resolved.settling = true;
+  if (manifest.originRewrites)
+    resolved.originRewrites = manifest.originRewrites;
   return resolved;
 }
 

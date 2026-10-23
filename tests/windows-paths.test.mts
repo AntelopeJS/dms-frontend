@@ -4,7 +4,7 @@
 // platform running it, so a Windows-shaped path can be fed in deliberately.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runInNewContext } from "node:vm";
@@ -14,6 +14,10 @@ import { normalizePath } from "vite";
 
 const WINDOWS_MODULE_PATH =
   "C:\\Users\\Mwesto\\.antelopejs\\dms-frontend\\a27ff4d5\\frontend-module.ts";
+const TEMPLATE = join(process.cwd(), "templates", "vue");
+const DYNAMIC_IMPORT = /\bimport\(\s*([^)\s][^)]*?)\s*\)/gs;
+// A string literal names a package; `.href` reads a `URL`.
+const URL_SPECIFIER = /^(["'`][^"'`]*["'`]|[\w.]+\.href)$/;
 
 /**
  * Run the auto-importer over a file that uses one of the injected names and
@@ -102,5 +106,39 @@ describe("Windows paths inlined into generated code", () => {
     ]) {
       assert.equal(normalizePath(path), path);
     }
+  });
+});
+
+describe("Windows paths handed to import()", () => {
+  // Node reads `C:\...` as a URL whose scheme is `c:` and refuses it with
+  // ERR_UNSUPPORTED_ESM_URL_SCHEME: every production render of `server.mjs`
+  // then fell back to client rendering. A POSIX path imports fine, so the
+  // check reads the template's Node.js sources.
+  it("refuses a native Windows path as a module specifier", async () => {
+    assert.equal(new URL(WINDOWS_MODULE_PATH).protocol, "c:");
+    await assert.rejects(import(WINDOWS_MODULE_PATH), {
+      code: "ERR_UNSUPPORTED_ESM_URL_SCHEME",
+    });
+  });
+
+  it("loads every module of the template's Node.js side by URL", () => {
+    const specifiers = readdirSync(TEMPLATE, {
+      recursive: true,
+      encoding: "utf8",
+    })
+      .filter((file) => file.endsWith(".mjs"))
+      .flatMap((file) =>
+        [
+          ...readFileSync(join(TEMPLATE, file), "utf8").matchAll(
+            DYNAMIC_IMPORT,
+          ),
+        ].map(([, specifier]) => ({ file, specifier })),
+      );
+    assert.ok(specifiers.some(({ file }) => file === "server.mjs"));
+    assert.deepEqual(
+      specifiers.filter(({ specifier }) => !URL_SPECIFIER.test(specifier)),
+      [],
+    );
+    assert.equal(URL_SPECIFIER.test("BUILT_SSR_RENDERER_PATH"), false);
   });
 });
