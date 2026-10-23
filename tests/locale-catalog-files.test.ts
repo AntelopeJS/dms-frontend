@@ -33,7 +33,12 @@ function write(path: string, content: string): void {
 }
 
 // Markers only one catalog carries, to find where each one ends up.
-const ENGLISH = { greeting: "Hello", only_english: "english-only-marker" };
+const ENGLISH = {
+  greeting: "Hello",
+  only_english: "english-only-marker",
+  // A message the renderer translates itself, overridden in English alone.
+  error: { network: { title: "Offline" } },
+};
 const FRENCH = { greeting: "Bonjour-french-marker" };
 
 /**
@@ -89,6 +94,40 @@ describe("generated locale catalogs", () => {
       ),
       FRENCH,
     );
+  });
+
+  it("keeps the renderer's own French over a module's English-only wording", async () => {
+    const french = await import(
+      pathToFileURL(join(workspace, "locales.generated", "fr.ts")).href
+    );
+    const { createI18n } = await import("vue-i18n");
+    const { showNetworkErrors } =
+      await import("../templates/vue/network-error.ts");
+    const i18n = createI18n({
+      legacy: false,
+      locale: "fr",
+      fallbackLocale: "en",
+      messages: { fr: french.default },
+    });
+    // Inertia only listens in a browser.
+    const globals = globalThis as Record<string, unknown>;
+    globals.window = globalThis;
+    globals.document = new EventTarget();
+    const titles: string[] = [];
+    const removeListener = showNetworkErrors(
+      (toast) => titles.push(toast.title),
+      i18n.global,
+    );
+    try {
+      (globals.document as EventTarget).dispatchEvent(
+        new CustomEvent("inertia:networkError", { cancelable: true }),
+      );
+    } finally {
+      removeListener();
+      delete globals.window;
+      delete globals.document;
+    }
+    assert.deepEqual(titles, ["Connexion perdue"]);
   });
 
   it("keeps every catalog out of the client entry, one file per locale", async () => {

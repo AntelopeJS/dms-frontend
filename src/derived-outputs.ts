@@ -352,6 +352,33 @@ export function affectsLocaleMessages(relativePath: string): boolean {
 const FALLBACK_LOCALE = "en";
 
 /**
+ * Messages the renderer translates itself and overrides only with a locale's
+ * own message, which it asks `te()` for (`templates/vue/network-error.ts`).
+ * They stay out of the English fill: a French visitor of an application that
+ * overrides one in English alone keeps the renderer's French text.
+ */
+const RENDERER_TRANSLATED_KEYS = ["error.network"];
+
+/**
+ * `messages` without the message or subtree at the dotted `key`, nor a group
+ * it leaves empty.
+ */
+function withoutMessage(
+  messages: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
+  const [head, ...rest] = key.split(".");
+  if (!(head in messages)) return messages;
+  const { [head]: value, ...others } = messages;
+  if (!rest.length) return others;
+  if (!isRecord(value)) return messages;
+  const remaining = withoutMessage(value, rest.join("."));
+  return Object.keys(remaining).length
+    ? { ...others, [head]: remaining }
+    : others;
+}
+
+/**
  * The module the application imports its catalogs from: every locale,
  * English included, is a file of its own that the application loads when a
  * page needs it. None is part of the client entry, which every page loads
@@ -487,7 +514,10 @@ export function writeLocaleMessages(
     changed = applyContent(content, path) || changed;
   };
   mkdirSync(outputDir, { recursive: true });
-  const fallback = messages[FALLBACK_LOCALE] ?? {};
+  const fallback = RENDERER_TRANSLATED_KEYS.reduce(
+    withoutMessage,
+    messages[FALLBACK_LOCALE] ?? {},
+  );
   for (const [locale, value] of Object.entries(messages)) {
     const catalog = JSON.stringify(value);
     const complete =

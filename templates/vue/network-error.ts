@@ -18,7 +18,9 @@ const NETWORK_ERROR_KEY = "error.network";
 const DEFAULT_LOCALE = "en";
 // Shipped with the renderer, since no module is guaranteed to translate the
 // case; a module overrides them with `error.network.title` and
-// `error.network.description` in its own locale files.
+// `error.network.description` in its own locale files. `te()` reads the
+// visitor's locale alone, and the generated catalogs leave these keys out of
+// their English fill, so only that locale's own message replaces them.
 const NETWORK_ERROR_MESSAGES: Record<
   string,
   Record<"title" | "description", string>
