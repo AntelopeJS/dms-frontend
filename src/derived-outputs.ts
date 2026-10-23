@@ -31,6 +31,7 @@ import {
 } from "./asset-roots";
 import { frontendLayerTypePaths } from "./layer-aliases";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
+import { readShippingVersion } from "./project-modules";
 import { FrontendModuleOptions, ResolvedLayer } from "./workspace";
 
 import {
@@ -45,6 +46,8 @@ export interface FrontendModuleRegistryEntry {
   /** The manifest name, or the package name without a manifest. */
   name?: string;
   packageName?: string;
+  /** The version of the package the module ships in, when it has one. */
+  version?: string;
   root: string;
   priority: number;
   entry?: string;
@@ -98,6 +101,7 @@ export function createFrontendModuleRegistry(
       id: getLayerSafeName(layer),
       name: layer.name ?? layer.packageName,
       packageName: layer.packageName,
+      version: readShippingVersion(layer.sourcePath ?? layer.path),
       root: getLayerWorkspacePath(workspaceDir, layer),
       priority: layer.priority ?? 0,
       entry: existsSync(sourceEntry) ? FRONTEND_MODULE_ENTRY : undefined,
