@@ -19,6 +19,10 @@ import { autoImportDirectories } from "./frontend-build-loader.ts";
 import { frontendBuilds } from "./frontend-builds.generated.ts";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
 import { iconScanGlobs } from "./icon-scan.mjs";
+import {
+  sfcGlobalTypesWatcher,
+  writeSfcGlobalTypes,
+} from "./sfc-global-types.mjs";
 
 interface FrontendModuleRegistryEntry {
   id: string;
@@ -72,6 +76,19 @@ const importDirectories = autoImportDirectories(
   registry.modules,
   frontendBuilds,
   (message) => logger.warn(message),
+);
+/**
+ * The auto-imported types, as declarations Vue's SFC compiler reads: without
+ * them a prop typed with one compiles to the wrong runtime type.
+ */
+const sfcGlobalTypesFile = resolve(
+  import.meta.dirname,
+  "sfc-global-types.generated.d.ts",
+);
+await writeSfcGlobalTypes(
+  importDirectories,
+  import.meta.dirname,
+  sfcGlobalTypesFile,
 );
 /**
  * Dependencies pre-bundled by name. A module's own dependencies need no entry:
@@ -169,7 +186,12 @@ export default defineConfig({
     uiKbd(isNuxtUiFile),
     uiInertiaPage(isNuxtUiFile),
     uiRequestState(isNuxtUiFile),
-    vue(),
+    vue({ script: { globalTypeFiles: [sfcGlobalTypesFile] } }),
+    sfcGlobalTypesWatcher(
+      importDirectories,
+      import.meta.dirname,
+      sfcGlobalTypesFile,
+    ),
     ui({
       router: "inertia",
       icon: {
