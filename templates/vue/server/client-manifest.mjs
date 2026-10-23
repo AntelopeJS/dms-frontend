@@ -78,3 +78,15 @@ export function renderedModuleStyleTags(modules, template) {
     .map((file) => `<link rel="stylesheet" href="/${file}">`)
     .join("");
 }
+
+/**
+ * The link that preloads the built catalog of `locale`, the one the page was
+ * rendered with: the browser fetches it next to the entry rather than once the
+ * entry runs and asks for it, which would put a round trip before hydration.
+ * Nothing without a production build (Vite serves the sources in development).
+ */
+export function localeCatalogPreloadTag(locale) {
+  const manifest = productionClientManifest();
+  const file = locale && manifest?.[`locales.generated/${locale}.ts`]?.file;
+  return file ? `<link rel="modulepreload" crossorigin href="/${file}">` : "";
+}

@@ -15,6 +15,7 @@ import { pathToFileURL } from "node:url";
 
 interface ManifestEntry {
   css?: string[];
+  file?: string;
   isDynamicEntry?: boolean;
 }
 
@@ -49,14 +50,16 @@ export const frontendModules = [{ options: { public: {} }, module: { setup(sdk) 
 `,
   // The client build only needs to split the components the way the real
   // entry does: one dynamic entry, with its stylesheet, per component.
-  "client-fixture.ts": `globalThis.fixtureLoaders = import.meta.glob("./${COMPONENTS}/*.vue");\n`,
+  // and one file per locale catalog, as the generated locale module loads them.
+  "client-fixture.ts": `globalThis.fixtureLoaders = import.meta.glob("./${COMPONENTS}/*.vue");\nglobalThis.fixtureCatalog = () => import("./locales.generated/en.ts");\n`,
+  "locales.generated/en.ts": "export default {};\n",
   "ui-stub.ts": `import {h} from 'vue'; const appConfig={}; export const useAppConfig=()=>appConfig;export const useToast=()=>({add(){}});export const en={code:"en"};export const fr={code:"fr"};export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
   "package.json": '{"type":"module"}',
   "frontend-paths.generated.json": "{}",
   "generated-frontend-modules.json": '{"modules":[]}',
   "app-configs.generated.ts": "export const appConfigs = [];\n",
   "locales.generated.ts":
-    'export const localeMessages={en:{}};export const supportedLocales=["en"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
+    'export const localeMessages={en:{}};export const supportedLocales=["en"];export const catalogLocale=(locale)=>locale.slice(0,2);export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
 };
 
 function write(root: string, path: string, content: string): void {
@@ -172,6 +175,18 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       "a component the render never reached gets no link",
     );
     assert.equal(new Set(linked).size, linked.length, "each link once");
+
+    // The catalog of the page's locale is preloaded next to the entry, not
+    // requested once the entry runs.
+    const catalog = manifest["locales.generated/en.ts"];
+    assert.ok(catalog?.isDynamicEntry, "the catalog is a file of its own");
+    const head = html.slice(0, html.indexOf("</head>"));
+    assert.ok(
+      head.includes(
+        `<link rel="modulepreload" crossorigin href="/${catalog.file}">`,
+      ),
+      "the catalog of the page's locale is preloaded",
+    );
   } finally {
     frontend?.closeAllConnections();
     await Promise.all(

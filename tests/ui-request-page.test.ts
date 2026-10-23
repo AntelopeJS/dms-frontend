@@ -187,7 +187,7 @@ async function withServerRenderer(
     write(
       workspace,
       "locales.generated.ts",
-      'export const localeMessages={en:{}};export const supportedLocales=["en"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
+      'export const localeMessages={en:{}};export const supportedLocales=["en"];export const catalogLocale=(locale)=>locale.slice(0,2);export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );
 
     const { createServer } = await import("vite");

@@ -116,8 +116,7 @@ describe("regenerated locale catalogs in the dev server", () => {
       (await server.ssrLoadModule("/server-entry.ts")).greeting(locale);
     assert.equal(await render("en"), "Hello");
     assert.equal(await render("fr"), "Bonjour");
-    // One locale at a time: English is imported statically and French on
-    // demand, and each has its own way of invalidating the modules above it.
+    // One locale at a time: each catalog is a module of its own.
     await regenerate({ "en-GB": { greeting: "Hello from the server" } });
     await eventually(
       async () => (await render("en")) === "Hello from the server",
@@ -141,6 +140,7 @@ describe("regenerated locale catalogs in the dev server", () => {
           applied[locale] = messages;
         },
       });
+      await catalogs.loadLocaleMessages("en");
       await catalogs.loadLocaleMessages("fr");
 
       await regenerate({
@@ -164,6 +164,14 @@ describe("regenerated locale catalogs in the dev server", () => {
       await regenerate({ "en-GB": { greeting: "Hello a third time" } });
       await eventually(() => applied.en?.greeting === "Hello a third time");
       assert.equal(catalogs.localeMessages.en.greeting, "Hello a third time");
+
+      // The French catalog carries the English messages it lacks: a message
+      // added in English alone reaches it too.
+      await regenerate({
+        "en-GB": { greeting: "Hello a third time", farewell: "Goodbye" },
+      });
+      await eventually(() => applied.fr?.farewell === "Goodbye");
+      assert.equal(applied.fr?.greeting, "Bonjour encore");
     } finally {
       await runner.close();
     }

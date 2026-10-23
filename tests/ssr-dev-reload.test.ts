@@ -73,7 +73,7 @@ it("serves an edited component on the next server render in development", async 
     );
     writeFileSync(
       join(workspace, "locales.generated.ts"),
-      'export const localeMessages={en:{}};export const supportedLocales=["en"];export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
+      'export const localeMessages={en:{}};export const supportedLocales=["en"];export const catalogLocale=(locale)=>locale.slice(0,2);export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
     );
     writeFileSync(
       join(workspace, "ui-stub.ts"),

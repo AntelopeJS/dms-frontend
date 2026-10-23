@@ -66,7 +66,7 @@ async function withRuntime(test: (fixture: Fixture) => Promise<void>) {
     writeFileSync(join(workspace, "frontend-paths.generated.json"), "{}");
     writeFileSync(
       join(workspace, "locales.generated.ts"),
-      'export const localeMessages={en:{}};export const supportedLocales=["en","fr","de"];export const loadLocaleMessages=async(locale)=>({locale});export const syncLocaleMessages=()=>{};',
+      'export const localeMessages={en:{}};export const supportedLocales=["en","fr","de"];export const catalogLocale=(locale)=>locale.slice(0,2);export const loadLocaleMessages=async(locale)=>({locale});export const syncLocaleMessages=()=>{};',
     );
     writeFileSync(
       join(workspace, "ui-stub.ts"),
