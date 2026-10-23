@@ -1855,6 +1855,9 @@ function startAsyncData<T>(
   const idle = entry.result.status.value === "idle";
   if (runtime.isServer) {
     if (!immediate || !onServer) return undefined;
+    // A render that already answers a redirect throws its HTML away: what it
+    // still has to read would reach nobody.
+    if (runtime.serverRedirect) return undefined;
     if (idle && options.lazy) entry.schedule();
     else if (idle) void entry.load();
     const settled = entry.settled();

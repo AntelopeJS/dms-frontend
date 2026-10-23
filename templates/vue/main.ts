@@ -61,6 +61,26 @@ if (import.meta.env.DEV) adoptViteDevStyles();
 addAPIProvider("", sameOriginIconProvider(location.origin));
 
 /**
+ * Shows the URL of the page the server sent, when it rendered a query the page
+ * completed in place of the one requested (`renderDocument` in server.mjs).
+ * Replaced before Inertia starts: Inertia records a first page whose URL is
+ * not the address bar's as a new history entry, and Back would then lead to
+ * the URL the page completes again.
+ */
+function showServedUrl(url: string): void {
+  const served = new URL(url, location.href);
+  if (
+    served.pathname === location.pathname &&
+    served.search !== location.search
+  )
+    history.replaceState(
+      history.state,
+      "",
+      `${served.pathname}${served.search}${location.hash}`,
+    );
+}
+
+/**
  * Sets the modules up, then starts the app.
  *
  * A function rather than top-level statements: Rollup keeps apart every module
@@ -84,6 +104,7 @@ async function startDmsApp(): Promise<void> {
   createInertiaApp({
     resolve: resolveDmsInertiaPage,
     async setup({ App, el, props, plugin }) {
+      showServedUrl(props.initialPage.url);
       const root = { render: () => h(App, props) };
       const app = el.hasAttribute("data-server-rendered")
         ? createSSRApp(root)

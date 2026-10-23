@@ -2,7 +2,6 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, maxHeaderSize } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ofetch } from "ofetch";
 import {
   CLIENT_HEADERS,
   relayedHeaders,
@@ -53,7 +52,8 @@ import {
 } from "./server/module-server.mjs";
 import { HOMEPAGE } from "./server/homepage.mjs";
 import { publicOptionsScript } from "./server/public-options.mjs";
-import { loadPageProps } from "./server/page-props.mjs";
+import { renderInPlace, serverReads } from "./server/in-place-render.mjs";
+import { loadPageProps, propsForQuery } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
@@ -152,17 +152,7 @@ function backendHeaders(request, access = { anonymous: false, headers: [] }) {
 }
 
 function serverComponentFetch(request) {
-  return (path, options = {}) => {
-    const headers = new Headers(backendHeaders(request));
-    new Headers(options.headers).forEach((value, name) => {
-      headers.set(name, value);
-    });
-    return ofetch(path, {
-      ...options,
-      baseURL: process.env.DMS_API_BASE_URL,
-      headers,
-    });
-  };
+  return serverReads(() => backendHeaders(request));
 }
 
 async function backendJson(path, request) {
@@ -180,18 +170,18 @@ async function currentAuth() {
   return (await loadServerModules(await developmentServer())).serverAuth;
 }
 
+function pageBackend(request) {
+  return {
+    fetchJson: (path) => backendJson(path, request),
+    isFrontendPage: async (pathname) =>
+      (await ssrRenderer(await developmentServer())).isDmsFrontendPage(
+        pathname,
+      ),
+  };
+}
+
 function pageProps(request, auth) {
-  return loadPageProps(
-    request,
-    {
-      fetchJson: (path) => backendJson(path, request),
-      isFrontendPage: async (pathname) =>
-        (await ssrRenderer(await developmentServer())).isDmsFrontendPage(
-          pathname,
-        ),
-    },
-    auth,
-  );
+  return loadPageProps(request, pageBackend(request), auth);
 }
 
 function redirectToHomepage(request, response, pathname) {
@@ -342,11 +332,26 @@ export async function renderHtml(
   return { html, status: rendered.error?.statusCode ?? 200 };
 }
 
-function renderRequestHtml(page, request, rule = {}) {
-  const fetch = serverComponentFetch(request);
+function renderRequestHtml(page, request, rule = {}, reads) {
+  const fetch = reads ?? serverComponentFetch(request);
   return renderHtml(page, request.url, fetch, request.headers.cookie, {
     ssr: rule.ssr,
   });
+}
+
+/**
+ * Renders a page document, at the query the page completes as it renders:
+ * see `renderInPlace`.
+ */
+function renderDocument(page, request, rule, auth) {
+  const fetch = serverComponentFetch(request);
+  return renderInPlace(
+    request,
+    page,
+    fetch,
+    (served) => renderRequestHtml(served, request, rule, fetch),
+    (props, url) => propsForQuery(props, url, pageBackend(request), auth),
+  );
 }
 
 async function writeBackendError(error, request, response) {
@@ -481,16 +486,17 @@ export async function handleRequest(request, response) {
       JSON.stringify(page),
     );
   }
-  const rendered = await renderRequestHtml(page, request, rule);
+  const { rendered, served } = await renderDocument(page, request, rule, auth);
   if (rendered.redirect) {
     redirectFrontendVisit(request, response, rendered.redirect);
     return;
   }
+  const location = served === page ? {} : { "content-location": served.url };
   return writeContent(
     request,
     response,
     rendered.status,
-    { ...htmlHeaders(), ...headersFor(rendered.status) },
+    { ...htmlHeaders(), ...headersFor(rendered.status), ...location },
     rendered.html,
   );
 }

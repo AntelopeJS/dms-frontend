@@ -101,6 +101,16 @@ async function loadPage(
 }
 
 /**
+ * The props of the same page at another query of its path (`url`): the page
+ * is read again, since its layout reads the query, and the rest is kept,
+ * the site layout included.
+ */
+export async function propsForQuery(props, url, backend, auth) {
+  const { page } = await loadPage(url, false, backend, auth.signInPath);
+  return { ...props, page };
+}
+
+/**
  * The props of the page a request visits, with the once props to declare.
  *
  * The site layout (`shared`) is a once prop: a visit sends it when the browser
