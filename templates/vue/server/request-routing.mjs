@@ -39,6 +39,26 @@ export function requestOwner(method, pathname, modules, hasRendererFile) {
   return PAGE_METHODS.has(method) ? { kind: "page" } : { kind: "not-found" };
 }
 
+/**
+ * Whether the server sends a request for `pathname` to the backend: a backend
+ * `Location` on such a path can become a frontend path (see
+ * `proxy-redirects.mjs`).
+ *
+ * @param pathname A normalized path
+ * @param modules What `loadServerModules` returned: `routes` and `proxies`
+ * @param hasRendererFile `(pathname) => boolean`, whether the renderer has a
+ *   file at that path
+ */
+export function reachesBackend(
+  pathname,
+  modules,
+  hasRendererFile = () => false,
+) {
+  return (
+    requestOwner("GET", pathname, modules, hasRendererFile).kind === "backend"
+  );
+}
+
 /** The `x-dms-route-owner` value of an owner, for the development server. */
 export function ownerLabel(owner) {
   if (owner.kind === "module") return `module:${owner.id}`;
