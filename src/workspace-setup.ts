@@ -55,6 +55,7 @@ import {
 import { CancelledError, exitCodeForSignal } from "./cancellation";
 import { endInterruptedTask } from "./output";
 import { canonicalizeBackendUrl, DEPS_HASH_FILE } from "./config";
+import { InvalidLocaleFileError } from "./locale-files";
 
 // ============================================================================
 // Constants
@@ -528,7 +529,7 @@ export async function setupWorkspace(
   copyStaticTemplates(workspaceDir);
   writeWorkspacePackageJson(workspaceDir, layers);
   materializeLayers(workspaceDir, layers);
-  writeFrontendModuleRegistry(workspaceDir, layers);
+  writeDerivedOutputs(workspaceDir, layers);
   writeDmsMainCss(workspaceDir, layers);
 
   const layerPaths = layers.map((layer) => layer.path);
@@ -561,3 +562,20 @@ export async function setupWorkspace(
 // ============================================================================
 
 /** Debounce window for coalescing a burst of watcher events into one apply. */
+
+/**
+ * The registry and what derives from it. A locale file it refuses is named at
+ * its source, the file to edit, rather than at its copy in the workspace.
+ */
+function writeDerivedOutputs(
+  workspaceDir: string,
+  layers: ResolvedLayer[],
+): void {
+  try {
+    writeFrontendModuleRegistry(workspaceDir, layers);
+  } catch (error) {
+    if (!(error instanceof InvalidLocaleFileError)) throw error;
+    const showSource = createPathMapper(workspaceDir, layers);
+    throw new InvalidLocaleFileError(showSource(error.path), error.reason);
+  }
+}

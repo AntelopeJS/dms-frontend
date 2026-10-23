@@ -9,13 +9,7 @@
 //
 // Split out of materialize.ts, whose size the linter caps.
 
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import {
   FRONTEND_BUILD_ENTRY,
@@ -24,6 +18,7 @@ import {
   SERVER_MODULE_ENTRY,
 } from "./config";
 import { affectsAppConfigs, writeAppConfigs } from "./app-configs";
+import { readLocaleFile } from "./locale-files";
 import {
   affectsAssetDirectory,
   isLayerDirectory,
@@ -320,30 +315,6 @@ function mergeLocaleMessages(
 
 /** Where each asset root keeps its locale files, one JSON file per locale. */
 const LOCALE_DIRECTORY = "i18n/locales";
-
-/**
- * A locale file that does not parse: in development an editor can save a
- * catalog half-written. Carries the file, which the dev watcher shows as the
- * source the user edits.
- */
-export class InvalidLocaleFileError extends Error {
-  constructor(
-    readonly path: string,
-    readonly reason: string,
-  ) {
-    super(`Invalid locale file ${path}: ${reason}`);
-    this.name = "InvalidLocaleFileError";
-  }
-}
-
-function readLocaleFile(path: string): Record<string, unknown> {
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new InvalidLocaleFileError(path, reason);
-  }
-}
 
 function readLocaleMessages(
   assets: DiscoveredAsset[],
