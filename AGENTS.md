@@ -16,6 +16,7 @@ oxlint skips `templates/**/*.{ts,tsx,vue}` and knip skips `templates/**`: they r
 
 - `@antelopejs/core` is a peer dependency (`>=1.16.0 <2`).
 - `@vueuse/core` stays pinned at `14.4.0`: `templates/vue/patches/@vueuse__core@14.4.0.patch` is applied to that exact version.
+- `@nuxt/ui` stays pinned at `4.10.0` in `templates/vue/package.json`: `templates/vue/pnpm-workspace.yaml` applies `patches/@nuxt__ui@4.10.0.patch` to that exact version.
 - `pnpm lint` runs `docs:reference:check`, which fails when the environment table in `docs/4.configuration.md` differs from `ajs dms help environment`.
 
 ## Tests
@@ -26,7 +27,7 @@ The CLI and output tests compare Unicode symbols, so `pnpm test`, and with it `p
 
 `pnpm run checks` does not cover:
 
-- `pnpm test:real-source`. `tsconfig.json` covers only `src`, so this is the only check that builds and type-checks the templates. Run it when a change touches `templates/` or `verify-source`: `DMS_LAYER_SOURCE=<dms checkout>/packages/dms/frontend-vue DMS_MODULE_SOURCES='["<module root>"]' pnpm test:real-source`, adding `DMS_LOCAL_PACKAGES='{"@antelopejs/dms":"<dms checkout>/packages/dms"}'` for an unpublished `@antelopejs/dms`.
+- `pnpm test:real-source`. `tsconfig.json` covers only `src`, so this is the only check that type-checks the templates (vue-tsc) and builds them against a real DMS layer. Run it when a change touches `templates/` or `verify-source`: `DMS_LAYER_SOURCE=<dms checkout>/packages/dms/frontend-vue DMS_MODULE_SOURCES='["<module root>"]' pnpm test:real-source`, adding `DMS_LOCAL_PACKAGES='{"@antelopejs/dms":"<dms checkout>/packages/dms"}'` for an unpublished `@antelopejs/dms`.
 - Dead files and exports. `pnpm knip` checks dependencies only; `pnpm knip:all` also reports unused files and exports, which need a human to confirm.
 
 <!-- antelopejs-guardrails:start -->
