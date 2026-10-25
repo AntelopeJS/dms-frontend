@@ -21,7 +21,7 @@ oxlint skips `templates/**/*.{ts,tsx,vue}` and knip skips `templates/**`: they r
 
 ## Tests
 
-`pnpm test` builds `dist`, then runs `tests/*.test.ts` and `tests/*.test.mts` with `DMS_PREBUILT=1`. The CLI tests spawn `dist/index.js`, so build before you run one of them on its own.
+`pnpm test` builds `dist`, then runs `tests/*.test.ts` and `tests/*.test.mts` with `DMS_PREBUILT=1`. `cli-startup`, `cli-signals` and `cli-framed-output` always spawn `dist/index.js`, so build before you run one of them on its own; `cli-sandbox` falls back to the sources without `DMS_PREBUILT`.
 
 The CLI and output tests compare Unicode symbols, so `pnpm test`, and with it `pnpm run checks`, fails under `TERM=dumb`. Run `TERM=xterm-256color pnpm run checks` in a shell that sets `TERM=dumb`.
 
