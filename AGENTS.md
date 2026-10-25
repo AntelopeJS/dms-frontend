@@ -21,12 +21,13 @@ oxlint skips `templates/**/*.{ts,tsx,vue}` and knip skips `templates/**`: they r
 
 ## Tests
 
-`pnpm test` builds `dist`, then runs `tests/*.test.ts` and `tests/*.test.mts` with `DMS_PREBUILT=1`. `cli-startup`, `cli-signals` and `cli-framed-output` always spawn `dist/index.js`, so build before you run one of them on its own; `cli-sandbox` falls back to the sources without `DMS_PREBUILT`.
+`pnpm test` runs every `tests/*.test.{ts,mts}` file except the CLI suites (`tests/cli.test.ts`, `tests/cli-*.test.{ts,mts}`), with no build.
 
-The CLI and output tests compare Unicode symbols, so `pnpm test`, and with it `pnpm run checks`, fails under `TERM=dumb`. Run `TERM=xterm-256color pnpm run checks` in a shell that sets `TERM=dumb`.
+The CLI and output tests compare Unicode symbols, so `pnpm test`, `pnpm test:cli` and `pnpm run checks` fail under `TERM=dumb`. Prefix them with `TERM=xterm-256color` in a shell that sets `TERM=dumb`.
 
 `pnpm run checks` does not cover:
 
+- The CLI suites. CI runs them in its `cli` job. Run `pnpm test:cli`: it builds `dist`, then runs them with `DMS_PREBUILT=1`. `cli-startup`, `cli-signals` and `cli-framed-output` always spawn `dist/index.js`, so build before you run one of them on its own; `cli-sandbox` falls back to the sources without `DMS_PREBUILT`.
 - `pnpm test:real-source`. `tsconfig.json` covers only `src`, so this is the only check that type-checks the templates (vue-tsc) and builds them against a real DMS layer. Run it when a change touches `templates/` or `verify-source`: `DMS_LAYER_SOURCE=<dms checkout>/packages/dms/frontend-vue DMS_MODULE_SOURCES='["<module root>"]' pnpm test:real-source`, adding `DMS_LOCAL_PACKAGES='{"@antelopejs/dms":"<dms checkout>/packages/dms"}'` for an unpublished `@antelopejs/dms`.
 - Dead files and exports. `pnpm knip` checks dependencies only; `pnpm knip:all` also reports unused files and exports, which need a human to confirm.
 

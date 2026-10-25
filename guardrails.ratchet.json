@@ -16,7 +16,7 @@
     "src/derived-outputs.ts": 23902,
     "src/workspace-setup.ts": 21332,
     "templates/vue/frontend-module.ts": 124737,
-    "tests/cli-sandbox.test.mts": 53677,
+    "tests/cli-sandbox.test.mts": 53679,
     "tests/cli.test.ts": 34144,
     "tests/inertia.test.ts": 44114,
     "tests/layer-watch.test.ts": 27773,

@@ -60,8 +60,9 @@
   "scripts": {
     "build": "rimraf dist && tsc",
     "prepack": "pnpm run build",
-    "release": "pnpm run lint && pnpm run format:check && pnpm run test && release-it",
-    "test": "pnpm run build && DMS_PREBUILT=1 node --import tsx --test tests/*.test.ts tests/*.test.mts",
+    "release": "pnpm run lint && pnpm run format:check && pnpm run test && pnpm run test:cli && release-it",
+    "test": "node --import tsx --test 'tests/!(cli|cli-*).test.{ts,mts}'",
+    "test:cli": "pnpm run build && DMS_PREBUILT=1 node --import tsx --test tests/cli.test.ts 'tests/cli-*.test.{ts,mts}'",
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
     "lint": "oxlint && antelopejs-check-interface-ranges && pnpm run docs:reference:check",
