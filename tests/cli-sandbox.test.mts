@@ -26,9 +26,9 @@ const packageJson = JSON.parse(
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const builtEntry = join(repository, "dist/index.js");
 /**
- * The CLI the runs spawn. CI builds before testing and sets DMS_PREBUILT, so
- * the runs take the compiled CLI, which starts several times faster than the
- * sources under tsx. Elsewhere `dist/` may be stale: the runs take the
+ * The CLI the runs spawn. `pnpm test` builds and sets DMS_PREBUILT, so the
+ * runs take the compiled CLI, which starts several times faster than the
+ * sources under tsx. Run directly, `dist/` may be stale: the runs take the
  * sources.
  */
 const cliCommand =

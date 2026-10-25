@@ -14,14 +14,20 @@ oxlint skips `templates/**/*.{ts,tsx,vue}` and knip skips `templates/**`: they r
 
 ## Versioning
 
-- `@antelopejs/core` is a peer dependency (`>=1.16.0 <2`). `pnpm lint` runs `antelopejs-check-interface-ranges` and `docs:reference:check`.
+- `@antelopejs/core` is a peer dependency (`>=1.16.0 <2`).
 - `@vueuse/core` stays pinned at `14.4.0`: `templates/vue/patches/@vueuse__core@14.4.0.patch` is applied to that exact version.
+- `pnpm lint` runs `docs:reference:check`, which fails when the environment table in `docs/4.configuration.md` differs from `ajs dms help environment`.
 
 ## Tests
 
-`pnpm test` builds `dist`, then runs every file in `tests/` with `DMS_PREBUILT=1`, so the CLI tests spawn the compiled CLI. The output tests expect a Unicode terminal: with `TERM=dumb` they fail on ASCII symbols, so run them with `TERM` unset or set to a real terminal.
+`pnpm test` builds `dist`, then runs `tests/*.test.ts` and `tests/*.test.mts` with `DMS_PREBUILT=1`. The CLI tests spawn `dist/index.js`, so build before you run one of them on its own.
 
-`pnpm run checks` does not run `pnpm test:real-source`. It builds `dist` and runs the `verify-source` runner directly, which builds and type-checks unpublished frontend packages in a temporary workspace. It reads `DMS_LAYER_SOURCE`, `DMS_MODULE_SOURCES` and `DMS_LOCAL_PACKAGES`, as `ajs dms verify-source` sets them. Run it when a change touches `templates/` or the `verify-source` code.
+The CLI and output tests compare Unicode symbols, so `pnpm test`, and with it `pnpm run checks`, fails under `TERM=dumb`. Run `TERM=xterm-256color pnpm run checks` in a shell that sets `TERM=dumb`.
+
+`pnpm run checks` does not cover:
+
+- `pnpm test:real-source`. `tsconfig.json` covers only `src`, so this is the only check that builds and type-checks the templates. Run it when a change touches `templates/` or `verify-source`: `DMS_LAYER_SOURCE=<dms checkout>/packages/dms/frontend-vue DMS_MODULE_SOURCES='["<module root>"]' pnpm test:real-source`, adding `DMS_LOCAL_PACKAGES='{"@antelopejs/dms":"<dms checkout>/packages/dms"}'` for an unpublished `@antelopejs/dms`.
+- Dead files and exports. `pnpm knip` checks dependencies only; `pnpm knip:all` also reports unused files and exports, which need a human to confirm.
 
 <!-- antelopejs-guardrails:start -->
 <!-- Managed by @antelopejs/tooling-configs. `antelopejs-sync` rewrites everything between these markers; write repository-specific guidance outside them. -->

@@ -60,11 +60,11 @@
   "scripts": {
     "build": "rimraf dist && tsc",
     "prepack": "pnpm run build",
-    "release": "pnpm run lint && pnpm run test && release-it",
+    "release": "pnpm run lint && pnpm run format:check && pnpm run test && release-it",
     "test": "pnpm run build && DMS_PREBUILT=1 node --import tsx --test tests/*.test.ts tests/*.test.mts",
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
-    "lint": "oxlint && oxfmt --check . && antelopejs-check-interface-ranges && pnpm run docs:reference:check",
+    "lint": "oxlint && antelopejs-check-interface-ranges && pnpm run docs:reference:check",
     "typecheck": "tsc --noEmit",
     "lint:fix": "oxlint --fix --max-warnings=1000000 && oxfmt .",
     "knip": "knip --dependencies",
