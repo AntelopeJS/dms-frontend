@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "node:test";
@@ -12,7 +12,7 @@ it(
   "fails, and stops its development server, when removing the server's directory fails",
   { timeout: LIMIT_MS + 10_000 },
   async () => {
-    const before = new Set(readdirSync(tmpdir()));
+    const privateTmp = mkdtempSync(join(tmpdir(), "dms-cleanup-"));
     // The inner run is a run of its own: NODE_OPTIONS may carry this run's
     // --test-shard, and NODE_TEST_CONTEXT would make it report to this one.
     const {
@@ -33,7 +33,11 @@ it(
       ],
       // Its own process group: a hung run is stopped with every server it
       // left behind.
-      { env, detached: true, stdio: ["ignore", "pipe", "pipe"] },
+      {
+        env: { ...env, TMPDIR: privateTmp },
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
     let output = "";
     run.stdout.on("data", (chunk: Buffer) => (output += chunk));
@@ -43,9 +47,7 @@ it(
       run.on("exit", (exitCode) => settle(exitCode)),
     );
     clearTimeout(hung);
-    for (const name of readdirSync(tmpdir()))
-      if (!before.has(name) && name.startsWith("dms-dev-host-"))
-        rmSync(join(tmpdir(), name), { recursive: true, force: true });
+    rmSync(privateTmp, { recursive: true, force: true });
     assert.notEqual(code, null, `the run hung: ${output}`);
     assert.equal(code, 1, "the failed cleanup fails the test");
     assert.match(output, /ENOTEMPTY/);
