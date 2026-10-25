@@ -61,7 +61,7 @@
     "build": "rimraf dist && tsc",
     "prepack": "pnpm run build",
     "release": "pnpm run lint && pnpm run format:check && pnpm run test && release-it",
-    "test": "pnpm run build && DMS_PREBUILT=1 node --import tsx --test --test-concurrency=6 tests/*.test.ts tests/*.test.mts",
+    "test": "pnpm run build && DMS_PREBUILT=1 node --import tsx --test --test-concurrency=8 tests/*.test.mts tests/*.test.ts",
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
     "lint": "oxlint && antelopejs-check-interface-ranges && pnpm run docs:reference:check",
