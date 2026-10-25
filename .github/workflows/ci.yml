@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  # No branch filter: the lint wave stacks pull requests on top of each
-  # other, and filtering on `main` left every intermediate step ungated --
-  # only the secret scanner ran.
   pull_request:
 
 permissions:
@@ -16,93 +13,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# The checks run as parallel jobs, so a pull request waits for the slowest
-# one rather than for their sum. `ubuntu`, the name of the former single job,
-# gathers them for branch protection.
 jobs:
-  static:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      COREPACK_DEFAULT_TO_LATEST: 0
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          # .nvmrc is the version of record. oxlint needs at least 22.18 to
-          # read a TypeScript config, which every value there clears.
-          node-version-file: .nvmrc
-      # Node's bundled corepack predates the pnpm version pinned in
-      # packageManager. Pinned so a corepack release cannot break every
-      # build at once.
-      - run: npm i -g --force corepack@0.34.0 && corepack enable
-      # setup-node's own `cache: pnpm` needs pnpm before setup-node runs, and
-      # pnpm only exists once corepack is enabled above.
-      - id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      # oxlint's type-aware pass degrades to `any` on a broken tsconfig
-      # without failing, so the typecheck is what catches it.
-      - run: pnpm typecheck
-      # Unused dependencies only. `pnpm knip:all` also reports dead files and
-      # exports, which need a human to confirm, so they stay out of the gate.
-      - run: pnpm knip
-
-  test:
-    name: test (${{ matrix.shard }}/2)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # The suite is CPU-bound: node --test already runs the files in parallel
-    # on every core, so splitting the files across two runners halves it.
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    env:
-      COREPACK_DEFAULT_TO_LATEST: 0
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-      - run: npm i -g --force corepack@0.34.0 && corepack enable
-      - id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
-      - run: pnpm install --frozen-lockfile
-      # The suite needs dist/ anyway (cli-startup spawns it); with
-      # DMS_PREBUILT set, the CLI runs of cli-sandbox spawn it too instead of
-      # the sources under tsx, several times slower to start.
-      - run: pnpm build
-      # --test-shard goes through NODE_OPTIONS because node only reads it
-      # before the file list `pnpm test` ends with; node ignores it outside a
-      # test run, so the processes the tests spawn are unaffected.
-      - run: pnpm test
-        env:
-          DMS_PREBUILT: 1
-          NODE_OPTIONS: --test-shard=${{ matrix.shard }}/2
+  ci:
+    uses: AntelopeJS/.github/.github/workflows/ci-node.yml@v1
 
   ubuntu:
     if: always()
-    needs: [static, test]
+    needs: [ci]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Every check passed
-        run: |
-          results='${{ join(needs.*.result, ' ') }}'
-          echo "$results"
-          for result in $results; do
-            [ "$result" = success ] || exit 1
-          done
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1
