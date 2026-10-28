@@ -99,7 +99,7 @@ export function autoImportDirectories(
   });
 }
 
-/** Hook-like keys of a Vite plugin that hold a value, not a function Vite calls. */
+/** The keys of a Vite plugin that hold a value, not a function Vite calls. */
 const PLUGIN_PROPERTIES = new Set([
   "name",
   "enforce",
@@ -109,39 +109,64 @@ const PLUGIN_PROPERTIES = new Set([
   "api",
 ]);
 
+/** The hooks whose function result is itself a hook, run after the server starts. */
+const SERVER_HOOKS = new Set(["configureServer", "configurePreviewServer"]);
+
 const attributedErrors = new WeakSet<object>();
 
-function attribute(label: string, error: unknown): unknown {
-  if (!(error instanceof Error)) {
-    return new Error(`Frontend module ${label}: ${String(error)}`, {
-      cause: error,
-    });
-  }
-  if (!attributedErrors.has(error)) {
-    attributedErrors.add(error);
-    error.message = `Frontend module ${label}: ${error.message}`;
-  }
-  return error;
+/**
+ * A new error naming the module, with the original as its cause: the original
+ * may be frozen, and it keeps the properties its owner set on it.
+ */
+function attribute(label: string, error: unknown): Error {
+  if (error instanceof Error && attributedErrors.has(error)) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  const attributed = new Error(`Frontend module ${label}: ${message}`, {
+    cause: error,
+  });
+  attributedErrors.add(attributed);
+  return attributed;
 }
 
-function attributedHook(label: string, hook: unknown): unknown {
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof value.then === "function"
+  );
+}
+
+function attributedHook(
+  label: string,
+  hook: unknown,
+  returnsHook: boolean,
+): unknown {
   if (typeof hook === "function") {
+    const attributedResult = (result: unknown): unknown =>
+      returnsHook ? attributedHook(label, result, false) : result;
     return function (this: unknown, ...args: unknown[]) {
       try {
         const result: unknown = hook.apply(this, args);
-        if (result instanceof Promise) {
-          return result.catch((error: unknown) => {
-            throw attribute(label, error);
-          });
+        if (isThenable(result)) {
+          return Promise.resolve(result).then(
+            attributedResult,
+            (error: unknown) => {
+              throw attribute(label, error);
+            },
+          );
         }
-        return result;
+        return attributedResult(result);
       } catch (error) {
         throw attribute(label, error);
       }
     };
   }
   if (typeof hook === "object" && hook !== null && "handler" in hook) {
-    return { ...hook, handler: attributedHook(label, hook.handler) };
+    return {
+      ...hook,
+      handler: attributedHook(label, hook.handler, returnsHook),
+    };
   }
   return hook;
 }
@@ -157,6 +182,59 @@ function isPlugin(value: unknown): value is Plugin {
   );
 }
 
+/** Every property name of an object, inherited ones included. */
+function propertyNames(plugin: object): Set<string> {
+  const names = new Set<string>();
+  for (
+    let object: object | null = plugin;
+    object !== null && object !== Object.prototype;
+    object = Object.getPrototypeOf(object)
+  ) {
+    for (const name of Object.getOwnPropertyNames(object)) {
+      if (name !== "constructor") names.add(name);
+    }
+  }
+  return names;
+}
+
+/**
+ * A copy of the plugin whose hooks, own or inherited from its class, name the
+ * module in the errors they throw. The module's own object is left as it is.
+ */
+function attributedPlugin(label: string, plugin: Plugin): Plugin {
+  const copy: Record<string, unknown> = {};
+  for (const key of propertyNames(plugin)) {
+    const value: unknown = Reflect.get(plugin, key);
+    copy[key] = PLUGIN_PROPERTIES.has(key)
+      ? value
+      : attributedHook(label, value, SERVER_HOOKS.has(key));
+  }
+  if (!isPlugin(copy)) throw invalidPlugins(label);
+  return copy;
+}
+
+function invalidPlugins(label: string): Error {
+  return new Error(
+    `Frontend module ${label} registered Vite plugins that are not valid: the function given to registerVitePlugins must return an array of Vite plugin objects, each with a name (false, null and undefined entries are skipped, nested arrays are flattened), or nothing.`,
+  );
+}
+
+function flattened(label: string, entries: readonly unknown[]): Plugin[] {
+  return entries.flatMap((entry): Plugin[] => {
+    if (entry === false || entry === null || entry === undefined) return [];
+    if (Array.isArray(entry)) return flattened(label, entry);
+    if (isThenable(entry)) throw promisedPlugins(label);
+    if (!isPlugin(entry)) throw invalidPlugins(label);
+    return [entry];
+  });
+}
+
+function promisedPlugins(label: string): Error {
+  return new Error(
+    `Frontend module ${label} registered Vite plugins as a Promise: Vite's configuration is built synchronously, so the function given to registerVitePlugins must return the plugins themselves, not a Promise.`,
+  );
+}
+
 function createdPlugins(label: string, create: VitePluginFactory): Plugin[] {
   let created: unknown;
   try {
@@ -165,21 +243,19 @@ function createdPlugins(label: string, create: VitePluginFactory): Plugin[] {
     throw attribute(label, error);
   }
   if (created === undefined) return [];
-  if (!Array.isArray(created) || !created.every(isPlugin)) {
-    throw new Error(
-      `Frontend module ${label} registered Vite plugins that are not valid: the function given to registerVitePlugins must return an array of Vite plugin objects, each with a name, or nothing.`,
-    );
-  }
-  return created;
+  if (isThenable(created)) throw promisedPlugins(label);
+  if (!Array.isArray(created)) throw invalidPlugins(label);
+  return flattened(label, created);
 }
 
 /**
  * The Vite plugins the modules registered with `registerVitePlugins`, in module
  * order and then call order. Each module's factories run here, in the build
- * process. A factory that throws or returns anything but an array of plugin
- * objects (or nothing) fails with a message naming the module, and so does an
- * error thrown by a hook of one of its plugins. The modules' plugins are
- * copied: a module's own objects are never modified.
+ * process. A factory that throws, returns a Promise, or returns anything but an
+ * array of plugin objects (or nothing) fails with a message naming the module,
+ * and so does an error thrown by a hook of one of its plugins. As in a Vite
+ * configuration, false, null and undefined entries are skipped and nested
+ * arrays are flattened.
  */
 export function vitePlugins(
   modules: readonly FrontendModuleName[],
@@ -191,14 +267,8 @@ export function vitePlugins(
   return buildDeclarations.flatMap(({ id, setup }) => {
     const label = names.get(id) ?? id;
     return declared(setup).pluginFactories.flatMap((create) =>
-      createdPlugins(label, create).map(
-        (plugin): Plugin =>
-          Object.fromEntries(
-            Object.entries(plugin).map(([key, value]) => [
-              key,
-              PLUGIN_PROPERTIES.has(key) ? value : attributedHook(label, value),
-            ]),
-          ) as Plugin,
+      createdPlugins(label, create).map((plugin) =>
+        attributedPlugin(label, plugin),
       ),
     );
   });

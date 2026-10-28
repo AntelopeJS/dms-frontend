@@ -220,8 +220,8 @@ describe("The Vite plugins a module registers", () => {
       {},
       "plugin",
       [{ resolveId() {} }],
-      [recording("fine", []), null],
-      [[recording("nested", [])]],
+      [recording("fine", []), "plugin"],
+      [[{ resolveId() {} }]],
       null,
     ];
 
@@ -232,6 +232,115 @@ describe("The Vite plugins a module registers", () => {
         /Frontend module @acme\/billing-frontend registered Vite plugins that are not valid/,
       );
     }
+  });
+
+  it("skip false, null and undefined entries and flatten nested arrays, as Vite does", () => {
+    const plugins = pluginsOf(
+      declaring(() => [
+        false,
+        recording("one", []),
+        null,
+        [undefined, [recording("two", [])], recording("three", [])],
+      ]),
+    );
+
+    assert.deepEqual(
+      plugins.map(({ name }) => name),
+      ["one", "two", "three"],
+    );
+  });
+
+  it("refuse a Promise, as the configuration is built synchronously", () => {
+    const promised: unknown[] = [
+      Promise.resolve([recording("late", [])]),
+      [Promise.resolve(recording("late", []))],
+    ];
+
+    for (const value of promised) {
+      assert.throws(
+        // SAFETY: the value is wrong on purpose, to reach the runtime validation.
+        () => pluginsOf(declaring((() => value) as Registered)),
+        /Frontend module @acme\/billing-frontend registered Vite plugins as a Promise.*synchronously/,
+      );
+    }
+  });
+
+  it("run the hooks of a class instance and name the module when one throws", async () => {
+    const seen: string[] = [];
+    class Boundary {
+      readonly name = "class-boundary";
+      readonly enforce = "pre";
+      resolveId(id: string) {
+        seen.push(id);
+        if (id.endsWith("dep.js")) throw new Error("class hook refused");
+        return null;
+      }
+    }
+
+    await assert.rejects(
+      production(project(), pluginsOf(declaring(() => [new Boundary()]))),
+      /Frontend module @acme\/billing-frontend: .*class hook refused/s,
+    );
+    assert.ok(seen.some((id) => id.endsWith("dep.js")));
+  });
+
+  it("name the module when the function configureServer returns throws", async () => {
+    const plugin: Plugin = {
+      name: "after-server",
+      configureServer() {
+        return () => {
+          throw new Error("post hook refused");
+        };
+      },
+    };
+
+    await assert.rejects(
+      development(project(), pluginsOf(declaring(() => [plugin]))),
+      /Frontend module @acme\/billing-frontend: .*post hook refused/s,
+    );
+  });
+
+  it("name the module when the function configurePreviewServer returns throws", async () => {
+    const plugin: Plugin = {
+      name: "after-preview",
+      configurePreviewServer: () => async () => {
+        throw new Error("preview post hook refused");
+      },
+    };
+    const [wrapped] = pluginsOf(declaring(() => [plugin]));
+    // SAFETY: the hook above is a plain function taking no argument.
+    const configure =
+      wrapped.configurePreviewServer as () => () => Promise<void>;
+
+    await assert.rejects(
+      configure()(),
+      /Frontend module @acme\/billing-frontend: preview post hook refused/,
+    );
+  });
+
+  it("name the module when a hook throws a frozen error, keeping the original as its cause", async () => {
+    const frozen = Object.freeze(new Error("frozen refusal"));
+    const plugin: Plugin = {
+      name: "frozen",
+      enforce: "pre",
+      resolveId(id) {
+        if (id.endsWith("dep.js")) throw frozen;
+        return null;
+      },
+    };
+
+    await assert.rejects(
+      production(project(), pluginsOf(declaring(() => [plugin]))),
+      (error: Error) => {
+        assert.match(
+          error.message,
+          /Frontend module @acme\/billing-frontend: /,
+        );
+        assert.match(error.message, /frozen refusal/);
+        assert.equal(frozen.message, "frozen refusal");
+        return true;
+      },
+    );
   });
 });
 
