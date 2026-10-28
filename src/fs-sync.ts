@@ -138,9 +138,7 @@ export function applyContent(content: string, destPath: string): boolean {
   if (existsSync(destPath)) {
     try {
       if (readFileSync(destPath).equals(buf)) return false;
-    } catch {
-      // unreadable dest — fall through and overwrite
-    }
+    } catch {}
   }
   mkdirSync(dirname(destPath), { recursive: true });
   const tmp = `${destPath}.ajs-dms-tmp-${process.pid}-${Date.now()}`;

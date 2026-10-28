@@ -92,9 +92,7 @@ function stopOnAbort(child: ChildProcess, signal: AbortSignal | undefined) {
       } else {
         process.kill(-child.pid, "SIGTERM");
       }
-    } catch {
-      // The server already exited.
-    }
+    } catch {}
   };
   if (signal.aborted) {
     stop();

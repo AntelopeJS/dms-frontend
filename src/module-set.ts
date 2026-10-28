@@ -105,9 +105,7 @@ export function followModuleSet(options: ModuleSetFollowOptions): () => void {
       if (!isStopped && !manifest.settling) {
         inspect(moduleSetFingerprint(manifest.modules));
       }
-    } catch {
-      // The backend is restarting or briefly unreachable.
-    }
+    } catch {}
     if (!isStopped) schedule();
   };
   const schedule = () => {
@@ -226,9 +224,7 @@ export async function reportFrontendReadyOnceAnswered(
         retry.timeoutMs,
       );
       if (response.status < SERVER_ERROR) return response.ok;
-    } catch {
-      // Asleep, waking or out of reach: report again.
-    }
+    } catch {}
     await sleep(delayMs, undefined, { ref: false });
     delayMs = Math.min(retry.maxDelayMs, delayMs * 2);
   }

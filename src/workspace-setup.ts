@@ -256,9 +256,7 @@ export function runCommand(
         } else {
           process.kill(-child.pid, signal);
         }
-      } catch {
-        // The whole group already exited.
-      }
+      } catch {}
     };
 
     const stopChild = (signal: NodeJS.Signals) => {
