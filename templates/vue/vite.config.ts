@@ -15,7 +15,7 @@ import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { uiInertiaPage } from "./ui-inertia-page.mjs";
 import { uiKbd } from "./ui-kbd.mjs";
 import { uiRequestState } from "./ui-request-state.mjs";
-import { autoImportDirectories } from "./frontend-build-loader.ts";
+import { autoImportDirectories, vitePlugins } from "./frontend-build-loader.ts";
 import { frontendBuilds } from "./frontend-builds.generated.ts";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
 import { iconScanGlobs } from "./icon-scan.mjs";
@@ -263,6 +263,7 @@ export default defineConfig({
       },
     }),
     paintBeforeHydrate(),
+    ...vitePlugins(registry.modules, frontendBuilds),
   ],
   resolve: {
     // `@iconify/vue` keeps its API providers in module state: `main.ts` and
