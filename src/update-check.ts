@@ -217,9 +217,7 @@ function writeCache(file: string, cache: UpdateCheckCache): void {
   try {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, `${JSON.stringify(cache)}\n`);
-  } catch {
-    // A read-only or full cache directory only costs us the throttle.
-  }
+  } catch {}
 }
 
 /**
@@ -390,9 +388,7 @@ export function startUpdateCheck(
               succeeded: published !== undefined,
             });
           },
-          () => {
-            // A version notice is never worth failing a command over.
-          },
+          () => {},
         );
 
     let isReported = false;

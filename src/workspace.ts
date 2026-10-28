@@ -362,9 +362,7 @@ export function directorySize(dir: string): number {
         if (stats.nlink > 1 && seen.has(inode)) continue;
         seen.add(inode);
         total += stats.size;
-      } catch {
-        // Removed while we walked: it no longer takes any space.
-      }
+      } catch {}
     }
   }
   return total;
