@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "deploy-dashboard",
+      "area": "dms",
+      "style": "clean",
+      "prompt": "Deploy the dashboard to production behind an nginx reverse proxy.",
+      "expect": {
+        "skills": ["dms-frontend"],
+        "acceptable": ["dms-project", "dms"]
+      }
+    },
+    {
+      "id": "dms-build-401-casual",
+      "area": "dms",
+      "style": "casual",
+      "prompt": "ajs dms build fails with a 401, wtf",
+      "expect": {
+        "skills": ["dms-frontend"],
+        "acceptable": ["dms-project", "ajs-cli"]
+      }
+    },
+    {
+      "id": "frontend-session-secret",
+      "area": "dms",
+      "style": "clean",
+      "prompt": "The frontend server refuses to start because of a missing session secret. How do I configure it?",
+      "expect": {
+        "skills": ["dms-frontend"],
+        "acceptable": ["dms-project"]
+      }
+    },
+    {
+      "id": "frontend-server-route",
+      "area": "dms",
+      "style": "clean",
+      "prompt": "Add a server route to my module's frontend (dms.server.ts) that proxies to an external API.",
+      "expect": {
+        "skills": ["dms-frontend"],
+        "acceptable": ["dms-module", "dms"]
+      }
+    },
+    {
+      "id": "dms-frontend-not-dev-servers",
+      "area": "dms",
+      "style": "clean",
+      "prompt": "My page change does not show live. How do I restart the backend and the frontend dev servers of my DMS project and read their logs?",
+      "expect": {
+        "skills": ["dms-project"],
+        "acceptable": ["dms"],
+        "avoid": ["dms-frontend"]
+      }
+    },
+    {
+      "id": "dms-frontend-backend-proxy",
+      "area": "dms",
+      "style": "clean",
+      "prompt": "Browser requests to /reports/summary answer 404 although my backend serves that route. How do I let the frontend server reach it?",
+      "expect": {
+        "skills": ["dms-frontend"],
+        "acceptable": ["dms-project", "dms-module"]
+      }
+    },
+    {
+      "id": "dms-frontend-module-entry",
+      "area": "dms",
+      "style": "clean",
+      "prompt": "Write the dms.frontend.ts entry for my module so its components are namespaced under the Acme prefix.",
+      "expect": {
+        "skills": ["dms-frontend"],
+        "acceptable": ["dms-module", "dms"],
+        "mustMention": ["componentPrefix", "setup"]
+      }
+    }
+  ]
+}
