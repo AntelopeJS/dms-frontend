@@ -6,7 +6,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -15,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
+import { readText } from "./helpers/files";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(REPOSITORY, "dist/index.js");
@@ -89,7 +89,7 @@ function runCli(args: string[], options: RunOptions = {}): Promise<Run> {
   return new Promise((settle) =>
     cli.on("close", (code) => {
       const calls = existsSync(log)
-        ? readFileSync(log, "utf8")
+        ? readText(log)
             .trim()
             .split("\n")
             .map((line) => JSON.parse(line) as PnpmCall)

@@ -1,15 +1,7 @@
 import * as assert from "node:assert/strict";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { Command } from "commander";
 import { CancelledError } from "../src/cancellation";
@@ -48,11 +40,7 @@ import {
   showWorkspace,
   workspaceId,
 } from "../src/output";
-import {
-  applyDmsHelp,
-  ENVIRONMENT_VARIABLES,
-  formatEnvironmentHelp,
-} from "../src/help";
+import { applyDmsHelp, formatEnvironmentHelp } from "../src/help";
 import {
   describeListenError,
   describeStartError,
@@ -74,13 +62,6 @@ function usageError(title: RegExp, ...details: RegExp[]) {
     return true;
   };
 }
-
-const packageJson = JSON.parse(
-  readFileSync(
-    resolve(dirname(fileURLToPath(import.meta.url)), "../package.json"),
-    "utf8",
-  ),
-);
 
 describe("DMS CLI plugin", () => {
   it("resolves session secrets by command mode", () => {
@@ -142,23 +123,6 @@ describe("DMS CLI plugin", () => {
     }
   });
 
-  it("publishes only the core-discoverable executable", () => {
-    assert.equal(packageJson.name, "@antelopejs/dms-frontend");
-    assert.deepEqual(packageJson.bin, { "ajs-dms": "./dist/index.js" });
-  });
-
-  it("requires the AntelopeJS CLI that publishes its output module", () => {
-    assert.equal(
-      packageJson.peerDependencies["@antelopejs/core"],
-      ">=1.16.0 <2",
-    );
-    assert.equal(packageJson.peerDependenciesMeta, undefined);
-    for (const dependency of ["figlet", "boxen", "chalk", "@types/figlet"]) {
-      assert.equal(packageJson.dependencies[dependency], undefined);
-      assert.equal(packageJson.devDependencies[dependency], undefined);
-    }
-  });
-
   it("requires a backend URL where nothing can discover one", () => {
     assert.equal(
       requireBackendUrl("http://127.0.0.1:5010"),
@@ -188,55 +152,7 @@ describe("DMS CLI plugin", () => {
   });
 });
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-/**
- * Set by the CLI for the processes it spawns, never by a user: dev mode for
- * the generated server, the verify-source runner's inputs, and the Vite and
- * Node settings of a build.
- */
-const INTERNAL_VARIABLES = new Set([
-  "DMS_DEV",
-  "DMS_LAYER_SOURCE",
-  "DMS_MODULE_SOURCES",
-  "DMS_LOCAL_PACKAGES",
-  "DMS_VITE_LOG_LEVEL",
-  "DMS_PUBLIC_OPTIONS",
-  "NODE_OPTIONS",
-]);
-
-const ENV_READ =
-  /process\.env\.([A-Z][A-Z0-9_]*)|\.env\("([A-Z][A-Z0-9_]*)"\)|flagOrEnv\([^,]+, "([A-Z][A-Z0-9_]*)"\)/g;
-
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) return sourceFiles(path);
-    return /\.(ts|mts|mjs|js)$/.test(entry.name) ? [path] : [];
-  });
-}
-
 describe("help environment", () => {
-  it("lists every variable the CLI and the generated server read", () => {
-    const documented = new Set(
-      ENVIRONMENT_VARIABLES.flatMap(([names]) => names.split(", ")),
-    );
-    const read = new Set(
-      [join(ROOT, "src"), join(ROOT, "templates")]
-        .flatMap(sourceFiles)
-        .flatMap((file) =>
-          [...readFileSync(file, "utf8").matchAll(ENV_READ)].map(
-            (match) => match[1] ?? match[2] ?? match[3],
-          ),
-        ),
-    );
-    assert.ok(read.has("DMS_PREPARE_STRICT"));
-    const missing = [...read].filter(
-      (name) => !documented.has(name) && !INTERNAL_VARIABLES.has(name),
-    );
-    assert.deepEqual(missing, []);
-  });
-
   it("wraps the topic to the width it is given, between words", () => {
     for (const width of [80, 60, 40]) {
       const lines = formatEnvironmentHelp(width).split("\n");

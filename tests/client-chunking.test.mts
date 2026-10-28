@@ -1,11 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -14,6 +8,7 @@ import {
   clientCodeSplitting,
   onBuildLog,
 } from "../templates/vue/client-chunking.mjs";
+import { readText } from "./helpers/files";
 
 interface ManifestChunk {
   file: string;
@@ -130,7 +125,7 @@ async function entryClosure(
     },
   });
   const manifest = JSON.parse(
-    readFileSync(join(root, "dist", ".vite", "manifest.json"), "utf8"),
+    readText(join(root, "dist", ".vite", "manifest.json")),
   ) as Record<string, ManifestChunk>;
   const entry = Object.keys(manifest).find((key) => manifest[key]?.isEntry);
   assert.ok(entry, "the build has an entry");
@@ -160,19 +155,6 @@ describe("client code splitting", () => {
     );
     assert.equal(closure.length, 1, closure.join(", "));
     assert.ok(files.length > closure.length, "components are separate chunks");
-  });
-
-  it("is applied to the browser bundle only", () => {
-    const config = readFileSync(
-      new URL("../templates/vue/vite.config.ts", import.meta.url),
-      "utf8",
-    );
-    const client = config.slice(config.indexOf("environments: {"));
-    assert.match(
-      client,
-      /client:\s*\{\s*build:\s*\{\s*rolldownOptions:\s*\{\s*output:\s*\{\s*codeSplitting: clientCodeSplitting/,
-    );
-    assert.equal(config.match(/codeSplitting/g)?.length, 1);
   });
 });
 

@@ -190,6 +190,7 @@ describe("regenerated locale catalogs in the dev server", () => {
       await runner.import("/locales.generated.ts");
       await regenerate({ "de-DE": { greeting: "Hallo" } });
       await eventually(() => invalidated.includes("/locales.generated.ts"));
+      assert.ok(invalidated.includes("/locales.generated.ts"));
     } finally {
       await runner.close();
     }

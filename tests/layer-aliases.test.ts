@@ -5,7 +5,7 @@
 // before the helper existed -- that file feeds every generated workspace.
 
 import * as assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -16,6 +16,7 @@ import {
   writeFrontendModuleRegistry,
 } from "../src/common";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
+import { readText } from "./helpers/files";
 
 function moduleWithLayers(prefix: string, layers: string[]): string {
   const root = temporaryDirectory(prefix);
@@ -85,29 +86,6 @@ describe("layer aliases", () => {
     });
     assert.deepEqual(frontendLayerTypePaths(root, { relativeTo: root }), {
       "#dms-ui/*": ["./layers/dms-ui/*"],
-    });
-  });
-});
-
-describe("published entry points", () => {
-  // Adding `exports` to a package that had none is where a deep import turns
-  // into a resolution error. Consumers import `@antelopejs/dms-frontend/dist/
-  // common.js` today, so the wildcards that keep those paths reachable are
-  // part of the contract, not a detail of the map.
-  it("keeps the deep dist and templates paths reachable", () => {
-    const { exports: map } = JSON.parse(
-      readFileSync(join("package.json"), "utf8"),
-    );
-    assert.deepEqual(map["./dist/*.js"], {
-      types: "./dist/*.d.ts",
-      default: "./dist/*.js",
-    });
-    assert.equal(map["./dist/*"], "./dist/*");
-    assert.equal(map["./templates/*"], "./templates/*");
-    assert.equal(map["./package.json"], "./package.json");
-    assert.deepEqual(map["./common"], {
-      types: "./dist/common.d.ts",
-      default: "./dist/common.js",
     });
   });
 });
@@ -182,7 +160,7 @@ describe("generated workspace type paths", () => {
     ]);
 
     assert.equal(
-      readFileSync(join(workspace, "frontend-paths.generated.json"), "utf8"),
+      readText(join(workspace, "frontend-paths.generated.json")),
       EXPECTED,
     );
   });

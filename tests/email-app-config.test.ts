@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
@@ -16,6 +9,7 @@ import {
   type ResolvedLayer,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { copyEmailRendererFiles } from "./helpers/templates";
 
 function writeFile(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -69,13 +63,7 @@ const branding = useDmsAppConfig().branding as Record<string, any>;
     writeFileSync(join(workspace, "package.json"), '{"type":"module"}');
     materializeLayers(workspace, [project, dms]);
     writeFrontendModuleRegistry(workspace, [project, dms]);
-    for (const file of readdirSync("templates/vue").filter(
-      (name) =>
-        name.startsWith("email-") ||
-        name === "public-options.ts" ||
-        name === "vite.email.config.ts",
-    ))
-      cpSync(join("templates/vue", file), join(workspace, file));
+    copyEmailRendererFiles(workspace);
     execFileSync(
       process.execPath,
       [

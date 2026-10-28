@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { type AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
@@ -18,6 +18,7 @@ import {
 import { DMS_FRONTEND_HOME } from "../src/config";
 import { memoryUi } from "./fixtures/memory-ui";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
+import { readText } from "./helpers/files";
 
 function cacheFile(): string {
   return join(temporaryDirectory("dms-update-check-"), "nested", "state.json");
@@ -164,7 +165,7 @@ describe("update check notice", () => {
 
     assert.deepEqual(test.fetched, [UPDATE_CHECK_PACKAGE]);
     assert.deepEqual(test.written, notice("0.1.0"));
-    assert.deepEqual(JSON.parse(readFileSync(test.cacheFile, "utf-8")), {
+    assert.deepEqual(JSON.parse(readText(test.cacheFile)), {
       checkedAt: 1_000_000,
       latestVersion: "0.1.0",
       succeeded: true,
@@ -210,7 +211,7 @@ describe("update check notice", () => {
       fetchLatestVersion: async () => undefined,
     });
 
-    assert.deepEqual(JSON.parse(readFileSync(test.cacheFile, "utf-8")), {
+    assert.deepEqual(JSON.parse(readText(test.cacheFile)), {
       checkedAt: later,
       latestVersion: "0.4.0",
       succeeded: false,
@@ -222,7 +223,7 @@ describe("update check notice", () => {
     const test = harness();
     await test.run({ fetchLatestVersion: async () => undefined });
 
-    assert.deepEqual(JSON.parse(readFileSync(test.cacheFile, "utf-8")), {
+    assert.deepEqual(JSON.parse(readText(test.cacheFile)), {
       checkedAt: 1_000_000,
       succeeded: false,
     });
@@ -361,7 +362,7 @@ describe("update check timing and placement", () => {
     answer("0.9.0");
     await check?.completion;
     assert.equal(
-      JSON.parse(readFileSync(test.cacheFile, "utf-8")).latestVersion,
+      JSON.parse(readText(test.cacheFile)).latestVersion,
       "0.9.0",
       "the answer is kept for the next run",
     );

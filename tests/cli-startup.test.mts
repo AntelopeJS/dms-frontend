@@ -1,10 +1,10 @@
 import * as assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
+import { readText } from "./helpers/files";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(REPOSITORY, "dist/index.js");
@@ -30,7 +30,7 @@ function loadedModules(args: string[]): string[] {
     },
   );
   assert.equal(result.status, 0, result.stderr);
-  return JSON.parse(readFileSync(record, "utf8"));
+  return JSON.parse(readText(record));
 }
 
 /** AntelopeJS's config loader, which only build and start read a project with. */

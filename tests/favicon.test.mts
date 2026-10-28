@@ -1,19 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { withFaviconPlaceholder } from "../templates/vue/server/favicon.mjs";
 
 const PLACEHOLDER = '<link rel="icon" href="data:," />';
 
 describe("the favicon placeholder", () => {
-  it("is left out of the template, which every page shares", () => {
-    const template = readFileSync(
-      new URL("../templates/vue/index.html", import.meta.url),
-      "utf8",
-    );
-    assert.doesNotMatch(template, /rel="icon"/);
-  });
-
   it("goes in front of a head that declares no icon", () => {
     // What a render without `useHead` icons, or the client-rendering fallback
     // of a failed one, hands the template.

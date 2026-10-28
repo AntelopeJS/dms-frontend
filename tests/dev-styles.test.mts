@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
-import { runInNewContext } from "node:vm";
 import vue from "@vitejs/plugin-vue";
-import { createServer, normalizePath } from "vite";
+import { createServer } from "vite";
 import { developmentStyleTags } from "../templates/vue/server/dev-styles.mjs";
 import { orderHeadForFirstPaint } from "../templates/vue/head-order.mjs";
 
@@ -171,22 +164,6 @@ describe("development stylesheets in the served document", () => {
     const tags = await developmentStyleTags(devServer as never);
     assert.doesNotMatch(tags, /<style/);
   });
-
-  it("hands each stylesheet over to Vite instead of leaving a duplicate", () => {
-    const entry = readFileSync(join("templates", "vue", "main.ts"), "utf8");
-    assert.match(entry, /data-dms-dev-style/);
-    assert.match(entry, /MutationObserver/);
-    assert.match(entry, /style\[data-vite-dev-id\]/);
-    const styles = readFileSync(
-      join("templates", "vue", "server", "dev-styles.mjs"),
-      "utf8",
-    );
-    assert.doesNotMatch(
-      styles,
-      /"data-vite-dev-id"/,
-      "reusing Vite's own attribute makes its client adopt the tag and skip updateStyle, stranding CSS edits",
-    );
-  });
 });
 
 describe("first paint in the built document", () => {
@@ -213,42 +190,5 @@ describe("first paint in the built document", () => {
   it("leaves an already ordered document alone", () => {
     const once = orderHeadForFirstPaint(built);
     assert.equal(orderHeadForFirstPaint(once), once);
-  });
-});
-
-describe("dependency optimizer entries", () => {
-  it("covers every materialized module rather than waiting for a page to need one", () => {
-    const template = readFileSync(
-      resolve("templates", "vue", "vite.config.ts"),
-      "utf8",
-    );
-    const expression = template.match(
-      /const optimizerEntries = ([\s\S]*?\n\][^;]*);/,
-    );
-    assert.ok(expression, "the template computes the optimizer's entry points");
-    // `normalizePath` is the real one: it must stay the identity on POSIX.
-    // `import.meta` is not valid outside a module: the expression runs with
-    // the directory under a plain name.
-    const source = expression[1].replaceAll("import.meta.dirname", "dirname");
-    const entries = runInNewContext(`(${source})`, {
-      dirname: "/workspace",
-      normalizePath,
-      resolve: (...parts: string[]) => parts.join("/"),
-      moduleRoots: ["/workspace/frontend-modules/core"],
-      frontendSourceRoots: ["/workspace/frontend-modules/core/layers/ui"],
-    }) as string[];
-    assert.ok(
-      entries.includes("/workspace/frontend-modules/core/dms.frontend.ts"),
-      "each module's entry must be crawled at startup",
-    );
-    assert.ok(
-      entries.some((entry) => entry.endsWith("layers/ui/app/**/*.vue")),
-      "so must the sources it reaches, which carry the module's own dependencies",
-    );
-    assert.doesNotMatch(
-      template,
-      /entries: \[\]/,
-      "an empty crawl makes a cold page re-run the optimizer mid-request, which answers 504 and forces a reload",
-    );
   });
 });

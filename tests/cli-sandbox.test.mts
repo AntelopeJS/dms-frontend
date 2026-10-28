@@ -1,13 +1,7 @@
 import * as assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createServer, type Server } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -15,13 +9,8 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
-
-const packageJson = JSON.parse(
-  readFileSync(
-    resolve(dirname(fileURLToPath(import.meta.url)), "../package.json"),
-    "utf8",
-  ),
-);
+import { listNames } from "./helpers/files";
+import { OWN_PACKAGE } from "./helpers/own-package";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const builtEntry = join(repository, "dist/index.js");
@@ -126,7 +115,7 @@ describe("running outside a DMS project", () => {
   it("reports the version without a project", async () => {
     const result = await runCli(["--version"]);
     assert.equal(result.code, 0);
-    assert.equal(result.stdout.trim(), packageJson.version);
+    assert.equal(result.stdout.trim(), OWN_PACKAGE.version);
   });
 
   it("cleans an empty home without a project", async () => {
@@ -221,7 +210,7 @@ describe("following the ajs output contract", () => {
       assert.match(
         result.stdout,
         new RegExp(
-          `^ajs dms ${packageJson.version} · DMS frontend for AntelopeJS \\(Vue 3, Vite, Inertia\\)\n\nUsage: ajs dms \\[options\\] \\[command\\]\n`,
+          `^ajs dms ${OWN_PACKAGE.version} · DMS frontend for AntelopeJS \\(Vue 3, Vite, Inertia\\)\n\nUsage: ajs dms \\[options\\] \\[command\\]\n`,
         ),
       );
       assert.equal(result.stderr, "");
@@ -700,7 +689,7 @@ describe("validating options before any work", () => {
       assert.equal(result.code, 0, result.stderr);
       assert.deepEqual(report, {
         modules: [{ name: "demo-lang", version: "1.4.0" }],
-        version: packageJson.version,
+        version: OWN_PACKAGE.version,
       });
       assert.match(
         result.stderr,
@@ -1248,7 +1237,7 @@ describe("listing and removing workspaces", () => {
     );
     assert.match(lines[3], /^– Skipped .*stray-dir \(not a workspace\)$/);
     const home = join(result.sandbox, ".antelopejs", "dms-frontend");
-    assert.deepEqual(readdirSync(home), ["stray-dir"]);
+    assert.deepEqual(listNames(home), ["stray-dir"]);
   });
 });
 
@@ -1264,7 +1253,7 @@ const UPDATE_ENV = {
   CI: undefined,
   NO_COLOR: "1",
 };
-const UPDATE_NOTICE = `ℹ ajs dms 999.0.0 is available (you have ${packageJson.version}) → ajs update dms\n`;
+const UPDATE_NOTICE = `ℹ ajs dms 999.0.0 is available (you have ${OWN_PACKAGE.version}) → ajs update dms\n`;
 
 describe("update notice", () => {
   it("ends a successful command on a terminal, after its own output", async () => {
@@ -1407,7 +1396,7 @@ describe("quiet runs", () => {
     assert.equal(cleaned.stdout, "");
     assert.equal(cleaned.stderr, "");
     assert.deepEqual(
-      readdirSync(join(cleaned.sandbox, ".antelopejs", "dms-frontend")),
+      listNames(join(cleaned.sandbox, ".antelopejs", "dms-frontend")),
       [],
     );
 

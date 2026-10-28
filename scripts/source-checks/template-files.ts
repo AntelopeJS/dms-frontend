@@ -1,28 +1,26 @@
-import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, posix, relative, resolve } from "node:path";
-import { describe, it } from "node:test";
-import { TEMPLATE_FILES } from "../src/config";
+import { TEMPLATE_FILES } from "../../src/config";
+import {
+  filesUnder,
+  isFile,
+  type Problem,
+  type SourceCheck,
+  TEMPLATE_DIR,
+} from "./repository";
 
-const TEMPLATE_DIR = resolve("templates/vue");
-
-/** How the workspace's files name another file of the workspace. */
-const REFERENCES = [
-  // import … from "./x", export … from "./x", import "./x"
-  /(?:\bfrom|^\s*import)\s*["'](\.{1,2}\/[^"']+)["']/gm,
-  // import("./x")
-  /\bimport\(\s*["'](\.{1,2}\/[^"']+)["']\s*\)/g,
-  // new URL("./x", import.meta.url)
-  /\bnew URL\(\s*["'](\.{1,2}\/[^"']+)["']\s*,\s*import\.meta\.url/g,
-  // resolve(import.meta.dirname, "x"), join(import.meta.dirname, "x")
-  /\b(?:resolve|join)\(\s*import\.meta\.dirname\s*,\s*["']([^"']+)["']/g,
-  // devServer.ssrLoadModule("/x"), <script src="/x">: from the workspace root
-  /\b(?:ssrLoadModule\(|src=)\s*["'](\/[^"'/][^"']*)["']/g,
-  // a Vite build's entry: build: { ssr: "x.ts" }, input: "x.ts"
-  /\b(?:ssr|input)\s*:\s*["']([\w./-]+\.(?:[cm]?[jt]s|html))["']/g,
-  // pnpm-workspace.yaml: patchedDependencies
-  /:\s*(patches\/\S+\.patch)/g,
-];
+/** How the workspace's files name another file of the workspace, by the form of the reference. */
+const REFERENCES = {
+  relativeImportOrExport: /(?:\bfrom|^\s*import)\s*["'](\.{1,2}\/[^"']+)["']/gm,
+  dynamicImport: /\bimport\(\s*["'](\.{1,2}\/[^"']+)["']\s*\)/g,
+  urlRelativeToModule:
+    /\bnew URL\(\s*["'](\.{1,2}\/[^"']+)["']\s*,\s*import\.meta\.url/g,
+  pathRelativeToDirname:
+    /\b(?:resolve|join)\(\s*import\.meta\.dirname\s*,\s*["']([^"']+)["']/g,
+  fromWorkspaceRoot: /\b(?:ssrLoadModule\(|src=)\s*["'](\/[^"'/][^"']*)["']/g,
+  buildEntry: /\b(?:ssr|input)\s*:\s*["']([\w./-]+\.(?:[cm]?[jt]s|html))["']/g,
+  patchedDependency: /:\s*(patches\/\S+\.patch)/g,
+};
 
 /**
  * Files the tools load by convention rather than by reference: Vite's
@@ -39,7 +37,6 @@ const CONVENTIONAL = [
   "gitignore",
 ];
 
-/** The script commands of the workspace's package.json name files too. */
 const SCRIPT_FILE = /(?:^|\s)(?:\.\/)?([\w.-]+\.(?:[cm]?[jt]s|json))(?=\s|$)/g;
 
 const EXTENSIONS = ["", ".ts", ".mts", ".mjs", ".js", ".vue", ".json"];
@@ -51,17 +48,7 @@ function templateFile(from: string, reference: string): string | undefined {
     : reference.startsWith(".")
       ? resolve(dirname(from), reference)
       : join(TEMPLATE_DIR, reference);
-  for (const extension of EXTENSIONS) {
-    const candidate = `${base}${extension}`;
-    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
-  }
-  return undefined;
-}
-
-/** Every file under `path`, or `path` itself. */
-function filesUnder(path: string): string[] {
-  if (!statSync(path).isDirectory()) return [path];
-  return readdirSync(path).flatMap((name) => filesUnder(join(path, name)));
+  return EXTENSIONS.map((extension) => `${base}${extension}`).find(isFile);
 }
 
 /** The template files the workspace receives, by their path in `templates/vue`. */
@@ -76,17 +63,16 @@ function copiedFiles(): Set<string> {
 
 function references(file: string): string[] {
   const source = readFileSync(file, "utf8");
-  const found = REFERENCES.flatMap((pattern) =>
+  const found = Object.values(REFERENCES).flatMap((pattern) =>
     [...source.matchAll(pattern)].map((match) => match[1]!),
   );
   if (file.endsWith("tsconfig.json")) {
-    const { files = [] } = JSON.parse(source) as { files?: string[] };
+    const { files = [] }: { files?: string[] } = JSON.parse(source);
     found.push(...files);
   }
   if (file.endsWith("package.json")) {
-    const { scripts = {} } = JSON.parse(source) as {
-      scripts?: Record<string, string>;
-    };
+    const { scripts = {} }: { scripts?: Record<string, string> } =
+      JSON.parse(source);
     for (const command of Object.values(scripts))
       for (const match of command.matchAll(SCRIPT_FILE)) found.push(match[1]!);
   }
@@ -96,7 +82,7 @@ function references(file: string): string[] {
 /**
  * The template files every copied file reaches, transitively, and the files
  * that reference them. A referenced file that does not exist in
- * `templates/vue` is one the workspace generates (`*.generated.*`, `dist/…`).
+ * `templates/vue` is one the workspace generates (`*.generated.*`, `dist/...`).
  */
 function reachedFiles(roots: Iterable<string>): Map<string, string> {
   const reached = new Map<string, string>();
@@ -134,31 +120,41 @@ function missingFiles(copied: Set<string>): string[] {
     );
 }
 
-describe("the workspace's template files", () => {
-  it("copies every file of templates/vue the application loads", () => {
-    const copied = copiedFiles();
-    for (const name of CONVENTIONAL)
-      assert.ok(
-        copied.has(join(TEMPLATE_DIR, name)),
+function workspaceCopiesEveryLoadedFile(): Problem[] {
+  const copied = copiedFiles();
+  return [
+    ...CONVENTIONAL.filter((name) => !copied.has(join(TEMPLATE_DIR, name))).map(
+      (name) =>
         `list ${name} in TEMPLATE_FILES (src/config.ts): the tools load it by convention`,
-      );
-    assert.deepEqual(
-      missingFiles(copied),
-      [],
-      "list these files in TEMPLATE_FILES (src/config.ts): a workspace would not have them",
-    );
-  });
+    ),
+    ...missingFiles(copied).map(
+      (entry) =>
+        `list ${entry} in TEMPLATE_FILES (src/config.ts): a workspace would not have it`,
+    ),
+  ];
+}
 
-  it("finds what an entry left out of TEMPLATE_FILES leaves behind", () => {
-    const copied = copiedFiles();
-    const withoutOne = new Set(
-      [...copied].filter((file) => relativeName(file) !== "network-error.ts"),
-    );
-    assert.equal(withoutOne.size, copied.size - 1);
-    const missing = missingFiles(withoutOne);
-    assert.ok(
-      missing.some((entry) => entry.startsWith("network-error.ts ")),
-      `network-error.ts left out goes unnoticed: ${JSON.stringify(missing)}`,
-    );
-  });
-});
+function theCheckFindsAFileLeftOut(): Problem[] {
+  const copied = copiedFiles();
+  const withoutOne = new Set(
+    [...copied].filter((file) => relativeName(file) !== "network-error.ts"),
+  );
+  const missing = missingFiles(withoutOne);
+  return withoutOne.size === copied.size - 1 &&
+    missing.some((entry) => entry.startsWith("network-error.ts "))
+    ? []
+    : [
+        `network-error.ts left out of TEMPLATE_FILES goes unnoticed: ${JSON.stringify(missing)}`,
+      ];
+}
+
+export const TEMPLATE_FILE_CHECKS: SourceCheck[] = [
+  {
+    name: "the workspace copies every file of templates/vue the application loads",
+    run: workspaceCopiesEveryLoadedFile,
+  },
+  {
+    name: "the template file check finds what an entry left out of TEMPLATE_FILES",
+    run: theCheckFindsAFileLeftOut,
+  },
+];

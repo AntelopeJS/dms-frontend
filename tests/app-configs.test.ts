@@ -1,11 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -15,6 +9,7 @@ import {
   type ResolvedLayer,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { readText } from "./helpers/files";
 
 function writeFile(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -47,7 +42,7 @@ describe("the generated app configs module", () => {
     mkdirSync(workspace);
     materializeLayers(workspace, layers);
     writeFrontendModuleRegistry(workspace, layers);
-    return readFileSync(join(workspace, "app-configs.generated.ts"), "utf8");
+    return readText(join(workspace, "app-configs.generated.ts"));
   }
 
   const CONFIG = "export default {};\n";
