@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.9.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.9.0...v0.9.1)
+
+### 🚀 Enhancements
+
+- **build:** Let frontend modules register Vite plugins ([#199](https://github.com/AntelopeJS/dms-frontend/pull/199))
+
+### 📖 Documentation
+
+- **changelog:** Upgrade notes of dms-frontend 0.9.0 ([#195](https://github.com/AntelopeJS/dms-frontend/pull/195))
+
+### 🏡 Chore
+
+- Adopt the guardrail pack from tooling-configs 0.2.0 ([#196](https://github.com/AntelopeJS/dms-frontend/pull/196))
+- Configure Renovate with the shared preset ([#197](https://github.com/AntelopeJS/dms-frontend/pull/197))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.9.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.8.0...v0.9.0)
