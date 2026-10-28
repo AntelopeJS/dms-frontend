@@ -1,13 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
 import {
@@ -18,6 +10,8 @@ import {
   writeFrontendModuleRegistry,
   writeLocaleMessages,
 } from "../src/common";
+import { readText } from "./helpers/files";
+import { copyEmailRendererFiles } from "./helpers/templates";
 
 const TIMEOUT_MS = 60_000;
 
@@ -42,7 +36,7 @@ it("rebuilds the email catalogs when they are regenerated during a watch-mode bu
   // missing or half written while a rebuild runs: not there yet.
   const subject = (): string | undefined => {
     try {
-      return JSON.parse(readFileSync(emitted, "utf8")).subject;
+      return JSON.parse(readText(emitted)).subject;
     } catch {
       return undefined;
     }
@@ -60,13 +54,7 @@ it("rebuilds the email catalogs when they are regenerated during a watch-mode bu
     writeFileSync(join(workspace, "package.json"), '{"type":"module"}');
     materializeLayers(workspace, [layer]);
     writeFrontendModuleRegistry(workspace, [layer]);
-    for (const file of readdirSync("templates/vue").filter(
-      (name) =>
-        name.startsWith("email-") ||
-        name === "public-options.ts" ||
-        name === "vite.email.config.ts",
-    ))
-      cpSync(join("templates/vue", file), join(workspace, file));
+    copyEmailRendererFiles(workspace);
 
     const { build } = await import("vite");
     const watcher = await build({

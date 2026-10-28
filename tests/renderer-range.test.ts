@@ -1,30 +1,18 @@
 import * as assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import {
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import {
-  assertLayersSupportRenderer,
-  type RendererRelease,
-  type ResolvedLayer,
-} from "../src/common";
+import { assertLayersSupportRenderer, type ResolvedLayer } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
+import { listNames, readText } from "./helpers/files";
+import { OWN_PACKAGE } from "./helpers/own-package";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const OWN_PACKAGE: RendererRelease = JSON.parse(
-  readFileSync(join(REPOSITORY, "package.json"), "utf8"),
-);
 const RENDERER = "@antelopejs/dms-frontend";
 const EXCLUDING_EVERY_RELEASE = ">=999.0.0";
 
@@ -155,7 +143,7 @@ describe("renderer range", () => {
 
     const added = layer("added-since");
     assert.equal(check([earlier, added], "0.4.0", workspace).length, 1);
-    assert.deepEqual(readFileSync(noticed, "utf8").trim().split("\n").sort(), [
+    assert.deepEqual(readText(noticed).trim().split("\n").sort(), [
       `added-since (${added.path})`,
       `noticed-by-an-earlier-run (${earlier.path})`,
     ]);
@@ -344,7 +332,7 @@ describe("commands refusing a module that does not support this release", () => 
         assert.match(output, /excluding-module \(.+\) supports >=999\.0\.0/);
       }
       const workspaces = join(home, ".antelopejs", "dms-frontend");
-      for (const workspace of readdirSync(workspaces))
+      for (const workspace of listNames(workspaces))
         assert.equal(
           existsSync(join(workspaces, workspace, "frontend-modules")),
           false,

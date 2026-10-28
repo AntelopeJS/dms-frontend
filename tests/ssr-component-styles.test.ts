@@ -1,17 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
+import { readText } from "./helpers/files";
 
 interface ManifestEntry {
   css?: string[];
@@ -137,7 +131,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       "<html><head><title>Antelope DMS</title></head><body>__DMS_APP__</body></html>",
     );
     const manifest = JSON.parse(
-      readFileSync(join(workspace, "dist/client/.vite/manifest.json"), "utf8"),
+      readText(join(workspace, "dist/client/.vite/manifest.json")),
     ) as Record<string, ManifestEntry>;
     const page = componentStylesheet(manifest, "Page");
     const child = componentStylesheet(manifest, "Child");

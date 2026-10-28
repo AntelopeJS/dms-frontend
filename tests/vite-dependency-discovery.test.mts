@@ -1,11 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -17,9 +11,10 @@ import {
   normalizePath,
   type DepOptimizationOptions,
 } from "vite";
+import { readText } from "./helpers/files";
 
 function templateSource(): string {
-  return readFileSync(resolve("templates/vue/vite.config.ts"), "utf8");
+  return readText(resolve("templates/vue/vite.config.ts"));
 }
 
 function templateOptimization(

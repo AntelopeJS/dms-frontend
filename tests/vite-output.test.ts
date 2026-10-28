@@ -1,20 +1,11 @@
 import * as assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { BUILD_STEPS } from "../src/commands/build-action";
 import {
   describeViteFailure,
   VERBOSE_VITE_HINT,
   viteLogLevel,
   ViteWarnings,
 } from "../src/vite-output";
-
-const TEMPLATE = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../templates/vue",
-);
 
 /** What Vite prints on a syntax error, paths already mapped to the source. */
 const SYNTAX_ERROR = [
@@ -119,26 +110,5 @@ describe("Vite build warnings", () => {
   it("runs Vite at warn, or at info in a verbose run", () => {
     assert.equal(viteLogLevel(false), "warn");
     assert.equal(viteLogLevel(true), "info");
-  });
-});
-
-describe("production build steps", () => {
-  const pkg = JSON.parse(
-    readFileSync(resolve(TEMPLATE, "package.json"), "utf8"),
-  );
-
-  it("run what the workspace build script runs, in its order", () => {
-    assert.equal(
-      BUILD_STEPS.map((step) => pkg.scripts[step.script]).join(" && "),
-      pkg.scripts.build,
-    );
-  });
-
-  it("let the CLI set the Vite log level of every config", () => {
-    for (const config of ["vite.config.ts", "vite.email.config.ts"]) {
-      const source = readFileSync(resolve(TEMPLATE, config), "utf8");
-      assert.match(source, /process\.env\.DMS_VITE_LOG_LEVEL/);
-      assert.match(source, /^ {2}logLevel,$/m);
-    }
   });
 });

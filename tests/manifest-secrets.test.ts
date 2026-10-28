@@ -2,13 +2,7 @@ import * as assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -24,14 +18,12 @@ import {
 } from "../src/manifest-secrets";
 import type { ManifestModule } from "../src/workspace";
 import { memoryUi } from "./fixtures/memory-ui";
+import { OWN_PACKAGE } from "./helpers/own-package";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST_SECRET = "manifest-render-secret";
 const RELAY_SECRET = "manifest-relay-secret";
 const SESSION_SECRET = "html-render-secret-test-session-secret";
-const OWN_VERSION: string = JSON.parse(
-  readFileSync(join(REPOSITORY, "package.json"), "utf8"),
-).version;
 
 function dmsModule(
   serviceSecret: unknown,
@@ -446,7 +438,7 @@ describe("ajs dms start", () => {
       assert.match(
         taken.log,
         new RegExp(
-          `\\[DMS\\] Reported 1 modules to the backend \\(dms-frontend ${OWN_VERSION.replace(/\\./g, "\\\\.")}\\)\\n`,
+          `\\[DMS\\] Reported 1 modules to the backend \\(dms-frontend ${OWN_PACKAGE.version.replace(/\\./g, "\\\\.")}\\)\\n`,
         ),
       );
       const refused = await start(

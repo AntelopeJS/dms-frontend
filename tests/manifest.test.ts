@@ -1,10 +1,9 @@
 import * as assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
 import { CliError } from "@antelopejs/core/cli";
 import {
   BackendResponseError,
@@ -18,6 +17,7 @@ import {
   resolveManifest,
 } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
+import { OWN_PACKAGE } from "./helpers/own-package";
 
 const manifest: Manifest = { modules: [] };
 
@@ -167,16 +167,10 @@ describe("fetchManifest", () => {
   });
 
   it("says which side to upgrade for a manifest of another version", () => {
-    const { version } = JSON.parse(
-      readFileSync(
-        join(dirname(fileURLToPath(import.meta.url)), "../package.json"),
-        "utf8",
-      ),
-    );
     assert.equal(
       problemText(new ManifestRefusedError(describeManifestVersion(3))),
       [
-        `✖ The backend serves frontend manifest version 3, which @antelopejs/dms-frontend ${version} cannot read`,
+        `✖ The backend serves frontend manifest version 3, which @antelopejs/dms-frontend ${OWN_PACKAGE.version} cannot read`,
         "  This loader reads version 2; the backend's @antelopejs/dms is newer than this loader.",
         "  → Upgrade the loader (ajs update dms) to a release that reads version 3",
         "",

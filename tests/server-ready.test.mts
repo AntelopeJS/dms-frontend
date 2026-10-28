@@ -190,7 +190,7 @@ describe("Frontend server startup", () => {
           fail(new Error(`server exited (${code}): ${started.output()}`)),
         );
       });
-      await canConnect(port);
+      await assert.doesNotReject(canConnect(port));
     },
   );
 

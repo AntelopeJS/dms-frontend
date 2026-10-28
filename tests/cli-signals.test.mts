@@ -6,7 +6,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -15,6 +14,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
+import { readText } from "./helpers/files";
+import { OWN_PACKAGE } from "./helpers/own-package";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(REPOSITORY, "dist/index.js");
@@ -22,9 +23,6 @@ const FIXTURES = join(REPOSITORY, "tests/fixtures");
 const PROCESS_TREE = join(FIXTURES, "process-tree.mjs");
 const SESSION_SECRET = "signals-test-session-secret-0123456789";
 const TERMINAL_STDERR = join(FIXTURES, "terminal-stderr.mjs");
-const { version } = JSON.parse(
-  readFileSync(join(REPOSITORY, "package.json"), "utf8"),
-);
 
 let scratch: string;
 
@@ -89,7 +87,7 @@ function startCli({
   );
   const tree = waitFor(
     () => {
-      const pids = readFileSync(pidFile, "utf8").trim().split(" ").map(Number);
+      const pids = readText(pidFile).trim().split(" ").map(Number);
       if (pids.length !== 2 || !pids.every((pid) => pid > 0)) return undefined;
       seen.push(...pids);
       return pids as [number, number];
@@ -126,7 +124,7 @@ function isAlive(pid: number): boolean {
     return false;
   }
   try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const stat = readText(`/proc/${pid}/stat`);
     return stat.slice(stat.lastIndexOf(")") + 2)[0] !== "Z";
   } catch {
     return true;
@@ -318,7 +316,7 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
         NO_COLOR: "1",
       },
     });
-    const notice = `ℹ ajs dms 999.0.0 is available (you have ${version}) → ajs update dms\n`;
+    const notice = `ℹ ajs dms 999.0.0 is available (you have ${OWN_PACKAGE.version}) → ajs update dms\n`;
     await waitFor(
       () => (run.output().includes(notice) ? true : undefined),
       run.output,
