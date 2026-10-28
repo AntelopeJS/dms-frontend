@@ -344,6 +344,53 @@ describe("The Vite plugins a module registers", () => {
   });
 });
 
+describe("The error a module's plugin hook throws", () => {
+  it("keeps the diagnostic fields, the stack frames and the original as its cause", () => {
+    const diagnostics = {
+      id: "/src/entry.ts",
+      loc: { file: "/src/entry.ts", line: 3, column: 7 },
+      frame: "1: import x\n   ^",
+      plugin: "boundary",
+      pluginCode: "BOUNDARY",
+      hook: "resolveId",
+      code: "PLUGIN_ERROR",
+    };
+    const original = Object.assign(new Error("refused import"), diagnostics);
+    const plugin: Plugin = {
+      name: "boundary",
+      resolveId() {
+        throw original;
+      },
+    };
+    const [wrapped] = pluginsOf(declaring(() => [plugin]));
+    // SAFETY: the hook above is a plain function taking no argument.
+    const resolveId = wrapped.resolveId as () => never;
+
+    assert.throws(resolveId, (error: Error & typeof diagnostics) => {
+      assert.equal(
+        error.message,
+        "Frontend module @acme/billing-frontend: refused import",
+      );
+      assert.equal(error.cause, original);
+      assert.deepEqual(
+        {
+          id: error.id,
+          loc: error.loc,
+          frame: error.frame,
+          plugin: error.plugin,
+          pluginCode: error.pluginCode,
+          hook: error.hook,
+          code: error.code,
+        },
+        diagnostics,
+      );
+      assert.ok(error.stack?.startsWith("Error: Frontend module"));
+      assert.ok(error.stack?.includes(original.stack?.split("\n")[1] ?? "?"));
+      return true;
+    });
+  });
+});
+
 describe("The Vite plugins of a module laid out in the workspace", () => {
   const PROBE = "__dmsVitePluginsProbe";
 

@@ -114,9 +114,21 @@ const SERVER_HOOKS = new Set(["configureServer", "configurePreviewServer"]);
 
 const attributedErrors = new WeakSet<object>();
 
+/** The fields of a Rollup or Vite error that diagnostics and the overlay read. */
+const ERROR_FIELDS = [
+  "id",
+  "loc",
+  "frame",
+  "plugin",
+  "pluginCode",
+  "hook",
+  "code",
+] as const;
+
 /**
  * A new error naming the module, with the original as its cause: the original
- * may be frozen, and it keeps the properties its owner set on it.
+ * may be frozen. It carries the original's diagnostic fields and its stack
+ * frames, so the error still points at the file and the line.
  */
 function attribute(label: string, error: unknown): Error {
   if (error instanceof Error && attributedErrors.has(error)) return error;
@@ -125,6 +137,15 @@ function attribute(label: string, error: unknown): Error {
     cause: error,
   });
   attributedErrors.add(attributed);
+  if (!(error instanceof Error)) return attributed;
+  for (const field of ERROR_FIELDS) {
+    if (field in error)
+      Reflect.set(attributed, field, Reflect.get(error, field));
+  }
+  const frames = error.stack?.split(error.message).slice(1).join(error.message);
+  if (frames !== undefined && error.stack?.includes(error.message)) {
+    attributed.stack = `${error.name}: ${attributed.message}${frames}`;
+  }
   return attributed;
 }
 
