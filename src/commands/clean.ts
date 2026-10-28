@@ -13,10 +13,12 @@ const CLEAN_EXAMPLES: HelpExample[] = [
   },
 ];
 
+/**
+ * `-b` is not the shared option: clean deletes, so its target is never taken
+ * from DMS_API_BASE_URL, which a project's .env sets without the user having
+ * it in mind.
+ */
 export function cmdClean(): Command {
-  // -b is not the shared option: clean deletes, so its target is never taken
-  // from DMS_API_BASE_URL, which a project's .env sets without the user
-  // having it in mind.
   const command = new Command("clean")
     .summary("Remove generated workspaces")
     .description(

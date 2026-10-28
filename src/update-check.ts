@@ -1,8 +1,3 @@
-// Daily "a newer release exists" notice for the `ajs-dms` executable.
-//
-// Every invocation goes through here, so the check is written to be
-// invisible when it cannot help: it never blocks the command, never throws,
-// and only speaks to a terminal, on stderr, once the command is done.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { type ClientRequest, get as httpGet } from "node:http";
 import { get as httpsGet } from "node:https";
@@ -213,6 +208,7 @@ function readCache(file: string): UpdateCheckCache | undefined {
   }
 }
 
+/** A read-only or full cache directory only costs the throttle. */
 function writeCache(file: string, cache: UpdateCheckCache): void {
   try {
     mkdirSync(dirname(file), { recursive: true });
@@ -226,6 +222,17 @@ function writeCache(file: string, cache: UpdateCheckCache): void {
  * Uses `node:http(s)` rather than `fetch` for the socket: an unref'd socket
  * cannot hold the event loop open, so a short command (`clean`, a failed
  * `build`) exits at its usual speed and simply skips the notice.
+ *
+ * The request asks for `application/json`: the abbreviated packument media type
+ * is rejected by `/latest` with a 406, which would make the notice silently
+ * never fire.
+ *
+ * Anything but a 200 is "no answer", 3xx included: this endpoint does not
+ * redirect, and chasing one would need a second deadline and an open-redirect
+ * check for a cosmetic notice.
+ *
+ * The deadline timer is unref'd like the socket: it exists to give up, never to
+ * keep a command alive.
  *
  * @param packageName Scoped package to look up
  * @param registryUrl Registry origin; overridden by tests
@@ -256,13 +263,8 @@ export function fetchLatestVersionFromRegistry(
       const get = url.protocol === "http:" ? httpGet : httpsGet;
       request = get(
         url,
-        // The abbreviated packument media type is rejected by the `/latest`
-        // endpoint with a 406, which would make this silently never fire.
         { headers: { accept: "application/json" } },
         (response) => {
-          // Anything but a 200 is "no answer", 3xx included: this endpoint
-          // does not redirect, and chasing one would mean a second deadline
-          // and an open redirect to validate for a cosmetic notice.
           if (response.statusCode !== 200) {
             response.resume();
             settle();
@@ -287,8 +289,6 @@ export function fetchLatestVersionFromRegistry(
       request.on("socket", (socket) => socket.unref());
       request.on("error", () => settle());
 
-      // Unref'd like the socket: the deadline exists to give up, never to
-      // keep a command alive waiting for one.
       deadline = setTimeout(() => {
         request?.destroy();
         settle();
@@ -343,6 +343,10 @@ async function isNewer(
  * `UPDATE_CHECK_RETRY_INTERVAL_MS` is the whole point of remembering whether
  * the last attempt answered: a lookup lost to a busy event loop or a dropped
  * connection otherwise costs a full day of silence.
+ *
+ * The notice is invisible when it cannot help: it never blocks the command,
+ * never throws, and only speaks to a terminal, on stderr, once the command is
+ * done.
  *
  * @param options Injection points for the clock, the registry and the output
  * @returns The running check, or undefined when this invocation stays silent
@@ -409,7 +413,6 @@ export function startUpdateCheck(
       report: (placement) => report(placement).catch(() => undefined),
     };
   } catch {
-    // A version notice is never worth failing a command over.
     return undefined;
   }
 }

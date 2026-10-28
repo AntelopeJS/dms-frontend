@@ -144,7 +144,6 @@ describe("manifest secrets resolution", () => {
     for (const value of ["high-render", "low-render", "low-relay"])
       assert.ok(!warnings.join("\n").includes(value));
 
-    // A variable does not settle a value the manifest publishes.
     assert.deepEqual(
       resolveManifestSecrets(secrets, { DMS_HTML_RENDER_SECRET: "set" })
         .conflicts,
@@ -286,7 +285,6 @@ describe("ajs dms start", () => {
   options: { key: config.key, api: config.api, undeclared: config.undeclared, dev: context.dev },
 });\n`,
     );
-    // The api module as it ships: the pure function its provide() reuses.
     const api = join(project, "modules", "api");
     mkdirSync(api, { recursive: true });
     writeFileSync(
@@ -357,7 +355,6 @@ describe("ajs dms start", () => {
         'process.send({ type: "dms:ready", address: "127.0.0.1", port: 3321 });\n' +
           "console.log(JSON.stringify({ secret: process.env.DMS_HTML_RENDER_SECRET, " +
           "relay: process.env.DMS_OAUTH_RELAY_SECRET, publicOptions: process.env.DMS_PUBLIC_OPTIONS }));\n" +
-          // Up long enough for the CLI to hear the backend take its report.
           `setTimeout(() => {}, ${SERVER_LIFETIME_MS});\n`,
       );
 
@@ -366,8 +363,6 @@ describe("ajs dms start", () => {
         HOME: project,
         USERPROFILE: project,
         NO_UPDATE_NOTIFIER: "1",
-        // start reserves its port before spawning the server: ask for any
-        // free one, so the suite does not depend on 3001 being free.
         PORT: "0",
         DMS_SESSION_SECRET: SESSION_SECRET,
         ...env,
@@ -390,7 +385,6 @@ describe("ajs dms start", () => {
         ],
         { cwd: project, env: environment },
       );
-      // stdout belongs to the server alone: the CLI reports on stderr.
       return { report: JSON.parse(stdout), log: stderr };
     } finally {
       rmSync(project, { recursive: true, force: true });

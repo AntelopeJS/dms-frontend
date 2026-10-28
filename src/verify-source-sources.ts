@@ -1,6 +1,3 @@
-// Reads the packages a source verification builds: the DMS core layer and
-// the frontend modules verified on top of it.
-
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { CliProblem } from "@antelopejs/core/cli";
@@ -92,10 +89,6 @@ function shellArgument(path: string): string {
   return /^[\w@%+=:,./~-]+$/.test(path) ? path : JSON.stringify(path);
 }
 
-// ============================================================================
-// Frontend modules
-// ============================================================================
-
 /**
  * The frontend module of the project when none is named: the project itself
  * when it is one, otherwise its frontend-vue directory.
@@ -113,10 +106,6 @@ function defaultModuleRoot(projectDir: string): string {
     ],
   });
 }
-
-// ============================================================================
-// The DMS core layer
-// ============================================================================
 
 /** The package manager of the project, pnpm unless it uses another one. */
 function packageManager(projectDir: string): string {
@@ -249,14 +238,13 @@ function readLayerSource(layerSource: string): {
   return { sourceRoot, layers: roots.map(readLayer) };
 }
 
-// ============================================================================
-// Sources
-// ============================================================================
-
 /**
  * The packages to verify. The core layer is the one at --layer, else one
  * passed as a module, else the one of the `@antelopejs/dms` installed in the
  * project; the modules are those passed, else the project's own.
+ *
+ * Reads the packages a source verification builds: the DMS core layer and the
+ * frontend modules verified on top of it.
  */
 export function readSources(options: SourceOptions): Sources {
   const { projectDir, layerSource, localPackages } = options;

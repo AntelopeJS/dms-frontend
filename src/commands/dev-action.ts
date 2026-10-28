@@ -60,13 +60,14 @@ const BASE_ENVIRONMENT = "default";
  * wrong origin. Wildcard binds (0.0.0.0, ::) are not reachable origins,
  * though — the browser will still use a concrete address, and localhost
  * is the best guess we have.
+ *
+ * Bare IPv6 literals need brackets inside a URL.
  */
 function clientHost(): string {
   const host = process.env.HOST?.trim();
   if (!host || host === "0.0.0.0" || host === "::" || host === "[::]") {
     return "localhost";
   }
-  // Bare IPv6 literals need brackets inside a URL.
   return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
@@ -101,6 +102,20 @@ function resolveBackend(options: DevOptions): ResolvedBackend {
   };
 }
 
+/**
+ * The frontend port is resolved before the manifest fetch: the real port is
+ * sent to the backend as `clientUrl` so a dev backend can serve a matching
+ * `clientBaseUrl` and whitelist the origin for CORS. The port is reserved,
+ * not just probed: the holding socket stays bound through the whole
+ * workspace setup and is released right before the frontend server binds, so
+ * nothing can steal it in between.
+ *
+ * The fallback port is reported once the setup succeeded: a failed setup
+ * makes it irrelevant.
+ *
+ * A development backend issues a new credential each time it restarts, and
+ * publishes it where discovery reads it.
+ */
 export async function runDev(options: DevOptions): Promise<void> {
   const startedAt = Date.now();
   const requestedPort = parsePort(options.port);
@@ -122,12 +137,6 @@ export async function runDev(options: DevOptions): Promise<void> {
     ui.message("info", `Backend discovered from ${showPath(projectDir)}`);
   }
 
-  // Resolve the frontend port BEFORE the manifest fetch: the real
-  // port is sent to the backend as clientUrl so a dev backend can
-  // serve a matching clientBaseUrl and whitelist the origin for CORS.
-  // We reserve (not just probe) the port — the holding socket stays
-  // bound through the whole workspace setup and is released right
-  // before the frontend server binds, so nothing can steal it in between.
   const reserved = await reserveFreePort(requestedPort);
   const port = reserved.port;
   const clientUrl = `http://${clientHost()}:${port}`;
@@ -149,8 +158,6 @@ export async function runDev(options: DevOptions): Promise<void> {
     project,
   });
 
-  // Reported once the setup succeeded: a failed setup makes the
-  // fallback port irrelevant.
   if (port !== requestedPort) {
     ui.message("warn", `Port ${requestedPort} is busy, using ${port}`);
   }
@@ -170,8 +177,6 @@ export async function runDev(options: DevOptions): Promise<void> {
     port,
     workspaceKey,
     bootstrapSecret,
-    // A development backend issues a new credential each time it restarts,
-    // and publishes it where discovery reads it.
     refreshBootstrapSecret: () =>
       resolveBootstrapSecret(options.bootstrapSecret, backendUrl),
     sessionSecret,
@@ -254,13 +259,18 @@ function reportServed(session: DevSession, setup: DevSetup): Promise<boolean> {
  * Runs the dev server on `setup` until it exits, or until the backend serves
  * another set of frontend modules (a module installed or removed from the
  * Modules page), which stops it for a rebuild.
+ *
+ * Offline, the backend is not there to follow.
+ *
+ * The layer watchers mirror source edits into the materialized workspace copy:
+ * HMR would otherwise be blind to changes in the real layer source tree, since
+ * layers are copied, not symlinked.
  */
 async function serveWorkspace(
   session: DevSession,
   setup: DevSetup,
 ): Promise<ServedRun> {
   const restart = new AbortController();
-  // Offline, the backend is not there to follow.
   const stopFollowing = session.isOffline
     ? () => undefined
     : followModuleSet({
@@ -274,9 +284,6 @@ async function serveWorkspace(
         onChange: () => restart.abort(),
         onUnchanged: () => void reportServed(session, setup),
       });
-  // Mirrors source edits into the materialized workspace copy: HMR would
-  // otherwise be blind to changes in the real layer source tree, since
-  // layers are copied, not symlinked.
   const stopWatchers = startLayerWatchers(setup.workspaceDir, setup.layers);
   const handleShutdown = async () => {
     stopFollowing();

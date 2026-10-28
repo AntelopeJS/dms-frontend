@@ -42,9 +42,6 @@ export const frontendModules = [{ options: { public: {} }, module: { setup(sdk) 
   sdk.registerComponent("FixtureUnused", lazy("Unused"));
 } } }];
 `,
-  // The client build only needs to split the components the way the real
-  // entry does: one dynamic entry, with its stylesheet, per component.
-  // and one file per locale catalog, as the generated locale module loads them.
   "client-fixture.ts": `globalThis.fixtureLoaders = import.meta.glob("./${COMPONENTS}/*.vue");\nglobalThis.fixtureCatalog = () => import("./locales.generated/en.ts");\n`,
   "locales.generated/en.ts": "export default {};\n",
   "ui-stub.ts": `import {h} from 'vue'; const appConfig={}; export const useAppConfig=()=>appConfig;export const useToast=()=>({add(){}});export const en={code:"en"};export const fr={code:"fr"};export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
@@ -170,8 +167,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     );
     assert.equal(new Set(linked).size, linked.length, "each link once");
 
-    // The catalog of the page's locale is preloaded next to the entry, not
-    // requested once the entry runs.
     const catalog = manifest["locales.generated/en.ts"];
     assert.ok(catalog?.isDynamicEntry, "the catalog is a file of its own");
     const head = html.slice(0, html.indexOf("</head>"));

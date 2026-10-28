@@ -12,7 +12,7 @@ const SERVER = resolve(
 );
 const READY = /✓ Server ready on http:\/\/127\.0\.0\.1:(\d+)/;
 const HINT = /headers exceed the \d+-byte limit[^]*clear this site's cookies/;
-// Cookies a browser piled up on localhost, past what Node parses.
+/** Cookies a browser piled up on localhost, past what Node parses. */
 const OVERSIZED_REQUEST =
   "GET / HTTP/1.1\r\nHost: localhost\r\n" +
   `Cookie: stale=${"x".repeat(maxHeaderSize)}\r\n\r\n`;
@@ -45,7 +45,6 @@ function exchange(port: number, request: string): Promise<string> {
     const socket = connect(port, "127.0.0.1", () => socket.write(request));
     socket.on("data", (chunk) => (answer += chunk));
     socket.on("close", () => settle(answer));
-    // The server may close before reading the whole request.
     socket.on("error", (error: NodeJS.ErrnoException) =>
       error.code === "ECONNRESET" ? settle(answer) : fail(error),
     );

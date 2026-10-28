@@ -6,8 +6,6 @@ const PLACEHOLDER = '<link rel="icon" href="data:," />';
 
 describe("the favicon placeholder", () => {
   it("goes in front of a head that declares no icon", () => {
-    // What a render without `useHead` icons, or the client-rendering fallback
-    // of a failed one, hands the template.
     for (const headTags of [
       "",
       "<title>Orders</title>",
@@ -24,7 +22,6 @@ describe("the favicon placeholder", () => {
   it("stays out of a head that declares its own icon", () => {
     for (const headTags of [
       '<title>Orders</title><link rel="icon" href="/favicon.svg">',
-      // The DMS declares one icon per color scheme.
       '<link rel="icon" href="/branding/icon-light.svg" media="(prefers-color-scheme: light)"><link rel="icon" href="/branding/icon-dark.svg" media="(prefers-color-scheme: dark)">',
       "<link href='/favicon.ico' rel='shortcut icon'>",
       '<LINK REL="ICON" HREF="/favicon.png">',

@@ -255,8 +255,6 @@ describe("resolveBootstrapSecret", () => {
   });
 
   it("holds a malformed published credential to the same standard", () => {
-    // The backend publishes its configured frontend.bootstrapSecret when one is
-    // set, so a malformed value can arrive this way too.
     const { root } = makeProject({
       pid: process.pid,
       bootstrapSecret: "has a space",

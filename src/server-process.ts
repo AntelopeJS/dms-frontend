@@ -1,7 +1,3 @@
-// Running the generated server for `dev` and `start`. The server reports over
-// IPC once it answers, or why it could not listen; the CLI words both, and
-// the line a stopped run ends on.
-
 import type { ChildProcess } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { networkInterfaces } from "node:os";
@@ -224,9 +220,11 @@ export function describeListenError(error: ListenError): CliProblem {
   };
 }
 
-// The loopback the dev server listens on by default prints as `localhost`,
-// the host the backend is told (`clientUrl`): OAuth's state cookie and the
-// e-mail links only work on the host the browser started from.
+/**
+ * The loopback the dev server listens on by default prints as `localhost`,
+ * the host the backend is told (`clientUrl`): OAuth's state cookie and the
+ * e-mail links only work on the host the browser started from.
+ */
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1"]);
 
 function urlHost(address: string): string {
@@ -326,6 +324,13 @@ export function readyLines(
  * Vite, and a
  * `CancelledError` naming the server and how long it ran when a signal
  * stopped it.
+ *
+ * Running the generated server for `dev` and `start`. The server reports over
+ * IPC once it answers, or why it could not listen; the CLI words both, and the
+ * line a stopped run ends on.
+ *
+ * The server runs as node itself, not through a shell, because the IPC channel
+ * needs it.
  */
 export async function runServer(options: RunServerOptions): Promise<number> {
   const { name, script, cwd, env, mapPath, onReady, stopSignal } = options;
@@ -339,7 +344,6 @@ export async function runServer(options: RunServerOptions): Promise<number> {
       {
         cwd,
         env,
-        // The IPC channel needs the server to be node itself, not a shell.
         shell: false,
         stdio: ["inherit", "inherit", "inherit", "ipc"],
       },

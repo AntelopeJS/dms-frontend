@@ -57,7 +57,6 @@ interface Fixture {
 
 /** The app runtime, loaded through Vite from a copy of the template. */
 async function withRuntime(test: (fixture: Fixture) => Promise<void>) {
-  // Inside the repository, so the runtime's dependencies resolve.
   const workspace = realpathSync(mkdtempSync(resolve(".session-locale-")));
   let server: ViteDevServer | undefined;
   try {
@@ -118,7 +117,6 @@ async function configuredApp(
     requestCookies !== undefined,
     requestCookies,
   );
-  // What the browser's runtime is to watchers, which run outside the app.
   frontend.setDmsServerRuntimeResolver(() => appRuntime);
   await runtime.configureDmsApp({
     app,
@@ -152,17 +150,14 @@ it("takes the interface language from the session, not from a restored page", as
     };
     assert.equal(localeOf(app), "fr");
 
-    // Back to a page fetched before the user switched to French.
     props.value = page("en", 1);
     await settle();
     assert.equal(localeOf(app), "fr");
 
-    // A page fetched after the session changed again.
     props.value = page("de", 3);
     await settle();
     assert.equal(localeOf(app), "de");
 
-    // Another account signs in, whatever the stamps say.
     props.value = page("en", 1, "account-b");
     await settle();
     assert.equal(localeOf(app), "en");
@@ -181,7 +176,6 @@ it("renders an anonymous visit in the language its browser picked", async () => 
     assert.equal(localeOf(picked), "fr");
     picked.unmount();
 
-    // A language the application does not offer, or a malformed value.
     for (const cookie of ["dms_locale=%22xx%22", "dms_locale=%E0"]) {
       const ignored = await configuredApp(
         fixture,
@@ -231,7 +225,6 @@ it("remembers the language a visitor picks, for the next page load", async () =>
       assert.match(written[0], /max-age=31536000/);
       assert.match(written[0], /samesite=lax/);
 
-      // A language the application does not offer is never remembered.
       await i18n.setLocale("xx");
       assert.equal(written.length, 1);
     } finally {

@@ -119,7 +119,6 @@ describe("Auth hook declarations", () => {
     ]);
     const auth = serverAuth(modules.auth, () => ({}));
     assert.equal(auth.signInLocation("/x"), "/login?redirect=%2Fx");
-    // The sign-in page itself: exempting /auth instead looped on /login.
     assert.equal(auth.isSignInExempt("/login"), true);
     assert.equal(auth.isSignInExempt("/login/"), true);
     assert.equal(auth.isSignInExempt("/login/reset"), true);
@@ -378,7 +377,6 @@ describe("Auth hooks in the production server", () => {
     sessions.writeSession(response, { accessToken: "a", persistent: true });
     sessions.writeSession(response, { accessToken: "b" });
     assert.match(written[0] ?? "", /; Max-Age=2592000/);
-    // No flag is no promise to outlive the browser.
     assert.doesNotMatch(written[1] ?? "", /Max-Age/);
   });
 

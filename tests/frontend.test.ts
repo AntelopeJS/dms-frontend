@@ -224,10 +224,6 @@ describe("Vite frontend generation", () => {
   });
 });
 
-// A path a Node API opens keeps its native separators; a path that becomes
-// text in generated output must not. Windows is the only platform where the
-// two differ, so the separator is injected explicitly here rather than taken
-// from the host.
 describe("Windows path separators in generated output", () => {
   it("rewrites a native Windows path onto POSIX separators", () => {
     assert.equal(
@@ -237,8 +233,6 @@ describe("Windows path separators in generated output", () => {
   });
 
   it("leaves a POSIX path alone, backslashes in filenames included", () => {
-    // A backslash is a legal character in a POSIX name, so the rewrite is
-    // conditioned on the platform separator rather than applied blindly.
     for (const path of [
       "/home/dev/workspace/frontend-modules/dms__ai",
       "/srv/od\\d name/app",

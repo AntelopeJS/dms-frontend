@@ -28,8 +28,6 @@ function templateOptimization(
   );
   return runInNewContext(`(${options[1]})`, {
     optimizedDependencies: [],
-    // The template crawls each materialized module at startup. A fixture has
-    // none unless the test passes its sources.
     optimizerEntries,
   }) as DepOptimizationOptions;
 }
@@ -159,7 +157,6 @@ it("pre-bundles a module's dependency at startup without naming it", async () =>
     `${moduleRoot}/app/composables/useList.ts`,
     'import { sortable } from "example-sortable"; export const useList = sortable;',
   );
-  // What the template crawls for each module: its `app/` sources.
   const optimizeDeps = templateOptimization([
     normalizePath(resolve(root, moduleRoot, "app/**/*.ts")),
   ]);
@@ -187,10 +184,6 @@ it("pre-bundles a module's dependency at startup without naming it", async () =>
 });
 
 it("names no dependency the DMS dropped for SortableJS", () => {
-  // vuedraggable left the DMS (useSortable) and dms-mailing does the same: a
-  // project without it saw "Failed to resolve dependency: vuedraggable" at
-  // every dev start. The crawl above pre-bundles it for a module that still
-  // imports it.
   const list = templateSource().match(
     /const optimizedDependencies = (\[[^\]]*\])/,
   );

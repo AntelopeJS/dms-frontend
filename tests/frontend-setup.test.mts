@@ -64,7 +64,6 @@ function evaluateModules(
       options: { public: { owner: label, providers: [owner] } },
       module: {
         setup(sdk) {
-          // What the DMS layout does with its app config.
           const appConfig = useDmsAppConfig();
           Object.assign(
             appConfig,
@@ -290,7 +289,6 @@ describe("Layer app configs", () => {
     );
     assert.equal(useDmsAppConfig().branding.name, "Renamed by a setup");
     assert.deepEqual(toRaw(useDmsAppConfig().extra), { addedBy: "setup" });
-    // A development server keeps a config module between two setups.
     assert.deepEqual(layers, pristine);
   });
 
@@ -310,8 +308,6 @@ describe("Layer app configs", () => {
         ui: { colors: { primary: "green" } },
       }),
     );
-    // The objects components hold, the nested ones included, and what they
-    // compute from them.
     assert.equal(useDmsAppConfig(), appConfig);
     assert.equal(appConfig.branding, branding);
     assert.equal(logo.value, "/v2.svg");
@@ -324,7 +320,6 @@ describe("Layer app configs", () => {
       extra: "by setup",
     });
 
-    // A value the edit no longer declares falls back to the layer below.
     updateDmsAppConfig(layerConfigs({}));
     assert.equal(logo.value, "/dms.svg");
     assert.equal("dark" in appConfig.branding.logo, false);
@@ -333,9 +328,6 @@ describe("Layer app configs", () => {
   });
 
   it("repeat the arrays of an entry that still merges its own config", async () => {
-    // What the DMS up to 0.8 does in its `setup`: its layer's config, which
-    // the loader now merges too, is merged once more, and defu concatenates
-    // arrays. Nuxt UI resolves the repeated classes to the same ones.
     const dms = { ui: { button: { compoundVariants: [{ class: "dms" }] } } };
     await setupFrontendModules(
       [
@@ -349,7 +341,6 @@ describe("Layer app configs", () => {
       toRaw((useDmsAppConfig() as Record<string, any>).ui.button)
         .compoundVariants;
     assert.deepEqual(variants(), [{ class: "dms" }, { class: "dms" }]);
-    // An edit applied in place keeps them as the setup left them, no more.
     updateDmsAppConfig([{ module: "dms", config: dms }]);
     assert.deepEqual(variants(), [{ class: "dms" }, { class: "dms" }]);
   });

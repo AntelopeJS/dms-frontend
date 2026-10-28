@@ -155,6 +155,10 @@ export function buildStepFailure(
   return new CliError(problem);
 }
 
+/**
+ * `--silent` drops pnpm's script echo and its ELIFECYCLE line: the CLI
+ * reports the failure itself.
+ */
 async function runBuildStep(
   step: BuildStep,
   context: BuildContext,
@@ -162,8 +166,6 @@ async function runBuildStep(
   const task = getProcessTasks().start(step.running);
   let result: FramedCommandResult;
   try {
-    // --silent drops pnpm's script echo and its ELIFECYCLE line: the CLI
-    // reports the failure itself.
     result = await runFramedCommand("pnpm", ["--silent", "run", step.script], {
       name: step.name,
       cwd: context.workspaceDir,
@@ -206,11 +208,14 @@ export async function runBuild(options: BuildOptions): Promise<void> {
   }
 }
 
+/**
+ * The entry weight threshold is read before the build, so that a value it
+ * cannot use fails at once.
+ */
 async function buildProduction(
   options: BuildOptions,
   startedAt: number,
 ): Promise<void> {
-  // Read before the build, so that a value it cannot use fails at once.
   entryWeightThreshold(process.env);
   const ui = getProcessUi();
   const workspace = productionWorkspace(options);

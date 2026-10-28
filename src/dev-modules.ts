@@ -1,12 +1,3 @@
-// The frontend modules `dev` serves: the project's, as `build` reads them but
-// with `dev: true`, completed with what only the running backend knows. The
-// backend's manifest gives the secrets it holds, which fill the private
-// options each module declares, as `start` fills them from its environment,
-// and the origins it rewrites in development, applied to the options the
-// same way. Which modules are served, and their options, come from the
-// project alone, so a mistake in a module's `frontendModule` shows in `dev`
-// rather than first in production.
-
 import { fork } from "node:child_process";
 import { CliError, getProcessUi } from "@antelopejs/core/cli";
 import { filledOptions } from "./private-values";
@@ -26,6 +17,15 @@ import type {
 /**
  * {@link readProjectFrontendModules} in a process of its own, so each read
  * sees the configuration and the modules as they are now.
+ *
+ * The frontend modules `dev` serves: the project's, as `build` reads them but
+ * with `dev: true`, completed with what only the running backend knows. The
+ * backend's manifest gives the secrets it holds, which fill the private options
+ * each module declares, as `start` fills them from its environment, and the
+ * origins it rewrites in development, applied to the options the same way.
+ * Which modules are served, and their options, come from the project alone, so
+ * a mistake in a module's `frontendModule` shows in `dev` rather than first in
+ * production.
  */
 export function readProjectModulesFresh(
   options: ProjectModulesOptions,
@@ -58,9 +58,11 @@ export function readProjectModulesFresh(
   });
 }
 
-// Kept in step with the DMS's own rewrite of its manifest: an origin is only
-// replaced whole, where it ends the string or a path, query or fragment
-// follows, so `http://h:5010` does not match inside `http://h:50100`.
+/**
+ * Kept in step with the DMS's own rewrite of its manifest: an origin is only
+ * replaced whole, where it ends the string or a path, query or fragment
+ * follows, so `http://h:5010` does not match inside `http://h:50100`.
+ */
 const URL_BOUNDARY = "(?=[/?#]|$)";
 
 function escapeRegExp(value: string): string {

@@ -17,7 +17,6 @@ function writeFile(path: string, content: string): void {
 }
 
 it("gives emails the layers' app configs, module by module, after each module's email config", async () => {
-  // Inside the repository, so the email config resolves its Vite plugins.
   const workspace = mkdtempSync(resolve(".email-app-config-"));
   try {
     const project: ResolvedLayer = {
@@ -39,7 +38,6 @@ it("gives emails the layers' app configs, module by module, after each module's 
       join(project.path, "i18n", "locales", "project-en-GB.json"),
       "{}",
     );
-    // What a theme editor writes into the project's layer.
     writeFile(
       join(project.path, "app", "app.config.ts"),
       'export default defineDmsAppConfig({ branding: { logo: { email: "/project-email.png" } } });\n',
@@ -48,7 +46,6 @@ it("gives emails the layers' app configs, module by module, after each module's 
       join(dms.path, "layers", "dms-layout", "app", "app.config.ts"),
       'export default { branding: { name: "DMS", logo: { email: "/dms-email.png", light: "/dms.svg" } } };\n',
     );
-    // The DMS up to 0.8 shares its branding with its emails this way.
     writeFile(
       join(dms.path, "dms.email.ts"),
       'export const serverEmailTemplates = import.meta.glob("./Branding.vue");\nexport const appConfig = { branding: { name: "DMS mail" } };\n',
@@ -80,8 +77,6 @@ const branding = useDmsAppConfig().branding as Record<string, any>;
     const { renderEmail } = await import(
       pathToFileURL(join(workspace, "dist", "server", "email-renderer.js")).href
     );
-    // The project's layer overrides the DMS's email config, which keeps the
-    // value it gave emails over the DMS's own layer, which fills the rest.
     assert.match(
       await renderEmail("Branding", {}),
       /<p>DMS mail\|\/project-email\.png\|\/dms\.svg<\/p>/,

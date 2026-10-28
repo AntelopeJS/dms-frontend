@@ -1,9 +1,3 @@
-// The modules' public options the running server serves: computed by
-// `ajs dms start` from the project's configuration and handed over in
-// `DMS_PUBLIC_OPTIONS`, a JSON object of options by module id. A build never
-// holds them, so a deployment's variables reach the dashboard without a
-// rebuild. Unset (`ajs dms dev`), the registry's options stand.
-
 const VARIABLE = "DMS_PUBLIC_OPTIONS";
 export const PUBLIC_OPTIONS_ELEMENT_ID = "dms-public-options";
 
@@ -22,7 +16,15 @@ function parse(raw) {
   }
 }
 
-/** The options by module id the server runs with, undefined when unset. */
+/**
+ * The options by module id the server runs with, undefined when unset.
+ *
+ * The modules' public options the running server serves: computed by `ajs
+ * dms start` from the project's configuration and handed over in
+ * `DMS_PUBLIC_OPTIONS`, a JSON object of options by module id. A build never
+ * holds them, so a deployment's variables reach the dashboard without a
+ * rebuild. Unset (`ajs dms dev`), the registry's options stand.
+ */
 export const RUNTIME_PUBLIC_OPTIONS = parse(process.env[VARIABLE]);
 
 /** The options of each module of the registry, the runtime ones first. */

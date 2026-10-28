@@ -274,7 +274,6 @@ describe("Polling", () => {
   it("polls a call made outside any component or scope, for the application's life", async () => {
     const { app, runtime } = clientApp();
     let calls = 0;
-    // A plugin past its first await: no component, no effect scope.
     await sleep(0);
     const status = app.runWithContext(() =>
       useDmsAsyncData("sidecar-status", async () => ++calls, {

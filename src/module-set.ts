@@ -1,9 +1,3 @@
-// Following the backend's set of frontend modules while a server runs: the
-// module store of the DMS installs and removes modules on a live backend, and
-// the frontend has to rebuild its workspace to serve them. The server also
-// tells the backend which modules it serves once it is ready, which is how
-// the Modules page knows when to reload.
-
 import { setTimeout as sleep } from "node:timers/promises";
 import { backendEndpoint, fetchManifest } from "./manifest";
 import { bootstrapHeaders, type ManifestModule } from "./workspace";
@@ -75,6 +69,12 @@ export function moduleSetFingerprint(
  * workspace is rebuilt once for the result, not for the step in between. A
  * manifest the backend marks as settling, and a failed read (a backend
  * restarting), are skipped: the next one decides.
+ *
+ * Follows the backend's set of frontend modules while a server runs: the DMS
+ * module store installs and removes modules on a live backend, and the frontend
+ * has to rebuild its workspace to serve them. The server also tells the backend
+ * which modules it serves once it is ready, which is how the Modules page knows
+ * when to reload.
  *
  * @returns A function that stops following
  */

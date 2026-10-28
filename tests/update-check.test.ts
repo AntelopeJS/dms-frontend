@@ -276,8 +276,6 @@ describe("update check notice", () => {
   });
 
   it("retries a cache written before the outcome was recorded", async () => {
-    // The shape a failed first lookup left on disk: a timestamp and nothing
-    // else. Read as a success it would silence the notice for a full day.
     const test = harness("0.7.0", 1_000_000);
     mkdirSync(dirname(test.cacheFile), { recursive: true });
     writeFileSync(test.cacheFile, JSON.stringify({ checkedAt: 1_000_000 }));
@@ -451,7 +449,6 @@ describe("registry lookup", () => {
       );
       assert.equal(version, "9.9.9");
       assert.equal(stub.requests[0]?.url, "/@antelopejs%2fdms-frontend/latest");
-      // The abbreviated packument type earns a 406 on this endpoint.
       assert.equal(stub.requests[0]?.headers.accept, "application/json");
     } finally {
       await stub.close();
@@ -483,10 +480,7 @@ describe("registry lookup", () => {
   });
 
   it("gives up on the deadline rather than on socket inactivity", async () => {
-    const stalled = createServer(() => {
-      // Accept the request and answer nothing, the captive-portal shape a
-      // per-socket inactivity timer would never fire on.
-    });
+    const stalled = createServer(() => {});
     await new Promise<void>((resolve) =>
       stalled.listen(0, "127.0.0.1", resolve),
     );

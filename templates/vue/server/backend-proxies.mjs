@@ -1,9 +1,3 @@
-// The backend prefixes the frontend server proxies. The renderer hardcodes
-// none: a frontend module declares them in its `dms.server.ts`
-// (`registerBackendProxy`), and a backend module in the frontend manifest
-// (`backendProxies`, next to its `publicEndpoints`). A path no prefix covers
-// is never sent to the backend.
-
 import { compilePathPattern } from "./path-patterns.mjs";
 
 /** How the proxy authenticates a request to the backend. */
@@ -59,6 +53,12 @@ function compileProxy(pattern, options, owner) {
 
 /**
  * The deployment's backend proxies, one per pattern.
+ *
+ * The backend prefixes the frontend server proxies. The renderer hardcodes
+ * none: a frontend module declares them in its `dms.server.ts`
+ * (`registerBackendProxy`), and a backend module in the frontend manifest
+ * (`backendProxies`, next to its `publicEndpoints`). A path no prefix covers is
+ * never sent to the backend.
  *
  * @param declared `{ id, pattern, options }` per `registerBackendProxy` call,
  *   from the highest-priority module down

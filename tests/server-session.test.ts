@@ -160,7 +160,6 @@ describe("cookies of instances sharing a host", () => {
         writeSession(response, { refreshToken: "refresh", accountId });
         return String(response.headers.get("set-cookie")).split(";", 1)[0];
       });
-    // The browser sends both, as it does for two ports of one host.
     const cookie = [
       write(...first, "account-1"),
       write(...second, "account-2"),

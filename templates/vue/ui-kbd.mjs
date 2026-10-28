@@ -1,13 +1,3 @@
-// Nuxt UI prints the `meta`, `ctrl` and `alt` of a key hint (`UKbd`, the
-// `kbds` of its menus) from a map every hint shares, blank until the first
-// hint mounts: a hint hydrating after that, in an async component, printed
-// "⌘" or "Ctrl" over the server's blank, a hydration mismatch on every
-// platform. Its `useKbd` is routed to the DMS runtime's `useDmsKbd`, which
-// keeps each hint on the server's value until it mounts and lets the
-// application give the platform to the server render
-// (`provideDmsKbdPlatform`). The build fails if Nuxt UI changes the form
-// rewritten here, rather than letting the mismatch come back unnoticed.
-
 /** Nuxt UI's key hint composable. */
 const USE_KBD = /\/@nuxt\/ui\/dist\/runtime\/composables\/useKbd\.js$/;
 /** Its export as Nuxt UI 4 writes it: one composable shared by every hint. */
@@ -20,6 +10,16 @@ const ROUTED_EXPORT =
 
 /**
  * The rewrite, as a Vite plugin.
+ *
+ * Nuxt UI prints the `meta`, `ctrl` and `alt` of a key hint (`UKbd`, the `kbds`
+ * of its menus) from a map every hint shares, blank until the first hint
+ * mounts: a hint hydrating after that, in an async component, printed "⌘" or
+ * "Ctrl" over the server's blank, a hydration mismatch on every platform. Its
+ * `useKbd` is routed to the DMS runtime's `useDmsKbd`, which keeps each hint on
+ * the server's value until it mounts and lets the application give the platform
+ * to the server render (`provideDmsKbdPlatform`). The build fails if Nuxt UI
+ * changes the form rewritten here, rather than letting the mismatch come back
+ * unnoticed.
  *
  * @param isNuxtUiFile `(id) => boolean`, whether a module is Nuxt UI's
  */

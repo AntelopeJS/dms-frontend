@@ -9,20 +9,27 @@ import { writeContent } from "./content.mjs";
 const WORKSPACE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const JSON_TYPE = "application/json";
 const READ_METHODS = new Set(["GET", "HEAD"]);
-// Iconify's own naming rule, for prefixes and icon names alike. It is also
-// what keeps a request from naming anything but a collection file.
+/**
+ * Iconify's own naming rule, for prefixes and icon names alike. It is also
+ * what keeps a request from naming anything but a collection file.
+ */
 const ICON_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const COLLECTION_FILE = /^([^/]+)\.json$/;
 const ICON_NAME_SEPARATOR = ",";
 const COLLECTION_PACKAGES = join("node_modules", "@iconify-json");
-// An icon's data only changes with the installed collection, which a
-// deployment replaces; a week bounds how long an upgraded icon can lag.
+/**
+ * An icon's data only changes with the installed collection, which a
+ * deployment replaces; a week bounds how long an upgraded icon can lag.
+ */
 const ICON_CACHE_CONTROL =
   "public, max-age=604800, stale-while-revalidate=86400";
 const ERROR_CACHE_CONTROL = "no-store";
 const collections = new Map();
-// By renderer module: a development server evaluates a new one after a layer
-// changes, and each must find the collections loaded before it renders.
+/**
+ * Kept by renderer module: a development server evaluates a new one after a
+ * layer changes, and each must find the collections loaded before it
+ * renders.
+ */
 const rendererCollections = new WeakMap();
 
 function collectionSpecifiers(prefix) {
@@ -37,9 +44,7 @@ function resolveCollectionFile(root, prefix) {
   for (const specifier of collectionSpecifiers(prefix)) {
     try {
       return require.resolve(specifier);
-    } catch {
-      // Not installed under this name: try the next source.
-    }
+    } catch {}
   }
   return undefined;
 }

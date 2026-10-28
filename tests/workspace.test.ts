@@ -60,8 +60,6 @@ describe("workspace identity", () => {
   it("keeps the same workspace for a project whatever the backend port", () => {
     const key = projectWorkspaceKey("/home/user/my-project");
     assert.equal(getWorkspaceDirForKey(key), getWorkspaceDirForKey(key));
-    // URL-keyed workspaces, by contrast, change with the port — the very
-    // behavior autodiscovery mode avoids.
     assert.notEqual(
       getWorkspaceDir("http://localhost:5010"),
       getWorkspaceDir("http://localhost:5011"),
@@ -76,10 +74,6 @@ describe("workspace identity", () => {
   });
 
   it("shares one workspace between build, start, clean and dev -b", () => {
-    // `build`, `start` and `clean` all key on `getWorkspaceDir`, and `dev`
-    // falls back to the same canonical URL key as soon as -b is given; the
-    // command name and the dev/build mode are deliberately not in the hash,
-    // so a single backend is built and served out of a single workspace.
     const spellings = [
       "http://localhost:5010",
       "http://localhost:5010/",
@@ -96,9 +90,6 @@ describe("workspace identity", () => {
   });
 
   it("never collides a project key with a backend URL key", () => {
-    // A pathological project path that *looks* like a URL still maps to a
-    // different workspace than the URL itself, thanks to the `project:`
-    // prefix.
     assert.notEqual(
       getWorkspaceDirForKey(projectWorkspaceKey("/http://localhost:5010")),
       getWorkspaceDir("http://localhost:5010"),
@@ -154,9 +145,6 @@ describe("workspace size", () => {
 
 describe("manifest cache", () => {
   it("survives the credential rotating between runs", () => {
-    // A development backend mints a new secret on every boot. Binding the
-    // entry to the credential would make --offline and the
-    // unreachable-backend replay unusable from the second run onward.
     const dir = makeWorkspace({
       manifest: cachedManifest,
       fetchedAt: "2026-08-06T10:00:00Z",

@@ -1,6 +1,3 @@
-// What a source verification ends with: the result the runner sends the CLI
-// that started it, and the way either of them reports it.
-
 import {
   CliError,
   type CliProblem,
@@ -10,6 +7,10 @@ import {
 } from "@antelopejs/core/cli";
 import { writeBlankLine } from "./output";
 
+/**
+ * What a source verification ends with: the result the runner sends the CLI
+ * that started it. Either of them reports it through `reportVerification`.
+ */
 export type VerificationResult =
   | { ok: true; modules: number }
   | { ok: false; problem: CliProblem };

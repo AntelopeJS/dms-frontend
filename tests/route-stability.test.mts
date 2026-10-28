@@ -70,7 +70,6 @@ describe("Route stability", () => {
       ),
     );
 
-    // Each component of the page reads the route on its own.
     inScope(() => useDmsRoute());
     await showPage("/runs?tab=open");
     await nextTick();
@@ -117,8 +116,6 @@ describe("Navigation to the URL shown", () => {
   let app: App;
   let location: URL;
 
-  // A component writes the URL in place (a record deep link): the browser
-  // shows it, while Inertia's page, and so the route, never saw it.
   const showUrl = (url: string) => {
     location.href = new URL(url, location.origin).href;
   };
@@ -132,7 +129,6 @@ describe("Navigation to the URL shown", () => {
       urls.push(url);
       options?.onFinish?.({});
     });
-    // Another query of the page on screen stays in the browser.
     for (const kind of ["push", "replace"] as const)
       context.mock.method(router, kind, (params) => {
         urls.push(`${kind} ${params.url}`);
@@ -144,7 +140,6 @@ describe("Navigation to the URL shown", () => {
 
   beforeEach(async () => {
     await showPage("/runs?tab=open");
-    // A browser runtime set up while the page was the one Inertia showed.
     app = createSSRApp({ render: () => null });
     const runtime = createDmsFrontendRuntime();
     provideDmsFrontendRuntime(app, runtime);

@@ -110,9 +110,6 @@ function typecheck(workspace: string): { code: number; output: string } {
 
 describe("generated workspace typecheck", () => {
   it("reads module sources the module registry only reaches through a glob", () => {
-    // `dms.frontend.ts` loads components with `import.meta.glob`, which
-    // TypeScript does not follow, so listing the registry roots in `files`
-    // left every component unchecked.
     const workspace = generatedWorkspace({
       "dms.frontend.ts": "export default { setup() {} };\n",
       "probe.ts": 'export const probe: number = "not a number";\n',
@@ -137,10 +134,6 @@ describe("generated workspace typecheck", () => {
   });
 
   it("ignores the dev-only files a module ships next to its sources", () => {
-    // A module's vitest suite and its config import `vitest` and `node:*`,
-    // neither of which exists in a browser-only workspace. Excluding them
-    // from the roots costs nothing: anything a checked file really imports
-    // is still followed.
     const workspace = generatedWorkspace({
       "probe.ts": "export const probe: number = 1;\n",
       "tests/unit.test.ts":
@@ -154,10 +147,6 @@ describe("generated workspace typecheck", () => {
   });
 
   it("checks the shipped frontend runtime against Vue's public typings", () => {
-    // The registry imports `./frontend-module` and modules reach it through
-    // `#dms/frontend-module`, so every generated workspace typechecks the
-    // shipped runtime. This repository's own tsconfig only covers `src/`,
-    // which let an internal Vue field through to every consumer's check.
     const workspace = shippedRuntimeWorkspace({
       "probe.ts":
         'import { useDmsState } from "#dms/frontend-module";\nexport const probe = useDmsState("probe", () => 1);\n',
@@ -168,9 +157,6 @@ describe("generated workspace typecheck", () => {
   });
 
   it("checks the shipped frontend runtime against the config modules declare", () => {
-    // Modules declare their public options on `PublicRuntimeConfig`, and the
-    // DMS layout makes its `dms` key required: the runtime must not type an
-    // empty config as one, not even while it rebuilds it for a new setup.
     const workspace = shippedRuntimeWorkspace({
       "runtime-config.d.ts":
         'declare module "#dms/frontend-module" {\n  interface PublicRuntimeConfig {\n    dms: { baseURL: string };\n  }\n}\n\nexport {};\n',
@@ -181,8 +167,6 @@ describe("generated workspace typecheck", () => {
   });
 
   it("checks a module's server entry and server files against Node.js and #dms/server", () => {
-    // A server entry imports Node.js built-ins, which the browser-only
-    // `types` of the workspace leave out: `#dms/server` brings them in.
     const workspace = generatedWorkspace({
       "dms.server.ts":
         'import { defineDmsServer } from "#dms/server";\nimport { digest } from "./server/digest";\n\nexport default defineDmsServer((server) => {\n  server.registerRoute("POST", "/api/_fixture/digest", digest);\n});\n',
@@ -203,8 +187,6 @@ describe("generated workspace typecheck", () => {
   });
 
   it("checks the generated app configs against the shipped runtime", () => {
-    // Listed in `files`, so every workspace checks the module importing each
-    // layer's `app/app.config.ts`, and its development hot update.
     const workspace = shippedRuntimeWorkspace({
       "app/app.config.ts":
         'export default defineDmsAppConfig({\n  branding: { logo: "/logo.svg" },\n  ui: { colors: { primary: "green" } },\n});\n',
@@ -215,10 +197,6 @@ describe("generated workspace typecheck", () => {
   });
 
   it("covers Vue single-file components too", () => {
-    // `tsc` cannot parse `.vue`; vue-tsc, which the verifier runs, reads the
-    // same `include`. Pin the effective globs so the two extensions cannot
-    // drift apart, and assert the dev-only exclusions are what the previous
-    // test relies on.
     const workspace = generatedWorkspace({ "probe.ts": "export {};\n" });
     const config = JSON.parse(
       execFileSync(

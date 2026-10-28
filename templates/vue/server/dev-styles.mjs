@@ -1,21 +1,3 @@
-// Putting the page's stylesheets in the document the development server
-// returns, instead of letting the client entry inject them from JavaScript
-// once it has executed.
-//
-// Vite serves every stylesheet as a JavaScript module in development, so a
-// plain SSR document carries no styles at all and the browser paints raw HTML
-// until `/main.ts` and its module graph have run. Production has no such gap:
-// the built `index.html` already links the entry stylesheet, which is why this
-// module is development-only and lives beside client-manifest.mjs rather than
-// inside server.mjs, whose size the linter caps.
-//
-// Each tag carries the module id Vite will use for its own copy
-// (`data-vite-dev-id`), under our own attribute name. `main.ts` hands the
-// stylesheet over as soon as Vite injects that copy — see `adoptViteDevStyles`.
-// We deliberately do NOT reuse `data-vite-dev-id` itself: Vite's client adopts
-// any pre-existing link with that attribute and then skips `updateStyle` for
-// it, which would leave CSS edits stranded.
-
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderedModuleStyleTags } from "./client-manifest.mjs";
@@ -47,12 +29,14 @@ function ssrModuleGraph(devServer) {
   return devServer.environments?.ssr?.moduleGraph ?? devServer.moduleGraph;
 }
 
-// Vite only treats an id as a stylesheet when the language is the LAST thing in
-// it, and a component's style block ends in `&lang.css`. Appending `&direct`
-// after that makes Vite skip its stylesheet pipeline, so the block comes back
-// as written: `@import "package/dist/style.css"` is left for the browser, which
-// resolves it against the page URL and gets a 404. `direct` therefore goes in
-// front of the trailing language segment.
+/**
+ * Vite only treats an id as a stylesheet when the language is the last thing
+ * in it, and a component's style block ends in `&lang.css`. Appending
+ * `&direct` after that makes Vite skip its stylesheet pipeline, so the block
+ * comes back as written: `@import "package/dist/style.css"` is left for the
+ * browser, which resolves it against the page URL and gets a 404. `direct`
+ * therefore goes in front of the trailing language segment.
+ */
 const TRAILING_LANG = /&(lang\.[^&?]*)$/;
 
 function directUrl(url) {
@@ -90,7 +74,20 @@ async function inlineTag(devServer, { url, id }) {
   return `<style ${STYLE_ATTRIBUTE}="${id}">${css}</style>`;
 }
 
-/** Style tags for everything the development render touched, entry sheet first. */
+/**
+ * Style tags for everything the development render touched, entry sheet
+ * first.
+ *
+ * Puts the page's stylesheets in the document the development server
+ * returns, instead of letting the client entry inject them from JavaScript
+ * once it has executed. Vite serves every stylesheet as a JavaScript module
+ * in development, so a plain SSR document carries no styles at all and the
+ * browser paints raw HTML until `/main.ts` and its module graph have run.
+ * Production has no such gap: the built `index.html` already links the entry
+ * stylesheet, which is why this module is development-only and lives beside
+ * client-manifest.mjs rather than inside server.mjs, whose size the linter
+ * caps.
+ */
 export async function developmentStyleTags(devServer) {
   const modules = styleModules(devServer);
   const links = [

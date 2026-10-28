@@ -1,8 +1,3 @@
-// Manifest and layer types, and the per-backend workspace directory: where it
-// lives, how its key is derived, and how its metadata is written.
-//
-// Split out of common.ts, which stays the barrel every command imports from.
-
 import {
   chmodSync,
   existsSync,
@@ -20,10 +15,6 @@ import {
   canonicalizeBackendUrl,
   sha256Hex,
 } from "./config";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 /** Marks a directory under the loader home as a workspace this CLI owns. */
 const WORKSPACE_META_FILE = ".ajs-dms-meta.json";
@@ -172,10 +163,6 @@ export interface ResolvedLayer {
   publicEndpoints?: PublicEndpointDeclaration[];
   backendProxies?: BackendProxyDeclaration[];
 }
-
-// ============================================================================
-// Workspace Management
-// ============================================================================
 
 /**
  * Get the workspace directory for an arbitrary identity key. The key is
@@ -338,6 +325,8 @@ function metaModifiedAt(dir: string): string {
  * The bytes the files under a directory take, each counted once however many
  * hard links it has, without following symbolic links: what removing the
  * directory gives back, as `du` counts it.
+ *
+ * A file removed during the walk takes no space.
  */
 export function directorySize(dir: string): number {
   const seen = new Set<string>();
@@ -393,10 +382,6 @@ export function writeWorkspaceMeta(
     ),
   );
 }
-
-// ============================================================================
-// Manifest Fetching
-// ============================================================================
 
 const BOOTSTRAP_HEADER = "x-dms-bootstrap";
 const UNAUTHORIZED_STATUSES = [401, 403];

@@ -1,8 +1,3 @@
-// What the help prints besides Commander's own sections and the conventions
-// of the core CLI's help: the environment topic `ajs dms help environment`
-// prints, and command names listed without Commander's `[options]`.
-// Everything is wrapped to the terminal, up to 80 columns.
-
 import {
   applyHelpConventions,
   formatHelpItem,
@@ -106,6 +101,11 @@ function subcommandTerm(command: Command): string {
 /**
  * The help of the core CLI on `program` and on every command under it,
  * commands listed by name and arguments.
+ *
+ * Adds what the help prints besides Commander's own sections and the
+ * conventions of the core CLI's help: the environment topic `ajs dms help
+ * environment` prints, and command names listed without Commander's
+ * `[options]`. Everything is wrapped to the terminal, up to 80 columns.
  */
 export function applyDmsHelp(program: Command): void {
   applyHelpConventions(program);

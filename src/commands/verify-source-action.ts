@@ -95,6 +95,9 @@ function channelClosed(child: ChildProcess): Promise<void> {
 /**
  * The runner shows its checks as tasks while it works, then sends its result
  * here: the summary, or the failure the error boundary reports once.
+ *
+ * The runner is next to this module: the compiled one, or its source under tsx.
+ * Without `-l`, it resolves the installed core layer.
  */
 export async function runVerifySource(
   options: VerifySourceOptions,
@@ -103,7 +106,6 @@ export async function runVerifySource(
   assertValidUsage(usageProblems(options));
   const modules = options.module ?? [];
   const localPackages = parseLocalPackages(options.localPackage ?? []);
-  // Next to this module: the compiled runner, or its source under tsx.
   const runner = join(
     __dirname,
     "..",
@@ -120,7 +122,6 @@ export async function runVerifySource(
       stdio: ["inherit", "inherit", "inherit", "ipc"],
       env: {
         ...process.env,
-        // Without -l, the runner resolves the installed core layer.
         DMS_LAYER_SOURCE:
           options.layer === undefined ? undefined : resolve(options.layer),
         DMS_MODULE_SOURCES: JSON.stringify(

@@ -1,10 +1,3 @@
-// Nuxt UI reads Inertia's page (`usePage()`) for its links and route stub.
-// Inertia's page is module state, shared by the concurrent requests of a
-// server: a render could read another request's URL. Nuxt UI's files read
-// the DMS's per-request page instead, and the build fails if one reads
-// Inertia's in a form this rewrite does not know, rather than letting the
-// leak come back unnoticed with a Nuxt UI release.
-
 const INERTIA_PAGE_IMPORT =
   /import\s*\{\s*usePage\s*\}\s*from\s*["']@inertiajs\/vue3["']/g;
 const DMS_PAGE_IMPORT =
@@ -15,6 +8,13 @@ const ANY_INERTIA_PAGE_IMPORT =
 
 /**
  * The rewrite, as a Vite plugin.
+ *
+ * Nuxt UI reads Inertia's page (`usePage()`) for its links and route stub.
+ * Inertia's page is module state, shared by the concurrent requests of a
+ * server: a render could read another request's URL. Nuxt UI's files read the
+ * DMS's per-request page instead, and the build fails if one reads Inertia's in
+ * a form this rewrite does not know, rather than letting the leak come back
+ * unnoticed with a Nuxt UI release.
  *
  * @param isNuxtUiFile `(id) => boolean`, whether a module is Nuxt UI's
  */

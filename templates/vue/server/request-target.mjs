@@ -1,11 +1,5 @@
 import { writeBadRequest } from "./request-failure.mjs";
 
-// The request target as the server reads it. Node hands `request.url` over
-// verbatim, so it is not always a path: `//host/x`, `/\host/x` and the
-// absolute form `http://host/x` all name another host once resolved, which
-// turned the proxy into an open one. Every routing decision and the URL sent to
-// the backend read the same normalized path from here.
-
 const FRONTEND_ORIGIN = "http://frontend.local";
 
 /**
@@ -45,6 +39,12 @@ export function backendUrl(
 /**
  * Answers 400 to a request whose target is not origin-form, before any route
  * reads it. Returns whether it answered.
+ *
+ * The request target as the server reads it. Node hands `request.url` over
+ * verbatim, so it is not always a path: `//host/x`, `/\host/x` and the absolute
+ * form `http://host/x` all name another host once resolved, which turned the
+ * proxy into an open one. Every routing decision and the URL sent to the
+ * backend read the same normalized path from here.
  */
 export function refuseForeignTarget(request, response) {
   if (isOriginForm(request.url)) return false;

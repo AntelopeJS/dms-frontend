@@ -1,7 +1,3 @@
-// What the server tells whoever started it. Started by `ajs dms dev` or
-// `ajs dms start`, it reports over IPC and the CLI words what the user reads.
-// Started on its own, it prints the line itself.
-
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
@@ -13,7 +9,13 @@ async function report(message, line, write) {
   await new Promise((sent) => process.send(message, () => sent()));
 }
 
-/** The server answers at `address`:`port`. */
+/**
+ * The server answers at `address`:`port`.
+ *
+ * What the server tells whoever started it. Started by `ajs dms dev` or `ajs
+ * dms start`, it reports over IPC and the CLI words what the user reads.
+ * Started on its own, it prints the line itself.
+ */
 export async function reportReady(address, port) {
   const host = WILDCARD_ADDRESSES.includes(address)
     ? "localhost"

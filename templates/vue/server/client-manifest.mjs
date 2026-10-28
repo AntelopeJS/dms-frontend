@@ -1,9 +1,3 @@
-// Reading the built client manifest and turning the components a server render
-// created into the stylesheet links its HTML needs.
-//
-// Lives apart from server.mjs so the file stays under the size the linter
-// allows. Production-only: in dev, Vite serves these itself.
-
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,11 +10,18 @@ const CLIENT_MANIFEST_PATH = join(
 );
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
 
-// Read once and kept: both files are build output and cannot change while the
-// server is up.
+/**
+ * Read once and kept: both files are build output and cannot change while
+ * the server is up.
+ */
 let clientManifest;
 let productionTemplate;
 
+/**
+ * Reads the built client manifest and turns the components a server render
+ * created into the stylesheet links its HTML needs. Production-only: in dev,
+ * Vite serves these itself.
+ */
 export function productionHtmlTemplate() {
   if (productionTemplate) return productionTemplate;
   const templatePath = existsSync(BUILT_TEMPLATE_PATH)

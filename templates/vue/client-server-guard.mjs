@@ -1,16 +1,3 @@
-// Keeping server code out of the browser.
-//
-// A module's `dms.server.ts` and the files under its `server/` directories run
-// in the generated server only: they read private options, sign tokens, talk
-// to the backend with its secrets. A client file that imports one of them,
-// even statically and through an alias, would ship that code in the client
-// bundle. Rollup's manifest only lists entries and dynamic imports, so a check
-// on the built output misses a static import; the guard sits in the module
-// graph instead, where every resolved file passes.
-//
-// Kept beside vite.config.ts rather than inside it so the plugin can be
-// exercised on its own, the way head-order.mjs is.
-
 import { relative, sep } from "node:path";
 
 const SERVER_ENTRY = /(?:^|[\\/])dms\.server\.[cm]?[jt]sx?$/;
@@ -47,6 +34,16 @@ export function isServerSource(id, moduleRoots) {
  * Fail a client build, and a client request in development, that loads server
  * code. Server-side rendering and the server modules build load it through
  * SSR, which the guard leaves alone.
+ *
+ * Keeps server code out of the browser. A module's `dms.server.ts` and the
+ * files under its `server/` directories run in the generated server only: they
+ * read private options, sign tokens, talk to the backend with its secrets. A
+ * client file that imports one of them, even statically and through an alias,
+ * would ship that code in the client bundle. Rollup's manifest only lists
+ * entries and dynamic imports, so a check on the built output misses a static
+ * import; the guard sits in the module graph instead, where every resolved file
+ * passes. Kept beside vite.config.ts rather than inside it so the plugin can be
+ * exercised on its own, the way head-order.mjs is.
  */
 export function rejectServerSourcesInClient(moduleRoots) {
   let ssrBuild = false;

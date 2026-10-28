@@ -1,15 +1,3 @@
-// What each frontend module adds to the client entry.
-//
-// Every page loads the entry, and everything it imports statically, before it
-// runs anything: a module's `dms.frontend.ts`, its plugins and whatever they
-// import land there, on every page of every application that loads the
-// module. The client build records, from the bundle's own metadata, how much
-// of the entry each module's sources make up; `ajs dms build` reports it and
-// warns about a module above its threshold.
-//
-// Kept beside vite.config.ts rather than inside it so the plugin can be
-// exercised on its own, the way client-chunking.mjs is.
-
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 
@@ -109,6 +97,18 @@ export function attributeEntry(bundle, modules) {
  * Records, in the client build, what each frontend module adds to the entry
  * (`ENTRY_WEIGHT_FILE`). Server builds are left alone: their bundle is no
  * page's entry.
+ *
+ * What each frontend module adds to the client entry. Every page loads the
+ * entry, and everything it imports statically, before it runs anything: a
+ * module's `dms.frontend.ts`, its plugins and whatever they import land there,
+ * on every page of every application that loads the module. The client build
+ * records, from the bundle's own metadata, how much of the entry each module's
+ * sources make up; `ajs dms build` reports it and warns about a module above
+ * its threshold. Kept beside vite.config.ts rather than inside it so the plugin
+ * can be exercised on its own, the way client-chunking.mjs is.
+ *
+ * The weight is recorded once the bundle is written: plugins that generate the
+ * bundle after this one still rewrite the chunks' code.
  */
 export function recordEntryWeight(modules) {
   let ssrBuild = false;
@@ -117,8 +117,6 @@ export function recordEntryWeight(modules) {
     configResolved(config) {
       ssrBuild = Boolean(config.build.ssr);
     },
-    // Once the bundle is written: plugins that generate the bundle after this
-    // one still rewrite the chunks' code.
     writeBundle(options, bundle) {
       if (ssrBuild || !options.dir) return;
       const file = join(options.dir, ENTRY_WEIGHT_FILE);

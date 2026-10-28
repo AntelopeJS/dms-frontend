@@ -4,9 +4,11 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { relayedLocation } from "../templates/vue/server/proxy-redirects.mjs";
 import "./fixtures/dms-backend-proxies.mts";
 
-// A backend redirect is the browser's to follow. Followed by the proxy, a
-// redirect to another site served that site's page, and its cookies, from the
-// dashboard's origin.
+/**
+ * A backend redirect is the browser's to follow. Followed by the proxy, a
+ * redirect to another site served that site's page, and its cookies, from
+ * the dashboard's origin.
+ */
 
 interface ServerTemplate {
   handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;

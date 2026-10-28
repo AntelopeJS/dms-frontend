@@ -68,8 +68,6 @@ async function runCli(
     USERPROFILE: sandbox,
     NO_UPDATE_NOTIFIER: "1",
     DMS_API_BASE_URL: "",
-    // What the output looks like depends on these: pin them to a plain
-    // UTF-8 terminal, whatever runs the suite.
     TERM: "xterm-256color",
     LANG: "en_US.UTF-8",
     LC_ALL: undefined,
@@ -277,7 +275,6 @@ describe("following the ajs output contract", () => {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
     });
-    // What `| head` does once it has read enough: close its end of the pipe.
     cli.stdout.destroy();
     let stderr = "";
     cli.stderr.on("data", (chunk) => (stderr += chunk));
@@ -657,7 +654,6 @@ describe("validating options before any work", () => {
       const result = await runCli(["start", "-b", backendUrl, "-p", "0"], {
         files: {
           ...builtWorkspace(),
-          // A variable turns the builder on, after a build made without it.
           "antelope.config.ts":
             "export default { name: 'sandbox', modules: { builder: " +
             "{ source: { type: 'local', path: './builder' }, " +
@@ -1156,8 +1152,6 @@ describe("listing and removing workspaces", () => {
       env: { NO_UPDATE_NOTIFIER: undefined, CI: undefined },
     });
     assert.equal(result.code, 0);
-    // An update is due, but the notice is for a person at a terminal; the
-    // skipped directory is reported on stderr.
     assert.doesNotMatch(result.stderr, /999\.0\.0/);
     assert.match(result.stderr, /– Skipped .*stray-dir \(not a workspace\)/);
     const listed = JSON.parse(result.stdout);

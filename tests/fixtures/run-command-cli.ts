@@ -1,5 +1,3 @@
-// A CLI that dies on its own while the child it spawned through runCommand is
-// still running, the way an uncaught exception would end `ajs dms dev`.
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

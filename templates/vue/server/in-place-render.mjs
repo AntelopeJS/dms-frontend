@@ -1,9 +1,3 @@
-// A page that completes its query as it renders, rendered at that query in
-// the same request rather than answered with a redirect.
-//
-// Lives apart from server.mjs so the file stays under the size the linter
-// allows.
-
 import { ofetch } from "ofetch";
 
 /**
@@ -34,6 +28,9 @@ function reusableReadKey(path, options, headers) {
  * `backendHeaders()` and the read's own. After `reuseCompletedReads()`, a later
  * render of the same request is given a copy of each read a previous render
  * completed instead of reading the backend again.
+ *
+ * A read returns a copy: the render that read it may still change the object it
+ * got. A body that cannot be copied is read again.
  */
 export function serverReads(backendHeaders) {
   const completed = new Map();
@@ -52,8 +49,6 @@ export function serverReads(backendHeaders) {
       headers,
     });
     if (!key) return reading;
-    // A copy: the render that read it may still change the object it got. A
-    // body that cannot be copied is read again.
     return reading.then((data) => {
       try {
         completed.set(key, structuredClone(data));
@@ -89,6 +84,9 @@ function rendersInPlace(request, from, location) {
  * the first render made (`fetch`), instead of being answered with a redirect
  * the browser would follow with a whole new request. The page served then
  * names the URL the document shows, which the browser puts in the address bar.
+ *
+ * A page that completes its query as it renders is rendered at that query in
+ * the same request, rather than answered with a redirect.
  */
 export async function renderInPlace(request, page, fetch, render, propsAt) {
   let rendered = await render(page);

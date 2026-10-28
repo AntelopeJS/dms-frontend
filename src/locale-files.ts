@@ -1,10 +1,3 @@
-// The locale files of the asset roots, read and checked: each one must parse,
-// and each of its messages must compile with vue-i18n's message compiler, so a
-// message the application could not show stops the build and dev instead of
-// reaching a page.
-//
-// Split out of derived-outputs.ts, whose size the linter caps.
-
 import { readFileSync } from "node:fs";
 import { baseCompile, type CompileError } from "@intlify/message-compiler";
 
@@ -86,7 +79,14 @@ function messageProblems(value: unknown, key: string): MessageProblem[] {
   );
 }
 
-/** A locale file's catalog, once it parses and each message compiles. */
+/**
+ * A locale file's catalog, once it parses and each message compiles.
+ *
+ * The locale files of the asset roots are read and checked: each one must
+ * parse, and each of its messages must compile with vue-i18n's message
+ * compiler, so a message the application could not show stops the build and
+ * dev instead of reaching a page.
+ */
 export function readLocaleFile(path: string): Record<string, unknown> {
   let value: Record<string, unknown>;
   try {

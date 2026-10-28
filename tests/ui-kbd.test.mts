@@ -1,10 +1,3 @@
-// Nuxt UI's key hints (`<UKbd value="meta">`, the `kbds` of its menus) print
-// `meta`, `ctrl` and `alt` from a map shared by every hint and filled by the
-// first one's `onMounted`: the server printed a blank, and a hint hydrating
-// after the first mount printed "⌘" or "Ctrl" over it, a hydration mismatch
-// on every platform. The DMS routes `useKbd` to its runtime, which prints the
-// application's platform from the server on, and otherwise keeps each hint on
-// the server's value until it mounts.
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { renderToString } from "@vue/server-renderer";
@@ -19,8 +12,6 @@ import {
   ref,
 } from "vue";
 import { uiKbd } from "../templates/vue/ui-kbd.mjs";
-// The module namespace rather than named imports: a name the runtime does not
-// export yet fails the test that uses it, not the whole file.
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
 
 const USE_KBD =
@@ -126,7 +117,7 @@ function hint(isMac: boolean, values = ["meta", "ctrl", "alt", "shift", "k"]) {
   });
 }
 
-// Mounts components without a DOM, the way the browser runtime runs them.
+/** Mounts components without a DOM, the way the browser runtime runs them. */
 function mountFresh(
   root: ReturnType<typeof defineComponent>,
   setup?: (app: App) => void,
@@ -215,7 +206,6 @@ describe("Key hints mounted in the browser", () => {
   it("follow the platform source when the application gives one", async () => {
     globalThis.window = {} as Window & typeof globalThis;
     const platform = ref<"mac" | "other">("other");
-    // A Mac browser, told the page renders PC hints: the source wins.
     const mounted = mountFresh(hint(true), (app) =>
       provideDmsKbdPlatform(app, () => platform),
     );

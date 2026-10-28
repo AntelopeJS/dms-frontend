@@ -60,8 +60,6 @@ function configSource(config: AppConfig): string {
  * set the modules up from the configs as `main.ts` and `ssr-renderer.ts` do.
  */
 describe("edited layer app configs in the dev server", () => {
-  // Inside the repository, so the runtime's dependencies resolve; resolved,
-  // because Vite reports a change under the path it resolved.
   const root = realpathSync(mkdtempSync(resolve(".app-config-hmr-")));
   const workspace = join(root, "workspace");
   const project: ResolvedLayer = {
@@ -84,9 +82,6 @@ describe("edited layer app configs in the dev server", () => {
   const probe: HotReloadProbe = { evaluations: 0 };
   let server: ViteDevServer;
 
-  // The dev layer watcher leaves at least 100 ms between two regenerations,
-  // because Vite's file watcher drops a second change to the same file within
-  // 50 ms on Linux. Consecutive edits here keep the same gap.
   const edit = async (path: string, config: AppConfig): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     writeFile(path, configSource(config));
@@ -114,13 +109,10 @@ describe("edited layer app configs in the dev server", () => {
     writeFrontendModuleRegistry(workspace, layers);
     for (const file of RUNTIME_FILES)
       cpSync(join("templates", "vue", file), join(workspace, file));
-    // What `ssr-renderer.ts` does with the configs.
     writeFileSync(
       join(workspace, "server-entry.ts"),
       'import { appConfigs } from "./app-configs.generated";\nimport { setupFrontendModules, useDmsAppConfig } from "./frontend-module";\nawait setupFrontendModules([], appConfigs);\nexport const appConfig = useDmsAppConfig();\n',
     );
-    // What `main.ts` does, with a module whose setup extends the config, as
-    // a DMS entry may.
     writeFileSync(
       join(workspace, "client-entry.ts"),
       'import { appConfigs, syncAppConfigs } from "./app-configs.generated";\nimport { setupFrontendModules, updateDmsAppConfig, useDmsAppConfig } from "./frontend-module";\nglobalThis.__dmsAppConfigHmr.evaluations += 1;\nawait setupFrontendModules([{ options: { public: {} }, module: { setup() { useDmsAppConfig().addedBySetup = true; } } }], appConfigs);\nsyncAppConfigs(updateDmsAppConfig);\nexport const appConfig = useDmsAppConfig();\n',
@@ -186,7 +178,6 @@ describe("edited layer app configs in the dev server", () => {
         ui: { colors: { primary: "green" } },
       });
       await eventually(() => appConfig.branding.name === "Edited");
-      // The objects the components hold, the nested ones included.
       assert.equal(appConfig.branding, branding);
       assert.equal(branding.logo, "/branding/logo-1a2b.png");
       assert.deepEqual(toRaw(appConfig.ui.colors), {
@@ -195,13 +186,10 @@ describe("edited layer app configs in the dev server", () => {
       });
       assert.equal(appConfig.addedBySetup, true);
 
-      // A second update goes through the instance the first one created.
       await edit(projectConfig, { branding: { name: "Edited again" } });
       await eventually(() => appConfig.branding.name === "Edited again");
       assert.equal(branding.logo, "/dms.svg");
 
-      // A config added to a layer regenerates the module, which applies it
-      // the same way. The last of a module's layers by name wins.
       await edit(join(dmsLayers, "dms-theme", "app", "app.config.ts"), {
         branding: { logo: "/theme.svg" },
         ui: { colors: { neutral: "zinc" } },
@@ -214,7 +202,6 @@ describe("edited layer app configs in the dev server", () => {
       assert.equal(branding.logo, "/theme.svg");
       assert.equal(appConfig.ui.colors.primary, "dms");
 
-      // Never evaluated again: no update reached the entry, nor reloaded it.
       assert.equal(probe.evaluations, 1);
       assert.deepEqual(invalidated, []);
     } finally {

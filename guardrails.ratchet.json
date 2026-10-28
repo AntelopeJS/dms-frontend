@@ -1,6 +1,5 @@
 {
   "rules": {
-    "antelopejs/no-comments": 1307,
     "anti-slop/no-known-value-widening": 38,
     "anti-slop/no-runtime-typeof": 159,
     "anti-slop/no-shape-in-symbol-names": 11,
@@ -10,17 +9,15 @@
     "anti-slop/require-safety-comment-for-type-assertion": 154
   },
   "oversizeFiles": {
-    "src/config.ts": 20147,
-    "src/derived-outputs.ts": 23902,
-    "src/workspace-setup.ts": 21332,
+    "src/derived-outputs.ts": 23812,
     "templates/vue/frontend-module.ts": 124737,
-    "tests/cli-sandbox.test.mts": 53593,
+    "tests/cli-sandbox.test.mts": 53195,
     "tests/cli.test.ts": 31659,
-    "tests/inertia.test.ts": 44114,
-    "tests/layer-watch.test.ts": 27767,
-    "tests/server-modules.test.ts": 37087,
-    "tests/ssr-errors.test.ts": 21858,
-    "tests/vue-async-data.test.mts": 50995,
-    "tests/vue-runtime.test.mts": 38286
+    "tests/inertia.test.ts": 42241,
+    "tests/layer-watch.test.ts": 26377,
+    "tests/server-modules.test.ts": 36402,
+    "tests/ssr-errors.test.ts": 20681,
+    "tests/vue-async-data.test.mts": 49789,
+    "tests/vue-runtime.test.mts": 37259
   }
 }
