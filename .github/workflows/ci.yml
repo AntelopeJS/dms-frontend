@@ -6,6 +6,7 @@ on:
       - main
   pull_request:
 
+  workflow_dispatch: null
 permissions:
   contents: read
 
@@ -16,6 +17,9 @@ concurrency:
 jobs:
   ci:
     uses: AntelopeJS/.github/.github/workflows/ci-node.yml@v1
+    permissions:
+      contents: write
+      actions: write
 
   cli:
     runs-on: ubuntu-latest
