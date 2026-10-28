@@ -29,6 +29,7 @@ tags: [frontend, cli, renderer, vue, inertia, ssr, deployment, dms-module]
 - The entry is `dms.frontend.ts`, default-exporting `{ componentPrefix?, setup(sdk) }`. `setup` only registers: under `dev` it runs again on every layer change.
 - Set a `componentPrefix`; the backend names a component by its full name (`CustomComponent("AcmeBanner")`). Replace another module's component with `registerComponent(fullName, c, { prefix: false })`.
 - Nothing is auto-imported unless `dms.frontend.build.ts` declares it; `app/build/` never is.
+- `dms.frontend.build.ts` can also add Vite plugins with `build.registerVitePlugins(() => [plugin])`, for dev, build and preview, after the renderer's own plugins.
 - Server routes, auth hooks, route rules and backend proxies go in `dms.server.ts` (`defineDmsServer` from `#dms/server`). It is trusted Node.js code: import what it uses, never `.vue` files or `dms.frontend.ts`.
 - The browser reaches the backend only through declared prefixes (`registerBackendProxy`, `backendProxies`, `DMS_BACKEND_PROXIES`). An undeclared backend route answers `404`; in development, the `x-dms-route-owner` header names who answered.
 - Declare `engines["@antelopejs/dms-frontend"]`, capped below the next minor (`">=0.6.0 <0.7.0"`); a range that excludes the installed loader stops `dev`, `build` and `verify-source`.
