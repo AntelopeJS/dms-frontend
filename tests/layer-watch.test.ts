@@ -143,7 +143,6 @@ describe("locale catalogs in the dev layer watcher", () => {
         ),
       () => catalog("en").form.demo_key === "Hello",
     );
-    // The higher-priority module still wins, as at materialization.
     assert.equal(catalog("en").form.owner, "app");
     assert.match(readText(join(generated, "en.ts")), /"demo_key":"Hello"/);
     assert.deepEqual(emailLocales(), ["en", "fr"]);
@@ -159,8 +158,6 @@ describe("locale catalogs in the dev layer watcher", () => {
     const before = untouched.map(mtime);
     await eventually(
       () => {
-        // Same English messages, laid out differently, in the same pass as a
-        // French change.
         writeFileSync(
           join(baseLocales, "ui-en-GB.json"),
           JSON.stringify(
@@ -180,9 +177,6 @@ describe("locale catalogs in the dev layer watcher", () => {
   });
 
   it("regenerates once for changes flushed by several layers together", async () => {
-    // What a checkout or an editor saving several files does. One regeneration
-    // per layer would write the first layer's change alone, then both within a
-    // few milliseconds: Vite's watcher drops that second change on Linux.
     const catalogPath = join(generated, "en.json");
     const rename = mock.method(fs, "renameSync");
     try {
@@ -283,7 +277,6 @@ describe("locale catalogs in the dev layer watcher", () => {
   });
 
   it("leaves the catalogs alone when a change is not a locale file", async () => {
-    // A regeneration would put the catalog back: its absence shows none ran.
     writeFileSync(join(generated, "en.json"), '{"form":{"marker":true}}');
     const component = join(
       base,
@@ -308,7 +301,6 @@ describe("locale catalogs in the dev layer watcher", () => {
         writeFileSync(component, "<template><form novalidate /></template>\n"),
       () => readText(mirrored).includes("novalidate"),
     );
-    // Longer than the delay a regeneration waits for, had one been scheduled.
     await new Promise((resolve) => setTimeout(resolve, 300));
     assert.deepEqual(catalog("en"), { form: { marker: true } });
   });
@@ -427,7 +419,6 @@ describe("derived outputs in the dev layer watcher", () => {
       () => rmSync(added, { force: true }),
       () => !existsSync(join(publicDir, "images", "new.png")),
     );
-    // The directory it leaves empty goes with it, as a restart would do.
     assert.ok(!existsSync(join(publicDir, "images")));
     assert.equal(read(join(publicDir, "logo.svg")), "<svg id='edited' />");
   });
@@ -457,7 +448,6 @@ describe("derived outputs in the dev layer watcher", () => {
         ),
       () => aggregated().includes("fixture__app/app/config/shortcuts-registry"),
     );
-    // Highest priority first, as at materialization.
     assert.match(
       aggregated(),
       /registry0 from "@frontend\/fixture__app\/app\/config\/shortcuts-registry\.ts";\nimport registry1 from "@frontend\/fixture__base\/layers\/ui\/app\/config\/shortcuts-registry\.ts"/,
@@ -509,7 +499,6 @@ describe("derived outputs in the dev layer watcher", () => {
         appConfigs().includes("fixture__app/app/app.config.ts") &&
         appConfigs().includes("fixture__base/layers/ui/app/app.config.ts"),
     );
-    // Highest precedence first, as at materialization.
     assert.match(
       appConfigs(),
       /config0 from "@frontend\/fixture__app\/app\/app\.config\.ts";\nimport config1 from "@frontend\/fixture__base\/layers\/ui\/app\/app\.config\.ts"/,
@@ -525,9 +514,6 @@ describe("derived outputs in the dev layer watcher", () => {
   });
 
   it("serves a public file before the source saved with it that names it", async () => {
-    // What a theme editor saves at once: a new logo, and the app config that
-    // points at it. The page Vite updates for the config asks for the logo
-    // straight away, which must not find it missing.
     const logo = join(app, "public", "branding", "logo-1a2b.png");
     const served = join(publicDir, "branding", "logo-1a2b.png");
     const config = join(
@@ -581,7 +567,6 @@ describe("derived outputs in the dev layer watcher", () => {
       );
       assert.ok(notices[0].includes(extra), notices[0]);
 
-      // A change that leaves the layer directories alone says nothing.
       await eventually(
         () =>
           writeFileSync(
@@ -605,8 +590,6 @@ describe("derived outputs in the dev layer watcher", () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
       assert.equal(warnings().filter(isRestartNotice).length, 1);
 
-      // Nor does a file next to the layers: the type paths are rewritten
-      // with the same content, which is what the notice waits for.
       const readme = join(base, "layers", "README.md");
       await eventually(
         () => writeFile(readme, "# Layers\n"),
@@ -629,7 +612,6 @@ describe("derived outputs in the dev layer watcher", () => {
         () => rmSync(extra, { recursive: true, force: true }),
         () => !typePaths().includes("#extra/*"),
       );
-      // Nor does removing it: one restart applies both changes.
       await new Promise((resolve) => setTimeout(resolve, 300));
       assert.equal(warnings().filter(isRestartNotice).length, 1);
     } finally {
@@ -689,7 +671,6 @@ describe("derived outputs in the dev layer watcher", () => {
   });
 
   it("leaves the derived outputs alone when a change affects none", async () => {
-    // A regeneration would put these back: their survival shows none ran.
     const markers: Array<[string, string]> = [
       [join(publicDir, "logo.svg"), "marker"],
       [join(workspace, "shortcuts-aggregated.generated.ts"), "// marker\n"],
@@ -715,7 +696,6 @@ describe("derived outputs in the dev layer watcher", () => {
         ),
       () => read(mirrored).includes("hidden"),
     );
-    // Longer than the delay a regeneration waits for, had one been scheduled.
     await new Promise((resolve) => setTimeout(resolve, 300));
     for (const [path, content] of markers) assert.equal(read(path), content);
   });

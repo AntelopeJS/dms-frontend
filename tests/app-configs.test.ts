@@ -56,8 +56,6 @@ describe("the generated app configs module", () => {
       },
       project: { "app/app.config.ts": CONFIG },
     });
-    // Modules by descending priority, and within one the last layer by name
-    // first: it wins, as it does a contested public file.
     assert.deepEqual(
       [...source.matchAll(/^import config\d+ from "([^"]+)";$/gm)].map(
         (match) => match[1],
@@ -75,7 +73,6 @@ describe("the generated app configs module", () => {
   });
 
   it("imports nothing at run time but the configs", () => {
-    // The email bundle imports it, and the browser runtime must not follow.
     const source = generate({ project: { "app/app.config.ts": CONFIG } });
     const imports = source.match(/^import .*$/gm) ?? [];
     assert.deepEqual(
@@ -85,7 +82,6 @@ describe("the generated app configs module", () => {
   });
 
   it("lists nothing for a module without a TypeScript config", () => {
-    // The workspace type check covers this module and allows no JavaScript.
     const source = generate({
       project: {
         "app/components/Card.vue": "<template />\n",

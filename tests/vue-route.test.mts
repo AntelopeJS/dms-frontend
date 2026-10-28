@@ -55,8 +55,6 @@ async function render(
   return result.body;
 }
 
-// Inertia keeps its page in one module-level ref: the browser test must run
-// first, while no render of this process has written it yet.
 describe("Route of the page", () => {
   it("keeps the initial URL for a plugin reading it before the app mounts", () => {
     const app = createSSRApp({ render: () => null });
@@ -72,8 +70,6 @@ describe("Route of the page", () => {
   it("gives a plugin its own request's URL during a server render", async () => {
     const Page = defineComponent({ setup: () => () => h("p", "page") });
     const seen: string[] = [];
-    // dms-ui's `register` plugin reads the route while it sets up, before the
-    // request's page has rendered.
     const readRoute = (app: App) =>
       seen.push(app.runWithContext(() => useDmsRoute().fullPath));
     await render("/first?x=1", Page, {}, readRoute);
@@ -85,7 +81,6 @@ describe("Route of the page", () => {
     const RouteAfterAwait = defineComponent({
       props: { delay: { type: Number, required: true } },
       async setup(props) {
-        // What `<script setup>` compiles a top-level await to.
         let pending: unknown;
         let restore: () => void;
         [pending, restore] = withAsyncContext(() => sleep(props.delay));
@@ -99,8 +94,6 @@ describe("Route of the page", () => {
       props: { delay: { type: Number, required: true } },
       setup: (props) => () => h("div", [h(RouteAfterAwait, props)]),
     });
-    // The first request waits longer: the second one starts, then renders,
-    // while the first is still suspended.
     const first = render("/orders/1?tab=a", Page, { delay: 30 });
     await sleep(5);
     const second = render("/orders/2?tab=b", Page, { delay: 1 });

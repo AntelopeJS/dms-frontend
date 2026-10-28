@@ -1,7 +1,3 @@
-// Constants, the Options bag read from the environment, and the bootstrap
-// credential handling.
-//
-// Split out of common.ts, which stays the barrel every command imports from.
 import { createHash, randomBytes } from "node:crypto";
 
 import { chmodSync, renameSync, writeFileSync } from "node:fs";
@@ -21,10 +17,6 @@ import {
   readDevBootstrapCredential,
 } from "./discovery";
 import { MAX_TCP_PORT } from "./ports";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 /**
  * Shared AntelopeJS home. Every generated workspace, manifest cache and
@@ -220,10 +212,6 @@ export const PNPM_LIFECYCLE_SCRIPTS: readonly string[] = [
 ];
 
 export const TAILWIND_SOURCE_GLOB = "**/*.{vue,ts,tsx,js,jsx,mjs,cjs}";
-
-// ============================================================================
-// Shared CLI Options
-// ============================================================================
 
 /**
  * Input the user must correct before the command does any work: a malformed
@@ -510,10 +498,6 @@ export function resolveBootstrapSecret(
     join(result.backend.projectDir, DEV_HANDSHAKE_RELATIVE_PATH),
   );
 }
-
-// ============================================================================
-// Types
-// ============================================================================
 
 /**
  * Compute a full SHA-256 hex digest for a string. Used to derive unique

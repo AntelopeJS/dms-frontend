@@ -25,15 +25,12 @@ async function eventually(done: () => boolean): Promise<void> {
 }
 
 it("rebuilds the email catalogs when they are regenerated during a watch-mode build", async () => {
-  // Inside the repository, so the email config resolves its Vite plugins.
   const workspace = mkdtempSync(resolve(".email-catalog-watch-"));
   const layer: ResolvedLayer = {
     path: join(workspace, "source"),
     packageName: "@fixture/mail",
   };
   const emitted = join(workspace, "dist", "server", "locales", "en.json");
-  // Rollup rewrites the emitted catalog in place, so a read can find it
-  // missing or half written while a rebuild runs: not there yet.
   const subject = (): string | undefined => {
     try {
       return JSON.parse(readText(emitted)).subject;

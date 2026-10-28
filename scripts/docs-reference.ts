@@ -1,7 +1,3 @@
-// Writes the environment-variable table of the configuration page from the
-// list `ajs dms help environment` prints, so the two never disagree.
-// `--check` compares instead of writing, and fails when the page is stale.
-
 import { readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { ENVIRONMENT_VARIABLES } from "../src/help";
@@ -60,6 +56,11 @@ function replaceTable(page: string): string {
   );
 }
 
+/**
+ * Writes the environment-variable table of the configuration page from the
+ * list `ajs dms help environment` prints, so the two never disagree.
+ * `--check` compares instead of writing, and fails when the page is stale.
+ */
 function main(): void {
   const page = readFileSync(PAGE, "utf8");
   const updated = replaceTable(page);

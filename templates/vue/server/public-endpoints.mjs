@@ -2,18 +2,23 @@ import { readFileSync } from "node:fs";
 import { json } from "./auth/backend.mjs";
 import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./auth/client-ip.mjs";
 
-// Written at the workspace root by the loader, from the endpoints each backend
-// module declared in the frontend manifest. This file sits one directory up.
+/**
+ * Written at the workspace root by the loader, from the endpoints each
+ * backend module declared in the frontend manifest. This file sits one
+ * directory up.
+ */
 const DECLARED_ENDPOINTS_FILE = new URL(
   "../generated-public-endpoints.json",
   import.meta.url,
 );
 
-// An absolute backend API path whose first segment is literal (a `*` there
-// would open a route of every module) and whose next ones are literal or `*`
-// (exactly one segment): no prefix match, no query string, no segment that
-// climbs out. Kept in step with `PUBLIC_PATH` in the DMS
-// (`frontend-public-endpoints.ts`), which validates the modules' declarations.
+/**
+ * An absolute backend API path whose first segment is literal (a `*` there
+ * would open a route of every module) and whose next ones are literal or `*`
+ * (exactly one segment): no prefix match, no query string, no segment that
+ * climbs out. Kept in step with `PUBLIC_PATH` in the DMS (`frontend-public-
+ * endpoints.ts`), which validates the modules' declarations.
+ */
 const PUBLIC_PATH =
   /^\/api\/[A-Za-z0-9][A-Za-z0-9._~-]*(?:\/(?:\*|[A-Za-z0-9][A-Za-z0-9._~-]*))*$/;
 const SEGMENT_WILDCARD = "*";
@@ -27,9 +32,11 @@ const ALLOWED_METHODS = new Set([
   "DELETE",
 ]);
 const DEFAULT_METHODS = ["POST"];
-// A declared header is a module's own `x-` header. Those the proxy, a reverse
-// proxy or the backend give a meaning to are never taken from the caller.
-// Kept in step with the DMS's `RESERVED_HEADER`.
+/**
+ * A declared header is a module's own `x-` header. Those the proxy, a
+ * reverse proxy or the backend give a meaning to are never taken from the
+ * caller. Kept in step with the DMS's `RESERVED_HEADER`.
+ */
 const HEADER_NAME = /^x-[a-z0-9-]+$/;
 const RESERVED_HEADER =
   /^x-(?:forwarded-|real-ip$|dms-|inertia|http-method|method-override|original-|rewrite-)/;
@@ -65,9 +72,7 @@ export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
   try {
     const parsed = JSON.parse(readFileSync(file, "utf8"));
     if (Array.isArray(parsed?.proxies)) proxies = parsed.proxies;
-  } catch {
-    // No file, or a broken one: no proxy declared.
-  }
+  } catch {}
   if (file === DECLARED_ENDPOINTS_FILE) declaredProxies = proxies;
   return proxies;
 }
@@ -89,9 +94,7 @@ export function environmentBackendProxies(
         ...entry,
         module: "DMS_BACKEND_PROXIES",
       }));
-  } catch {
-    // Reported below.
-  }
+  } catch {}
   console.warn("Ignoring DMS_BACKEND_PROXIES: not a JSON array");
   return [];
 }
@@ -180,8 +183,10 @@ export function allowedPublicEndpoints(
   );
 }
 
-// Compiled once per value of the environment variable, so a malformed entry
-// is reported once rather than on every request.
+/**
+ * Compiled once per value of the environment variable, so a malformed entry
+ * is reported once rather than on every request.
+ */
 let compiled;
 
 function currentPublicEndpoints() {

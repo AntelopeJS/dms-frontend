@@ -44,8 +44,6 @@ describe("private files the development server refuses", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
-    // The real development server, as dev-server-files.test.mts runs it: Vite
-    // in middleware mode, rooted in the workspace, without watcher or HMR.
     writeFixture(
       root,
       "vite.config.mjs",
@@ -182,9 +180,6 @@ describe("private files the development server refuses", () => {
       );
       assert.equal(entry.secret, SECRET);
       assert.equal(handler.sign, SECRET);
-      // A client transform of the same files fails, however it is reached:
-      // by the load guard, or, since Vite 8.3 closed the `?import&raw` gap
-      // `dev-private-files.mjs` describes, by Vite's own deny list.
       for (const url of [
         "/frontend-modules/shop/layers/base/server/sign.ts",
         "/generated-server-options.json?import&raw",

@@ -24,15 +24,19 @@ const VERIFY_SOURCE_EXAMPLES: HelpExample[] = [
   },
 ];
 
-/** Creates the command that verifies unpublished frontend source packages. */
+/**
+ * Creates the command that verifies unpublished frontend source packages.
+ *
+ * The options are checked by the action rather than by Commander, which
+ * would stop at the first problem: the action reports every one of them at
+ * once.
+ */
 export function cmdVerifySource(): Command {
   const command = new Command("verify-source")
     .summary("Build and type-check unpublished frontend sources")
     .description(
       "Build and type-check unpublished DMS frontend modules against this loader version, on top of the DMS core layer of the @antelopejs/dms installed in the project. Runs in a temporary workspace removed when the run ends, and starts no backend.",
     )
-    // Checked by the action rather than by Commander, which would stop at
-    // the first problem: the action reports every one of them at once.
     .option(
       "-l, --layer <path>",
       "Root of an unpublished DMS core layer to verify instead of the installed one",

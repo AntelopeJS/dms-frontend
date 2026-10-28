@@ -58,8 +58,6 @@ describe("dev reads the project's modules", () => {
       dev: true,
     });
 
-    // What the module store does: write the configuration, replace a
-    // module's files, while dev keeps running.
     writeModule(project, "second");
     writeConfig(
       project,

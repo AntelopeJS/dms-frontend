@@ -1,8 +1,3 @@
-// A prop typed with an auto-imported type: Vue's SFC compiler only reads a
-// component's own imports, so without the generated declarations
-// `boolean | ActionRule` compiled to `Boolean` (skipCheck in development,
-// `{ type: Boolean }` in production), and a development Vue rejected every
-// object the prop received.
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import {
@@ -60,7 +55,6 @@ after(() => {
 });
 
 function workspace() {
-  // Inside the repository, so `import("vue")` resolves as in a real workspace.
   const root = realpathSync(mkdtempSync(resolve(".sfc-global-types-")));
   workspaces.push(root);
   const module = join(root, "frontend-modules", "acme");
@@ -75,7 +69,6 @@ function workspace() {
     "export interface InternalRule { secret: string }\n",
   );
   writeFixture(module, "app/components/Panel.vue", COMPONENT);
-  // The same component importing its types itself, as the reference.
   writeFixture(
     module,
     "app/components/Imported.vue",
@@ -146,7 +139,6 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
       const props = compiledProps(component, isProd, [file]);
       assert.match(props, /action: \{ type: \[Boolean, Object\]/);
       assert.doesNotMatch(props, /action: [^\n]*skipCheck/);
-      // Exactly as if the component imported them, Vue's own types included.
       const reference = compiledProps(imported, isProd);
       for (const name of ["action", "target"])
         assert.equal(propLine(props, name), propLine(reference, name), name);
@@ -160,12 +152,10 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
       declarations,
       /^declare type ActionRule = import\(".*\/frontend-modules\/acme\/app\/types\/action"\)\.ActionRule;$/m,
     );
-    // Vue's own types, which the `vue` preset auto-imports.
     assert.match(
       declarations,
       /^declare type Component = import\("vue"\)\.Component;$/m,
     );
-    // A module's app/build/ is private, never auto-imported.
     assert.doesNotMatch(declarations, /InternalRule/);
   });
 

@@ -1,8 +1,3 @@
-// The props of a DMS page visit, and which of them the browser already has.
-//
-// Lives apart from server.mjs so the file stays under the size the linter
-// allows.
-
 import { createHash } from "node:crypto";
 import { readSession } from "./auth/session.mjs";
 import { BackendResponseError } from "./backend-response.mjs";
@@ -43,8 +38,10 @@ function holdsOnlyThisLayout(held, sharedKey) {
   );
 }
 
-// The parameters of the page request itself, which a page query of the same
-// name cannot override.
+/**
+ * The parameters of the page request itself, which a page query of the same
+ * name cannot override.
+ */
 const PAGE_REQUEST_PARAMETERS = new Set(["path", SHARED_PROP]);
 
 /**
@@ -118,6 +115,16 @@ export async function propsForQuery(props, url, backend, auth) {
  * asks for it, and otherwise asks the backend for the page alone. A partial
  * reload gets the props it names, and the layout too when the browser's copy
  * is not this session's.
+ *
+ * The sealed session names the account and workspace, whatever the module
+ * owning sign-in shows a page of it.
+ *
+ * A partial reload merges what it gets into the page on screen: a session that
+ * ended has to be sent as one, not left out.
+ *
+ * The shared layout is declared only when the browser ends up with this
+ * session's layout, sent now or already held: declaring it otherwise would let
+ * a layout of another session pass for this one.
  */
 export async function loadPageProps(request, backend, auth) {
   const url = new URL(request.url, "http://frontend.local");
@@ -125,15 +132,11 @@ export async function loadPageProps(request, backend, auth) {
   const sealed = readSession(request);
   const { user, session } = auth.view(sealed);
   const { partial, wants } = requestedProps(request);
-  // The sealed session names the account and workspace, whatever the module
-  // owning sign-in shows a page of it.
   const sharedKey = sharedOnceKey(sealed);
   const holdsShared = holdsOnlyThisLayout(heldOnceProps(request), sharedKey);
   const withShared = (partial && wants(SHARED_PROP)) || !holdsShared;
   const props = {};
   if (wants("path")) props.path = pathname;
-  // A partial reload merges what it gets into the page on screen: a session
-  // that ended has to be sent as one, not left out.
   if (wants("user") && (user || partial)) props.user = user ?? null;
   if (wants("session") && (session || partial)) props.session = session ?? null;
   let shared;
@@ -145,9 +148,6 @@ export async function loadPageProps(request, backend, auth) {
     shared = await backend.fetchJson(SITE_LAYOUT_PATH);
   }
   if (shared) props[SHARED_PROP] = shared;
-  // Declared only when the browser ends up with this session's layout: sent
-  // now, or already held. Declaring it otherwise would let a layout of
-  // another session pass for this one.
   const onceProps =
     shared || holdsShared
       ? {

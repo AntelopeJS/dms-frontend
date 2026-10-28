@@ -122,7 +122,6 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received.origin, "https://shop.example.test");
     assert.equal(received.referer, "https://shop.example.test/cart?step=2");
     assert.equal(received["x-tracker-site"], "shop");
-    // No trusted proxy: what the caller wrote is not believed.
     assert.equal(received["x-forwarded-for"], "127.0.0.1");
     assert.equal(received["x-forwarded-proto"], "http");
     assert.equal(received["x-forwarded-host"], new URL(frontendUrl).host);

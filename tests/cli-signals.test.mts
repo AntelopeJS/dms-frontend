@@ -107,9 +107,7 @@ async function waitFor<T>(
     try {
       const value = probe();
       if (value !== undefined) return value;
-    } catch {
-      // Not ready yet.
-    }
+    } catch {}
     if (Date.now() > deadline)
       throw new Error(`timed out waiting for the process tree\n${context()}`);
     await new Promise((tick) => setTimeout(tick, 50));
@@ -249,8 +247,10 @@ function signalsProject(): string {
   return project;
 }
 
-// Process groups are a POSIX notion; on Windows runCommand kills the tree
-// with taskkill instead, which these pid checks cannot observe the same way.
+/**
+ * Process groups are a POSIX notion; on Windows runCommand kills the tree
+ * with taskkill instead, which these pid checks cannot observe the same way.
+ */
 const describeSignals = process.platform === "win32" ? describe.skip : describe;
 
 describeSignals("stopping the CLI stops the whole child process tree", () => {
@@ -267,7 +267,6 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     const run = await startServer("http://127.0.0.1:9", true);
     const pids = await run.tree;
 
-    // What a terminal does on Ctrl+C: SIGINT to the foreground process group.
     process.kill(-run.pid, "SIGINT");
 
     assert.deepEqual(await run.exited, { code: 130, signal: null });
@@ -284,8 +283,6 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
     const run = await startServer("http://127.0.0.1:9");
     const pids = await run.tree;
 
-    // kill -INT <pid>, or a CI runner cancelling the step: the child never
-    // sees the signal unless the CLI passes it on.
     process.kill(run.pid, "SIGINT");
 
     assert.deepEqual(await run.exited, { code: 130, signal: null });

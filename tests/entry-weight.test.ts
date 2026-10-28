@@ -74,8 +74,6 @@ async function buildFixture(): Promise<string> {
     { id: "heavy", name: "@acme/heavy", root: heavy, priority: 2 },
     { id: "light", name: "@acme/light", root: light, priority: 1 },
   ];
-  // Imported here, as the other tests that run Vite from a TypeScript test
-  // file do: the static import goes through the CommonJS transform.
   const { build } = await import("vite");
   await build({
     root,
@@ -106,7 +104,6 @@ describe("the client entry's weight by module", () => {
       .map((file: string) => readBytes(join(root, "dist", "client", file)))
       .reduce((sum: number, code: Buffer) => sum + code.length, 0);
     assert.equal(recorded.bytes, entrySize);
-    // The heavy module's gallery is in the entry, the light one's is not.
     assert.ok(recorded.owners["@acme/heavy"] > 25_000);
     assert.ok((recorded.owners["@acme/light"] ?? 0) < 1_000);
     assert.ok(recorded.owners.shared > 8_000, "the rest is shared code");

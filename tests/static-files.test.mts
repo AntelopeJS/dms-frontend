@@ -41,7 +41,6 @@ describe("the files of the build", () => {
     await mkdir(join(root, ".vite"));
     await writeFile(join(root, ".vite", "manifest.json"), "{}");
     server = createServer((request, response) => {
-      // As the production server does: `publicBuildFile` picks the file.
       const pathname = new URL(request.url ?? "/", "http://frontend").pathname;
       const file = publicBuildFile(root, pathname);
       if (file) {
@@ -124,7 +123,6 @@ describe("the files of the build", () => {
     assert.equal(await identity.text(), SCRIPT);
     assert.notEqual(brotli.headers.get("etag"), identity.headers.get("etag"));
 
-    // The tag of one encoding does not validate the other.
     const crossed = await fetch(`${base}/assets/app-abc123.js`, {
       headers: {
         "accept-encoding": "identity",

@@ -27,10 +27,12 @@ interface ProxyCompression {
 
 type Handler = (request: IncomingMessage, response: ServerResponse) => void;
 
-// How long the backend's event stream lives before it breaks, like a backend
-// restarting or undici's body timeout on a stream that went quiet.
+/**
+ * How long the backend's event stream lives before it breaks, like a backend
+ * restarting or undici's body timeout on a stream that went quiet.
+ */
 const STREAM_LIFETIME_MS = 50;
-// Long enough for a body nobody listens to to have failed by then.
+/** Long enough for a body nobody listens to to have failed by then. */
 const SETTLE_MS = STREAM_LIFETIME_MS * 4;
 const EVENT_STREAM = "text/event-stream";
 
@@ -73,7 +75,6 @@ function failingEventStream(onCancel: () => void): ReadableStream {
 describe("a backend stream that fails", () => {
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backendRequests: string[] = [];
-  // An event stream that says hello and breaks a moment later.
   const backend = createServer((request, response) => {
     backendRequests.push(request.url ?? "");
     response.writeHead(200, { "content-type": EVENT_STREAM });
@@ -138,8 +139,6 @@ describe("a backend stream that fails", () => {
     });
     leaveEarly(frontendPort, "/dms/dev");
     await handled;
-    // A stream opened anyway was never read, and its failure, unheard, would
-    // have ended the process by now.
     await delay(SETTLE_MS);
     assert.equal(backendRequests.length, before);
   });

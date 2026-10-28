@@ -1,17 +1,15 @@
-// Large transfers through the proxy, a file upload above all. The request
-// body is streamed to the backend, never buffered, and held to the
-// `maxBodyBytes` of the proxy it reached: a declared Content-Length over the
-// limit is refused before a byte is passed on, a chunked body is cut off as
-// soon as it goes over.
-
 const PAYLOAD_TOO_LARGE = 413;
 const TOO_LARGE_BODY = JSON.stringify({ message: "Payload Too Large" });
-// The refused body is never passed on: the iteration stops where it went
-// over, and the request stream stays open for the lingering close below.
+/**
+ * The refused body is never passed on: the iteration stops where it went
+ * over, and the request stream stays open for the lingering close below.
+ */
 const BODY_ITERATION = { destroyOnReturn: false };
-// How long a refused body is read and dropped before the connection closes
-// anyway: long enough for a client to finish sending what was in flight,
-// short enough to bound what a refused client can make the server read.
+/**
+ * How long a refused body is read and dropped before the connection closes
+ * anyway: long enough for a client to finish sending what was in flight,
+ * short enough to bound what a refused client can make the server read.
+ */
 const LINGER_MS = 5_000;
 
 const BODILESS_METHODS = new Set(["GET", "HEAD"]);
@@ -91,6 +89,12 @@ function refuseTooLargeBody(request, response) {
 
 /**
  * Sends a proxied request, its body held to `maxBodyBytes`.
+ *
+ * Large transfers through the proxy, a file upload above all. The request body
+ * is streamed to the backend, never buffered, and held to the `maxBodyBytes` of
+ * the proxy it reached: a declared Content-Length over the limit is refused
+ * before a byte is passed on, a chunked body is cut off as soon as it goes
+ * over.
  *
  * @param send `(body) => Promise<Response>`, the backend request with the
  *   body to stream: none for a GET or a HEAD, the request itself, or its

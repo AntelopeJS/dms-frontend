@@ -1,6 +1,3 @@
-// What the production server serves from the client build: the files the
-// browser loads, never the build metadata Vite writes beside them.
-
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -159,8 +156,6 @@ describe("built files the production server serves", () => {
           redirect: "manual",
         });
 
-      // Vite's metadata, in every spelling and encoding that reaches it, is
-      // answered as a file the build does not have.
       const missing = await get("/missing-file.json");
       assert.equal(missing.status, 404);
       await missing.body?.cancel();
@@ -192,7 +187,6 @@ describe("built files the production server serves", () => {
         );
       }
 
-      // What the browser loads keeps its headers.
       const entry = await get("/assets/main-a1b2.js");
       assert.equal(entry.status, 200);
       assert.equal(await entry.text(), ENTRY_SCRIPT);
@@ -208,7 +202,6 @@ describe("built files the production server serves", () => {
       assert.equal(compressed.status, 200);
       assert.equal(compressed.headers.get("content-encoding"), "br");
       assert.equal(await compressed.text(), ENTRY_SCRIPT);
-      // A name the browser percent-encodes is served under that encoding.
       const encoded = await get("/images/logo%20light.svg");
       assert.equal(encoded.status, 200);
       assert.equal(encoded.headers.get("content-type"), "image/svg+xml");
@@ -218,9 +211,6 @@ describe("built files the production server serves", () => {
       assert.equal(wellKnown.headers.get("cache-control"), "no-cache");
       assert.equal(await wellKnown.text(), "Contact: test\n");
 
-      // The server still reads the manifest: the page links the stylesheet
-      // of the component it rendered, and the asset version is the
-      // manifest's hash.
       const page = await get("/articles");
       assert.equal(page.status, 200);
       const html = await page.text();

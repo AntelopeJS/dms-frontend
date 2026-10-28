@@ -57,9 +57,6 @@ export default {
 }
 
 it("serves an edited component on the next server render in development", async () => {
-  // Inside the repository, like the SSR memory test, so the renderer's
-  // dependencies resolve; resolved, because Vite reports a change under the
-  // path it resolved.
   const workspace = realpathSync(mkdtempSync(resolve(".ssr-dev-reload-")));
   const probe: ReloadProbe = { setups: 0, plugins: [] };
   let server: ViteDevServer | undefined;
@@ -79,8 +76,6 @@ it("serves an edited component on the next server render in development", async 
       join(workspace, "ui-stub.ts"),
       "import {h} from 'vue'; const appConfig={}; export const useAppConfig=()=>appConfig;export const useToast=()=>({add(){}});export const en={code:'en'};export const fr={code:'fr'};export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};",
     );
-    // Both modules claim the page; `high` comes first, as the generated
-    // loader orders modules by descending priority.
     writeModule(workspace, "high", "<template><p>high v1</p></template>\n");
     writeModule(workspace, "low", "<template><p>low</p></template>\n");
     writeFileSync(
@@ -109,8 +104,6 @@ it("serves an edited component on the next server render in development", async 
     });
     const devServer = server;
 
-    // What `server.mjs` does for every document request in development: the
-    // page it renders, and the plugins the render set up.
     const render = async () => {
       const renderer = (await devServer.ssrLoadModule(
         "/ssr-renderer.ts",
@@ -127,9 +120,6 @@ it("serves an edited component on the next server render in development", async 
         plugins: probe.plugins,
       };
     };
-    // The layer watcher leaves at least 100 ms between two changes to a file,
-    // because Vite's file watcher drops a second change to the same file
-    // within 50 ms on Linux. Each edit here keeps the same gap.
     const edit = async (text: string) => {
       const setups = probe.setups;
       await new Promise((settle) => setTimeout(settle, 100));

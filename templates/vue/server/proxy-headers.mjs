@@ -1,8 +1,10 @@
 import { relayedLocation } from "./proxy-redirects.mjs";
 
-// Hop-by-hop headers describe the backend connection, not the client's one.
-// Forwarded, an explicit `connection: keep-alive` overrode the client's own
-// `Connection: close`, so Node kept the socket open until its idle timeout.
+/**
+ * Hop-by-hop headers describe the backend connection, not the client's one.
+ * Forwarded, an explicit `connection: keep-alive` overrode the client's own
+ * `Connection: close`, so Node kept the socket open until its idle timeout.
+ */
 const HOP_BY_HOP_HEADERS = [
   "connection",
   "keep-alive",

@@ -47,8 +47,6 @@ async function eventually(done: () => boolean | Promise<boolean>) {
  * by `ssrLoadModule`, which is how the generated server renders pages.
  */
 describe("regenerated locale catalogs in the dev server", () => {
-  // Vite reports a change under the path it resolved, so the fixture must not
-  // live behind a symlink such as macOS's /var -> /private/var.
   const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-locale-hmr-")));
   const workspace = join(root, "workspace");
   const layer: ResolvedLayer = {
@@ -58,9 +56,6 @@ describe("regenerated locale catalogs in the dev server", () => {
   const copy = join(getLayerWorkspacePath(workspace, layer), "i18n", "locales");
   let server: ViteDevServer;
 
-  // The dev layer watcher leaves at least 100 ms between two regenerations,
-  // because Vite's file watcher drops a second change to the same file within
-  // 50 ms on Linux. Consecutive steps here keep the same gap.
   const regenerate = async (
     catalogs: Record<string, Messages>,
   ): Promise<void> => {
@@ -90,8 +85,6 @@ describe("regenerated locale catalogs in the dev server", () => {
     mkdirSync(workspace);
     materializeLayers(workspace, [layer]);
     writeFrontendModuleRegistry(workspace, [layer]);
-    // What the server renderer does with the catalogs, through an importer
-    // as `app-runtime.ts` is.
     writeFileSync(
       join(workspace, "server-entry.ts"),
       'import { loadLocaleMessages } from "./locales.generated";\nexport async function greeting(locale: string) {\n  return (await loadLocaleMessages(locale)).greeting;\n}\n',
@@ -116,7 +109,6 @@ describe("regenerated locale catalogs in the dev server", () => {
       (await server.ssrLoadModule("/server-entry.ts")).greeting(locale);
     assert.equal(await render("en"), "Hello");
     assert.equal(await render("fr"), "Bonjour");
-    // One locale at a time: each catalog is a module of its own.
     await regenerate({ "en-GB": { greeting: "Hello from the server" } });
     await eventually(
       async () => (await render("en")) === "Hello from the server",
@@ -152,21 +144,16 @@ describe("regenerated locale catalogs in the dev server", () => {
           applied.en?.greeting === "Hello again" &&
           applied.fr?.greeting === "Bonjour encore",
       );
-      // The module the app imported first is the one kept up to date, so a
-      // later locale switch loads the new catalog too.
       assert.equal(catalogs.localeMessages.en.greeting, "Hello again");
       assert.equal(
         (await catalogs.loadLocaleMessages("fr")).greeting,
         "Bonjour encore",
       );
 
-      // A second update goes through the instance the first one created.
       await regenerate({ "en-GB": { greeting: "Hello a third time" } });
       await eventually(() => applied.en?.greeting === "Hello a third time");
       assert.equal(catalogs.localeMessages.en.greeting, "Hello a third time");
 
-      // The French catalog carries the English messages it lacks: a message
-      // added in English alone reaches it too.
       await regenerate({
         "en-GB": { greeting: "Hello a third time", farewell: "Goodbye" },
       });

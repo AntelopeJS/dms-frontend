@@ -1,6 +1,3 @@
-// What the CLI makes of the output of `vue-tsc --pretty`: the type errors it
-// reported, each with its message and code frame, as one problem.
-
 import { type CliProblem, getProcessUi, pluralize } from "@antelopejs/core/cli";
 import { VERBOSE_OUTPUT_HINT } from "./child-output";
 

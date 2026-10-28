@@ -1,8 +1,3 @@
-// Builds and type-checks unpublished frontend packages in a temporary
-// workspace, one task per check. Started by `ajs dms verify-source`, it sends
-// its result over IPC for the CLI to report; run on its own (`pnpm
-// test:real-source`), it reports the result itself.
-
 import {
   cpSync,
   existsSync,
@@ -83,10 +78,6 @@ function ensure(
   if (!condition) throw new CliError({ title, reason });
 }
 
-// ============================================================================
-// Workspace
-// ============================================================================
-
 function removeDevelopmentDependencies(root: string): void {
   const packagePath = join(root, "package.json");
   if (!existsSync(packagePath)) return;
@@ -136,10 +127,6 @@ function materializeWorkspace(
   };
   writeFileSync(packagePath, `${JSON.stringify(workspacePackage, null, 2)}\n`);
 }
-
-// ============================================================================
-// Checks
-// ============================================================================
 
 /**
  * The client bundle keeps the heavy libraries out of the main chunk, and
@@ -349,10 +336,6 @@ async function checkEmailContracts(workspace: string): Promise<string> {
   ].join(getProcessUi().symbols.separator);
 }
 
-// ============================================================================
-// Run
-// ============================================================================
-
 const LINE_BREAK = /\r?\n/;
 const STACK_TRACE_HINT = "Run with --verbose for the full trace.";
 
@@ -371,12 +354,15 @@ function describeError(error: unknown, isVerbose: boolean): CliProblem {
   };
 }
 
+/**
+ * The renderer range is asserted before the first task, so its notice does
+ * not land inside one.
+ */
 async function verifySources(): Promise<VerificationResult> {
   const options = readSourceOptions();
   const { layers, coreLayer } = readSources(options);
   writeHeader("verify-source", [pluralize(layers.length, "module")]);
   getProcessUi().message("info", `Verifying against ${coreLayer}`);
-  // Before the first task, so its notice does not land inside one.
   assertLayersSupportRenderer(layers);
   const workspace = createTemporaryWorkspace("dms-frontend-real-source-");
   const isVerbose = isVerboseRun();
@@ -420,18 +406,26 @@ function sendResult(result: VerificationResult): Promise<void> {
   });
 }
 
+/**
+ * Builds and type-checks unpublished frontend packages in a temporary
+ * workspace, one task per check. Started by `ajs dms verify-source`, it
+ * sends its result over IPC for the CLI to report; run on its own (`pnpm
+ * test:real-source`), it reports the result itself.
+ *
+ * The workspace tools run on their own Node options, not on those this
+ * runner was started with.
+ *
+ * When started by the CLI, the CLI reports the stop itself.
+ */
 async function main(): Promise<void> {
   exitOnBrokenPipe();
   const startedAt = Date.now();
-  // The workspace tools run on their own Node options, not on those this
-  // runner was started with.
   delete process.env.NODE_OPTIONS;
   let result: VerificationResult;
   try {
     result = await verifySources();
   } catch (error) {
     if (error instanceof CancelledError) {
-      // Started by the CLI, the CLI reports the stop itself.
       if (!process.send) reportStopped(error);
       process.exitCode = error.exitCode;
       return;

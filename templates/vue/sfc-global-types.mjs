@@ -1,24 +1,12 @@
-// Vue's SFC compiler turns `defineProps<Props>()` into runtime prop types, and
-// it reads a type from the component's own imports only. A type a module
-// auto-imports (its declared `app/types`, `app/composables`…, and Vue's own
-// `Ref`, `Component`…) is visible to TypeScript through auto-imports.d.ts but
-// not to the compiler, which drops it from the prop without a word:
-// `boolean | RowActionConfig` became `{ type: Boolean }` in a production build.
-//
-// The compiler does read ambient declarations from `script.globalTypeFiles`,
-// but not the `export type { … } from` re-exports auto-imports.d.ts is made
-// of. This writes those types as ambient aliases it can follow, from the same
-// directories and through the same scanner as the auto-imports, before Vite
-// compiles anything, and rewrites them when a dev server sees a module's
-// declared directories change.
-
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
-// The very unimport the auto-import plugin scans with, so both read the
-// directories the same way. Imported by URL, not by path: on Windows,
-// `import()` reads `C:\...` as a URL whose scheme is `c:` and refuses it.
+/**
+ * The very unimport the auto-import plugin scans with, so both read the
+ * directories the same way. Imported by URL, not by path: on Windows,
+ * `import()` reads `C:\...` as a URL whose scheme is `c:` and refuses it.
+ */
 const unimportUrl = pathToFileURL(
   createRequire(
     createRequire(import.meta.url).resolve("unplugin-auto-import/package.json"),
@@ -41,6 +29,19 @@ const withoutExtension = (path) => path.replace(/\.[cm]?[jt]sx?$/, "");
  * the last of two imports of the same name. A module that exports its own
  * `Component` thus shadows Vue's, for the compiler as for TypeScript.
  *
+ * Vue's SFC compiler turns `defineProps<Props>()` into runtime prop types and
+ * reads a type from the component's own imports only. A type a module auto-
+ * imports (its declared `app/types`, `app/composables`..., and Vue's own `Ref`,
+ * `Component`...) is visible to TypeScript through auto-imports.d.ts but not to
+ * the compiler, which drops it from the prop without a word: `boolean |
+ * RowActionConfig` became `{ type: Boolean }` in a production build. The
+ * compiler does read ambient declarations from `script.globalTypeFiles`, but
+ * not the `export type { ... } from` re-exports auto-imports.d.ts is made of.
+ * These types are therefore written as ambient aliases it can follow, from the
+ * same directories and through the same scanner as the auto-imports, before
+ * Vite compiles anything, and rewritten when a dev server sees a module's
+ * declared directories change.
+ *
  * @param {(string | { glob: string, types?: boolean })[]} dirs the auto-import
  *   directories, as handed to the auto-import plugin
  * @param {string} cwd the workspace
@@ -61,6 +62,11 @@ export async function sfcGlobalTypes(dirs, cwd) {
   return `${HEADER}${[...aliases.values()].join("\n")}\n`;
 }
 
+/**
+ * Written through a temporary file: a build starting meanwhile reads the
+ * previous declarations or the new ones, never a half-written file the
+ * compiler would then keep in its cache.
+ */
 function writeIfChanged(file, content) {
   let current;
   try {
@@ -69,9 +75,6 @@ function writeIfChanged(file, content) {
     current = undefined;
   }
   if (current === content) return false;
-  // Through a temporary file: a build starting meanwhile reads the previous
-  // declarations or the new ones, never a half-written file the compiler
-  // would then keep in its cache.
   const temporary = `${file}.${process.pid}.tmp`;
   writeFileSync(temporary, content);
   renameSync(temporary, file);
@@ -87,6 +90,10 @@ export async function writeSfcGlobalTypes(dirs, cwd, file) {
  * Keeps the declarations in step on a dev server: a type file added, renamed
  * or removed rewrites them, and the Vue plugin reloads the components whose
  * props read the file.
+ *
+ * The file is under the workspace, which Vite watches: rewriting it is the
+ * change the Vue plugin reloads the dependent components on. A failed scan or
+ * write keeps the previous declarations, since it must not end the dev server.
  */
 export function sfcGlobalTypesWatcher(dirs, cwd, file) {
   return {
@@ -98,10 +105,6 @@ export function sfcGlobalTypesWatcher(dirs, cwd, file) {
         if (!/\.[cm]?[jt]sx?$/.test(path) || path === file) return;
         clearTimeout(pending);
         pending = setTimeout(() => {
-          // The file is under the workspace, which Vite watches: rewriting it
-          // is the change the Vue plugin reloads the dependent components on.
-          // A failed scan or write keeps the previous declarations: it must
-          // not end the dev server.
           sfcGlobalTypes(dirs, cwd)
             .then((content) => writeIfChanged(file, content))
             .catch((error) =>

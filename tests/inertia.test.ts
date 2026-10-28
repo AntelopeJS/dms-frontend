@@ -38,8 +38,10 @@ const sessions = import(
 
 const SSR_DIRECTORY = join(process.cwd(), "templates", "vue", "dist", "ssr");
 const ACCESS_BLOCKED_CODE = "saas.errors.workspace.access_blocked";
-// Node caches the first renderer import for the whole run: every test that
-// needs one writes this same module.
+/**
+ * Node caches the first renderer import for the whole run: every test that
+ * needs one writes this same module.
+ */
 const SSR_RENDERER_FIXTURE = `export async function renderDmsPage(page) {
   const serialized = JSON.stringify(page).replaceAll("/", "\\\\/");
   return { body: \`<script data-page="app" type="application/json">\${serialized}</script><div data-server-rendered="true" id="app"></div>\`, head: { headTags: "", htmlAttrs: "", bodyAttrs: "" }, overlays: "" };
@@ -127,10 +129,6 @@ describe("Inertia HTTP protocol", () => {
   it("sets Inertia response and cache variation headers", async () => {
     const runtime = await server;
     assert.deepEqual(runtime.inertiaHeaders(), {
-      // Every payload carries the visitor's own session, so it must never
-      // reach a shared cache, and the browser's own copy must be revalidated
-      // rather than replayed. `no-store` would go further and cost the
-      // back-forward cache on every page.
       "cache-control": "private, no-cache",
       "content-type": "application/json",
       "x-inertia": "true",
@@ -167,9 +165,6 @@ describe("Inertia HTTP protocol", () => {
       frontend.close();
       backend.close();
     }
-    // The document path renders through Vite, which this suite does not boot.
-    // Hold it to the same stance by checking the headers it writes, and that
-    // no document response builds its own set behind the helper's back.
     assert.deepEqual(runtime.htmlHeaders(), {
       "cache-control": "private, no-cache",
       "content-type": "text/html",
@@ -329,8 +324,6 @@ describe("Inertia HTTP protocol", () => {
       "client",
       "assets",
     );
-    // The first directory this test creates, if any: removing it leaves no
-    // `dist/` behind to switch later tests to the production paths.
     const created = await mkdir(assets, { recursive: true });
     await writeFile(join(assets, assetName), "export const probe = 1;\n");
     try {
@@ -342,8 +335,6 @@ describe("Inertia HTTP protocol", () => {
         "public, max-age=31536000, immutable",
       );
       assert.deepEqual(backendPaths, []);
-      // A public file keeps its name across builds: sent with its type, then
-      // revalidated rather than downloaded again.
       await writeFile(join(assets, "..", `${assetName}.woff2`), "font");
       const font = await fetch(`${base}/${assetName}.woff2`);
       assert.equal(font.headers.get("content-type"), "font/woff2");
@@ -355,8 +346,6 @@ describe("Inertia HTTP protocol", () => {
       assert.equal(revalidated.status, 304);
       await revalidated.body?.cancel();
       assert.deepEqual(backendPaths, []);
-      // A file the build does not have is the backend's under a prefix a
-      // module declares, and the backend is asked for nothing else.
       process.env.DMS_BACKEND_PROXIES = JSON.stringify([
         { path: "/media/**", auth: "none" },
       ]);
@@ -460,8 +449,6 @@ describe("Inertia HTTP protocol", () => {
   });
 
   it("puts a favicon placeholder in a page whose render declares no icon", async () => {
-    // The template no longer carries one: a page declaring its own icons
-    // would compete with it (see server/favicon.mjs).
     await writeSsrRendererFixture();
     const runtime = await server;
     try {
@@ -530,8 +517,6 @@ describe("Inertia HTTP protocol", () => {
         assert.equal(response.status, 404, `${method} ${path}`);
         assert.equal(reached.at(-1), `${method} ${path}`);
       }
-      // A path no module route and no backend proxy covers is a page: a
-      // sign-in action no module serves is a 404, never the backend's.
       const signIn = await fetch(`${base}/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json", origin: base },
@@ -682,7 +667,6 @@ describe("Inertia HTTP protocol", () => {
     await writeSsrRendererFixture();
     const refusals = new Map([
       ["/projects", ACCESS_BLOCKED_CODE],
-      // The registered destination refused in turn keeps the error page.
       ["/workspace-suspended", ACCESS_BLOCKED_CODE],
       ["/json-refusal", JSON.stringify({ message: ACCESS_BLOCKED_CODE })],
       ["/unregistered", "saas.errors.other"],
@@ -1020,7 +1004,6 @@ describe("Site layout as an Inertia once prop", () => {
         [anonymous]: { prop: "shared", expiresAt: null },
       });
 
-      // The layout another session was sent is not this one's.
       const cookie = await accountCookie("account-a");
       const signedIn = await visit("/articles", {
         cookie,
@@ -1043,8 +1026,6 @@ describe("Site layout as an Inertia once prop", () => {
       assert.deepEqual(held.backendCalls, [
         "/dms/page?path=%2Farticles&shared=false",
       ]);
-      // A browser that holds another session's layout too may show that one
-      // under `shared`: it is sent this session's again.
       const mixed = await visit("/articles", {
         cookie,
         "x-inertia-except-once-props": `${anonymous},${accountKey}`,
@@ -1075,7 +1056,6 @@ describe("Site layout as an Inertia once prop", () => {
         ...extra,
       });
     try {
-      // A forced reload of the layout the browser holds.
       const shared = await partial("shared", {
         "x-inertia-except-once-props": held,
       });
@@ -1095,7 +1075,6 @@ describe("Site layout as an Inertia once prop", () => {
       ]);
       assert.deepEqual(Object.keys(page.page.props).sort(), ["errors", "page"]);
 
-      // A signed-out session is sent as one, so the merge cannot keep the old.
       const session = await partial("user,session", {
         "x-inertia-except-once-props": held,
       });
@@ -1106,7 +1085,6 @@ describe("Site layout as an Inertia once prop", () => {
         errors: {},
       });
 
-      // A browser without this session's layout gets it with any reload.
       const stale = await partial("page");
       assert.deepEqual(stale.backendCalls, [
         "/dms/page?path=%2Farticles&tab=b",
@@ -1121,7 +1099,6 @@ describe("Site layout as an Inertia once prop", () => {
       assert.deepEqual(excepted.backendCalls, ["/dms/sitelayout"]);
       assert.equal("page" in excepted.page.props, false);
 
-      // Another component's reload is a full visit.
       const other = await visit("/articles", {
         "x-inertia-partial-component": "Other",
         "x-inertia-partial-data": "shared",
@@ -1140,8 +1117,6 @@ describe("Site layout as an Inertia once prop", () => {
     const { sharedOnceKey } = await pagePropsModule;
     const { visit, close } = await frontendWithBackend();
     try {
-      // A header button's availability reads the page query: the layout is
-      // asked for the query the browser shows, one value per name, the last.
       const first = await visit(
         "/articles?workspace=web&locale=fr&locale=de&path=%2Fother",
       );

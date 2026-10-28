@@ -1,6 +1,3 @@
-// What the CLI makes of the output of a Vite production build: the warnings
-// it printed and the error that stopped it.
-
 import { type CliProblem, pluralize, type Ui } from "@antelopejs/core/cli";
 import { isTerminalFeedback } from "./output";
 

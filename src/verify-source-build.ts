@@ -1,6 +1,3 @@
-// The build and type-check steps of a source verification, run at once in
-// the temporary workspace `verify-source-runner` materialized.
-
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -108,6 +105,9 @@ function snapshotTypeDeclarations(workspace: string): void {
 /**
  * Builds one bundle. Its Vite warnings are kept apart, since the builds run
  * at once and their lines interleave.
+ *
+ * `--silent` drops pnpm's script echo and its ELIFECYCLE line: the failure is
+ * reported here.
  */
 async function buildBundle(
   context: VerificationContext,
@@ -117,8 +117,6 @@ async function buildBundle(
   await getProcessTasks().run(
     step.running,
     async (task) => {
-      // --silent drops pnpm's script echo and its ELIFECYCLE line: the
-      // failure is reported here.
       const result = await runFramedCommand(
         "pnpm",
         ["--silent", "run", step.script],
@@ -148,6 +146,9 @@ async function buildBundle(
  * and each is mostly one busy core. Every step runs to its end, so a failure
  * is reported once nothing else writes to the screen, and the first failing
  * step, in their usual order, is the one reported.
+ *
+ * The build and type-check steps of a source verification, run at once in the
+ * temporary workspace `verify-source-runner` materialized.
  */
 export async function buildAndTypeCheck(
   context: VerificationContext,

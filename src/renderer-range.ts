@@ -1,18 +1,3 @@
-// Refusing a frontend module that declares it does not run on this loader
-// release, before a workspace is built from it.
-//
-// A module declares the releases it supports the way a package declares the
-// Node.js versions it runs on: `engines["@antelopejs/dms-frontend"]` in its own
-// package.json. The loader reads it from the module's files because they are
-// the one input `prepare`, `dev`, `build` and `verify-source` all have: the
-// last compiles module sources without any backend, so a declaration that only
-// reached the loader through the manifest would never be seen there.
-//
-// Not a peer dependency: the generated workspace installs every module as a
-// workspace package, and pnpm installs a workspace package's peers, optional
-// ones included, so a peer on the loader would pull a copy of it into every
-// workspace. Package managers ignore an engine they do not know.
-
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -166,6 +151,19 @@ function noticeUndeclared(
  * cannot be read, stops the command here rather than later, in the middle of
  * a build or a render, on an API this release no longer has or does not have
  * yet.
+ *
+ * Refuses a frontend module that declares it does not run on this loader
+ * release, before a workspace is built from it. A module declares the releases
+ * it supports the way a package declares the Node.js versions it runs on:
+ * `engines["@antelopejs/dms-frontend"]` in its own package.json. The loader
+ * reads it from the module's files because they are the one input `prepare`,
+ * `dev`, `build` and `verify-source` all have: the last compiles module sources
+ * without any backend, so a declaration that only reached the loader through
+ * the manifest would never be seen there. It is not a peer dependency: the
+ * generated workspace installs every module as a workspace package, and pnpm
+ * installs a workspace package's peers, optional ones included, so a peer on
+ * the loader would pull a copy of it into every workspace. Package managers
+ * ignore an engine they do not know.
  *
  * @param layers Resolved modules, each read from its own package.json
  * @param options Release to check against and notice sink, for tests

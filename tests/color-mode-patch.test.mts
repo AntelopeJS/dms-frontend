@@ -1,10 +1,3 @@
-// The workspace patches @vueuse/core (templates/vue/patches) so useColorMode
-// stops re-applying a color mode `<html>` already carries: every re-apply
-// injects a `*{transition:none}` sheet and reads getComputedStyle, a forced
-// full style recalculation. The repository installs the same version with the
-// same patch file (package.json `pnpm.patchedDependencies`), so this suite runs
-// the code the workspace ships against a minimal document that counts those
-// recalculations and sheet injections.
 import { after, afterEach, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
@@ -150,7 +143,6 @@ let vue: typeof import("vue");
 let vueuse: typeof import("@vueuse/core");
 
 before(async () => {
-  // vueuse decides `isClient` and its default window when the module loads.
   Object.assign(globalThis, {
     window: dom.window,
     document: dom.document,
@@ -197,8 +189,6 @@ afterEach(() => {
 describe("vueuse useColorMode patch", () => {
   it("leaves a class mode the element already carries alone", async () => {
     reset({ htmlClasses: ["light"], stored: "light" });
-    // Nuxt UI's plugin, the dms theme plugin and every component calling it:
-    // each instance applies its mode immediately and again once mounted.
     colorMode();
     colorMode({ storageKey: "other-key", initialValue: "light" });
     await vue.nextTick();

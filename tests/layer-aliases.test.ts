@@ -1,9 +1,3 @@
-// The layer alias convention is now a public helper, and the generated
-// workspace consumes it instead of its own copy. Two things are pinned here:
-// the helper's own behaviour against a module root on disk, and the fact that
-// `frontend-paths.generated.json` still comes out byte-for-byte as it did
-// before the helper existed -- that file feeds every generated workspace.
-
 import * as assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -62,7 +56,6 @@ describe("layer aliases", () => {
     const high = moduleWithLayers("dms-high-", ["dms-core", "shared"]);
     assert.deepEqual(frontendLayerAliases([low, high]), {
       "#legacy": join(low, "layers", "legacy"),
-      // `shared` comes from the last root, at the position the first one gave it.
       "#shared": join(high, "layers", "shared"),
       "#dms-core": join(high, "layers", "dms-core"),
     });
@@ -91,10 +84,6 @@ describe("layer aliases", () => {
 });
 
 describe("generated workspace type paths", () => {
-  // Characterisation test: this JSON is the verbatim output of
-  // `writeFrontendTypePaths` before it was rewritten on top of the helper,
-  // for a workspace holding one module with three layers, one with two (one
-  // of them a same-named overlay), and one with no layers directory at all.
   const EXPECTED = `{
   "compilerOptions": {
     "paths": {

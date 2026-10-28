@@ -44,13 +44,9 @@ describe("files the development server serves", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
-    // Read once, as the server reads it when it starts.
     process.env.DMS_BACKEND_PROXIES = JSON.stringify([
       { path: "/media/**", auth: "none" },
     ]);
-    // The real development server: Vite in middleware mode, rooted in a
-    // directory of its own, without the watcher and HMR socket that would keep
-    // the test process alive.
     writeFileSync(
       join(root, "vite.config.mjs"),
       "export default { logLevel: 'silent', server: { watch: null, ws: false } };",

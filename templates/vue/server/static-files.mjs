@@ -1,9 +1,11 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname } from "node:path";
 
-// What a build or a module's `public/` directory may hold. A type missing
-// here went out as `application/octet-stream`: fonts among them, which a
-// browser then reports as a mismatch against the `font/woff2` it preloaded.
+/**
+ * What a build or a module's `public/` directory may hold. A type missing
+ * here went out as `application/octet-stream`: fonts among them, which a
+ * browser then reports as a mismatch against the `font/woff2` it preloaded.
+ */
 const MIME_TYPES = {
   ".avif": "image/avif",
   ".css": "text/css",
@@ -32,12 +34,16 @@ const MIME_TYPES = {
   ".xml": "application/xml",
 };
 const DEFAULT_MIME_TYPE = "application/octet-stream";
-// Vite names everything under `assets/` after its content: a new build
-// writes new names, so a client never needs to ask again.
+/**
+ * Vite names everything under `assets/` after its content: a new build
+ * writes new names, so a client never needs to ask again.
+ */
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
-// Any other file keeps its name across builds (a module's `public/` file,
-// a favicon): the client asks again on each use, and is answered 304 while
-// it has not changed.
+/**
+ * Any other file keeps its name across builds (a module's `public/` file, a
+ * favicon): the client asks again on each use, and is answered 304 while it
+ * has not changed.
+ */
 const REVALIDATED_CACHE = "no-cache";
 
 const isFile = (path) => existsSync(path) && statSync(path).isFile();
@@ -62,7 +68,11 @@ function entityTag(stats) {
 
 const opaqueTag = (tag) => tag.trim().replace(/^W\//, "");
 
-/** RFC 9110 §13.1.2 and §13.1.3: `If-None-Match` first, the date otherwise. */
+/**
+ * RFC 9110 §13.1.2 and §13.1.3: `If-None-Match` first, the date otherwise.
+ *
+ * The header has a one-second resolution.
+ */
 function isNotModified(request, tag, stats) {
   const noneMatch = request.headers["if-none-match"];
   if (noneMatch !== undefined) {
@@ -73,7 +83,6 @@ function isNotModified(request, tag, stats) {
       .some((candidate) => opaqueTag(candidate) === wanted);
   }
   const since = Date.parse(request.headers["if-modified-since"] ?? "");
-  // The header has a one-second resolution.
   return (
     !Number.isNaN(since) && Math.floor(stats.mtimeMs / 1000) * 1000 <= since
   );

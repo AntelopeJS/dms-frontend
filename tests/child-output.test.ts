@@ -44,7 +44,6 @@ describe("child output lines", () => {
 
 describe("the output a framed child leaves", () => {
   it("keeps stdout, then stderr, whichever pipe was read first", async () => {
-    // stderr is written, and read, long before stdout.
     const script = [
       'process.stderr.write("ERR_PNPM_FETCH_404\\n");',
       'setTimeout(() => { process.stdout.write("line 1\\nline 2\\n"); process.exitCode = 1; }, 100);',

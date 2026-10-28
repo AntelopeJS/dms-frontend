@@ -12,8 +12,6 @@ import {
   nextTick,
   ref,
 } from "vue";
-// The module namespace rather than named imports: a name the runtime does not
-// export yet fails the test that uses it, not the whole file.
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
 
 const {
@@ -52,7 +50,7 @@ function serverRender(root: Component, prepare?: (runtime: Runtime) => void) {
   return { runtime, render: () => renderToString(app) };
 }
 
-// Mounts components without a DOM, the way the browser runtime runs them.
+/** Mounts components without a DOM, the way the browser runtime runs them. */
 function mountRuntime(runtime: Runtime, root: Component) {
   interface Node {
     parent: Node | null;
@@ -149,7 +147,6 @@ describe("Stale while revalidate", () => {
     });
     await settle();
     assert.equal(calls, 1);
-    // A second block of the page mounts once the first one's read answered.
     second.value = true;
     await nextTick();
     await settle();
@@ -388,8 +385,6 @@ describe("Plugin order", () => {
     const reads: Array<{ data: { value: unknown } }> = [];
     await runtimeModule.setupFrontendModules([
       {
-        // Of higher priority, so set up and run first by default: the
-        // assistant of dms-ai, which reads its status as it starts.
         options: { public: {} },
         module: {
           setup(sdk) {
@@ -405,7 +400,6 @@ describe("Plugin order", () => {
         },
       },
       {
-        // The DMS, which puts every key in the session's scope.
         options: { public: {} },
         module: {
           setup(sdk) {
@@ -483,7 +477,6 @@ describe("Async data a server cannot transfer", () => {
           const transferred = useDmsAsyncData("transferred", () =>
             runtimeModule.$fetch<string>("/api/transferred"),
           );
-          // What an immediate watcher reading the backend does.
           await runtimeModule.$fetch("/api/watched");
           const { data } = await transferred;
           return () => h("p", String(data.value));
@@ -508,9 +501,6 @@ describe("Async data a server cannot transfer", () => {
         String(warnings[0]),
         /\/api\/watched was read during a server render/,
       );
-      // A read handed over with `transfer: true` looks the same from the
-      // renderer: the message says so instead of claiming the browser reads
-      // it again.
       assert.match(
         String(warnings[0]),
         /unless the code hands the answer over \(useDmsState with transfer: true\)/,

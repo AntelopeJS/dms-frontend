@@ -1,8 +1,3 @@
-// What the CLI makes of the output of the children it frames (pnpm install,
-// the production build): lines kept for the failure report, paths into the
-// generated workspace shown as the frontend-module sources they were copied
-// from, and the gutter a verbose run streams them behind.
-
 import { existsSync } from "node:fs";
 import {
   type CliProblem,
@@ -123,10 +118,6 @@ export function describeChildFailure(failure: ChildFailure): CliProblem {
   };
 }
 
-// ============================================================================
-// Paths
-// ============================================================================
-
 export type PathMapper = (line: string) => string;
 
 export interface PathMapperOptions {
@@ -245,10 +236,6 @@ export function createPathMapper(
     );
 }
 
-// ============================================================================
-// Verbose streaming
-// ============================================================================
-
 function hasFeedbackColor(): boolean {
   return detectCapabilities(processCapabilityContext()).colors.feedback;
 }
@@ -270,10 +257,6 @@ export function writeChildLine(
     `${ui.palette().dim(`${name} ${bar}`)} ${text}\n`,
   );
 }
-
-// ============================================================================
-// pnpm install
-// ============================================================================
 
 const PROGRESS_LINE =
   /^Progress: resolved (\d+), reused \d+, downloaded \d+, added (\d+)/;

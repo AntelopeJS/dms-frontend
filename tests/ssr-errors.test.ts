@@ -126,8 +126,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       "<html><head><title>Antelope DMS</title></head><body>__DMS_APP__</body></html>",
     );
     writeFileSync(join(workspace, "dist/client/.vite/manifest.json"), "{}");
-    // The module owning sign-in shows the session to pages, and proxies the
-    // one backend path the browser reads here outside a page.
     mkdirSync(join(workspace, "dist/server-modules"), { recursive: true });
     writeFileSync(
       join(workspace, "dist/server-modules/server-modules.generated.js"),
@@ -190,9 +188,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.equal(redirectB.headers.get("location"), "/onboarding?source=b");
     assert.equal(isolatedHealthy.status, 200);
     assert.match(await isolatedHealthy.text(), /Healthy request/);
-    // The page renders once its middleware is done, and a redirect still wins
-    // over the page: the middleware's, the one the page issues while its
-    // middleware still runs, and the middleware's over the page's.
     for (const [path, location] of [
       ["/slow-guard-redirect", "/onboarding?source=guard"],
       ["/slow-guard-page-redirect", "/onboarding?source=page"],
@@ -205,11 +200,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       assert.equal(response.status, 302, path);
       assert.equal(response.headers.get("location"), location, path);
     }
-    // A middleware that throws fails the page as a page setup does: the
-    // server renders the error page with the error's status, and a redirect
-    // a middleware decides still answers with a redirect. The pages take
-    // longer than their middleware: a failure that nothing handled yet then
-    // took the whole server down as an unhandled rejection.
     const [guardNotFound, guardBroken, guardRedirect] = await Promise.all(
       ["/guard-not-found", "/guard-broken", "/guard-redirect"].map((path) =>
         fetch(`${base}${path}`, {
@@ -240,9 +230,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       guardRedirect.headers.get("location"),
       "/onboarding?source=guard",
     );
-    // A page that completes its query as it renders is rendered at that query
-    // in the same request: no redirect, the reads of the first render reused,
-    // and only the page read again for the new query.
     backendReads.length = 0;
     const filled = await fetch(`${base}/fill-query`, {
       headers: { accept: "text/html" },
@@ -267,8 +254,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
         "/dms/page?path=%2Ffill-query&workspace=default&shared=false",
       ],
     );
-    // A page that keeps changing its query is answered with a redirect after
-    // a few renders, as before.
     const looping = await fetch(`${base}/fill-query?loop=0`, {
       headers: { accept: "text/html" },
       redirect: "manual",
@@ -293,8 +278,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     const unexpectedHtml = await unexpected.text();
     assert.match(unexpectedHtml, /500: no message \/ no status message/);
     assert.doesNotMatch(unexpectedHtml, /private database hostname/);
-    // A failed backend read names the backend's own address in its message:
-    // the error page shows its status text instead.
     const fetchNotFound = await fetch(`${base}/fetch-not-found`, {
       headers: { accept: "text/html" },
     });

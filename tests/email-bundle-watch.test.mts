@@ -70,7 +70,6 @@ it("builds the email bundle in development and rebuilds it when a template chang
   try {
     const render = () => email.renderEmailTemplate("Welcome", {});
 
-    // No bundle exists yet: the render waits for the build started here.
     builder = email.watchEmailBundle();
     assert.match(await render(), /Welcome, first edition/);
 
@@ -89,8 +88,6 @@ it("builds the email bundle in development and rebuilds it when a template chang
 });
 
 it("lets a render in progress finish before a rebuild replaces the bundle", async () => {
-  // The template holds its render until the test opens the gate, then imports
-  // its footer: a chunk no earlier render loaded, read from dist/server then.
   const gate = globalThis as { emailRenderGate?: Promise<void> };
   const { workspace, moduleRoot, email } = await emailWorkspace({
     "Welcome.vue": `<script setup lang="ts">
@@ -121,8 +118,6 @@ if (props.footer) {
       "<template><p>Footer, second edition</p></template>\n",
     );
     assert.deepEqual((await rebuild)[0], { state: "building" });
-    // The rebuild empties dist/server, footer chunk included: given time to
-    // run, it would pull the chunk from under the render.
     const ready = once(builder, "message");
     let newRenderFinished = false;
     const queued = email.renderEmailTemplate("Welcome", {}).then((html) => {

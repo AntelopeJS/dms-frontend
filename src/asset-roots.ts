@@ -1,9 +1,3 @@
-// Where a frontend module keeps the files the workspace derives its own from:
-// the module root, or each of its layers.
-//
-// Split out of derived-outputs.ts, whose size the linter caps, so the derived
-// outputs kept in their own modules share one notion of it.
-
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { toPosixPath } from "./fs-sync";
@@ -18,6 +12,9 @@ export interface AssetRoot {
  * The module root when it has no `layers/` directory, else each layer in it,
  * sorted by name: where two of a module's layers hold the same file, the last
  * one wins, the same one on every system.
+ *
+ * Where a frontend module keeps the files the workspace derives its own from:
+ * the module root, or each of its layers.
  */
 export function moduleAssetRoots(moduleRoot: string): AssetRoot[] {
   const layersRoot = join(moduleRoot, "layers");

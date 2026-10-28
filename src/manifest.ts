@@ -1,8 +1,3 @@
-// Fetching the frontend manifest from the backend, and the on-disk cache that
-// lets a workspace start without it.
-//
-// Split out of common.ts, which stays the barrel every command imports from.
-
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -20,10 +15,6 @@ import {
   isUnauthorized,
   ManifestModule,
 } from "./workspace";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 export class ManifestUnauthorizedError extends CliError {
   constructor(
@@ -308,10 +299,6 @@ export async function fetchManifest(
     resolved.originRewrites = manifest.originRewrites;
   return resolved;
 }
-
-// ============================================================================
-// Manifest Cache
-// ============================================================================
 
 /**
  * The manifest is the only thing the backend is needed for during workspace

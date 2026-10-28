@@ -1,8 +1,3 @@
-// The routes frontend modules declare in their `dms.server.ts`: what each
-// declaration is checked against, how conflicts are settled, and which route a
-// request reaches. Pure: the server hands it the declarations it loaded, and
-// `module-event.mjs` runs the handler a request reaches.
-
 import { resolveBackendProxies } from "./backend-proxies.mjs";
 import { compilePathPattern } from "./path-patterns.mjs";
 import { matchPublicEndpoint } from "./public-endpoints.mjs";
@@ -93,6 +88,10 @@ function optionsRejection(options) {
   return undefined;
 }
 
+/**
+ * Two declarations of one path whatever their parameters are named share a
+ * shape.
+ */
 function compilePath(path) {
   const normalized = normalizedPath(path);
   const segments = normalized === "/" ? [] : normalized.slice(1).split("/");
@@ -107,7 +106,6 @@ function compilePath(path) {
     .join("");
   return {
     path: normalized,
-    // Two declarations of one path whatever their parameters are named.
     shape: segments
       .map((segment) => (PARAM_SEGMENT.test(segment) ? ":" : segment))
       .join("/"),
@@ -432,6 +430,11 @@ function resolveRules(modules, warn) {
  * `proxies`: the backend prefixes the modules and the manifest declare, the
  * most specific first (see `backend-proxies.mjs`).
  *
+ * The routes frontend modules declare in their `dms.server.ts`: what each
+ * declaration is checked against, how conflicts are settled, and which route a
+ * request reaches. Pure: the server hands it the declarations it loaded, and
+ * `module-event.mjs` runs the handler a request reaches.
+ *
  * @param declarations `{ id, priority, setup }` per module with a dms.server.ts
  * @param warn Reports a declaration problem
  * @param publicEndpoints The deployment's public endpoints (#108), to report a
@@ -478,13 +481,14 @@ function decodedParams(route, match) {
 /**
  * The route a request reaches, with its parameters, or `undefined`.
  *
+ * A `HEAD` no route declares is the `GET`'s, without its body.
+ *
  * @param routes What `resolveServerDeclarations` returned
  * @param method The request's method
  * @param pathname The request's normalized path, without its query string
  */
 export function matchModuleRoute(routes, method, pathname) {
   const reached = matchMethod(routes, method, pathname);
-  // A `HEAD` no route declares is the `GET`'s, without its body.
   if (reached || method !== "HEAD") return reached;
   return matchMethod(routes, "GET", pathname);
 }

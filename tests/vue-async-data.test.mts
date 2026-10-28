@@ -17,8 +17,6 @@ import {
   watch,
 } from "vue";
 import { createI18n } from "vue-i18n";
-// The module namespace rather than named imports: a name the runtime does not
-// export yet fails the test that uses it, not the whole file.
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
 
 const {
@@ -57,7 +55,7 @@ function clientApp(runtime: Runtime = createDmsFrontendRuntime()) {
   return { app, runtime };
 }
 
-// Mounts components without a DOM, the way the browser runtime runs them.
+/** Mounts components without a DOM, the way the browser runtime runs them. */
 function mountRuntime(runtime: Runtime, root: Component) {
   interface Node {
     parent: Node | null;
@@ -163,7 +161,6 @@ describe("Async data in a server render", () => {
 
     const rendering = render();
     await settle();
-    // The second request leaves before the first one answers: no waterfall.
     assert.deepEqual(started, ["a", "b"]);
     gates.b.resolve("B");
     gates.a.resolve("A");
@@ -202,13 +199,9 @@ describe("Async data in a server render", () => {
         options: { public: {} },
         module: {
           setup(sdk) {
-            // Started, never awaited, and slower than everything after it: the
-            // render must wait for it all the same.
             sdk.registerPlugin(() => {
               useDmsAsyncData("plugin-lazy", handler(40), { lazy: true });
             });
-            // The DMS seo plugin: a lazy key, then an explicit refresh in the
-            // same turn, which replaces the scheduled first run.
             sdk.registerPlugin(async () => {
               const entry = useDmsAsyncData("plugin-refreshed", handler(5), {
                 lazy: true,
@@ -274,8 +267,6 @@ describe("Async data in a server render", () => {
 describe("Async data in the browser", () => {
   it("hands a hydrating component the server's data when the server's render had it", async () => {
     const rendered: string[] = [];
-    // Selects the first schema once there is one, as the dms-database schemas
-    // page does: on the server, the watcher runs once, before the data is in.
     const Selection = defineComponent({
       setup() {
         const { data } = useDmsAsyncData("schemas", async () => ["demo"]);
@@ -383,7 +374,6 @@ describe("Async data in the browser", () => {
     });
 
     const app = mountRuntime(runtime, { render: () => h(Consumer) });
-    // The first render must match the server's HTML, which showed the default.
     assert.equal(rendered[0], "idle:default");
     await settle();
     await nextTick();
@@ -478,7 +468,6 @@ describe("Async data in the browser", () => {
           shownKeys.value.map((name) => h(Consumer, { name, key: name })),
         ),
     });
-    // 60 keys shown one after the other, then a page showing "kept".
     for (let index = 0; index < 60; index++) {
       shownKeys.value = [`key-${index}`];
       await nextTick();
@@ -527,7 +516,6 @@ describe("Async data in the browser", () => {
       runtimeModule.dmsPageSuspenseProps(),
     );
 
-    // A hydrating suspense resolves without ever being pending.
     suspense.onResolve();
     assert.equal(
       runtime.hydrating,
@@ -872,7 +860,6 @@ describe("useDmsFetch", () => {
       ["order 1", "order 2"],
       "the first URL's data stays for a return to it",
     );
-    // Back to the first URL: its data at once, read again in the background.
     id.value = 1;
     await nextTick();
     assert.equal(entry!.data.value, "order 1");
@@ -1035,7 +1022,6 @@ describe("useDmsFetch", () => {
     assert.equal(entry().data.value, "order 1", "no flash while it loads");
     id.value = 1;
     await nextTick();
-    // Back on a key loaded before: its data at once, read again meanwhile.
     assert.equal(entry().data.value, "order 1");
     assert.equal(entry().placeholder.value, false);
     assert.equal(entry().status.value, "pending");
@@ -1196,7 +1182,7 @@ describe("useDmsFetch", () => {
 });
 
 describe("A reactive key a render sets", () => {
-  // A backend that answers at once, and records each request on its side.
+  /** A backend that answers at once, and records each request on its side. */
   function backend(isServer: boolean) {
     const requests: string[] = [];
     const runtime = createDmsFrontendRuntime(
@@ -1210,9 +1196,11 @@ describe("A reactive key a render sets", () => {
     return { runtime, requests };
   }
 
-  // Renders `root` on a server, then mounts it in a browser hydrating that
-  // render, and returns what each side requested and what the browser's
-  // renders showed.
+  /**
+   * Renders `root` on a server, then mounts it in a browser hydrating that
+   * render, and returns what each side requested and what the browser's
+   * renders showed.
+   */
   async function renderThenHydrate(
     root: (rendered: string[]) => Component,
     expectedHtml: string,
@@ -1277,7 +1265,6 @@ describe("A reactive key a render sets", () => {
         defineComponent({
           setup() {
             const details = runtimeModule.useDmsFetch<string>("/api/details");
-            // Known once the details are in, past the component's prefetch.
             const sizes = runtimeModule.useDmsFetch<string>(
               () => (details.data.value ? "/api/sizes" : null),
               { default: () => "none" },
@@ -1369,7 +1356,6 @@ describe("Another caller's data (useDmsData)", () => {
     const rendered: string[] = [];
     const Owner = defineComponent({
       setup() {
-        // In place changes need a deep key: keys are shallow by default.
         const { data } = useDmsAsyncData<Rows>(
           "rows",
           async () => {
@@ -1388,7 +1374,6 @@ describe("Another caller's data (useDmsData)", () => {
     const seen: string[] = [];
     const app = mountRuntime(runtime, {
       setup() {
-        // Called before any caller loads the key.
         accessor = runtimeModule.useDmsData<Rows>("rows");
         watch(
           () => accessor.data.value?.rows.join() ?? "undefined",

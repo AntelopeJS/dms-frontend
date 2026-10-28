@@ -82,22 +82,21 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const CLIENT_ROOT = join(PROJECT_ROOT, "dist/client");
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
-// A URL, not a path: on Windows, `import()` reads `C:\...` as a URL whose
-// scheme is `c:` and refuses it.
+/**
+ * A URL, not a path: on Windows, `import()` reads `C:\...` as a URL whose
+ * scheme is `c:` and refuses it.
+ */
 const BUILT_SSR_RENDERER_URL = new URL(
   "dist/ssr/ssr-renderer.js",
   import.meta.url,
 );
-// The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
-// which reads compile-time flags only a bundler replaces. Vite inlines them in
-// the client bundle; without the same value here, installing vue-i18n under
-// NODE_ENV=production throws a ReferenceError on the first render.
 globalThis.__VUE_PROD_DEVTOOLS__ ??= false;
 let productionSsrRenderer;
 let vite;
 let vitePromise;
 let frontendHttpServer;
 
+/** The generated secrets and the modules' server code are never served. */
 async function developmentServer() {
   if (process.env.DMS_DEV !== "true") return undefined;
   if (vite) return vite;
@@ -105,7 +104,6 @@ async function developmentServer() {
     .then(({ createServer: createViteServer }) => {
       const serverOptions = {
         middlewareMode: true,
-        // The generated secrets and the modules' server code, never served.
         fs: { deny: DEV_FS_DENY },
       };
       if (frontendHttpServer) serverOptions.ws = { server: frontendHttpServer };
@@ -206,6 +204,16 @@ function redirectSignedOutPrivatePage(request, response, props, auth) {
  * Sends a request to the backend through the proxy it reached.
  * `isProxiedPath` says which backend paths a relayed `Location` may name on
  * the frontend's origin.
+ *
+ * A client that left while the request was routed closed the response already,
+ * and would never abort the request below.
+ *
+ * Cancelling the body alone misses a client that leaves before the backend
+ * answers: its stream, an SSE feed above all, then stayed open for good.
+ *
+ * A backend redirect is the browser's to follow: Media sends a file's link to
+ * the storage's signed URL, on the public origin the server itself may not
+ * reach, which turned every download into a 502.
  */
 async function proxy(request, response, backendProxy, isProxiedPath) {
   const access = proxyAccess(request, SAFE_METHODS, backendProxy);
@@ -213,11 +221,7 @@ async function proxy(request, response, backendProxy, isProxiedPath) {
     refuseCrossOrigin(response);
     return true;
   }
-  // A client that left while the request was routed closed the response
-  // already, and would never abort the request below.
   if (response.closed) return;
-  // Cancelling the body alone misses a client that leaves before the backend
-  // answers: its stream, an SSE feed above all, then stayed open for good.
   const abandoned = new AbortController();
   response.once("close", () => abandoned.abort());
   const init = {
@@ -225,9 +229,6 @@ async function proxy(request, response, backendProxy, isProxiedPath) {
     method: request.method,
     headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
     duplex: "half",
-    // A backend redirect is the browser's to follow: Media sends a file's
-    // link to the storage's signed URL, on the public origin the server
-    // itself may not reach, which turned every download into a 502.
     redirect: "manual",
   };
   const upstream = await sendWithinLimit(
@@ -409,11 +410,12 @@ async function answeredByVite(devServer, request, response) {
  * Whether the renderer has a file at `pathname`: a development source Vite
  * serves (under the workspace or its `public/`), or a built asset the
  * production server serves. Only a path with an extension names one.
+ *
+ * The path is decoded as Vite and the asset server read it: `%2E` is a dot.
  */
 function hasRendererFile(devServer, requested) {
   let pathname;
   try {
-    // As Vite and the asset server read it: `%2E` is a dot.
     pathname = decodeURIComponent(requested);
   } catch {
     return false;
@@ -519,12 +521,12 @@ async function writeRequestFailure(error, request, response) {
   await writeBackendError(error, request, response);
 }
 
+/** An error page failing too must not reject: that would end the process. */
 export async function handleRequestSafely(request, response) {
   try {
     if (refuseForeignTarget(request, response)) return;
     await handleRequest(request, response);
   } catch (error) {
-    // An error page failing too must not reject: that would end the process.
     await writeRequestFailure(error, request, response).catch((failure) =>
       requestFailure.abandonResponse(failure, response),
     );
@@ -564,6 +566,9 @@ async function reportRouting() {
  * Report the server ready. In development Vite would otherwise start with the
  * first request, so it is started here: "ready" then means the first page is
  * served without that wait.
+ *
+ * Only the production build produces the email bundle otherwise. The watcher
+ * starts once the server answers, so it never delays the first page.
  */
 async function announceReady() {
   try {
@@ -575,7 +580,5 @@ async function announceReady() {
   const { address, port } = frontendHttpServer.address();
   await reportReady(address, port);
   await reportRouting();
-  // Only the production build produces the email bundle otherwise. Started
-  // once the server answers, so it never delays the first page.
   if (process.env.DMS_DEV === "true") watchEmailBundle();
 }

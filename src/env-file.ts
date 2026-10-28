@@ -1,12 +1,3 @@
-// Loading the invoking project's `.env` files into the process environment.
-//
-// The CLI reads its whole configuration from environment variables —
-// `DMS_API_BASE_URL`, `DMS_BOOTSTRAP_SECRET`, `DMS_SESSION_SECRET`, `PORT`,
-// `DMS_OFFLINE`, … — and passes `process.env` on to the workspace build and to
-// the generated server. A project that keeps those values in a `.env` file
-// (as the DMS project templates suggest) would otherwise have to export them
-// by hand before every `ajs dms` invocation.
-
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
@@ -50,6 +41,14 @@ export interface LoadProjectEnvOptions {
  * A missing file is not an error. An unreadable or malformed one is reported
  * and skipped rather than aborting the command, because the CLI may well not
  * need anything the file holds.
+ *
+ * Loads the invoking project's `.env` files into the process environment. The
+ * CLI reads its whole configuration from environment variables
+ * (`DMS_API_BASE_URL`, `DMS_BOOTSTRAP_SECRET`, `DMS_SESSION_SECRET`, `PORT`,
+ * `DMS_OFFLINE`, ...) and passes `process.env` on to the workspace build and to
+ * the generated server; a project that keeps those values in a `.env` file
+ * would otherwise have to export them by hand before every `ajs dms`
+ * invocation.
  *
  * @param options Injectable cwd, target environment and warning sink
  * @returns The absolute paths of the files that were read, in the order read

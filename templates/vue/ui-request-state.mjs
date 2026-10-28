@@ -1,12 +1,3 @@
-// Nuxt UI's `useState` outside Nuxt keeps its state in one object for the
-// whole module: on a server, for the whole process. A toast one render adds
-// (`useToast()` keeps its list there) would then show in every later render,
-// whoever asks for the page, until the server restarts. Nuxt UI's stub keeps
-// its state in the DMS's per-application state instead, as Nuxt's own
-// `useState` does, and the build fails if the stub changes form or another
-// Nuxt UI file defines `useState`, rather than letting the leak come back
-// unnoticed with a Nuxt UI release.
-
 /** Nuxt UI's stub of Nuxt's composables, which defines `useState`. */
 const STUB = /\/@nuxt\/ui\/dist\/runtime\/vue\/stubs\/base\.js$/;
 /** `useState` as Nuxt UI 4 defines it: a module-wide record of refs. */
@@ -20,6 +11,15 @@ const APPLICATION_STATE =
 
 /**
  * The rewrite, as a Vite plugin.
+ *
+ * Nuxt UI's `useState` outside Nuxt keeps its state in one object for the whole
+ * module: on a server, for the whole process. A toast one render adds
+ * (`useToast()` keeps its list there) would then show in every later render,
+ * whoever asks for the page, until the server restarts. Nuxt UI's stub keeps
+ * its state in the DMS's per-application state instead, as Nuxt's own
+ * `useState` does, and the build fails if the stub changes form or another Nuxt
+ * UI file defines `useState`, rather than letting the leak come back unnoticed
+ * with a Nuxt UI release.
  *
  * @param isNuxtUiFile `(id) => boolean`, whether a module is Nuxt UI's
  */
