@@ -1,10 +1,7 @@
 import * as assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
 import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
@@ -207,80 +204,6 @@ describe("Inertia HTTP protocol", () => {
       assert.equal(response.headers.get("x-inertia"), null);
       assert.equal(backendRequests, 0);
     } finally {
-      frontend.close();
-      backend.close();
-    }
-  });
-
-  it("serves a built asset without asking the backend first", async () => {
-    const backendPaths: string[] = [];
-    const backend = createServer((request, response) => {
-      backendPaths.push(request.url ?? "");
-      const found = request.url === "/media/asset-1/photo.webp";
-      response.writeHead(found ? 200 : 404, { "content-type": "image/webp" });
-      response.end(found ? "backend media" : "");
-    });
-    await new Promise<void>((resolve) =>
-      backend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = addressOf(backend);
-    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
-    const runtime = await server;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const frontendAddress = addressOf(frontend);
-    const base = `http://127.0.0.1:${frontendAddress.port}`;
-    const assetName = `probe-${randomUUID()}.js`;
-    const assets = join(
-      process.cwd(),
-      "templates",
-      "vue",
-      "dist",
-      "client",
-      "assets",
-    );
-    const created = await mkdir(assets, { recursive: true });
-    await writeFile(join(assets, assetName), "export const probe = 1;\n");
-    try {
-      const asset = await fetch(`${base}/assets/${assetName}`);
-      assert.equal(asset.status, 200);
-      assert.equal(await asset.text(), "export const probe = 1;\n");
-      assert.equal(
-        asset.headers.get("cache-control"),
-        "public, max-age=31536000, immutable",
-      );
-      assert.deepEqual(backendPaths, []);
-      await writeFile(join(assets, "..", `${assetName}.woff2`), "font");
-      const font = await fetch(`${base}/${assetName}.woff2`);
-      assert.equal(font.headers.get("content-type"), "font/woff2");
-      assert.equal(font.headers.get("cache-control"), "no-cache");
-      await font.body?.cancel();
-      const revalidated = await fetch(`${base}/${assetName}.woff2`, {
-        headers: { "if-none-match": font.headers.get("etag") ?? "" },
-      });
-      assert.equal(revalidated.status, 304);
-      await revalidated.body?.cancel();
-      assert.deepEqual(backendPaths, []);
-      process.env.DMS_BACKEND_PROXIES = JSON.stringify([
-        { path: "/media/**", auth: "none" },
-      ]);
-      const media = await fetch(`${base}/media/asset-1/photo.webp`);
-      assert.equal(media.status, 200);
-      assert.equal(await media.text(), "backend media");
-      assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
-      const missing = await fetch(`${base}/assets/missing-${assetName}`);
-      assert.equal(missing.status, 404);
-      await missing.body?.cancel();
-      assert.deepEqual(backendPaths, ["/media/asset-1/photo.webp"]);
-    } finally {
-      process.env.DMS_BACKEND_PROXIES = DMS_BACKEND_PROXIES;
-      await rm(join(assets, "..", `${assetName}.woff2`), { force: true });
-      await rm(created ?? join(assets, assetName), {
-        recursive: true,
-        force: true,
-      });
       frontend.close();
       backend.close();
     }

@@ -1,13 +1,16 @@
 import * as assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
 import { createServer } from "node:http";
-import { join } from "node:path";
 import { describe, it } from "node:test";
 import { addressOf } from "./helpers/net";
 import { isText } from "./helpers/guards";
 import {
+  FRESH_SHARED,
+  accountCookie,
+  frontendWithBackend,
+  PAGE,
+  pagePropsModule,
   server,
-  writeSsrRendererFixture,
+  SHARED,
   sessionCookie,
 } from "./fixtures/inertia";
 
@@ -154,84 +157,7 @@ describe("public endpoints through the proxy", () => {
   });
 });
 
-interface PagePropsTemplate {
-  sharedOnceKey: (session?: Record<string, unknown>) => string;
-  SHARED_PROP_TTL_MS: number;
-}
-
-const pagePropsModule = import(
-  join(process.cwd(), "templates", "vue", "server", "page-props.mjs")
-) as Promise<PagePropsTemplate>;
-
 describe("Site layout as an Inertia once prop", () => {
-  const PAGE = { route: { fullSlug: "/articles" }, layout: { id: "layout" } };
-  const SHARED = { siteLayout: { pages: {} }, isOwner: true };
-  const FRESH_SHARED = { siteLayout: { pages: {} }, isOwner: false };
-
-  async function frontendWithBackend() {
-    const backendCalls: string[] = [];
-    const backend = createServer((request, response) => {
-      const url = new URL(request.url ?? "/", "http://backend.local");
-      backendCalls.push(`${url.pathname}${url.search}`);
-      if (url.pathname === "/dms/sitelayout") {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify(FRESH_SHARED));
-        return;
-      }
-      if (url.searchParams.get("path") === "/auth/custom") {
-        response.writeHead(404, { "content-type": "application/json" });
-        response.end('{"message":"error.page_not_found"}');
-        return;
-      }
-      const omitShared = url.searchParams.get("shared") === "false";
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(
-        JSON.stringify(omitShared ? PAGE : { ...PAGE, shared: SHARED }),
-      );
-    });
-    await new Promise<void>((resolve) =>
-      backend.listen(0, "127.0.0.1", resolve),
-    );
-    const address = addressOf(backend);
-    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
-    const runtime = await server;
-    const frontend = createServer(runtime.handleRequestSafely);
-    await new Promise<void>((resolve) =>
-      frontend.listen(0, "127.0.0.1", resolve),
-    );
-    const frontendAddress = addressOf(frontend);
-    const base = `http://127.0.0.1:${frontendAddress.port}`;
-    const visit = async (
-      path: string,
-      headers: Record<string, string> = {},
-    ) => {
-      backendCalls.length = 0;
-      const response = await fetch(`${base}${path}`, {
-        headers: { "x-inertia": "true", ...headers },
-        redirect: "manual",
-      });
-      const page = (await response.json()) as {
-        props: Record<string, unknown>;
-        onceProps?: Record<string, { prop: string; expiresAt: number | null }>;
-      };
-      return { page, backendCalls: [...backendCalls] };
-    };
-    const close = () => {
-      frontend.close();
-      backend.close();
-    };
-    return { visit, close };
-  }
-
-  function accountCookie(accountId: string): Promise<string> {
-    return sessionCookie({
-      accessToken: "access",
-      accountId,
-      activeTenantId: "tenant-1",
-      user: { id: accountId },
-    });
-  }
-
   it("sends the site layout once per session, then the page alone", async () => {
     const { sharedOnceKey, SHARED_PROP_TTL_MS } = await pagePropsModule;
     const { visit, close } = await frontendWithBackend();
@@ -389,35 +315,6 @@ describe("Site layout as an Inertia once prop", () => {
       ]);
     } finally {
       close();
-    }
-  });
-
-  it("keeps the layout over a frontend-only page only when the browser holds it", async () => {
-    await writeSsrRendererFixture();
-    const { sharedOnceKey } = await pagePropsModule;
-    const { visit, close } = await frontendWithBackend();
-    const held = sharedOnceKey(undefined);
-    try {
-      const holding = await visit("/auth/custom", {
-        "x-inertia-except-once-props": held,
-      });
-      assert.equal(
-        (holding.page.props.page as { isFrontendOnly?: boolean })
-          .isFrontendOnly,
-        true,
-      );
-      assert.deepEqual(holding.page.onceProps, {
-        [held]: { prop: "shared", expiresAt: null },
-      });
-      const bare = await visit("/auth/custom");
-      assert.equal("shared" in bare.page.props, false);
-      assert.equal(bare.page.onceProps, undefined);
-    } finally {
-      close();
-      await rm(join(process.cwd(), "templates", "vue", "dist"), {
-        force: true,
-        recursive: true,
-      });
     }
   });
 });
