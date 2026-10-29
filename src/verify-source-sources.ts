@@ -36,7 +36,11 @@ const CORE_LAYER_DIRECTORY = "frontend-vue";
 const FRONTEND_ENTRY = "dms.frontend.ts";
 
 /** How each package manager adds a development dependency. */
-const ADD_DEV_DEPENDENCY: Record<string, string> = {
+interface CommandsByPackageManager {
+  [packageManager: string]: string;
+}
+
+const ADD_DEV_DEPENDENCY: CommandsByPackageManager = {
   pnpm: "pnpm add -D",
   npm: "npm install -D",
   yarn: "yarn add -D",
@@ -214,11 +218,13 @@ function notCoreLayer(
   };
 }
 
-/** The packages at --layer: the one there, or each directory in it. */
-function readLayerSource(layerSource: string): {
+interface LayerSource {
   sourceRoot: string;
   layers: ResolvedLayer[];
-} {
+}
+
+/** The packages at --layer: the one there, or each directory in it. */
+function readLayerSource(layerSource: string): LayerSource {
   const sourceRoot = resolve(layerSource);
   if (!statSync(sourceRoot, { throwIfNoEntry: false })?.isDirectory())
     throw new UsageError({

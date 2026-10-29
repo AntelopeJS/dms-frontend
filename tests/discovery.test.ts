@@ -8,6 +8,7 @@ import {
   type DevRegistry,
   discoverBackend,
 } from "../src/discovery";
+import { isText } from "./helpers/guards";
 
 const alive = () => true;
 const dead = () => false;
@@ -24,9 +25,7 @@ function makeProject(registry?: DevRegistry | string): {
     mkdirSync(join(root, ".antelope"), { recursive: true });
     writeFileSync(
       join(root, ".antelope", "dev.json"),
-      typeof registry === "string"
-        ? registry
-        : JSON.stringify(registry, null, 2),
+      isText(registry) ? registry : JSON.stringify(registry, null, 2),
     );
   }
   return { root, nested };

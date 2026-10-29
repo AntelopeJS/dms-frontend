@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { CliProblem } from "@antelopejs/core/cli";
 import { showPath } from "./output";
+import { isObjectLike } from "./internal/guards";
 
 /**
  * Shared contract with the antelopejs core: `ajs project dev` writes
@@ -48,17 +49,23 @@ export function isPidAlive(pid: number): boolean {
   }
 }
 
+function isDevRegistry(
+  value: unknown,
+): value is { pid: number; servers: object } {
+  return (
+    isObjectLike(value) &&
+    "pid" in value &&
+    typeof value.pid === "number" &&
+    "servers" in value &&
+    typeof value.servers === "object" &&
+    value.servers !== null
+  );
+}
+
 function parseRegistry(file: string): DevRegistry | undefined {
   try {
-    const parsed = JSON.parse(readFileSync(file, "utf-8"));
-    if (
-      typeof parsed?.pid !== "number" ||
-      typeof parsed?.servers !== "object" ||
-      parsed.servers === null
-    ) {
-      return undefined;
-    }
-    return parsed as DevRegistry;
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf-8"));
+    return isDevRegistry(parsed) ? (parsed as DevRegistry) : undefined;
   } catch {
     return undefined;
   }
@@ -197,17 +204,21 @@ export interface DevHandshake {
 
 export const DEV_HANDSHAKE_RELATIVE_PATH = join(".antelope", "dms-dev.json");
 
+function isDevHandshake(value: unknown): value is DevHandshake {
+  return (
+    isObjectLike(value) &&
+    "pid" in value &&
+    typeof value.pid === "number" &&
+    "bootstrapSecret" in value &&
+    typeof value.bootstrapSecret === "string" &&
+    value.bootstrapSecret !== ""
+  );
+}
+
 function parseHandshake(file: string): DevHandshake | undefined {
   try {
-    const parsed = JSON.parse(readFileSync(file, "utf-8"));
-    if (
-      typeof parsed?.pid !== "number" ||
-      typeof parsed?.bootstrapSecret !== "string" ||
-      !parsed.bootstrapSecret
-    ) {
-      return undefined;
-    }
-    return parsed;
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf-8"));
+    return isDevHandshake(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }

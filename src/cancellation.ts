@@ -1,10 +1,11 @@
 import { constants as osConstants } from "node:os";
 import { getProcessUi } from "@antelopejs/core/cli";
+import { isNumber } from "./internal/guards";
 
 /** Shell convention for "died from signal N", used when the child never exited on its own. */
 export function exitCodeForSignal(signal: NodeJS.Signals): number {
   const number = osConstants.signals[signal];
-  return 128 + (typeof number === "number" ? number : 15);
+  return 128 + (isNumber(number) ? number : 15);
 }
 
 /**

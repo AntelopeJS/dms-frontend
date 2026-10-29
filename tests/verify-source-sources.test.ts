@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { readSources, type SourceOptions } from "../src/verify-source-sources";
+import { isText } from "./helpers/guards";
 
 const CORE_LAYER = "@antelopejs/dms-frontend-vue";
 const INSTALLED_DMS = "node_modules/@antelopejs/dms";
@@ -28,7 +29,7 @@ function project(files: Record<string, unknown>): string {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(
       join(root, path),
-      typeof content === "string" ? content : JSON.stringify(content),
+      isText(content) ? content : JSON.stringify(content),
     );
   }
   return root;

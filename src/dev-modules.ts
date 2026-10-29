@@ -13,6 +13,7 @@ import type {
   OriginRewrite,
   ResolvedLayer,
 } from "./workspace";
+import { isObjectLike, isText } from "./internal/guards";
 
 /**
  * {@link readProjectFrontendModules} in a process of its own, so each read
@@ -82,14 +83,13 @@ function rewriteOrigins(
     .join("|");
   const pattern = new RegExp(`(?:${alternation})${URL_BOUNDARY}`, "g");
   const rewrite = (value: FrontendModuleValue): FrontendModuleValue => {
-    if (typeof value === "string")
+    if (isText(value))
       return value.replace(
         pattern,
         (match) => replacements.get(match) ?? match,
       );
     if (Array.isArray(value)) return value.map(rewrite);
-    if (value !== null && typeof value === "object")
-      return rewriteObject(value);
+    if (isObjectLike(value)) return rewriteObject(value);
     return value;
   };
   const rewriteObject = (value: FrontendModuleOptions): FrontendModuleOptions =>

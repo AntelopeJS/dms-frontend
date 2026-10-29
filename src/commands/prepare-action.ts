@@ -35,7 +35,9 @@ const STRICT_HINT =
  * (a refused credential, an incompatible manifest or renderer range, a
  * mistyped URL) fails again until someone fixes it.
  */
-function isSkip(error: unknown): boolean {
+function isSkip(
+  error: unknown,
+): error is BackendUnreachableError | NoCachedManifestError {
   return (
     error instanceof BackendUnreachableError ||
     error instanceof NoCachedManifestError

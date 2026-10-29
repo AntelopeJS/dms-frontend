@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { parse } from "devalue";
+import { addressOf } from "./helpers/net";
 
 /**
  * The pages render through the real SSR entry: the payload the browser
@@ -120,16 +121,14 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     );
     writeFileSync(join(workspace, "dist/client/.vite/manifest.json"), "{}");
     await new Promise<void>((done) => backend.listen(0, "127.0.0.1", done));
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
+    const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const { handleRequestSafely } = await import(
       pathToFileURL(join(workspace, "server.mjs")).href
     );
     frontend = createServer(handleRequestSafely);
     await new Promise<void>((done) => frontend!.listen(0, "127.0.0.1", done));
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(frontend);
     const base = `http://127.0.0.1:${address.port}`;
     const render = async (path: string) => {
       const response = await fetch(`${base}${path}`, {

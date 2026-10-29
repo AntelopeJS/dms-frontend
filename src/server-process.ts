@@ -1,4 +1,4 @@
-import type { ChildProcess } from "node:child_process";
+import type { ChildProcess, Serializable } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,7 @@ import type { PathMapper } from "./child-output";
 import type { ReadyLine } from "./output";
 import { CancelledError } from "./cancellation";
 import { runCommand } from "./workspace-setup";
+import { isNumber, isObjectLike, isText } from "./internal/guards";
 
 const READY_MESSAGE = "dms:ready";
 const LISTEN_ERROR_MESSAGE = "dms:listen-error";
@@ -98,46 +99,66 @@ function stopOnAbort(child: ChildProcess, signal: AbortSignal | undefined) {
   child.once("exit", () => signal.removeEventListener("abort", stop));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+interface ServerMessage {
+  type?: unknown;
+  address?: unknown;
+  port?: unknown;
+  code?: unknown;
+  message?: unknown;
+  host?: unknown;
+  location?: unknown;
 }
 
-function readReady(message: unknown): ServerAddress | undefined {
-  if (!isRecord(message) || message.type !== READY_MESSAGE) return undefined;
+interface ServerMessageLocation {
+  file?: unknown;
+  line?: unknown;
+  column?: unknown;
+  lineText?: unknown;
+}
+
+function hasFile(
+  value: unknown,
+): value is ServerMessageLocation & { file: string } {
+  return isObjectLike(value) && "file" in value && isText(value.file);
+}
+
+function isServerMessage(message: Serializable): message is ServerMessage {
+  return isObjectLike(message);
+}
+
+function readReady(message: Serializable): ServerAddress | undefined {
+  if (!isServerMessage(message) || message.type !== READY_MESSAGE)
+    return undefined;
   const { address, port } = message;
-  if (typeof address !== "string" || typeof port !== "number") return undefined;
+  if (!isText(address) || !isNumber(port)) return undefined;
   return { address, port };
 }
 
-function readListenError(message: unknown): ListenError | undefined {
-  if (!isRecord(message) || message.type !== LISTEN_ERROR_MESSAGE)
+function readListenError(message: Serializable): ListenError | undefined {
+  if (!isServerMessage(message) || message.type !== LISTEN_ERROR_MESSAGE)
     return undefined;
   return {
-    code: typeof message.code === "string" ? message.code : undefined,
+    code: isText(message.code) ? message.code : undefined,
     message: String(message.message),
     host: String(message.host),
     port: Number(message.port),
   };
 }
 
-function readStartError(message: unknown): StartError | undefined {
-  if (!isRecord(message) || message.type !== START_ERROR_MESSAGE)
+function readStartError(message: Serializable): StartError | undefined {
+  if (!isServerMessage(message) || message.type !== START_ERROR_MESSAGE)
     return undefined;
   const { location } = message;
-  const isLocated = isRecord(location) && typeof location.file === "string";
+  const isLocated = hasFile(location);
   return {
     message: String(message.message),
-    code: typeof message.code === "string" ? message.code : undefined,
+    code: isText(message.code) ? message.code : undefined,
     location: isLocated
       ? {
           file: String(location.file),
-          line: typeof location.line === "number" ? location.line : undefined,
-          column:
-            typeof location.column === "number" ? location.column : undefined,
-          lineText:
-            typeof location.lineText === "string"
-              ? location.lineText
-              : undefined,
+          line: isNumber(location.line) ? location.line : undefined,
+          column: isNumber(location.column) ? location.column : undefined,
+          lineText: isText(location.lineText) ? location.lineText : undefined,
         }
       : undefined,
   };

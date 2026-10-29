@@ -2,14 +2,15 @@ import * as assert from "node:assert/strict";
 import { connect, createServer, type Server } from "node:net";
 import { describe, it } from "node:test";
 import { reserveFreePort, reservePort } from "../src/ports";
+import { boundAddress } from "./helpers/net";
 
 function occupyPort(port = 0): Promise<{ server: Server; port: number }> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.once("error", reject);
     server.listen({ port }, () => {
-      const address = server.address();
-      if (address === null || typeof address === "string") {
+      const address = boundAddress(server);
+      if (address === undefined) {
         reject(new Error("No address"));
         return;
       }

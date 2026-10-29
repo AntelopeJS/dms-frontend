@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { connect } from "node:net";
 import { after, before, describe, it } from "node:test";
 import "./fixtures/dms-backend-proxies.mts";
+import { addressOf } from "./helpers/net";
 
 /**
  * A socket the proxy kept open would otherwise hang the test until Node's
@@ -10,14 +11,9 @@ import "./fixtures/dms-backend-proxies.mts";
  */
 const CLOSE_TIMEOUT_MS = 2_000;
 
-interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
-}
-
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return address.port;
 }
 
@@ -56,8 +52,7 @@ describe("the proxy and the client's connection", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
-    const runtime =
-      (await import("../templates/vue/server.mjs")) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     frontendPort = await listen(frontend);
   });

@@ -53,7 +53,7 @@ import {
 interface LayerPackage {
   name?: string;
   devDependencies?: Record<string, string>;
-  [key: string]: unknown;
+  pnpm?: { overrides: Record<string, string> };
 }
 
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;
@@ -71,7 +71,7 @@ function readJson(path: string): unknown {
 
 /** Fails the running check with `title` unless `condition` holds. */
 function ensure(
-  condition: unknown,
+  condition: boolean,
   title: string,
   reason?: string,
 ): asserts condition {
@@ -139,7 +139,7 @@ function checkClientBundle(workspace: string): void {
     join(clientRoot, ".vite", "manifest.json"),
   ) as Record<string, { file: string; isEntry?: boolean }>;
   const mainEntry = Object.values(manifest).find((entry) => entry.isEntry);
-  ensure(mainEntry, "The Vite manifest names no entry chunk");
+  ensure(mainEntry !== undefined, "The Vite manifest names no entry chunk");
   const mainJavascript = readFileSync(join(clientRoot, mainEntry.file), "utf8");
   const javascript = readdirSync(join(clientRoot, "assets"))
     .filter((file) => file.endsWith(".js"))
@@ -179,9 +179,9 @@ async function checkServerModulesBundle(workspace: string): Promise<string> {
     "The server modules bundle loads application code",
     "A dms.server.ts imports server code only, never .vue files or dms.frontend.ts.",
   );
-  const { serverModules } = (await import(
+  const { serverModules }: { serverModules: unknown } = await import(
     join(root, "server-modules.generated.js")
-  )) as { serverModules: { id: string }[] };
+  );
   ensure(
     Array.isArray(serverModules),
     "The server modules bundle exports none",
@@ -191,7 +191,7 @@ async function checkServerModulesBundle(workspace: string): Promise<string> {
 
 interface EmailCase {
   name: string;
-  props: Record<string, unknown>;
+  props: Record<string, string>;
   marker: string;
 }
 

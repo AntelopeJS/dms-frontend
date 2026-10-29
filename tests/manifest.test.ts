@@ -18,6 +18,7 @@ import {
 } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
 import { OWN_PACKAGE } from "./helpers/own-package";
+import { addressOf } from "./helpers/net";
 
 const manifest: Manifest = { modules: [] };
 
@@ -52,10 +53,7 @@ function startBackend(status = 200): Promise<Backend> {
       );
     });
     server.listen({ port: 0, host: "127.0.0.1" }, () => {
-      const address = server.address();
-      if (address === null || typeof address === "string") {
-        throw new Error("No address");
-      }
+      const address = addressOf(server);
       resolve({
         server,
         baseUrl: `http://127.0.0.1:${address.port}`,

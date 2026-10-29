@@ -116,7 +116,7 @@ function writeFrontendTypePaths(
   workspaceDir: string,
   registry: FrontendModuleRegistry,
 ): boolean {
-  const paths: Record<string, string[]> = {
+  const paths = {
     "#dms/frontend-module": ["./frontend-module.ts"],
     "#dms/frontend-build": ["./frontend-build.ts"],
     "#dms/server": ["./server-module.ts"],

@@ -15,6 +15,7 @@ import {
   isUnauthorized,
   ManifestModule,
 } from "./workspace";
+import { isNumber, isText } from "./internal/guards";
 
 export class ManifestUnauthorizedError extends CliError {
   constructor(
@@ -35,7 +36,11 @@ export class ManifestUnauthorizedError extends CliError {
   }
 }
 
-const UNREACHABLE_REASONS: Record<string, string> = {
+interface ReasonsByErrorCode {
+  [code: string]: string;
+}
+
+const UNREACHABLE_REASONS: ReasonsByErrorCode = {
   ECONNREFUSED: "Connection refused",
   ECONNRESET: "Connection reset",
   ENOTFOUND: "Unknown host",
@@ -58,7 +63,8 @@ export class BackendUnreachableError extends CliError {
     readonly url: string,
     failure: unknown,
   ) {
-    const cause = (failure as { cause?: unknown })?.cause ?? failure;
+    const cause =
+      (hasProperties(failure) ? failure.cause : undefined) ?? failure;
     const code = errorCode(cause);
     const detail = code
       ? (UNREACHABLE_REASONS[code] ?? errorMessage(cause))
@@ -80,9 +86,22 @@ export class BackendUnreachableError extends CliError {
   }
 }
 
+interface ErrorProperties {
+  cause?: unknown;
+  code?: unknown;
+  errors?: unknown;
+}
+
+function hasProperties(value: unknown): value is ErrorProperties {
+  return (
+    value !== null && (typeof value === "object" || typeof value === "function")
+  );
+}
+
 function errorCode(err: unknown): string | undefined {
-  const { code, errors } = (err ?? {}) as { code?: unknown; errors?: unknown };
-  if (typeof code === "string") return code;
+  if (!hasProperties(err)) return undefined;
+  const { code, errors } = err;
+  if (isText(code)) return code;
   return Array.isArray(errors) ? errorCode(errors[0]) : undefined;
 }
 
@@ -149,7 +168,7 @@ export async function fetchFromBackend(
  */
 export class ManifestRefusedError extends CliError {
   constructor(problem: string | CliProblem) {
-    super(typeof problem === "string" ? { title: problem } : problem);
+    super(isText(problem) ? { title: problem } : problem);
     this.name = "ManifestRefusedError";
   }
 }
@@ -168,7 +187,7 @@ const LOADER_UPDATE_COMMAND = "ajs update dms";
 export function describeManifestVersion(version: unknown): CliProblem {
   const loader = `${OWN_RELEASE.name} ${OWN_RELEASE.version}`;
   const supported = `This loader reads version ${FRONTEND_MANIFEST_VERSION}`;
-  if (typeof version !== "number") {
+  if (!isNumber(version)) {
     return {
       title:
         "The backend served a frontend manifest without a protocol version",

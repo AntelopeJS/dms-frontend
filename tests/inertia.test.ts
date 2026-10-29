@@ -5,6 +5,8 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
+import { addressOf } from "./helpers/net";
+import { isText } from "./helpers/guards";
 
 interface ServerTemplate {
   assetVersion: () => string;
@@ -145,16 +147,14 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     try {
       const response = await fetch(
         `http://127.0.0.1:${frontendAddress.port}/articles`,
@@ -222,16 +222,14 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     try {
       const response = await fetch(
         `http://127.0.0.1:${frontendAddress.port}/articles`,
@@ -255,16 +253,14 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     try {
       const response = await fetch(
         `http://127.0.0.1:${frontendAddress.port}/articles?tab=recent`,
@@ -304,16 +300,14 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     const base = `http://127.0.0.1:${frontendAddress.port}`;
     const assetName = `probe-${randomUUID()}.js`;
     const assets = join(
@@ -416,16 +410,14 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     try {
       await assert.rejects(
         fetch(`http://127.0.0.1:${frontendAddress.port}/api/feed`, {
@@ -491,16 +483,14 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
+    const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(frontend);
     const base = `http://127.0.0.1:${address.port}`;
     try {
       for (const [method, path] of [
@@ -540,16 +530,14 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     const base = `http://127.0.0.1:${frontendAddress.port}`;
     try {
       for (const headers of [
@@ -613,16 +601,14 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     const base = `http://127.0.0.1:${frontendAddress.port}`;
     try {
       const html = await fetch(`${base}/protected?tab=one`, {
@@ -682,8 +668,7 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const sessionRuntime = await sessions;
@@ -707,8 +692,7 @@ describe("Inertia HTTP protocol", () => {
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     const base = `http://127.0.0.1:${frontendAddress.port}`;
     const visit = (path: string, headers: Record<string, string>) =>
       fetch(`${base}${path}`, {
@@ -761,16 +745,14 @@ describe("proxied mutations", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
+    const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(frontend);
     const base = `http://127.0.0.1:${address.port}`;
     try {
       const rejected = await fetch(`${base}/api/items`, {
@@ -825,16 +807,14 @@ describe("public endpoints through the proxy", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
+    const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(frontend);
     const base = `http://127.0.0.1:${address.port}`;
     try {
       const cookie = await sessionCookie({
@@ -932,16 +912,14 @@ describe("Site layout as an Inertia once prop", () => {
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const address = backend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const frontend = createServer(runtime.handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend.listen(0, "127.0.0.1", resolve),
     );
-    const frontendAddress = frontend.address();
-    assert.ok(frontendAddress && typeof frontendAddress === "object");
+    const frontendAddress = addressOf(frontend);
     const base = `http://127.0.0.1:${frontendAddress.port}`;
     const visit = async (
       path: string,
@@ -1107,7 +1085,7 @@ describe("Site layout as an Inertia once prop", () => {
       assert.deepEqual(other.backendCalls, [
         "/dms/page?path=%2Farticles&shared=false",
       ]);
-      assert.equal(typeof other.page.props.path, "string");
+      assert.ok(isText(other.page.props.path));
     } finally {
       close();
     }

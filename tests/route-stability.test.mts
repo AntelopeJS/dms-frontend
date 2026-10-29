@@ -112,7 +112,6 @@ describe("Route stability", () => {
 });
 
 describe("Navigation to the URL shown", () => {
-  const globals = globalThis as Record<string, unknown>;
   let app: App;
   let location: URL;
 
@@ -145,11 +144,11 @@ describe("Navigation to the URL shown", () => {
     provideDmsFrontendRuntime(app, runtime);
     app.runWithContext(() => useDmsRoute());
     location = new URL("http://localhost/runs?tab=open");
-    globals.window = { location };
+    Reflect.set(globalThis, "window", { location });
   });
 
   afterEach(() => {
-    delete globals.window;
+    Reflect.deleteProperty(globalThis, "window");
   });
 
   it("navigates when the URL moved away from the route", async (context) => {

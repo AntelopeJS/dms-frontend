@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { baseCompile, type CompileError } from "@intlify/message-compiler";
+import { isObjectLike, isText } from "./internal/guards";
 
 /**
  * A locale file that does not parse, or holds a message vue-i18n cannot
@@ -18,12 +19,24 @@ export class InvalidLocaleFileError extends Error {
 }
 
 /** The characters vue-i18n's syntax reserves, as a message writes them literally. */
-const LITERAL_ESCAPES: Record<string, string> = {
+interface EscapesByCharacter {
+  [character: string]: string;
+}
+
+const LITERAL_ESCAPES: EscapesByCharacter = {
   "@": "{'@'}",
   "{": "{'{'}",
   "}": "{'}'}",
   "|": "{'|'}",
 };
+
+type LocaleJson =
+  | string
+  | number
+  | boolean
+  | null
+  | LocaleJson[]
+  | { [key: string]: LocaleJson };
 
 /** One message that does not compile, with the key that holds it. */
 interface MessageProblem {
@@ -68,12 +81,12 @@ function firstCompileError(message: string): CompileError | undefined {
 }
 
 /** Every message under `value` that does not compile, by its dotted key. */
-function messageProblems(value: unknown, key: string): MessageProblem[] {
-  if (typeof value === "string") {
+function messageProblems(value: LocaleJson, key: string): MessageProblem[] {
+  if (isText(value)) {
     const error = firstCompileError(value);
     return error ? [{ key, message: value, error }] : [];
   }
-  if (typeof value !== "object" || value === null) return [];
+  if (!isObjectLike(value)) return [];
   return Object.entries(value).flatMap(([child, nested]) =>
     messageProblems(nested, key ? `${key}.${child}` : child),
   );
@@ -88,7 +101,7 @@ function messageProblems(value: unknown, key: string): MessageProblem[] {
  * dev instead of reaching a page.
  */
 export function readLocaleFile(path: string): Record<string, unknown> {
-  let value: Record<string, unknown>;
+  let value: { [key: string]: LocaleJson };
   try {
     value = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {

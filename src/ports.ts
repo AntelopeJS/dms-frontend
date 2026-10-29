@@ -1,5 +1,6 @@
-import { type AddressInfo, createServer, type Server } from "node:net";
+import { createServer, type Server } from "node:net";
 import { CliError } from "@antelopejs/core/cli";
+import { isObjectLike } from "./internal/guards";
 
 /**
  * How many consecutive ports we try after the requested one before
@@ -63,6 +64,13 @@ export async function reserveFreePort(
   });
 }
 
+function listeningPort(server: Server): number {
+  const address = server.address();
+  if (!isObjectLike(address))
+    throw new Error("The reserved server does not listen on a TCP port");
+  return address.port;
+}
+
 /**
  * Reserve exactly `port`, for a server that must not move elsewhere: the
  * production server's port is the one the deployment routes traffic to.
@@ -75,7 +83,7 @@ export async function reservePort(
   const server = await tryListen(port);
   if (!server) return undefined;
   return {
-    port: (server.address() as AddressInfo).port,
+    port: listeningPort(server),
     release: () =>
       new Promise((resolve) => {
         server.close(() => resolve());

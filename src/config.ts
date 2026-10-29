@@ -368,7 +368,11 @@ export const Options = {
 const HEADER_SAFE_CREDENTIAL = /^[\x21-\x7e]+$/;
 const HEADER_UNSAFE_CHARACTER = /[^\x21-\x7e]/u;
 
-const UNSAFE_CHARACTER_NAMES: Record<string, string> = {
+interface NamesByCharacter {
+  [character: string]: string;
+}
+
+const UNSAFE_CHARACTER_NAMES: NamesByCharacter = {
   " ": "a space",
   "\t": "a tab",
   "\r": "a line break",

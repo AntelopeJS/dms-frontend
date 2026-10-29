@@ -1,5 +1,6 @@
 import { getProcessUi, type Ui } from "@antelopejs/core/cli";
 import type { FrontendModuleValue, ManifestModule } from "./workspace";
+import { isObjectLike, isText } from "./internal/guards";
 
 /**
  * Secrets the generated server reads from its environment, and where the DMS
@@ -17,7 +18,11 @@ export const MANIFEST_SECRET_ENV = {
 
 export type ManifestSecretName = keyof typeof MANIFEST_SECRET_ENV;
 
-const SECRET_NAMES = Object.keys(MANIFEST_SECRET_ENV) as ManifestSecretName[];
+function isSecretName(name: string): name is ManifestSecretName {
+  return name in MANIFEST_SECRET_ENV;
+}
+
+const SECRET_NAMES = Object.keys(MANIFEST_SECRET_ENV).filter(isSecretName);
 
 /** What the generated server does when a secret reaches it unset. */
 const UNSET_CONSEQUENCE: Record<ManifestSecretName, string> = {
@@ -63,8 +68,7 @@ function readPath(
 ): FrontendModuleValue | undefined {
   let value = options;
   for (const key of path) {
-    if (!value || typeof value !== "object" || Array.isArray(value))
-      return undefined;
+    if (!isObjectLike(value) || Array.isArray(value)) return undefined;
     value = value[key];
   }
   return value;
@@ -90,7 +94,7 @@ export function collectManifestSecrets(
     const ignored: string[] = [];
     for (const module of ordered) {
       const value = readPath(module.privateOptions, MANIFEST_SECRET_ENV[name]);
-      if (typeof value !== "string" || value === "") continue;
+      if (!isText(value) || value === "") continue;
       const first = published[name];
       if (!first) published[name] = { value, module: module.name };
       else if (first.value !== value) ignored.push(module.name);
