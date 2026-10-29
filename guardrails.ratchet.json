@@ -4,7 +4,7 @@
     "antelopejs/no-fs-read-in-tests": 45,
     "antelopejs/require-assertion": 5,
     "anti-slop/no-known-value-widening": 38,
-    "anti-slop/no-runtime-typeof": 164,
+    "anti-slop/no-runtime-typeof": 161,
     "anti-slop/no-shape-in-symbol-names": 11,
     "anti-slop/no-unknown-parameters": 91,
     "anti-slop/no-unknown-returns": 13,
