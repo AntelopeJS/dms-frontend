@@ -30,6 +30,7 @@ interface HotReloadProbe {
 const TIMEOUT_MS = 15_000;
 const RUNTIME_FILES = [
   "frontend-module.ts",
+  "frontend-runtime",
   "layer-app-config.ts",
   "ui-app-config.ts",
 ];
@@ -108,7 +109,9 @@ describe("edited layer app configs in the dev server", () => {
     materializeLayers(workspace, layers);
     writeFrontendModuleRegistry(workspace, layers);
     for (const file of RUNTIME_FILES)
-      cpSync(join("templates", "vue", file), join(workspace, file));
+      cpSync(join("templates", "vue", file), join(workspace, file), {
+        recursive: true,
+      });
     writeFileSync(
       join(workspace, "server-entry.ts"),
       'import { appConfigs } from "./app-configs.generated";\nimport { setupFrontendModules, useDmsAppConfig } from "./frontend-module";\nawait setupFrontendModules([], appConfigs);\nexport const appConfig = useDmsAppConfig();\n',
