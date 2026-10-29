@@ -72,12 +72,15 @@ function shippedRuntimeWorkspace(moduleFiles: Record<string, string>): string {
   const workspace = generatedWorkspace(moduleFiles);
   for (const file of [
     "frontend-module.ts",
+    "frontend-runtime",
     "public-options.ts",
     "layer-app-config.ts",
     "ui-app-config.ts",
     "globals.d.ts",
   ]) {
-    cpSync(join(repoRoot, "templates", "vue", file), join(workspace, file));
+    cpSync(join(repoRoot, "templates", "vue", file), join(workspace, file), {
+      recursive: true,
+    });
   }
   writeFileSync(
     join(workspace, "frontend-paths.generated.json"),
