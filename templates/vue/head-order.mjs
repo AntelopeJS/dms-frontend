@@ -22,8 +22,8 @@ function deprioritize(html) {
  * template asked: it discovered a 250 kB hydration bundle first and let it
  * compete with the 27 kB the first paint actually waits on, over the plain
  * HTTP/1.1 the generated server speaks. Kept beside vite.config.ts rather than
- * inside it so the transform can be exercised on its own, the way client-
- * manifest.mjs is.
+ * inside it so the transform can be exercised on its own, the way
+ * client-manifest.mjs is.
  */
 export function orderHeadForFirstPaint(html) {
   const prioritized = deprioritize(html);

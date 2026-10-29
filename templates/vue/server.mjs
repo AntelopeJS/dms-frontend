@@ -107,7 +107,6 @@ let vite;
 let vitePromise;
 let frontendHttpServer;
 
-/** The generated secrets and the modules' server code are never served. */
 async function developmentServer() {
   if (process.env.DMS_DEV !== "true") return undefined;
   if (vite) return vite;

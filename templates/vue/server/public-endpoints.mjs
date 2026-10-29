@@ -16,8 +16,8 @@ const DECLARED_ENDPOINTS_FILE = new URL(
  * An absolute backend API path whose first segment is literal (a `*` there
  * would open a route of every module) and whose next ones are literal or `*`
  * (exactly one segment): no prefix match, no query string, no segment that
- * climbs out. Kept in step with `PUBLIC_PATH` in the DMS (`frontend-public-
- * endpoints.ts`), which validates the modules' declarations.
+ * climbs out. Kept in step with `PUBLIC_PATH` in the DMS
+ * (`frontend-public-endpoints.ts`), which validates the modules' declarations.
  */
 const PUBLIC_PATH =
   /^\/api\/[A-Za-z0-9][A-Za-z0-9._~-]*(?:\/(?:\*|[A-Za-z0-9][A-Za-z0-9._~-]*))*$/;
@@ -63,6 +63,8 @@ export function readDeclaredPublicEndpoints(file = DECLARED_ENDPOINTS_FILE) {
  * The backend proxies the backend modules declared in the manifest, as
  * `{ module, path, auth?, maxBodyBytes? }`, unchecked.
  *
+ * A missing or broken file declares no proxy.
+ *
  * @param file Generated file to read
  */
 export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
@@ -79,7 +81,8 @@ export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
 
 /**
  * The backend proxies `DMS_BACKEND_PROXIES` adds: a JSON array of
- * `{ path, auth?, maxBodyBytes? }`, as the manifest's `backendProxies`, for an operator.
+ * `{ path, auth?, maxBodyBytes? }`, as the manifest's `backendProxies`, for an
+ * operator. A value that is not a JSON array is reported and ignored.
  *
  * @param declaration The variable's value
  */
