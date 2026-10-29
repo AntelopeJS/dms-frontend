@@ -4,6 +4,7 @@ import { normalizePath } from "vite";
 import {
   expectMatch,
   expectNoMatch,
+  isStringList,
   type Problem,
   type SourceCheck,
   templateText,
@@ -179,12 +180,6 @@ function templateDeclaresInertia(): Problem[] {
     /@inertiajs\/vue3/,
     "templates/vue/package.json does not declare @inertiajs/vue3",
   );
-}
-
-function isStringList(value: unknown): value is string[] {
-  if (!Array.isArray(value)) return false;
-  for (const entry of value) if (typeof entry !== "string") return false;
-  return true;
 }
 
 /**

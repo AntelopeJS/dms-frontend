@@ -45,3 +45,15 @@ export function expectNoMatch(
 ): Problem[] {
   return pattern.test(text) ? [problem] : [];
 }
+
+/** Narrows a parsed JSON value to an object, arrays included. */
+export function isJsonObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
+}
+
+/** Narrows a value to a list of strings. */
+export function isStringList(value: unknown): value is string[] {
+  if (!Array.isArray(value)) return false;
+  for (const entry of value) if (typeof entry !== "string") return false;
+  return true;
+}

@@ -4,6 +4,8 @@ import { TEMPLATE_FILES } from "../../src/config";
 import {
   filesUnder,
   isFile,
+  isJsonObject,
+  isStringList,
   type Problem,
   type SourceCheck,
   TEMPLATE_DIR,
@@ -61,20 +63,37 @@ function copiedFiles(): Set<string> {
   );
 }
 
-function references(file: string): string[] {
+/**
+ * The files `file` names. A tsconfig.json names its `files`, a package.json
+ * the files its scripts run; one whose field has another shape adds a problem
+ * to `malformed` instead.
+ */
+function references(file: string, malformed: Problem[]): string[] {
   const source = readFileSync(file, "utf8");
   const found = Object.values(REFERENCES).flatMap((pattern) =>
     [...source.matchAll(pattern)].map((match) => match[1]!),
   );
   if (file.endsWith("tsconfig.json")) {
-    const { files = [] }: { files?: string[] } = JSON.parse(source);
-    found.push(...files);
+    const manifest: unknown = JSON.parse(source);
+    const files =
+      isJsonObject(manifest) && "files" in manifest ? manifest.files : [];
+    if (isStringList(files)) found.push(...files);
+    else
+      malformed.push(`${relativeName(file)}: "files" is not a list of paths`);
   }
   if (file.endsWith("package.json")) {
-    const { scripts = {} }: { scripts?: Record<string, string> } =
-      JSON.parse(source);
-    for (const command of Object.values(scripts))
-      for (const match of command.matchAll(SCRIPT_FILE)) found.push(match[1]!);
+    const manifest: unknown = JSON.parse(source);
+    const scripts =
+      isJsonObject(manifest) && "scripts" in manifest ? manifest.scripts : {};
+    const commands = isJsonObject(scripts) ? Object.values(scripts) : undefined;
+    if (isStringList(commands)) {
+      for (const command of commands)
+        for (const match of command.matchAll(SCRIPT_FILE))
+          found.push(match[1]!);
+    } else
+      malformed.push(
+        `${relativeName(file)}: "scripts" is not an object of commands`,
+      );
   }
   return found;
 }
@@ -84,12 +103,15 @@ function references(file: string): string[] {
  * that reference them. A referenced file that does not exist in
  * `templates/vue` is one the workspace generates (`*.generated.*`, `dist/...`).
  */
-function reachedFiles(roots: Iterable<string>): Map<string, string> {
+function reachedFiles(
+  roots: Iterable<string>,
+  malformed: Problem[],
+): Map<string, string> {
   const reached = new Map<string, string>();
   const pending = [...roots];
   while (pending.length) {
     const file = pending.pop()!;
-    for (const reference of references(file)) {
+    for (const reference of references(file, malformed)) {
       const target = templateFile(file, reference);
       if (!target || reached.has(target)) continue;
       reached.set(target, file);
@@ -107,12 +129,12 @@ const relativeName = (file: string) =>
  * with the file that loads it. package.json is written from its template
  * rather than copied.
  */
-function missingFiles(copied: Set<string>): string[] {
+function missingFiles(copied: Set<string>, malformed: Problem[]): string[] {
   const roots = [
     ...CONVENTIONAL.map((name) => join(TEMPLATE_DIR, name)),
     join(TEMPLATE_DIR, "package.json"),
   ];
-  return [...reachedFiles(roots)]
+  return [...reachedFiles(roots, malformed)]
     .filter(([file]) => !copied.has(file) && !file.endsWith("package.json"))
     .map(
       ([file, from]) =>
@@ -122,15 +144,18 @@ function missingFiles(copied: Set<string>): string[] {
 
 function workspaceCopiesEveryLoadedFile(): Problem[] {
   const copied = copiedFiles();
+  const malformed: Problem[] = [];
+  const missing = missingFiles(copied, malformed);
   return [
     ...CONVENTIONAL.filter((name) => !copied.has(join(TEMPLATE_DIR, name))).map(
       (name) =>
         `list ${name} in TEMPLATE_FILES (src/config.ts): the tools load it by convention`,
     ),
-    ...missingFiles(copied).map(
+    ...missing.map(
       (entry) =>
         `list ${entry} in TEMPLATE_FILES (src/config.ts): a workspace would not have it`,
     ),
+    ...malformed,
   ];
 }
 
@@ -139,7 +164,7 @@ function theCheckFindsAFileLeftOut(): Problem[] {
   const withoutOne = new Set(
     [...copied].filter((file) => relativeName(file) !== "network-error.ts"),
   );
-  const missing = missingFiles(withoutOne);
+  const missing = missingFiles(withoutOne, []);
   return withoutOne.size === copied.size - 1 &&
     missing.some((entry) => entry.startsWith("network-error.ts "))
     ? []
