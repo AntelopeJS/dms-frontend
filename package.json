@@ -92,7 +92,7 @@
   },
   "devDependencies": {
     "@antelopejs/core": "^1.16.0",
-    "@antelopejs/tooling-configs": "^0.2.10",
+    "@antelopejs/tooling-configs": "^0.2.11",
     "@iconify/utils": "^3.1.0",
     "@iconify/vue": "^5.0.1",
     "@inertiajs/vue3": "^3.7.1",
