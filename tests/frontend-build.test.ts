@@ -223,7 +223,9 @@ describe("The generated build declarations loader", () => {
         { glob: `${root}/app/composables/**/*`, types: true },
         { glob: `!${root}/**/app/build/**`, types: true },
       ]);
-      assert.equal((loaded.config.warnings as string[]).length, 1);
+      const { config } = loaded;
+      assert.ok("warnings" in config && Array.isArray(config.warnings));
+      assert.equal(config.warnings.length, 1);
       assert.ok(
         loaded.dependencies.some((dependency) =>
           declaration.endsWith(dependency),

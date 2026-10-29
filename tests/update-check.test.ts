@@ -1,7 +1,6 @@
 import * as assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
-import { type AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -19,6 +18,7 @@ import { DMS_FRONTEND_HOME } from "../src/config";
 import { memoryUi } from "./fixtures/memory-ui";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
+import { addressOf } from "./helpers/net";
 
 function cacheFile(): string {
   return join(temporaryDirectory("dms-update-check-"), "nested", "state.json");
@@ -428,7 +428,7 @@ async function registryStub(
     response.end(body);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
+  const { port } = addressOf(server);
   return {
     url: `http://127.0.0.1:${port}/`,
     requests,
@@ -484,7 +484,7 @@ describe("registry lookup", () => {
     await new Promise<void>((resolve) =>
       stalled.listen(0, "127.0.0.1", resolve),
     );
-    const { port } = stalled.address() as AddressInfo;
+    const { port } = addressOf(stalled);
     const started = Date.now();
     try {
       assert.equal(

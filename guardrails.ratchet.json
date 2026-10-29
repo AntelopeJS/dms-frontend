@@ -1,22 +1,22 @@
 {
   "rules": {
-    "anti-slop/no-known-value-widening": 38,
-    "anti-slop/no-runtime-typeof": 159,
-    "anti-slop/no-shape-in-symbol-names": 11,
-    "anti-slop/no-unknown-parameters": 90,
-    "anti-slop/no-unknown-returns": 13,
-    "anti-slop/no-unsafe-dictionary-type": 62,
-    "anti-slop/require-safety-comment-for-type-assertion": 154
+    "anti-slop/no-known-value-widening": 28,
+    "anti-slop/no-runtime-typeof": 39,
+    "anti-slop/no-shape-in-symbol-names": 3,
+    "anti-slop/no-unknown-parameters": 58,
+    "anti-slop/no-unknown-returns": 12,
+    "anti-slop/no-unsafe-dictionary-type": 54,
+    "anti-slop/require-safety-comment-for-type-assertion": 116
   },
   "oversizeFiles": {
-    "src/derived-outputs.ts": 23812,
+    "src/derived-outputs.ts": 23786,
     "templates/vue/frontend-module.ts": 124737,
-    "tests/cli-sandbox.test.mts": 53195,
+    "tests/cli-sandbox.test.mts": 53116,
     "tests/cli.test.ts": 31659,
-    "tests/inertia.test.ts": 42241,
+    "tests/inertia.test.ts": 40833,
     "tests/layer-watch.test.ts": 26377,
-    "tests/server-modules.test.ts": 36402,
-    "tests/ssr-errors.test.ts": 20681,
+    "tests/server-modules.test.ts": 36393,
+    "tests/ssr-errors.test.ts": 20602,
     "tests/vue-async-data.test.mts": 49789,
     "tests/vue-runtime.test.mts": 37259
   }

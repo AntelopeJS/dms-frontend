@@ -5,6 +5,7 @@ import AutoImport from "unplugin-auto-import/vite";
 import type { Plugin } from "vite";
 import { normalizePath } from "vite";
 import { dynamicImports } from "../scripts/source-checks/dynamic-imports";
+import { isCallable, isText } from "./helpers/guards";
 
 const WINDOWS_MODULE_PATH =
   "C:\\Users\\Mwesto\\.antelopejs\\dms-frontend\\a27ff4d5\\frontend-module.ts";
@@ -24,16 +25,15 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
     }),
   ].flat() as Plugin[];
   const transform = plugin.transform;
-  const handler =
-    typeof transform === "function" ? transform : transform?.handler;
+  const handler = isCallable(transform) ? transform : transform?.handler;
   assert.ok(handler, "the auto-importer exposes a transform hook");
   const result = await handler.call(
     { error: () => {}, warn: () => {} } as never,
     "const session = useDmsUserSession();",
     "/workspace/frontend-modules/dms__ai/app/plugins/ai.client.ts",
   );
-  const code = typeof result === "string" ? result : result?.code;
-  const emitted = typeof code === "string" ? code : String(code ?? "");
+  const code = isText(result) ? result : result?.code;
+  const emitted = isText(code) ? code : String(code ?? "");
   const literal = emitted.match(/from\s+('[^']*'|"[^"]*")/)?.[1];
   assert.ok(literal, `no import was injected into:\n${emitted}`);
   return runInNewContext(literal) as string;

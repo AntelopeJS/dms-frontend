@@ -2,19 +2,11 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { after, before, beforeEach, describe, it } from "node:test";
 import "./fixtures/dms-backend-proxies.mts";
-
-interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
-}
-
-interface SessionTemplate {
-  writeSession: (response: unknown, session: Record<string, unknown>) => void;
-}
+import { addressOf } from "./helpers/net";
 
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return address.port;
 }
 
@@ -22,7 +14,7 @@ async function sessionCookie(
   session: Record<string, unknown>,
 ): Promise<string> {
   const { writeSession } =
-    (await import("../templates/vue/server/auth/session.mjs")) as SessionTemplate;
+    await import("../templates/vue/server/auth/session.mjs");
   const headers = new Map<string, string | string[]>();
   writeSession(
     {
@@ -70,8 +62,7 @@ describe("the proxy forwards who is asking", () => {
     ]);
     process.env.DMS_SESSION_SECRET =
       "test-secret-with-at-least-thirty-two-characters";
-    const runtime =
-      (await import("../templates/vue/server.mjs")) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     frontendUrl = `http://127.0.0.1:${await listen(frontend)}`;
   });

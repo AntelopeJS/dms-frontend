@@ -11,10 +11,7 @@ import {
 import { after, before, describe, it } from "node:test";
 import { brotliDecompressSync, gunzipSync, gzipSync } from "node:zlib";
 import "./fixtures/dms-backend-proxies.mts";
-
-interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
-}
+import { addressOf } from "./helpers/net";
 
 type Route = (request: IncomingMessage, response: ServerResponse) => void;
 
@@ -30,8 +27,7 @@ const SYNC_FLUSH_MARKER = Buffer.from([0, 0, 255, 255]);
 
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return address.port;
 }
 
@@ -125,8 +121,7 @@ describe("the proxy compresses what the backend did not", () => {
       response.end(Buffer.alloc(4096));
     });
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
-    const runtime =
-      (await import("../templates/vue/server.mjs")) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     frontendPort = await listen(frontend);
   });

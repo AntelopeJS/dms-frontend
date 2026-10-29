@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
+import { addressOf } from "./helpers/net";
 
 /**
  * A path whose last percent-escape is cut short: Vite's HTML transform and
@@ -20,8 +21,7 @@ interface ServerTemplate {
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return `http://127.0.0.1:${address.port}`;
 }
 

@@ -11,6 +11,7 @@ import { assertLayersSupportRenderer, type ResolvedLayer } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
 import { listNames, readText } from "./helpers/files";
 import { OWN_PACKAGE } from "./helpers/own-package";
+import { addressOf } from "./helpers/net";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RENDERER = "@antelopejs/dms-frontend";
@@ -232,9 +233,7 @@ function serveManifest(layerPath: string): Promise<Backend> {
       res.end(JSON.stringify(manifest));
     });
     server.listen({ port: 0, host: "127.0.0.1" }, () => {
-      const address = server.address();
-      if (address === null || typeof address === "string")
-        throw new Error("No address");
+      const address = addressOf(server);
       resolveBackend({ server, url: `http://127.0.0.1:${address.port}` });
     });
   });

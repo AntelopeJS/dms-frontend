@@ -28,6 +28,7 @@ import {
   ruleHeaders,
 } from "../templates/vue/server/route-rules.mjs";
 import type { DmsServerSetup } from "../templates/vue/server-module";
+import { addressOf } from "./helpers/net";
 
 const PUBLIC_CACHE = {
   public: true as const,
@@ -240,8 +241,7 @@ describe("Route rules in the production server", () => {
     await new Promise<void>((settle) =>
       backend!.listen(0, "127.0.0.1", settle),
     );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
+    const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     process.env.DMS_SESSION_SECRET =
       "a-test-only-session-secret-of-32-characters";
@@ -274,8 +274,7 @@ describe("Route rules in the production server", () => {
     await new Promise<void>((settle) =>
       frontend!.listen(0, "127.0.0.1", settle),
     );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(frontend);
     frontendUrl = `http://127.0.0.1:${address.port}`;
   });
 

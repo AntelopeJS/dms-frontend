@@ -1,22 +1,30 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import {
+  createServer,
+  type Server,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
+import { addressOf } from "./helpers/net";
 
 const UNREAD_COUNT_PATH = "/settings/user/notifications/unread-count";
 const MEDIA_PATH = "/media/asset-1/photo.webp";
 
 interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
+  handleRequestSafely: (
+    request: IncomingMessage,
+    response: ServerResponse,
+  ) => Promise<void>;
 }
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return `http://127.0.0.1:${address.port}`;
 }
 

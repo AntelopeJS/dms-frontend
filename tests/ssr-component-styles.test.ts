@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { readText } from "./helpers/files";
+import { addressOf } from "./helpers/net";
 
 interface ManifestEntry {
   css?: string[];
@@ -135,8 +136,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     const unused = componentStylesheet(manifest, "Unused");
 
     await new Promise<void>((settle) => backend.listen(0, "127.0.0.1", settle));
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
+    const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const { handleRequestSafely } = await import(
       pathToFileURL(join(workspace, "server.mjs")).href
@@ -145,8 +145,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     await new Promise<void>((settle) =>
       frontend!.listen(0, "127.0.0.1", settle),
     );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(frontend);
     const response = await fetch(`http://127.0.0.1:${address.port}/page`, {
       headers: { accept: "text/html" },
     });

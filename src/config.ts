@@ -368,19 +368,19 @@ export const Options = {
 const HEADER_SAFE_CREDENTIAL = /^[\x21-\x7e]+$/;
 const HEADER_UNSAFE_CHARACTER = /[^\x21-\x7e]/u;
 
-const UNSAFE_CHARACTER_NAMES: Record<string, string> = {
-  " ": "a space",
-  "\t": "a tab",
-  "\r": "a line break",
-  "\n": "a line break",
-};
+const UNSAFE_CHARACTER_NAMES = new Map([
+  [" ", "a space"],
+  ["\t", "a tab"],
+  ["\r", "a line break"],
+  ["\n", "a line break"],
+]);
 
 const LAST_ASCII_CODE_POINT = 0x7f;
 
 /** Name the first character that keeps a credential out of a header. */
 function describeUnsafeCharacter(value: string): string {
   const char = HEADER_UNSAFE_CHARACTER.exec(value)?.[0] ?? "";
-  const named = UNSAFE_CHARACTER_NAMES[char];
+  const named = UNSAFE_CHARACTER_NAMES.get(char);
   if (named) return named;
   return (char.codePointAt(0) ?? 0) > LAST_ASCII_CODE_POINT
     ? "a non-ASCII character"

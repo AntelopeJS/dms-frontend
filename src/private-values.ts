@@ -1,10 +1,23 @@
 import { UsageError } from "./config";
+import { isObjectLike, isText } from "./internal/guards";
 import type { FrontendModuleOptions, FrontendModuleValue } from "./workspace";
 
+type OptionValue = FrontendModuleValue | undefined;
+
+function isOptions(value: OptionValue): value is FrontendModuleOptions {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isContainer(
+  value: OptionValue,
+): value is FrontendModuleOptions | FrontendModuleValue[] {
+  return typeof value === "object" && value !== null;
+}
+
 function emptied(value: FrontendModuleValue): FrontendModuleValue {
-  if (typeof value === "string") return "";
+  if (isText(value)) return "";
   if (Array.isArray(value)) return value.map(emptied);
-  if (value !== null && typeof value === "object") return emptiedOptions(value);
+  if (isOptions(value)) return emptiedOptions(value);
   return value;
 }
 
@@ -27,17 +40,17 @@ export function emptiedOptions(
 }
 
 function filled(
-  shape: FrontendModuleValue,
-  value: FrontendModuleValue | undefined,
+  declared: FrontendModuleValue,
+  value: OptionValue,
 ): FrontendModuleValue {
-  if (typeof shape === "string") return typeof value === "string" ? value : "";
-  if (Array.isArray(shape))
-    return shape.map((item, index) =>
+  if (isText(declared)) return isText(value) ? value : "";
+  if (Array.isArray(declared))
+    return declared.map((item, index) =>
       filled(item, Array.isArray(value) ? value[index] : undefined),
     );
-  if (shape !== null && typeof shape === "object")
-    return filledOptions(shape, isOptions(value) ? value : undefined);
-  return shape;
+  if (isOptions(declared))
+    return filledOptions(declared, isOptions(value) ? value : undefined);
+  return declared;
 }
 
 /**
@@ -67,8 +80,14 @@ export interface UnfilledPrivateValue {
   path: string[];
 }
 
-function isOptions(value: unknown): value is FrontendModuleOptions {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isOptionsById(
+  value: unknown,
+): value is Record<string, FrontendModuleOptions> {
+  return (
+    isObjectLike(value) &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isOptions)
+  );
 }
 
 /**
@@ -87,7 +106,7 @@ export function parsePrivateOptions(
   } catch {
     given = undefined;
   }
-  if (!isOptions(given) || !Object.values(given).every(isOptions)) {
+  if (!isOptionsById(given)) {
     throw new UsageError({
       title: `${PRIVATE_OPTIONS_VARIABLE} is not a JSON object of options by module id`,
       fixes: [
@@ -95,25 +114,25 @@ export function parsePrivateOptions(
       ],
     });
   }
-  return given as Record<string, FrontendModuleOptions>;
+  return given;
 }
 
-function readPath(options: unknown, path: readonly string[]): unknown {
+function readPath(options: OptionValue, path: readonly string[]): OptionValue {
   let value = options;
   for (const key of path) {
-    if (typeof value !== "object" || value === null) return undefined;
+    if (!isContainer(value)) return undefined;
     if (!Object.prototype.hasOwnProperty.call(value, key)) return undefined;
-    value = (value as Record<string, unknown>)[key];
+    value = isOptions(value) ? value[key] : value[Number(key)];
   }
   return value;
 }
 
 function* emptyStrings(
-  value: unknown,
+  value: OptionValue,
   path: string[] = [],
 ): Generator<string[]> {
   if (value === "") yield path;
-  else if (typeof value === "object" && value !== null)
+  else if (isContainer(value))
     for (const [key, child] of Object.entries(value))
       yield* emptyStrings(child, [...path, key]);
 }
@@ -141,7 +160,7 @@ export function unfilledPrivateValues(
       .filter((path) => path.length > 0 && !isCovered(path))
       .filter((path) => {
         const value = readPath(given[module], path);
-        return typeof value !== "string" || value === "";
+        return !isText(value) || value === "";
       })
       .map((path) => ({ module, path })),
   );

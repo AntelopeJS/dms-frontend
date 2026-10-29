@@ -33,10 +33,7 @@ export interface WorkspaceRecord {
 }
 
 /** Reads every workspace the loader owns, with its size on disk. */
-export function readWorkspaceRecords(): {
-  records: WorkspaceRecord[];
-  skipped: string[];
-} {
+export function readWorkspaceRecords() {
   const { workspaces, skipped } = listWorkspaces();
   const records = workspaces.map((workspace): WorkspaceRecord => {
     const projectDir = projectDirFromWorkspaceKey(workspace.workspaceKey);

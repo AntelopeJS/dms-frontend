@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import {
   followModuleSet,
@@ -9,6 +8,7 @@ import {
   reportFrontendReadyOnceAnswered,
 } from "../src/module-set";
 import { OWN_PACKAGE } from "./helpers/own-package";
+import { addressOf } from "./helpers/net";
 
 interface RecordedRequest {
   method?: string;
@@ -70,7 +70,7 @@ describe("module set", () => {
       });
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
-    backendUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    backendUrl = `http://127.0.0.1:${addressOf(server).port}`;
   });
 
   after(() => server.close());
@@ -272,7 +272,7 @@ describe("reporting to a backend that is waking", () => {
       response.end();
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
-    backendUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    backendUrl = `http://127.0.0.1:${addressOf(server).port}`;
   });
 
   after(() => {

@@ -25,6 +25,8 @@ import {
 import { serverAuth } from "../templates/vue/server/auth-hooks.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
 import type { DmsServerSetup } from "../templates/vue/server-module";
+import { addressOf } from "./helpers/net";
+import { isNumber } from "./helpers/guards";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const ACCOUNT_ID = "0b5e7c2a-4d1f-4a8e-9c3b-2f6d8e1a7b40";
@@ -165,8 +167,7 @@ describe("Auth hook declarations", () => {
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((settle) => server.listen(0, "127.0.0.1", settle));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -335,7 +336,7 @@ describe("Auth hooks in the production server", () => {
       viaHook: true,
     });
     assert.equal(page.props.session.accountId, "account-1");
-    assert.equal(typeof page.props.session.updatedAt, "number");
+    assert.ok(isNumber(page.props.session.updatedAt));
     const [cookie] = response.headers.getSetCookie();
     const renewed = sessions.readSession({
       headers: { cookie: cookie.split(";", 1)[0] },
@@ -395,6 +396,6 @@ describe("Auth hooks in the production server", () => {
       headers: { cookie: cookie.split(";", 1)[0] },
     });
     assert.equal(written?.accessToken, "from-module");
-    assert.equal(typeof written?.updatedAt, "number");
+    assert.ok(isNumber(written?.updatedAt));
   });
 });

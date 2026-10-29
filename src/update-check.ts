@@ -10,6 +10,7 @@ import {
   wrapAfter,
   writeFeedback,
 } from "./output";
+import { isFlag, isNumber, isObjectLike, isText } from "./internal/guards";
 
 export const UPDATE_CHECK_PACKAGE = "@antelopejs/dms-frontend";
 
@@ -190,19 +191,26 @@ export function updateCheckCacheFile(): string {
   return join(DMS_FRONTEND_HOME, "update-check.json");
 }
 
+function isUpdateCheckCache(value: unknown): value is UpdateCheckCache {
+  return (
+    isObjectLike(value) &&
+    "checkedAt" in value &&
+    isNumber(value.checkedAt) &&
+    (!("latestVersion" in value) ||
+      value.latestVersion === undefined ||
+      isText(value.latestVersion)) &&
+    (!("succeeded" in value) ||
+      value.succeeded === undefined ||
+      isFlag(value.succeeded))
+  );
+}
+
 function readCache(file: string): UpdateCheckCache | undefined {
   try {
-    const parsed = JSON.parse(readFileSync(file, "utf-8"));
-    if (typeof parsed?.checkedAt !== "number") return undefined;
-    const latestVersion = parsed.latestVersion;
-    if (latestVersion !== undefined && typeof latestVersion !== "string") {
-      return undefined;
-    }
-    const succeeded = parsed.succeeded;
-    if (succeeded !== undefined && typeof succeeded !== "boolean") {
-      return undefined;
-    }
-    return { checkedAt: parsed.checkedAt, latestVersion, succeeded };
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf-8"));
+    if (!isUpdateCheckCache(parsed)) return undefined;
+    const { checkedAt, latestVersion, succeeded } = parsed;
+    return { checkedAt, latestVersion, succeeded };
   } catch {
     return undefined;
   }
@@ -277,8 +285,14 @@ export function fetchLatestVersionFromRegistry(
           });
           response.on("end", () => {
             try {
-              const version = JSON.parse(body)?.version;
-              settle(typeof version === "string" ? version : undefined);
+              const parsed: unknown = JSON.parse(body);
+              settle(
+                isObjectLike(parsed) &&
+                  "version" in parsed &&
+                  isText(parsed.version)
+                  ? parsed.version
+                  : undefined,
+              );
             } catch {
               settle();
             }

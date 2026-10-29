@@ -15,6 +15,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 import { readText } from "./helpers/files";
+import { addressOf } from "./helpers/net";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(REPOSITORY, "dist/index.js");
@@ -128,9 +129,7 @@ function serveManifest(
       res.end(JSON.stringify(manifest));
     });
     server.listen({ port: 0, host: "127.0.0.1" }, () => {
-      const address = server.address();
-      if (address === null || typeof address === "string")
-        throw new Error("No address");
+      const address = addressOf(server);
       settle({ server, url: `http://127.0.0.1:${address.port}` });
     });
   });

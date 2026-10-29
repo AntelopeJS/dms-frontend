@@ -15,6 +15,7 @@ import {
   canonicalizeBackendUrl,
   sha256Hex,
 } from "./config";
+import { isObjectLike, isText } from "./internal/guards";
 
 /** Marks a directory under the loader home as a workspace this CLI owns. */
 const WORKSPACE_META_FILE = ".ajs-dms-meta.json";
@@ -296,22 +297,20 @@ function readWorkspaceMeta(
   } catch {
     return undefined;
   }
-  const record = meta as {
-    backendUrl?: unknown;
-    workspaceKey?: unknown;
-    updatedAt?: unknown;
-  } | null;
+  const backendUrl =
+    isObjectLike(meta) && "backendUrl" in meta ? meta.backendUrl : undefined;
+  const workspaceKey =
+    isObjectLike(meta) && "workspaceKey" in meta
+      ? meta.workspaceKey
+      : undefined;
+  const updatedAt =
+    isObjectLike(meta) && "updatedAt" in meta ? meta.updatedAt : undefined;
   return {
-    backendUrl:
-      typeof record?.backendUrl === "string" ? record.backendUrl : undefined,
-    workspaceKey:
-      typeof record?.workspaceKey === "string"
-        ? record.workspaceKey
-        : undefined,
+    backendUrl: isText(backendUrl) ? backendUrl : undefined,
+    workspaceKey: isText(workspaceKey) ? workspaceKey : undefined,
     updatedAt:
-      typeof record?.updatedAt === "string" &&
-      !Number.isNaN(Date.parse(record.updatedAt))
-        ? new Date(record.updatedAt).toISOString()
+      isText(updatedAt) && !Number.isNaN(Date.parse(updatedAt))
+        ? new Date(updatedAt).toISOString()
         : undefined,
   };
 }

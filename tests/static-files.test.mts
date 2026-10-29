@@ -4,18 +4,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-
-interface StaticFiles {
-  serveStaticFile: (
-    file: string,
-    request: unknown,
-    response: unknown,
-    options: { immutable: boolean },
-  ) => void;
-}
-interface BuiltFiles {
-  publicBuildFile: (root: string, pathname: string) => string | undefined;
-}
+import { addressOf } from "./helpers/net";
 
 const FONT = Buffer.from("wOF2 font bytes");
 const SCRIPT = "export const probe = 1;\n".repeat(64);
@@ -29,9 +18,9 @@ describe("the files of the build", () => {
 
   before(async () => {
     const { serveStaticFile } =
-      (await import("../templates/vue/server/static-files.mjs")) as StaticFiles;
+      await import("../templates/vue/server/static-files.mjs");
     const { publicBuildFile } =
-      (await import("../templates/vue/server/built-files.mjs")) as BuiltFiles;
+      await import("../templates/vue/server/built-files.mjs");
     root = await mkdtemp(join(tmpdir(), "dms-static-files-"));
     await mkdir(join(root, "fonts"));
     await mkdir(join(root, "assets"));
@@ -55,8 +44,7 @@ describe("the files of the build", () => {
     await new Promise<void>((resolve) =>
       server!.listen(0, "127.0.0.1", resolve),
     );
-    const address = server.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(server);
     base = `http://127.0.0.1:${address.port}`;
   });
 

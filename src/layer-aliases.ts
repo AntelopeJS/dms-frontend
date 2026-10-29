@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { toPosixPath } from "./fs-sync";
+import { isText } from "./internal/guards";
 
 /** The subdirectory of a frontend module root that holds its layers. */
 export const MODULE_LAYERS_DIRNAME = "layers";
@@ -76,7 +77,7 @@ function readModuleLayers(moduleRoot: string): FrontendLayer[] {
 export function resolveFrontendLayers(
   moduleRoots: string | readonly string[],
 ): FrontendLayer[] {
-  const roots = typeof moduleRoots === "string" ? [moduleRoots] : moduleRoots;
+  const roots = isText(moduleRoots) ? [moduleRoots] : moduleRoots;
   const layers = new Map<string, FrontendLayer>();
   for (const root of roots) {
     for (const layer of readModuleLayers(root)) {

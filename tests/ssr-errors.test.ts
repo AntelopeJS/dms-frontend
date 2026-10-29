@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
+import { addressOf } from "./helpers/net";
 
 it("renders setup errors as HTTP errors without corrupting simultaneous successful SSR", async () => {
   const workspace = mkdtempSync(resolve(".ssr-errors-"));
@@ -137,8 +138,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
     );
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
+    const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     const { handleRequestSafely } = await import(
       pathToFileURL(join(workspace, "server.mjs")).href
@@ -147,8 +147,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     await new Promise<void>((resolve) =>
       frontend!.listen(0, "127.0.0.1", resolve),
     );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(frontend);
     const base = `http://127.0.0.1:${address.port}`;
     const [failed, healthy] = await Promise.all([
       fetch(`${base}/throws`, { headers: { accept: "text/html" } }),

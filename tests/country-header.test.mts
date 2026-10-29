@@ -1,14 +1,24 @@
 import assert from "node:assert/strict";
-import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import {
+  createServer,
+  type IncomingHttpHeaders,
+  type Server,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { join } from "node:path";
 import { after, afterEach, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { backend } from "../templates/vue/server/auth/backend.mjs";
 import { clientCountryHeader } from "../templates/vue/server/auth/client-ip.mjs";
 import "./fixtures/dms-backend-proxies.mts";
+import { addressOf } from "./helpers/net";
 
 interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
+  handleRequestSafely: (
+    request: IncomingMessage,
+    response: ServerResponse,
+  ) => Promise<void>;
 }
 
 const ENVIRONMENT = [
@@ -19,8 +29,7 @@ const ENVIRONMENT = [
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return `http://127.0.0.1:${address.port}`;
 }
 

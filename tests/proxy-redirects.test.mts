@@ -3,16 +3,13 @@ import { createServer, type Server } from "node:http";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { relayedLocation } from "../templates/vue/server/proxy-redirects.mjs";
 import "./fixtures/dms-backend-proxies.mts";
+import { addressOf } from "./helpers/net";
 
 /**
  * A backend redirect is the browser's to follow. Followed by the proxy, a
  * redirect to another site served that site's page, and its cookies, from
  * the dashboard's origin.
  */
-
-interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
-}
 
 interface ServedModules {
   url: string;
@@ -44,8 +41,7 @@ const UNPROXIED_URL = "/exports/report.pdf?token=signed";
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -95,8 +91,7 @@ describe("backend redirects", () => {
     ]);
     process.env.DMS_SESSION_SECRET ??=
       "a-test-only-session-secret-of-32-characters";
-    const runtime =
-      (await import("../templates/vue/server.mjs")) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     frontendUrl = await listen(frontend);
   });
