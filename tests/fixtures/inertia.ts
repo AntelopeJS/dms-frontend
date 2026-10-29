@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import { addressOf } from "../helpers/net";
 import "./dms-backend-proxies.mts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -83,4 +85,79 @@ export async function sessionCookie(
     .flat()
     .map((value) => value.split(";")[0])
     .join("; ");
+}
+
+export interface PagePropsTemplate {
+  sharedOnceKey: (session?: Record<string, unknown>) => string;
+  SHARED_PROP_TTL_MS: number;
+}
+
+export const pagePropsModule = import(
+  join(process.cwd(), "templates", "vue", "server", "page-props.mjs")
+) as Promise<PagePropsTemplate>;
+
+export const PAGE = {
+  route: { fullSlug: "/articles" },
+  layout: { id: "layout" },
+};
+export const SHARED = { siteLayout: { pages: {} }, isOwner: true };
+export const FRESH_SHARED = { siteLayout: { pages: {} }, isOwner: false };
+
+export async function frontendWithBackend() {
+  const backendCalls: string[] = [];
+  const backend = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://backend.local");
+    backendCalls.push(`${url.pathname}${url.search}`);
+    if (url.pathname === "/dms/sitelayout") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(FRESH_SHARED));
+      return;
+    }
+    if (url.searchParams.get("path") === "/auth/custom") {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end('{"message":"error.page_not_found"}');
+      return;
+    }
+    const omitShared = url.searchParams.get("shared") === "false";
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify(omitShared ? PAGE : { ...PAGE, shared: SHARED }),
+    );
+  });
+  await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
+  const address = addressOf(backend);
+  process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
+  const runtime = await server;
+  const frontend = createServer(runtime.handleRequestSafely);
+  await new Promise<void>((resolve) =>
+    frontend.listen(0, "127.0.0.1", resolve),
+  );
+  const frontendAddress = addressOf(frontend);
+  const base = `http://127.0.0.1:${frontendAddress.port}`;
+  const visit = async (path: string, headers: Record<string, string> = {}) => {
+    backendCalls.length = 0;
+    const response = await fetch(`${base}${path}`, {
+      headers: { "x-inertia": "true", ...headers },
+      redirect: "manual",
+    });
+    const page = (await response.json()) as {
+      props: Record<string, unknown>;
+      onceProps?: Record<string, { prop: string; expiresAt: number | null }>;
+    };
+    return { page, backendCalls: [...backendCalls] };
+  };
+  const close = () => {
+    frontend.close();
+    backend.close();
+  };
+  return { visit, close };
+}
+
+export function accountCookie(accountId: string): Promise<string> {
+  return sessionCookie({
+    accessToken: "access",
+    accountId,
+    activeTenantId: "tenant-1",
+    user: { id: accountId },
+  });
 }
