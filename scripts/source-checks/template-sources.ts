@@ -181,6 +181,12 @@ function templateDeclaresInertia(): Problem[] {
   );
 }
 
+function isStringList(value: unknown): value is string[] {
+  if (!Array.isArray(value)) return false;
+  for (const entry of value) if (typeof entry !== "string") return false;
+  return true;
+}
+
 /**
  * An empty crawl makes a cold page re-run the optimizer mid-request, which
  * answers 504 and forces a reload; the expression runs with the directory
@@ -193,7 +199,7 @@ function optimizerCrawlsEveryModule(): Problem[] {
   );
   if (!expression)
     return ["vite.config.ts does not compute the optimizer's entry points"];
-  const entries: string[] = runInNewContext(
+  const entries: unknown = runInNewContext(
     `(${expression[1]!.replaceAll("import.meta.dirname", "dirname")})`,
     {
       dirname: "/workspace",
@@ -203,6 +209,10 @@ function optimizerCrawlsEveryModule(): Problem[] {
       frontendSourceRoots: ["/workspace/frontend-modules/core/layers/ui"],
     },
   );
+  if (!isStringList(entries))
+    return [
+      "vite.config.ts computes optimizer entry points that are not a list of paths",
+    ];
   return [
     ...(entries.includes("/workspace/frontend-modules/core/dms.frontend.ts")
       ? []

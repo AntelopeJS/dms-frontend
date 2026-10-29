@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 
 type FilePath = string | URL;
 
-/** The UTF-8 text of a file the code under test wrote, or a fixture. */
+/** The UTF-8 text of a file the code under test wrote, a fixture, or a template read as the data a test executes. */
 export function readText(path: FilePath): string {
   return readFileSync(path, "utf8");
 }
