@@ -16,7 +16,8 @@ const MAX_AGE = 60 * 60 * 24 * 30;
  * session, each failing to decrypt the other's and signing the user out. The
  * suffix follows the backend, so a restart keeps the cookies it wrote.
  *
- * The scope is not a URL: the raw string still tells two backends apart.
+ * A `DMS_API_BASE_URL` that is not a URL is hashed as written: the raw string
+ * still tells two backends apart.
  */
 function cookieScope() {
   const backendUrl = (process.env.DMS_API_BASE_URL ?? "").trim();
