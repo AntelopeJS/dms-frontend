@@ -1,11 +1,5 @@
 import * as assert from "node:assert/strict";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -19,6 +13,7 @@ import { materializeLayers } from "../src/materialize";
 import { defineDmsFrontendBuild } from "../templates/vue/frontend-build";
 import { autoImportDirectories } from "../templates/vue/frontend-build-loader";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
+import { readText } from "./helpers/files";
 
 const BUILD_FILE = "dms.frontend.build.ts";
 
@@ -158,10 +153,7 @@ describe("The generated build declarations loader", () => {
     );
 
     writeFrontendModuleRegistry(workspace, layers);
-    const builds = readFileSync(
-      join(workspace, "frontend-builds.generated.ts"),
-      "utf8",
-    );
+    const builds = readText(join(workspace, "frontend-builds.generated.ts"));
     const billingId = registry.modules[0].id;
     assert.match(
       builds,
@@ -175,9 +167,8 @@ describe("The generated build declarations loader", () => {
     );
     assert.doesNotMatch(builds, /build1/);
     assert.deepEqual(
-      JSON.parse(
-        readFileSync(join(workspace, "frontend-paths.generated.json"), "utf8"),
-      ).compilerOptions.paths["#dms/frontend-build"],
+      JSON.parse(readText(join(workspace, "frontend-paths.generated.json")))
+        .compilerOptions.paths["#dms/frontend-build"],
       ["./frontend-build.ts"],
     );
   });
@@ -187,10 +178,7 @@ describe("The generated build declarations loader", () => {
     const layers = sources();
     writeFixture(layers[0].path, "dms.frontend.ts", "export default {};");
     writeFrontendModuleRegistry(workspace, layers);
-    const loader = readFileSync(
-      join(workspace, "frontend-modules.generated.ts"),
-      "utf8",
-    );
+    const loader = readText(join(workspace, "frontend-modules.generated.ts"));
     assert.match(
       loader,
       /\{ id: "[^"]+", name: "@acme\/billing-frontend", module: module0, options: /,

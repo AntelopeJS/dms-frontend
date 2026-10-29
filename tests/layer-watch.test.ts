@@ -3,7 +3,6 @@ import fs, {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -20,6 +19,7 @@ import {
   writeFrontendModuleRegistry,
 } from "../src/common";
 import { memoryUi } from "./fixtures/memory-ui";
+import { readText } from "./helpers/files";
 
 const memory = memoryUi();
 let written = "";
@@ -82,11 +82,9 @@ describe("locale catalogs in the dev layer watcher", () => {
   let stopWatchers: () => Promise<void> = async () => {};
 
   const catalog = (locale: string): Record<string, any> =>
-    JSON.parse(readFileSync(join(generated, `${locale}.json`), "utf8"));
+    JSON.parse(readText(join(generated, `${locale}.json`)));
   const emailLocales = (): string[] =>
-    JSON.parse(
-      readFileSync(join(workspace, "email-locales.generated.json"), "utf8"),
-    );
+    JSON.parse(readText(join(workspace, "email-locales.generated.json")));
   const mtime = (path: string): number => statSync(path).mtimeMs;
 
   before(() => {
@@ -147,10 +145,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     );
     // The higher-priority module still wins, as at materialization.
     assert.equal(catalog("en").form.owner, "app");
-    assert.match(
-      readFileSync(join(generated, "en.ts"), "utf8"),
-      /"demo_key":"Hello"/,
-    );
+    assert.match(readText(join(generated, "en.ts")), /"demo_key":"Hello"/);
     assert.deepEqual(emailLocales(), ["en", "fr"]);
   });
 
@@ -228,7 +223,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     assert.ok(existsSync(join(generated, "de.ts")));
     assert.deepEqual(emailLocales().sort(), ["de", "en", "fr"]);
     assert.match(
-      readFileSync(join(workspace, "locales.generated.ts"), "utf8"),
+      readText(join(workspace, "locales.generated.ts")),
       /"de": \(\) => import\("\.\/locales\.generated\/de"\)/,
     );
 
@@ -239,7 +234,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     assert.ok(!existsSync(join(generated, "de.ts")));
     assert.deepEqual(emailLocales(), ["en", "fr"]);
     assert.doesNotMatch(
-      readFileSync(join(workspace, "locales.generated.ts"), "utf8"),
+      readText(join(workspace, "locales.generated.ts")),
       /locales\.generated\/de/,
     );
   });
@@ -311,7 +306,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     await eventually(
       () =>
         writeFileSync(component, "<template><form novalidate /></template>\n"),
-      () => readFileSync(mirrored, "utf8").includes("novalidate"),
+      () => readText(mirrored).includes("novalidate"),
     );
     // Longer than the delay a regeneration waits for, had one been scheduled.
     await new Promise((resolve) => setTimeout(resolve, 300));
@@ -356,7 +351,7 @@ describe("derived outputs in the dev layer watcher", () => {
   ];
   let stopWatchers: () => Promise<void> = async () => {};
 
-  const read = (path: string): string => readFileSync(path, "utf8");
+  const read = (path: string): string => readText(path);
   const workspaceFile = (name: string): string => read(join(workspace, name));
   const typePaths = (): string[] =>
     Object.keys(
@@ -447,6 +442,7 @@ describe("derived outputs in the dev layer watcher", () => {
       () => rmSync(join(app, "public"), { recursive: true, force: true }),
       () => read(join(publicDir, "logo.svg")) === "<svg id='edited' />",
     );
+    assert.equal(read(join(publicDir, "logo.svg")), "<svg id='edited' />");
   });
 
   it("aggregates the shortcut registry a module adds, and drops it once removed", async () => {
@@ -685,6 +681,7 @@ describe("derived outputs in the dev layer watcher", () => {
             warning.includes("is not a valid locale file"),
           ),
       );
+      assert.equal(read(join(publicDir, "after-failure.txt")), "served");
     } finally {
       output.clear();
     }
@@ -755,13 +752,10 @@ describe("mirrorFiles", () => {
     const leaf = source("leaf.txt", "leaf");
     mirrorFiles(new Map([["entry", leaf]]), dest);
     mirrorFiles(new Map([[join("entry", "inner.txt"), leaf]]), dest);
-    assert.equal(
-      readFileSync(join(dest, "entry", "inner.txt"), "utf8"),
-      "leaf",
-    );
+    assert.equal(readText(join(dest, "entry", "inner.txt")), "leaf");
 
     mirrorFiles(new Map([["entry", leaf]]), dest);
-    assert.equal(readFileSync(join(dest, "entry"), "utf8"), "leaf");
+    assert.equal(readText(join(dest, "entry")), "leaf");
   });
 });
 
@@ -777,9 +771,7 @@ describe("a quiet dev run's layer watcher", () => {
   let stopWatchers: () => Promise<void> = async () => {};
 
   const catalog = (): Record<string, any> =>
-    JSON.parse(
-      readFileSync(join(workspace, "locales.generated", "en.json"), "utf8"),
-    );
+    JSON.parse(readText(join(workspace, "locales.generated", "en.json")));
 
   before(() => {
     writeFile(

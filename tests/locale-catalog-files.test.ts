@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import {
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -19,6 +18,7 @@ import {
   writeLocaleMessages,
 } from "../src/common";
 import { clientCodeSplitting } from "../templates/vue/client-chunking.mjs";
+import { readText } from "./helpers/files";
 
 interface ManifestChunk {
   file: string;
@@ -89,9 +89,7 @@ describe("generated locale catalogs", () => {
     // The email bundle resolves its fallback itself, from each locale's own
     // messages.
     assert.deepEqual(
-      JSON.parse(
-        readFileSync(join(workspace, "locales.generated", "fr.json"), "utf8"),
-      ),
+      JSON.parse(readText(join(workspace, "locales.generated", "fr.json"))),
       FRENCH,
     );
   });
@@ -157,7 +155,7 @@ describe("generated locale catalogs", () => {
       },
     });
     const manifest = JSON.parse(
-      readFileSync(join(outDir, ".vite", "manifest.json"), "utf8"),
+      readText(join(outDir, ".vite", "manifest.json")),
     ) as Record<string, ManifestChunk>;
     const entry = Object.values(manifest).find((chunk) => chunk.isEntry);
     assert.ok(entry, "the build has an entry");
@@ -165,7 +163,7 @@ describe("generated locale catalogs", () => {
       entry,
       ...(entry.imports ?? []).map((key) => manifest[key]!),
     ]
-      .map((chunk) => readFileSync(join(outDir, chunk.file), "utf8"))
+      .map((chunk) => readText(join(outDir, chunk.file)))
       .join("\n");
     assert.doesNotMatch(loadedFirst, /english-only-marker/);
     assert.doesNotMatch(loadedFirst, /Bonjour-french-marker/);

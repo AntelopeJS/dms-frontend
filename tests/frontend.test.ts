@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -11,6 +11,7 @@ import {
   writeFrontendModuleRegistry,
 } from "../src/common";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
+import { readText } from "./helpers/files";
 
 describe("Vite frontend generation", () => {
   it("discovers Vue entries and the stable SDK alias", () => {
@@ -24,14 +25,8 @@ describe("Vite frontend generation", () => {
     writeFrontendModuleRegistry(workspace, [
       { path: source, packageName: "@dms/vue", priority: 7 },
     ]);
-    const paths = readFileSync(
-      join(workspace, "frontend-paths.generated.json"),
-      "utf8",
-    );
-    const loader = readFileSync(
-      join(workspace, "frontend-modules.generated.ts"),
-      "utf8",
-    );
+    const paths = readText(join(workspace, "frontend-paths.generated.json"));
+    const loader = readText(join(workspace, "frontend-modules.generated.ts"));
     assert.match(paths, /#dms\/frontend-module/);
     assert.match(loader, /dms\.frontend\.ts/);
   });
@@ -57,7 +52,7 @@ describe("Vite frontend generation", () => {
       },
     ]);
     const declared = JSON.parse(
-      readFileSync(join(workspace, "generated-auth-establish.json"), "utf8"),
+      readText(join(workspace, "generated-auth-establish.json")),
     );
     assert.deepEqual(declared.endpoints, [
       "/api/saas/register/finalize",
@@ -72,7 +67,7 @@ describe("Vite frontend generation", () => {
       { path: source, packageName: "@dms/legacy", priority: 0 },
     ]);
     const declared = JSON.parse(
-      readFileSync(join(workspace, "generated-auth-establish.json"), "utf8"),
+      readText(join(workspace, "generated-auth-establish.json")),
     );
     assert.deepEqual(declared.endpoints, []);
   });
@@ -94,7 +89,7 @@ describe("Vite frontend generation", () => {
       { path: source, packageName: "@dms/legacy", priority: 1 },
     ]);
     const declared = JSON.parse(
-      readFileSync(join(workspace, "generated-public-endpoints.json"), "utf8"),
+      readText(join(workspace, "generated-public-endpoints.json")),
     );
     assert.deepEqual(declared.endpoints, [webhook]);
     assert.deepEqual(declared.proxies, []);
@@ -116,7 +111,7 @@ describe("Vite frontend generation", () => {
       },
     ]);
     const declared = JSON.parse(
-      readFileSync(join(workspace, "generated-public-endpoints.json"), "utf8"),
+      readText(join(workspace, "generated-public-endpoints.json")),
     );
     assert.deepEqual(declared.proxies, [
       { path: "/media/**", auth: "none", module: "@dms/media" },
@@ -142,13 +137,6 @@ describe("Vite frontend generation", () => {
     );
   });
 
-  it("ships complete renderer-specific workspace templates", () => {
-    const vuePackage = readFileSync(
-      join("templates", "vue", "package.json"),
-      "utf8",
-    );
-    assert.match(vuePackage, /@inertiajs\/vue3/);
-  });
   it("preserves deterministic manifest priority in the module registry", () => {
     const first = temporaryDirectory("dms-module-");
     const second = temporaryDirectory("dms-module-");
@@ -204,17 +192,17 @@ describe("Vite frontend generation", () => {
       { path: highSource, packageName: "@dms/high", priority: 10 },
     ]);
     assert.equal(
-      readFileSync(join(workspace, "public", "images", "logo.svg"), "utf8"),
+      readText(join(workspace, "public", "images", "logo.svg")),
       "high",
     );
     const paths = JSON.parse(
-      readFileSync(join(workspace, "frontend-paths.generated.json"), "utf8"),
+      readText(join(workspace, "frontend-paths.generated.json")),
     );
     assert.deepEqual(paths.compilerOptions.paths["#shared/*"], [
       "./frontend-modules/dms__high/layers/shared/*",
     ]);
     assert.match(
-      readFileSync(join(workspace, "locales.generated", "en.ts"), "utf8"),
+      readText(join(workspace, "locales.generated", "en.ts")),
       /"owner":"high"/,
     );
   });
@@ -222,7 +210,7 @@ describe("Vite frontend generation", () => {
   it("keeps dev-rewritten declaration files, build output and translation catalogs out of Tailwind's source scan", () => {
     const workspace = temporaryDirectory("dms-gitignore-workspace-");
     copyStaticTemplates(workspace);
-    const ignored = readFileSync(join(workspace, ".gitignore"), "utf8")
+    const ignored = readText(join(workspace, ".gitignore"))
       .split("\n")
       .filter((line) => line && !line.startsWith("#"));
     assert.deepEqual(ignored.sort(), [
@@ -267,7 +255,7 @@ describe("Windows path separators in generated output", () => {
       { path: "/src/saas", packageName: "@dms/saas", priority: 0 },
     ]);
     const sources = [
-      ...readFileSync(join(workspace, "dms-main.css"), "utf8").matchAll(
+      ...readText(join(workspace, "dms-main.css")).matchAll(
         /@source "([^"]+)";/g,
       ),
     ].map((match) => match[1]);

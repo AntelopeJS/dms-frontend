@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import {
   mkdirSync,
   mkdtempSync,
-  readdirSync,
-  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -25,6 +23,7 @@ import {
   ENTRY_WEIGHT_FILE,
   recordEntryWeight,
 } from "../templates/vue/entry-weight.mjs";
+import { readText, readBytes, listNames } from "./helpers/files";
 
 const roots: string[] = [];
 after(() => {
@@ -101,10 +100,10 @@ describe("the client entry's weight by module", () => {
   it("records, from the client build, what each module's sources add to the entry", async () => {
     const root = await buildFixture();
     const recorded = JSON.parse(
-      readFileSync(join(root, "dist", "client", ENTRY_WEIGHT_FILE), "utf8"),
+      readText(join(root, "dist", "client", ENTRY_WEIGHT_FILE)),
     );
     const entrySize = recorded.files
-      .map((file: string) => readFileSync(join(root, "dist", "client", file)))
+      .map((file: string) => readBytes(join(root, "dist", "client", file)))
       .reduce((sum: number, code: Buffer) => sum + code.length, 0);
     assert.equal(recorded.bytes, entrySize);
     // The heavy module's gallery is in the entry, the light one's is not.
@@ -112,7 +111,7 @@ describe("the client entry's weight by module", () => {
     assert.ok((recorded.owners["@acme/light"] ?? 0) < 1_000);
     assert.ok(recorded.owners.shared > 8_000, "the rest is shared code");
     assert.deepEqual(
-      readdirSync(join(root, "dist", "client", "assets")).filter((file) =>
+      listNames(join(root, "dist", "client", "assets")).filter((file) =>
         file.endsWith(".map"),
       ),
       [],
@@ -124,7 +123,7 @@ describe("the client entry's weight by module", () => {
     assert.equal(weight.shares[0]?.owner, "@acme/heavy");
     const brotli = recorded.files
       .map((file: string) =>
-        brotliCompressSync(readFileSync(join(root, "dist", "client", file))),
+        brotliCompressSync(readBytes(join(root, "dist", "client", file))),
       )
       .reduce((sum: number, code: Buffer) => sum + code.length, 0);
     assert.ok(Math.abs(weight.brotli - brotli) <= 16, "Brotli of the entry");

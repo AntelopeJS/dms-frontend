@@ -1,23 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
 import {
   followModuleSet,
   moduleSetFingerprint,
   reportFrontendReady,
   reportFrontendReadyOnceAnswered,
 } from "../src/module-set";
-
-const ownVersion: string = JSON.parse(
-  readFileSync(
-    resolve(dirname(fileURLToPath(import.meta.url)), "../package.json"),
-    "utf8",
-  ),
-).version;
+import { OWN_PACKAGE } from "./helpers/own-package";
 
 interface RecordedRequest {
   method?: string;
@@ -126,12 +117,14 @@ describe("module set", () => {
     { timeout: 2000 },
     async () => {
       served = [dmsModule];
+      let changes = 0;
       const changed = new Promise<void>((resolve) => {
         const stop = followModuleSet({
           backendUrl,
           fingerprint: moduleSetFingerprint([dmsModule]),
           intervalMs: 20,
           onChange: () => {
+            changes += 1;
             stop();
             resolve();
           },
@@ -141,6 +134,7 @@ describe("module set", () => {
         { ...dmsModule, publicEndpoints: [{ path: "/api/tracker/beacon" }] },
       ];
       await changed;
+      assert.equal(changes, 1);
       served = [dmsModule];
     },
   );
@@ -247,7 +241,7 @@ describe("module set", () => {
         { name: dmsModule.name, version: "0.9.8" },
         { name: "unversioned" },
       ],
-      version: ownVersion,
+      version: OWN_PACKAGE.version,
     });
   });
 

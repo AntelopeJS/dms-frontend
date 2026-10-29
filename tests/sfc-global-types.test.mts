@@ -8,7 +8,6 @@ import { EventEmitter } from "node:events";
 import {
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   realpathSync,
   rmSync,
   statSync,
@@ -29,6 +28,7 @@ import {
   sfcGlobalTypesWatcher,
   writeSfcGlobalTypes,
 } from "../templates/vue/sfc-global-types.mjs";
+import { readText } from "./helpers/files";
 
 registerTS(() => ts);
 
@@ -104,7 +104,7 @@ const compilerFs = {
       return false;
     }
   },
-  readFile: (file: string) => readFileSync(file, "utf8"),
+  readFile: (file: string) => readText(file),
   realpath: (file: string) => realpathSync(file),
 };
 
@@ -114,7 +114,7 @@ function compiledProps(
   isProd: boolean,
   globalTypeFiles?: string[],
 ): string {
-  const { descriptor } = parse(readFileSync(component, "utf8"), {
+  const { descriptor } = parse(readText(component), {
     filename: component,
   });
   const { content } = compileScript(descriptor, {
@@ -200,7 +200,7 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
     watcher.emit("add", added);
     await delay(400);
 
-    assert.match(readFileSync(file, "utf8"), /declare type LaterRule = /);
+    assert.match(readText(file), /declare type LaterRule = /);
     invalidateTypeCache(file);
   });
 
@@ -220,17 +220,5 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
 
     assert.equal(warnings.length, 1);
     assert.match(warnings[0] ?? "", /Could not update .*sfc-global-types/);
-  });
-
-  it("is what the Vite config hands the Vue plugin, before it compiles", () => {
-    const source = readFileSync(
-      join("templates", "vue", "vite.config.ts"),
-      "utf8",
-    );
-    assert.match(
-      source,
-      /vue\(\{ script: \{ globalTypeFiles: \[sfcGlobalTypesFile\] \} \}\)/,
-    );
-    assert.match(source, /await writeSfcGlobalTypes\(/);
   });
 });

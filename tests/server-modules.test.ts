@@ -3,7 +3,6 @@ import {
   cpSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   realpathSync,
   rmSync,
   statSync,
@@ -34,6 +33,7 @@ import {
   type DmsServerSetup,
   defineDmsServer,
 } from "../templates/vue/server-module";
+import { readText } from "./helpers/files";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const SERVER_ENTRY = "dms.server.ts";
@@ -389,10 +389,7 @@ describe("The generated server modules loader", () => {
         ],
       );
       writeFrontendModuleRegistry(workspace, layers);
-      const loader = readFileSync(
-        join(workspace, "server-modules.generated.ts"),
-        "utf8",
-      );
+      const loader = readText(join(workspace, "server-modules.generated.ts"));
       assert.match(
         loader,
         /import server0 from "\.\/frontend-modules\/acme__auth-frontend\/dms\.server\.ts";/,
@@ -403,16 +400,12 @@ describe("The generated server modules loader", () => {
       );
       assert.doesNotMatch(loader, /server1/);
       assert.deepEqual(
-        JSON.parse(
-          readFileSync(
-            join(workspace, "frontend-paths.generated.json"),
-            "utf8",
-          ),
-        ).compilerOptions.paths["#dms/server"],
+        JSON.parse(readText(join(workspace, "frontend-paths.generated.json")))
+          .compilerOptions.paths["#dms/server"],
         ["./server-module.ts"],
       );
       const optionsFile = join(workspace, "generated-server-options.json");
-      assert.deepEqual(JSON.parse(readFileSync(optionsFile, "utf8")).modules, {
+      assert.deepEqual(JSON.parse(readText(optionsFile)).modules, {
         "acme__auth-frontend": { oauth: { relaySecret: "relay" } },
       });
       if (process.platform !== "win32")

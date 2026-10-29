@@ -1,18 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { materializeLayers, writeFrontendModuleRegistry } from "../src/common";
+import { listNames, readBytes, readText } from "./helpers/files";
+import { copyEmailRendererFiles } from "./helpers/templates";
 
 type LocaleMessages = Record<string, unknown>;
 
@@ -108,22 +102,12 @@ const { t } = useI18n();
       const { fallback, ...own } = browserMessages;
       assert.deepEqual(
         JSON.parse(
-          readFileSync(
-            join(workspace, "locales.generated", `${locale}.json`),
-            "utf8",
-          ),
+          readText(join(workspace, "locales.generated", `${locale}.json`)),
         ),
         locale === "en" ? { ...own, fallback } : own,
       );
     }
-    for (const file of readdirSync("templates/vue").filter(
-      (name) =>
-        name.startsWith("email-") ||
-        name === "public-options.ts" ||
-        name === "vite.email.config.ts",
-    )) {
-      cpSync(join("templates/vue", file), join(workspace, file));
-    }
+    copyEmailRendererFiles(workspace);
     execFileSync(
       process.execPath,
       [
@@ -141,22 +125,22 @@ const { t } = useI18n();
     rmSync(join(workspace, "dist"), { recursive: true });
     rmSync(join(workspace, "locales.generated"), { recursive: true });
     const manifest = JSON.parse(
-      readFileSync(join(output, ".vite/manifest.json"), "utf8"),
+      readText(join(output, ".vite/manifest.json")),
     ) as Record<string, { file: string }>;
     const javascript = [
       ...new Set(Object.values(manifest).map((entry) => entry.file)),
     ]
       .filter((file) => file.endsWith(".js"))
-      .map((file) => readFileSync(join(output, file), "utf8"))
+      .map((file) => readText(join(output, file)))
       .join("\n");
     assert.ok(
       Buffer.byteLength(javascript) < 262144,
       `Email code grew to ${Buffer.byteLength(javascript)} bytes with unrelated translations`,
     );
     assert.doesNotMatch(javascript, /UNRELATED_APPLICATION_TRANSLATION/);
-    const dataBytes = readdirSync(join(output, "locales")).reduce(
+    const dataBytes = listNames(join(output, "locales")).reduce(
       (total, file) =>
-        total + readFileSync(join(output, "locales", file)).byteLength,
+        total + readBytes(join(output, "locales", file)).byteLength,
       0,
     );
     assert.ok(
@@ -167,7 +151,7 @@ const { t } = useI18n();
       `Email JavaScript: ${Buffer.byteLength(javascript)} bytes; complete locale data: ${dataBytes} bytes`,
     );
     const germanPath = join(output, "locales/de.json");
-    const german = readFileSync(germanPath);
+    const german = readBytes(germanPath);
     writeFileSync(
       germanPath,
       "invalid JSON: must not be read by an English or French render",

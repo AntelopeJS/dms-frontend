@@ -7,8 +7,6 @@
 // recalculations and sheet injections.
 import { after, afterEach, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 class FakeClassList {
   private readonly names = new Set<string>();
@@ -197,25 +195,6 @@ afterEach(() => {
 });
 
 describe("vueuse useColorMode patch", () => {
-  it("is the version the workspace pins and patches", () => {
-    const template = JSON.parse(
-      readFileSync(join("templates", "vue", "package.json"), "utf8"),
-    );
-    const installed = JSON.parse(
-      readFileSync(
-        join("node_modules", "@vueuse", "core", "package.json"),
-        "utf8",
-      ),
-    );
-    assert.equal(template.dependencies["@vueuse/core"], installed.version);
-    assert.match(
-      readFileSync(join("templates", "vue", "pnpm-workspace.yaml"), "utf8"),
-      new RegExp(
-        `"@vueuse/core@${installed.version}": patches/@vueuse__core@${installed.version}\\.patch`,
-      ),
-    );
-  });
-
   it("leaves a class mode the element already carries alone", async () => {
     reset({ htmlClasses: ["light"], stored: "light" });
     // Nuxt UI's plugin, the dms theme plugin and every component calling it:

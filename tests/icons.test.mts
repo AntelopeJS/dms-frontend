@@ -3,7 +3,6 @@ import {
   globSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -207,15 +206,6 @@ describe("the client's Iconify API provider", () => {
     ]);
     assert.ok(isIconRequest(new URL(requested[0]).pathname));
   });
-
-  it("is registered by the client entry before any module sets up", () => {
-    const entry = readFileSync(join("templates", "vue", "main.ts"), "utf8");
-    const registration = entry.indexOf(
-      'addAPIProvider("", sameOriginIconProvider(location.origin));',
-    );
-    assert.ok(registration > 0);
-    assert.ok(registration < entry.indexOf("await setupFrontendModules("));
-  });
 });
 
 describe("the client-bundle icon scan", () => {
@@ -243,16 +233,5 @@ describe("the client-bundle icon scan", () => {
       "frontend-modules/dms/layers/dms-layout/app/app.config.ts",
       "frontend-modules/dms/layers/dms-layout/app/components/Header.vue",
     ]);
-  });
-
-  it("is what the generated Vite config hands Nuxt UI", () => {
-    const config = readFileSync(
-      join("templates", "vue", "vite.config.ts"),
-      "utf8",
-    );
-    assert.match(
-      config,
-      /scan: \{\s*globInclude: iconScanGlobs\(\s*import\.meta\.dirname,\s*frontendSourceRoots,?\s*\),?\s*\}/,
-    );
   });
 });

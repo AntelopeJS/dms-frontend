@@ -1,12 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -15,6 +8,7 @@ import {
   isServerSource,
   rejectServerSourcesInClient,
 } from "../templates/vue/client-server-guard.mjs";
+import { readText, listTree } from "./helpers/files";
 
 const SECRET_MARKER = "server-only-secret-marker";
 
@@ -65,9 +59,9 @@ async function buildClient(
 }
 
 function builtJavascript(root: string): string {
-  return readdirSync(join(root, "dist"), { recursive: true, encoding: "utf8" })
+  return listTree(join(root, "dist"))
     .filter((file) => /\.m?js$/.test(file))
-    .map((file) => readFileSync(join(root, "dist", file), "utf8"))
+    .map((file) => readText(join(root, "dist", file)))
     .join("\n");
 }
 

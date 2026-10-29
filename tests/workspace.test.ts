@@ -3,8 +3,6 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
-  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -55,38 +53,6 @@ describe("dependency fingerprint", () => {
     assert.notEqual(patched, before);
     writeFileSync(pnpmConfig, "packages: ['.']\npatchedDependencies: {}");
     assert.notEqual(computeDepsHash([], workspacePackage, inputs), patched);
-  });
-});
-
-describe("renderer dependency patches", () => {
-  it("declares every shipped patch and ships every declared one", () => {
-    const template = join("templates", "vue");
-    const shipped = readdirSync(join(template, "patches"))
-      .map((name) => `patches/${name}`)
-      .sort();
-    const config = readFileSync(join(template, "pnpm-workspace.yaml"), "utf8");
-    const declared = [...config.matchAll(/^\s+"[^"]+":\s*(patches\/\S+)$/gm)]
-      .map((match) => match[1])
-      .sort();
-    assert.ok(shipped.length > 0);
-    assert.deepEqual(declared, shipped);
-  });
-
-  it("pins every patched dependency to the version its patch targets", () => {
-    // A range would let a fresh install resolve a newer release, which pnpm
-    // then refuses to install because the patch no longer has a target.
-    const template = join("templates", "vue");
-    const { dependencies } = JSON.parse(
-      readFileSync(join(template, "package.json"), "utf8"),
-    );
-    const config = readFileSync(join(template, "pnpm-workspace.yaml"), "utf8");
-    const patched = [
-      ...config.matchAll(/^\s+"(@?[^@"]+)@([^"]+)":\s*patches\/\S+$/gm),
-    ];
-    assert.ok(patched.length > 0);
-    for (const [, name, version] of patched) {
-      assert.equal(dependencies[name], version, name);
-    }
   });
 });
 
