@@ -46,9 +46,9 @@ export interface EntryWeight {
 }
 
 /**
- * The Brotli size the server serves a built file with.
- *
- * compress-assets leaves out files too small to gain from it.
+ * The Brotli size the server serves a built file with: the `.br` file beside
+ * it, or the size it compresses to when compress-assets left it out as too
+ * small to gain from it.
  */
 function brotliSize(file: string): number {
   const compressed = `${file}.br`;

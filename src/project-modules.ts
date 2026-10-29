@@ -324,7 +324,10 @@ export function readShippingVersion(sourcePath: string): string | undefined {
   }
 }
 
-/** A build is deployed, whatever a module returns: no secret is written. */
+/**
+ * The layer a module registration resolves to. A build is deployed, whatever a
+ * module returns: its private options are emptied and no secret is written.
+ */
 function toLayer(registration: FrontendRegistration): ResolvedLayer {
   const name = readLayerPackage(registration.sourcePath)?.name;
   return {

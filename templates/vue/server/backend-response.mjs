@@ -25,6 +25,10 @@ export class BackendResponseError extends Error {
   }
 }
 
+/**
+ * The refusal code in a backend answer: the string or the `message` of its
+ * JSON body, or the body itself when it is not JSON (a bare code).
+ */
 async function refusalCode(response) {
   const text = (await response.text().catch(() => "")).trim();
   if (text.length > REFUSAL_CODE_MAX_LENGTH) return undefined;

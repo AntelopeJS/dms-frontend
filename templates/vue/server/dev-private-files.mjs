@@ -10,7 +10,8 @@ const FORBIDDEN_STATUS = 403;
 
 /**
  * Vite's `server.fs.deny` for the development server: Vite's own defaults,
- * which a `deny` list replaces, and the private files.
+ * which a `deny` list replaces, and the private files: the generated secrets
+ * and the modules' server code are never served.
  */
 export const DEV_FS_DENY = [
   ".env",

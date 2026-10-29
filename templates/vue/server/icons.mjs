@@ -39,6 +39,10 @@ function collectionSpecifiers(prefix) {
   ];
 }
 
+/**
+ * The file of an icon collection from the first source installed under its
+ * name; a source not installed is skipped and the next one tried.
+ */
 function resolveCollectionFile(root, prefix) {
   const require = createRequire(join(root, "package.json"));
   for (const specifier of collectionSpecifiers(prefix)) {

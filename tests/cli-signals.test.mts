@@ -97,6 +97,7 @@ function startCli({
   return { pid: cli.pid!, exited, output: () => output, tree };
 }
 
+/** Calls `probe` until it returns a value; a probe that throws is not ready yet. */
 async function waitFor<T>(
   probe: () => T | undefined,
   context: () => string = () => "",

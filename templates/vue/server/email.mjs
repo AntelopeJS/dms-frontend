@@ -61,7 +61,8 @@ function renderFinished() {
  * Build the email bundle now and again on every template change, for
  * development: only the production build otherwise produces it. The builder
  * runs in a child process at low priority, so the dev server keeps answering
- * while it works.
+ * while it works. Lowering the priority is skipped where the platform does not
+ * permit it: the build then runs at normal priority.
  */
 export function watchEmailBundle() {
   emailBuildStarted();
