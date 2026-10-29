@@ -1,8 +1,3 @@
-// A path that leaves Node's filesystem APIs and becomes text — a module
-// specifier, a glob, a CSS directive — has to be POSIX. These tests pin that
-// down from a POSIX host: the failure is a property of the string, not of the
-// platform running it, so a Windows-shaped path can be fed in deliberately.
-
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runInNewContext } from "node:vm";
@@ -37,7 +32,6 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
     "const session = useDmsUserSession();",
     "/workspace/frontend-modules/dms__ai/app/plugins/ai.client.ts",
   );
-  // Vite 8 types `code` as a string or a Rolldown magic string.
   const code = typeof result === "string" ? result : result?.code;
   const emitted = typeof code === "string" ? code : String(code ?? "");
   const literal = emitted.match(/from\s+('[^']*'|"[^"]*")/)?.[1];
@@ -53,8 +47,6 @@ describe("Windows paths inlined into generated code", () => {
       WINDOWS_MODULE_PATH,
       "the key is inlined verbatim into a quoted string, so its backslashes are read as escapes",
     );
-    // The exact shape of the reported resolution failure: the separators are
-    // gone and `\f` has become a form feed in front of the filename.
     assert.match(specifier, /^C:UsersMwesto\.antelopejs/);
     assert.ok(specifier.endsWith("\frontend-module.ts"));
   });
@@ -67,7 +59,6 @@ describe("Windows paths inlined into generated code", () => {
   });
 
   it("leaves POSIX paths and globs untouched", () => {
-    // The whole fix is a no-op on Linux and macOS, and stays one.
     for (const path of [
       "/home/dev/.antelopejs/dms-frontend/a27ff4d5/frontend-module.ts",
       "/home/dev/workspace/frontend-modules/dms__ai/app/**/*.vue",

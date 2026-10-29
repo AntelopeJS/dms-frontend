@@ -1,8 +1,3 @@
-// Watching the layer sources in dev and mirroring their changes into the
-// materialized workspace.
-//
-// Split out of common.ts, which stays the barrel every command imports from.
-
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { getProcessUi, isQuietRun, type Ui } from "@antelopejs/core/cli";
@@ -33,10 +28,6 @@ import {
   sanitizedBuildDeclaration,
   sanitizedPackageContent,
 } from "./fs-sync";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 /**
  * Quiet time after the last watcher event, of any layer, before the pass that
@@ -103,6 +94,18 @@ function createSyncFailures(src: string, reporter: WatchReporter) {
  * during editor saves and re-materialize) never leaves the workspace tree
  * transiently missing a file the Vite importer is mid-scan over. A pass may
  * apply a layer's changes in two rounds (see `runPass`), each in that order.
+ *
+ * Each file is isolated: one racing the pass (deleted between the `existsSync`
+ * guard and the copy, or a locked destination on Windows) must not abort the
+ * rest of the batch, and must not escape as an uncaught exception out of the
+ * `setTimeout(flush)` callback, which would crash the dev process (there is no
+ * global uncaughtException handler). The failure is logged and the pass
+ * continues.
+ *
+ * `package.json` is gated on its stripped bytes: the destination holds the
+ * post-stripped form, so a plain copy would always rewrite it (the source still
+ * has its scripts) and churn the destination mtime. The frontend build
+ * declaration is likewise compared in its rewritten form.
  */
 function createLayerSync(
   src: string,
@@ -131,27 +134,17 @@ function createLayerSync(
     return taken;
   };
 
-  // Per-entry isolation: a single file racing the pass (deleted between the
-  // existsSync guard and the copy, or a locked dest on Windows) must not abort
-  // the rest of the batch — and crucially must not escape as an uncaught
-  // exception out of the setTimeout(flush) callback, which would crash the dev
-  // process (there is no global uncaughtException handler). Log and continue.
-
   const upsert = (rel: string): void => {
     try {
       const srcPath = join(src, rel);
-      if (!existsSync(srcPath)) return; // vanished before the pass
+      if (!existsSync(srcPath)) return;
       const destPath = join(dest, rel);
       if (rel === "package.json") {
-        // dest is the post-stripped form, so applyFile would always copy
-        // (src still has its scripts); gate on the stripped bytes instead so
-        // an unchanged package.json doesn't churn the dest mtime.
         applyContent(
           sanitizedPackageContent(readFileSync(srcPath, "utf-8")),
           destPath,
         );
       } else if (rel === FRONTEND_BUILD_ENTRY) {
-        // The workspace holds the rewritten form, see the function.
         applyContent(
           sanitizedBuildDeclaration(readFileSync(srcPath, "utf-8")),
           destPath,
@@ -167,7 +160,7 @@ function createLayerSync(
 
   const remove = (rel: string, recursive: boolean): void => {
     try {
-      if (existsSync(join(src, rel))) return; // re-created; keep
+      if (existsSync(join(src, rel))) return;
       const destPath = join(dest, rel);
       if (existsSync(destPath)) rmSync(destPath, { recursive, force: true });
       failures.applied(rel);
@@ -254,12 +247,13 @@ function describeOutputFailure(
 /**
  * The warning for layer directories added or removed while dev runs, which
  * only a restart applies.
+ *
+ * A new `layers/extra` brings `layers` with it, so only the layer is named.
  */
 function describeLayerDirectories(
   paths: string[],
   reporter: WatchReporter,
 ): string {
-  // A new `layers/extra` brings `layers` with it: name the layer only.
   const layers = [...new Set(paths)].filter(
     (path) => !paths.some((other) => other.startsWith(`${path}${sep}`)),
   );
@@ -282,6 +276,13 @@ function describeLayerDirectories(
  *
  * A regeneration that fails leaves the previous output in place and says so;
  * the one that succeeds next says the failure is over.
+ *
+ * Same reason as the layer sync's: a file saved half-written, a catalog for
+ * instance, must not take the dev process down. The previous output stays in
+ * place.
+ *
+ * The registry is built again because a module may have added or removed its
+ * entry since.
  */
 function createDerivedOutputRefresher(
   workspaceDir: string,
@@ -321,9 +322,6 @@ function createDerivedOutputRefresher(
       if (isChanged) noticeRestart(output, paths);
       return isChanged;
     } catch (err) {
-      // Same reason as the layer sync's: a file saved half-written, a catalog
-      // for instance, must not take the dev process down. The previous
-      // output stays in place.
       fail(output, describeOutputFailure(output, err, reporter));
       return false;
     }
@@ -331,7 +329,6 @@ function createDerivedOutputRefresher(
 
   const buildRegistry = (): FrontendModuleRegistry | undefined => {
     try {
-      // Built again: a module may have added or removed its entry since.
       const registry = createFrontendModuleRegistry(workspaceDir, layers);
       recover("registry");
       return registry;
@@ -476,6 +473,9 @@ function createPassScheduler(pass: () => boolean) {
  * the module loader, the app configs and the type paths): the app reads
  * those, never a module's own copy, so a pass that touches their sources
  * regenerates them (see `createDerivedOutputRefresher` and `runPass`).
+ *
+ * The watched layers are their own sources: workspace paths in messages name
+ * the files the user edits.
  */
 export function startLayerWatchers(
   workspaceDir: string,
@@ -484,8 +484,6 @@ export function startLayerWatchers(
   write: (text: string) => void = writeFeedback,
   isQuiet: boolean = isQuietRun(),
 ): () => Promise<void> {
-  // The watched layers are their own sources: workspace paths in messages
-  // name the files the user edits.
   const mapPath: PathMapper = createPathMapper(
     workspaceDir,
     layers.map((layer) => ({ ...layer, sourcePath: layer.path })),
@@ -538,7 +536,3 @@ export function startLayerWatchers(
     passes.flushNow();
   };
 }
-
-// ============================================================================
-// Directory Sync Utilities (for ZIP extract preserving mode)
-// ============================================================================

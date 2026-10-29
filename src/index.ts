@@ -156,25 +156,40 @@ function unknownHelpSubject(
   return known.includes(subject) ? undefined : subject;
 }
 
+/**
+ * The project environment loads before anything reads it: every command
+ * option binds to an environment variable that Commander resolves while
+ * parsing, the commands are constructed only afterwards, and each child
+ * process inherits `process.env` as it stands there.
+ *
+ * The update lookup starts before the command so it has the whole command to
+ * answer in; its registry socket is unref'd, so a short command never waits
+ * for it. Its notice is reported last, and only after a success: a failure
+ * ends on its own problem.
+ *
+ * `--no-color` and the verbosity flags are read by the core output module
+ * straight from the command line and the environment; they are declared so
+ * Commander accepts them after a command name.
+ *
+ * `--no-update-check` is registered for `--help` only:
+ * `stripUpdateCheckFlag` removes it before Commander parses, so it is also
+ * accepted after a subcommand name.
+ *
+ * The commands leave their exit code in `process.exitCode`; exiting right
+ * after stops whatever a finished command may leave behind, such as the
+ * update lookup.
+ */
 const runCLI = async () => {
   exitOnBrokenPipe();
-  // Before anything reads the environment: every command option binds to an
-  // environment variable that Commander resolves while parsing, the commands
-  // below are only constructed after this point, and each child process the
-  // CLI spawns inherits `process.env` as it stands here.
   loadProjectEnv();
 
   const argv = process.argv.slice(2);
 
-  // Before the command, so the lookup has all of it to answer in; the
-  // registry socket is unref'd, so a short command never waits for it.
   startProcessUpdateCheck({ currentVersion: version, argv });
 
   const program = new Command()
     .name("ajs dms")
     .version(version, "-v, --version", "Print the version")
-    // Read by the core output module straight from the command line and the
-    // environment; declared so Commander accepts them after a command name.
     .option("--no-color", "Disable colors (also NO_COLOR=1)")
     .option(
       `${VERBOSE_FLAG} [=channels]`,
@@ -184,8 +199,6 @@ const runCLI = async () => {
       "-q, --quiet",
       "Print only results, warnings and errors (also ANTELOPEJS_QUIET=1)",
     )
-    // Registered for `--help` only: `stripUpdateCheckFlag` removes the flag
-    // before Commander parses, so it is accepted after a subcommand name too.
     .option(
       "--no-update-check",
       "Skip the daily update check (also NO_UPDATE_NOTIFIER=1)",
@@ -231,12 +244,9 @@ const runCLI = async () => {
     process.exitCode = err.exitCode;
     return;
   }
-  // Last, and only after a success: a failure ends on its own problem.
   if (!process.exitCode) await reportAvailableUpdate();
 };
 
-// The commands leave their exit code in process.exitCode. Exiting here stops
-// what a finished command may leave behind, such as the update lookup.
 void runWithErrorBoundary(runCLI, { verbose: isVerboseRun() }).then(() =>
   process.exit(),
 );

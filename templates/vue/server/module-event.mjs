@@ -1,8 +1,3 @@
-// What a module route handler receives and how its answer is written: the
-// Web-standard request, the session, the module's sealed cookies, the backend,
-// and the defaults every route gets once (same-origin on unsafe methods, a body
-// limit, `no-store`). See `server-module.ts` for the types a module reads.
-
 import { Readable } from "node:stream";
 import { backend, json, RequestBodyError } from "./auth/backend.mjs";
 import {
@@ -164,6 +159,11 @@ function frozenCopy(value) {
 
 /**
  * The event a handler receives.
+ *
+ * What a module route handler receives and how its answer is written: the Web-
+ * standard request, the session, the module's sealed cookies, the backend, and
+ * the defaults every route gets once (same-origin on unsafe methods, a body
+ * limit, `no-store`). See `server-module.ts` for the types a module reads.
  *
  * @param context `{ request, response, route, params, module, app, view,
  *   authOwner }`, where `module` is `{ id, options, privateOptions }`, `app`

@@ -1,9 +1,3 @@
-// Loads what the frontend modules declare in their `dms.server.ts` and hands
-// a request to the module route it reaches. In development the declarations
-// come from Vite (`ssrLoadModule`), so an edited entry or handler answers on
-// the next request; in production from the bundle `ajs dms build` makes
-// (`dist/server-modules`). A workspace built before the feature has none.
-
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { allowedEstablishEndpoints } from "./auth/establish-endpoints.mjs";
@@ -185,6 +179,8 @@ async function currentDeclarations(devServer) {
 /**
  * A set of server modules, resolved for a deployment.
  *
+ * `authOwner` is the module whose sealed cookies are the `dms_*` ones.
+ *
  * @param declarations `{ id, priority, setup }` per module with a dms.server.ts
  * @param deployment `{ publicOptions, privateOptions, authEstablishEndpoints,
  *   publicEndpoints, backendProxies, warn }`: each module's options by id,
@@ -211,7 +207,6 @@ export function createServerModules(declarations, deployment) {
     app: {
       authEstablishEndpoints: deployment.authEstablishEndpoints?.() ?? [],
     },
-    // The module whose sealed cookies are the `dms_*` ones.
     authOwner: resolution.auth?.id,
   });
   return {
@@ -243,6 +238,12 @@ function serverModules(declarations) {
 
 /**
  * The server modules of this deployment, resolved.
+ *
+ * Loads what the frontend modules declare in their `dms.server.ts` and hands a
+ * request to the module route it reaches. In development the declarations come
+ * from Vite (`ssrLoadModule`), so an edited entry or handler answers on the
+ * next request; in production from the bundle `ajs dms build` makes
+ * (`dist/server-modules`). A workspace built before the feature has none.
  *
  * @param devServer Vite in development, `undefined` in production
  */

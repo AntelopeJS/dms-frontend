@@ -15,6 +15,9 @@ const MAX_AGE = 60 * 60 * 24 * 30;
  * frontends on localhost:3000 and localhost:3001 would overwrite each other's
  * session, each failing to decrypt the other's and signing the user out. The
  * suffix follows the backend, so a restart keeps the cookies it wrote.
+ *
+ * A `DMS_API_BASE_URL` that is not a URL is hashed as written: the raw string
+ * still tells two backends apart.
  */
 function cookieScope() {
   const backendUrl = (process.env.DMS_API_BASE_URL ?? "").trim();
@@ -24,9 +27,7 @@ function cookieScope() {
     if (url.hostname === "localhost" || url.hostname === "[::1]")
       url.hostname = "127.0.0.1";
     canonical = url.toString().replace(/\/$/, "");
-  } catch {
-    // Not a URL: the raw string still tells two backends apart.
-  }
+  } catch {}
   return createHash("sha256").update(canonical).digest("hex").slice(0, 12);
 }
 

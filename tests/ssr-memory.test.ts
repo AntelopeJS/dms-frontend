@@ -61,8 +61,6 @@ it("releases every server render once it is sent", async () => {
   const workspace = mkdtempSync(resolve(".ssr-memory-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
   const previousEnvironment = process.env.NODE_ENV;
-  // Production, like the hub: in development, Vue and vue-i18n register every
-  // app with the devtools hook, which keeps them all on purpose.
   process.env.NODE_ENV = "production";
   const backend = createServer((request, response) => {
     const path = new URL(request.url!, "http://fixture").searchParams.get(
@@ -93,14 +91,6 @@ it("releases every server render once it is sent", async () => {
       join(workspace, "ui-stub.ts"),
       `import {h} from 'vue'; export const useAppConfig=()=>globalThis.__dmsLeakProbe.uiAppConfig;export const useToast=()=>({add(){}});export const en={code:"en"};export const fr={code:"fr"};export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
     );
-    // Stands for Nuxt UI's `useRuntimeHook`: a process-wide registry a
-    // component only leaves when its scope is disposed. The hook holds the
-    // component instance, and through it the whole app. The page awaits the
-    // way a compiled <script setup> does, and the plugin reads the route the
-    // way the DMS layout's plugins do. The interval stands for a pooled
-    // backend socket: opened during the render, it outlives it. The module
-    // declares a compound variant the way the DMS layout's app config does,
-    // into the one app config Nuxt UI keeps for the process.
     writeFileSync(
       join(workspace, "frontend-modules.generated.ts"),
       `
@@ -164,8 +154,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.equal(probe.rendered, RENDERS);
     assert.equal(probe.hooks.size, 0);
     assert.equal(probe.uiAppConfig.ui?.button?.compoundVariants?.length, 1);
-    // Inertia keeps the head manager of the latest render in module state,
-    // so that one render stays reachable until the next replaces it.
     assert.ok((await retainedApps(probe)) <= 1);
   } finally {
     probe.timers.forEach(clearInterval);

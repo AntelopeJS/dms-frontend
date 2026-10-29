@@ -223,7 +223,6 @@ describe("Component prefix", () => {
   });
 
   it("preloads a component a page places inside another one", async () => {
-    // How a page layout nests blocks: each child places a definition.
     const layout = {
       components: {
         grid: {

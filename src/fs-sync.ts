@@ -1,9 +1,3 @@
-// The file primitives the workspace materialization and the dev watcher both
-// use: comparing, copying, mirroring and pruning directories.
-//
-// They live in their own module because both callers need them; putting them
-// in either one made the two import each other.
-
 import {
   cpSync,
   existsSync,
@@ -60,6 +54,8 @@ export function toPosixPath(path: string, separator: string = sep): string {
  * gitignore-style pattern in `LAYER_COPY_BLOCKLIST`. Used by both
  * `copyLayerSource` (via `cpSync`'s filter) and the dev watcher (via
  * chokidar's `ignored`) to guarantee a single source of truth.
+ *
+ * `ignore` expects POSIX separators, while `relative()` yields `\` on Windows.
  */
 export function isBlocklistedCopyPath(src: string, srcPath: string): boolean {
   const rel = relative(
@@ -67,7 +63,6 @@ export function isBlocklistedCopyPath(src: string, srcPath: string): boolean {
     resolve(stripExtendedLengthPrefix(srcPath)),
   );
   if (!rel || rel.startsWith("..")) return false;
-  // `ignore` expects POSIX separators; on Windows `relative()` yields `\`.
   return layerCopyIgnore.ignores(toPosixPath(rel));
 }
 
@@ -131,6 +126,8 @@ export function filesIdentical(srcPath: string, destPath: string): boolean {
  * on-disk dest is never byte-identical to the untransformed source, defeating
  * the content-gate for that file.
  *
+ * An unreadable destination falls through to an overwrite.
+ *
  * @returns Whether it wrote the file
  */
 export function applyContent(content: string, destPath: string): boolean {
@@ -138,9 +135,7 @@ export function applyContent(content: string, destPath: string): boolean {
   if (existsSync(destPath)) {
     try {
       if (readFileSync(destPath).equals(buf)) return false;
-    } catch {
-      // unreadable dest — fall through and overwrite
-    }
+    } catch {}
   }
   mkdirSync(dirname(destPath), { recursive: true });
   const tmp = `${destPath}.ajs-dms-tmp-${process.pid}-${Date.now()}`;
@@ -271,19 +266,22 @@ export function collectFiles(dir: string, baseDir: string = dir): string[] {
   return files;
 }
 
+/**
+ * Content-gated, atomic upserts come first: unchanged files keep their
+ * mtime, so an incremental re-sync does not churn the whole tree (and trip a
+ * full Vite rebuild) when only a few files changed.
+ *
+ * Deletions come last, mirroring the watcher's apply order.
+ */
 export function syncDirectories(src: string, dest: string): void {
   const ig = loadGitignore(src);
   const srcFiles = collectFiles(src).filter((f: string) => !ig.ignores(f));
   const destFiles = collectFiles(dest);
 
-  // Content-gated + atomic upserts first: unchanged files keep their mtime
-  // so an incremental re-sync doesn't churn the whole tree (and trip a full
-  // Vite rebuild) when only a handful of files actually changed.
   for (const file of srcFiles) {
     applyFile(join(src, file), join(dest, file));
   }
 
-  // Deletions last, mirroring the watcher's apply order.
   for (const file of destFiles) {
     if (ig.ignores(file)) continue;
     if (!srcFiles.includes(file)) {

@@ -184,11 +184,9 @@ describe("Vue request runtime", () => {
     ]);
     const navigation = app.runWithContext(() => navigateDms("/both"));
     await new Promise((settle) => setTimeout(settle, 0));
-    // Both parallel ones started before either settled; the next waits.
     assert.deepEqual(started, ["session /both", "flags /both"]);
     release();
     await navigation;
-    // The parallel group's redirect wins over the middleware after it.
     assert.deepEqual(started, [
       "session /both",
       "flags /both",
@@ -523,8 +521,6 @@ describe("Vue request runtime", () => {
     const state = (key: string) => runtime.sharedState.get(key)?.value;
     app.runWithContext(() => {
       hydrateDmsPageProps({ path: "/one", page: {}, shared });
-      // A refresh wrote a newer layout; the next page carries the same copy
-      // over (a once prop) and must not bring the older one back.
       useDmsState("dms-modules").value = ["refreshed"];
       useDmsState("dms-lastRefreshTime").value = 1;
       hydrateDmsPageProps({ path: "/two", page: {}, shared });
@@ -569,7 +565,6 @@ describe("Vue request runtime", () => {
         keepSharedOverHistory();
         hydrateDmsPageProps({ path: "/one", page: {}, shared: newer });
       });
-      // Back: Inertia puts back a page written before the reload.
       listeners.get("popstate")?.({ state: { page: {} } });
       app.runWithContext(() =>
         hydrateDmsPageProps({ path: "/zero", page: {}, shared: older }),
@@ -581,7 +576,6 @@ describe("Vue request runtime", () => {
         "newer",
       ]);
       assert.deepEqual(replaced, [["shared", newer]]);
-      // A visit after it copies the layout it brings again.
       const fresh = { isOwner: true, modules: ["fresh"], quickActions: [] };
       app.runWithContext(() =>
         hydrateDmsPageProps({ path: "/two", page: {}, shared: fresh }),
@@ -606,7 +600,6 @@ describe("Vue request runtime", () => {
     context.mock.method(globalThis, "fetch", async () =>
       Response.json(sessions.shift() ?? {}),
     );
-    // The session forgets prefetched pages in a browser only.
     const hadWindow = "window" in globalThis;
     Reflect.set(globalThis, "window", globalThis);
     try {
@@ -618,8 +611,6 @@ describe("Vue request runtime", () => {
       }
       await session.clear();
       counts.push(flushes.mock.callCount());
-      // Signed in, refreshed (same account and workspace), another workspace,
-      // another account, signed out.
       assert.deepEqual(counts, [1, 1, 2, 3, 4]);
     } finally {
       if (!hadWindow) Reflect.deleteProperty(globalThis, "window");
@@ -655,7 +646,6 @@ describe("Vue request runtime", () => {
     assert.deepEqual(second.requests, ["/request/1"]);
     assert.equal(first.runtime.sharedState.get("identity")?.value, 0);
     assert.equal(second.runtime.sharedState.get("identity")?.value, 1);
-    // The fetch each one ran is transferred too, from its own runtime only.
     const transferred = serializeDmsAsyncData(first.runtime);
     assert.equal(transferred["same-key"], "first");
     assert.deepEqual(new Set(Object.values(transferred)), new Set(["first"]));
@@ -869,8 +859,6 @@ describe("Server render scopes", () => {
 });
 
 describe("Page meta", () => {
-  // What the DMS catch-all page does: it declares `auth`, then reads its
-  // route. A plugin (dms-ui's `register`) reads the route while it sets up.
   const DeclaringPage = defineComponent({
     setup() {
       defineDmsPageMeta({ auth: true });
@@ -974,7 +962,6 @@ describe("Page meta", () => {
     app.runWithContext(() => {
       hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared");
       defineDmsPageMeta({ auth: true });
-      // A visit that only changes the query keeps the page mounted.
       hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared?tab=b");
     });
     assert.deepEqual(runtime.route.meta, { auth: true });
@@ -995,8 +982,6 @@ describe("Page meta", () => {
       hydrateDmsPageProps({ path: "/missing", page: {} }, "/missing");
       defineDmsPageMeta({ auth: true });
     });
-    // Settles rather than rejects: nothing awaits it in the browser, and the
-    // server reads the failure from the error it set.
     await runtime.pendingNavigation;
     assert.equal(runtime.currentError.value?.statusCode, 404);
     assert.equal(runtime.currentError.value?.message, "Not here");

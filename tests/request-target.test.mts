@@ -9,7 +9,7 @@ import {
 import "./fixtures/dms-backend-proxies.mts";
 
 const BACKEND = "http://127.0.0.1:8080";
-// A request the server dropped would otherwise wait forever.
+/** A request the server dropped would otherwise wait forever. */
 const REQUEST_TIMEOUT_MS = 10_000;
 
 interface ServerTemplate {

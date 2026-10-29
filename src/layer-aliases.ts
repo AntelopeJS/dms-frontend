@@ -1,18 +1,3 @@
-// The layer alias convention, on its own and free of the loader.
-//
-// Every frontend module may carry a `layers/<name>/` directory, and each of
-// those layers is addressable as `#<name>` from anywhere in the generated Vue
-// workspace -- that is what makes `#dms-core/composables/...` and
-// `#dms-ui/components/...` resolve. The convention used to live inside
-// `writeFrontendTypePaths`, which only runs against an already-materialized
-// workspace built from a manifest downloaded with a bootstrap secret. Anything
-// outside that workspace -- a module's own Vitest run, for instance -- had to
-// restate the same aliases by hand.
-//
-// The functions here derive the convention from a module root on disk, with no
-// backend, no manifest and no workspace, so both consumers read the same
-// definition.
-
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { toPosixPath } from "./fs-sync";
@@ -41,9 +26,11 @@ export interface FrontendLayerPathOptions {
   relativeTo?: string;
 }
 
+/**
+ * `statSync`, not the dirent: a layer reached through a symlink is still a
+ * layer, and a module root can legitimately be a link farm.
+ */
 function isDirectory(path: string): boolean {
-  // statSync, not the dirent: a layer reached through a symlink is still a
-  // layer, and a module root can legitimately be a link farm.
   try {
     return statSync(path).isDirectory();
   } catch {
@@ -74,6 +61,14 @@ function readModuleLayers(moduleRoot: string): FrontendLayer[] {
  * position of its first appearance. That is the order the loader already feeds
  * every overlay -- public assets, locale messages -- so the highest-priority
  * module is the one materialized last.
+ *
+ * The layer alias convention, free of the loader: every frontend module may
+ * carry a `layers/<name>/` directory, and each layer is addressable as
+ * `#<name>` from anywhere in the generated Vue workspace, which is what makes
+ * `#dms-core/composables/...` resolve. The functions of this module derive it
+ * from a module root on disk, with no backend, manifest or workspace, so the
+ * workspace and anything outside it, such as a module's own Vitest run, read
+ * the same definition instead of restating the aliases by hand.
  *
  * @param moduleRoots One module root, or several in increasing precedence
  * @returns One entry per distinct layer name, in first-appearance order

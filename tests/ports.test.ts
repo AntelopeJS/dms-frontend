@@ -36,8 +36,6 @@ describe("reserveFreePort", () => {
   });
 
   it("returns the requested port when it is free", async () => {
-    // Grab an ephemeral port then release it: it is almost certainly
-    // still free when we probe it right after.
     const { server, port } = await occupyPort();
     await closeServer(server);
     const reserved = await reserveFreePort(port);
@@ -68,7 +66,6 @@ describe("reserveFreePort", () => {
     await closeServer(server);
 
     const first = await reserveFreePort(port);
-    // While the first reservation is held, a second one must skip past it.
     const second = await reserveFreePort(port);
     try {
       assert.equal(first.port, port);
@@ -77,7 +74,6 @@ describe("reserveFreePort", () => {
       await second.release();
     }
 
-    // Once released, the port is reservable again.
     await first.release();
     const again = await reserveFreePort(port);
     try {
@@ -92,8 +88,6 @@ describe("reserveFreePort", () => {
     await closeServer(server);
     const held = await reserveFreePort(port);
 
-    // A client that connects during the reservation and never hangs up,
-    // like a browser tab or a startup probe polling the frontend port.
     const client = connect(held.port, "127.0.0.1");
     client.on("error", () => {});
     await new Promise<void>((resolve) => client.once("connect", resolve));
@@ -106,7 +100,6 @@ describe("reserveFreePort", () => {
       ]);
       assert.equal(outcome, "released");
 
-      // The frontend server can then bind the port.
       const again = await reserveFreePort(held.port, 0);
       await again.release();
     } finally {
@@ -127,9 +120,6 @@ describe("reserveFreePort", () => {
   });
 
   it("clamps the probe range to the TCP maximum", async () => {
-    // Whatever the local state of ports 65530-65535, the result must
-    // never exceed the TCP maximum (without the clamp, the loop would
-    // probe invalid port numbers and report a bogus upper bound).
     try {
       const reserved = await reserveFreePort(65530, 20);
       try {

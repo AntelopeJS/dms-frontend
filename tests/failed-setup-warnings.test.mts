@@ -1,11 +1,3 @@
-// A page whose setup throws (dms's `/auth/recover` without its token) shows the
-// error page, but Vue still renders the page itself first, against the setup
-// state that never came. A development server compiles a single-file
-// component's template apart from its setup, so the template reads the missing
-// bindings, and Vue warns about each component it uses ("Invalid vnode type
-// when creating vnode: undefined", then "Component <Anonymous> is missing
-// template or render function" for the comment it renders instead). The pages
-// here are compiled the way @vitejs/plugin-vue compiles them for that server.
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -28,7 +20,7 @@ import {
   setupFrontendModules,
 } from "../templates/vue/frontend-module.ts";
 
-// Inside the repository, so the compiled modules resolve its `vue`.
+/** Inside the repository, so the compiled modules resolve its `vue`. */
 const directory = mkdtempSync(resolve(".failed-setup-"));
 after(() => rmSync(directory, { recursive: true, force: true }));
 
@@ -106,8 +98,6 @@ async function render(context: TestContext, ...children: Array<() => unknown>) {
   });
   const app = createSSRApp({
     render: () =>
-      // As the renderer shows a page: in a `<Suspense>`, which an async
-      // setup needs.
       h(Suspense, null, {
         default: () =>
           h(
@@ -164,8 +154,6 @@ describe("a page whose setup fails", () => {
   });
 
   it("drops the warnings of a component rendered under the failed page", async (context) => {
-    // A `<script setup>` page exposes itself, so its children see it through
-    // an expose proxy rather than the proxy `errorHandler` receives.
     const { warnings, error } = await render(context, () => h(ParentPage));
     assert.equal(error?.statusCode, 400);
     assert.deepEqual(warnings, []);

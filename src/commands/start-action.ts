@@ -231,6 +231,13 @@ async function reportServedModules(
   );
 }
 
+/**
+ * The port is held until the server is spawned, as `dev` does, so a busy
+ * port is reported here instead of as the server's unhandled listen error.
+ *
+ * The private values are secrets the server reads from its environment: the
+ * project's configuration never holds them.
+ */
 export async function runStart(options: StartOptions): Promise<void> {
   const startedAt = Date.now();
   const workspaceDir = resolve(productionWorkspace(options));
@@ -259,8 +266,6 @@ export async function runStart(options: StartOptions): Promise<void> {
     `built ${formatAge(builtAt)}`,
   ]);
 
-  // Held until the server is spawned, as dev does, so a busy port is
-  // reported here instead of as the server's unhandled listen error.
   const reserved = await reservePort(requestedPort);
   if (!reserved) {
     throw new CliError({
@@ -278,8 +283,6 @@ export async function runStart(options: StartOptions): Promise<void> {
   });
   const built = builtModules(workspaceDir);
   reportModuleSetDrift(built, modules);
-  // The private values are secrets the server reads from its environment:
-  // the project's configuration never holds them.
   const secrets = resolveManifestSecrets({ published: {}, conflicts: [] });
   reportManifestSecrets(
     secrets,

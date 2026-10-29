@@ -15,6 +15,8 @@ const DYNAMIC_BROTLI_QUALITY = 4;
  * accepts (Brotli first), or `undefined` when it accepts neither. `streaming`
  * flushes what each write gives at once, for a body written over time: the
  * client gets each part when it is written, not when a block fills.
+ *
+ * Implicit identity is a fallback, not a preference over compression.
  */
 export function acceptedEncoder(request, { streaming = false } = {}) {
   const accepted = request.headers["accept-encoding"] ?? "";
@@ -38,7 +40,6 @@ export function acceptedEncoder(request, { streaming = false } = {}) {
   const quality = (token) => qualities.get(token) ?? qualities.get("*") ?? 0;
   const br = quality("br");
   const gzip = quality("gzip");
-  // Implicit identity is a fallback, not a preference over compression.
   const identity = qualities.get("identity") ?? 0;
   if (identity > Math.max(br, gzip)) return undefined;
   if (br > 0 && br >= gzip)

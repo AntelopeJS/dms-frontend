@@ -42,19 +42,20 @@ function isSkip(error: unknown): boolean {
   );
 }
 
+/**
+ * `prepare` is often run from CI (e.g. as a `postinstall` hook on a frontend
+ * module) where the backend is unreachable or no URL is configured. CI
+ * installs must not fail in that case, since types can be regenerated later
+ * in a dev environment: it warns and exits 0 instead of erroring, after
+ * falling back to a workspace-less prepare without leaving a partially
+ * generated workspace. `--strict` turns the warning back into the error.
+ */
 export async function runPrepare(options: PrepareOptions): Promise<void> {
   const startedAt = Date.now();
   const offline = flagOrEnv(options.offline, "DMS_OFFLINE");
   const strict = flagOrEnv(options.strict, "DMS_PREPARE_STRICT");
   const ui = getProcessUi();
   const hint = ui.symbols.levels.hint;
-  // The prepare command is often run from CI (e.g. as a `postinstall`
-  // hook on a frontend module) where the backend is unreachable or no URL
-  // is configured. We don't want CI installs to fail in that case — types
-  // can be regenerated later in a dev environment. Warn and exit 0
-  // instead of erroring, after falling back to a workspace-less prepare
-  // without leaving a partially generated workspace. --strict turns the
-  // warning back into the error.
   if (!options.backendUrl) {
     if (strict) requireBackendUrl(options.backendUrl);
     ui.message("warn", "Skipped prepare: no backend URL", {

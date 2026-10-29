@@ -1,5 +1,3 @@
-// Preloaded by server-ready-cleanup.test.mts: removing a development server's
-// directory fails, as it does when Vite still writes its cache into it.
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 

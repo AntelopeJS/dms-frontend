@@ -45,11 +45,14 @@ export interface EntryWeight {
   shares: EntryShare[];
 }
 
-/** The Brotli size the server serves a built file with. */
+/**
+ * The Brotli size the server serves a built file with: the `.br` file beside
+ * it, or the size it compresses to when compress-assets left it out as too
+ * small to gain from it.
+ */
 function brotliSize(file: string): number {
   const compressed = `${file}.br`;
   if (existsSync(compressed)) return statSync(compressed).size;
-  // compress-assets leaves out files too small to gain from it.
   return brotliCompressSync(readFileSync(file), {
     params: { [constants.BROTLI_PARAM_QUALITY]: constants.BROTLI_MAX_QUALITY },
   }).length;

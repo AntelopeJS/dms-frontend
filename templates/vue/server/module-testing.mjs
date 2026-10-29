@@ -1,10 +1,3 @@
-// Serves a frontend module's `dms.server.ts` routes the way the frontend
-// server does, for the module's own tests: same router, same event, same
-// cookie jar and the same defaults. Imported from
-// `@antelopejs/dms-frontend/templates/vue/server/module-testing.mjs`; the
-// server reads `DMS_API_BASE_URL` and `DMS_SESSION_SECRET` from the
-// environment, as in production.
-
 import { createServer } from "node:http";
 import { RequestBodyError, UpstreamError } from "./auth/backend.mjs";
 import { UNEXPECTED_ERROR_BODY } from "./backend-response.mjs";
@@ -25,6 +18,13 @@ function writeFailure(error, response) {
 /**
  * Starts an HTTP server on a free local port answering the modules' routes,
  * and `404` to anything else.
+ *
+ * Serves a frontend module's `dms.server.ts` routes the way the frontend server
+ * does, for the module's own tests: same router, same event, same cookie jar
+ * and the same defaults. Imported from
+ * `@antelopejs/dms-frontend/templates/vue/server/module-testing.mjs`; the server reads
+ * `DMS_API_BASE_URL` and `DMS_SESSION_SECRET` from the environment, as in
+ * production.
  *
  * @param declarations `{ id, priority?, setup }` per module, `setup` being
  *   the default export of its `dms.server.ts`

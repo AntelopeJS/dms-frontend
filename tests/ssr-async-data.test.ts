@@ -7,8 +7,10 @@ import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { parse } from "devalue";
 
-// The pages render through the real SSR entry: the payload the browser
-// hydrates with is only what the HTML of the same render shows.
+/**
+ * The pages render through the real SSR entry: the payload the browser
+ * hydrates with is only what the HTML of the same render shows.
+ */
 const FIXTURE_MODULES = `
 import {defineComponent,h} from 'vue';
 import {Icon,addIcon} from '@iconify/vue';
@@ -137,14 +139,10 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       return response.text();
     };
 
-    // Lazy data settles while a slower sibling still renders: the HTML must
-    // show it rather than its idle state, since the payload carries it.
     const lazy = await render("/lazy");
     assert.match(lazy, /lazy success:fresh/);
     assert.equal(payload(lazy)["lazy-key"], "fresh");
 
-    // A page renders once its middleware is done: what the middleware sets
-    // and loads is what the HTML shows, and what the browser hydrates with.
     const guarded = await render("/guarded");
     assert.match(guarded, /page:set by the guard/);
     assert.match(guarded, /content:set by the guard:loaded by the guard/);
@@ -160,8 +158,6 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.equal("client-key" in payload(clientOnly), false);
     assert.equal(backendCalls.includes("/client-data"), false);
 
-    // A plugin refreshes the lazy key it just declared: one request, whose
-    // result the page renders.
     backendCalls.length = 0;
     const plugin = await render("/plugin");
     assert.match(plugin, /plugin:backend \/plugin-data/);
@@ -171,15 +167,10 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       ["/plugin-data"],
     );
 
-    // One script carries the data, the failures and the state a key opted
-    // into, in a format that keeps what JSON cannot: a Set, a Date. A value
-    // it cannot write is left out, and the page still renders.
     const logged = context.mock.method(console, "error", () => {});
     const page = await render("/payload");
     logged.mock.restore();
     assert.match(page, /payload error:2/);
-    // The icons the render drew travel beside the payload, in their own
-    // script: the browser loads them before it hydrates.
     assert.match(page, /<circle cx="1" cy="1" r="1"/);
     const icons = page.match(
       /<script id="dms-ssr-icons" type="application\/json">(.*?)<\/script>/s,

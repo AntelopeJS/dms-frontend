@@ -1,7 +1,3 @@
-// Writes a Web-standard body, a backend answer above all, to a Node response.
-//
-// Lives apart from the proxy and the module routes, which both send one.
-
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
@@ -12,6 +8,9 @@ import { pipeline } from "node:stream/promises";
  * listener, and its next failure (the backend closing, or undici's body
  * timeout on an event stream gone quiet) ended the whole server. The body is
  * cancelled instead, which closes its backend connection too.
+ *
+ * Writes a Web-standard body, a backend answer above all, to a Node response.
+ * It lives apart from the proxy and the module routes, which both send one.
  */
 export async function pipeWebBody(body, ...streams) {
   const response = streams.at(-1);

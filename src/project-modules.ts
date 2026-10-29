@@ -1,12 +1,3 @@
-// The frontend modules of an AntelopeJS project, read from the project itself:
-// its `antelope.config.ts`, evaluated by AntelopeJS's own config loader, and
-// the packages of its modules. Each module declares in its package.json, as
-// `dmsFrontend`, a file exporting `frontendModule(config, context)`: the pure
-// function its backend passes to `AddFrontendModule`. No backend is asked.
-// The `${@<module>.<VAR>}` references resolve the same way: each provider
-// declares, as `antelopeJs.configVarsFile`, a file exporting the pure
-// `configVars(config)` its own `provide` publishes from.
-
 import { existsSync, readFileSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -167,6 +158,7 @@ function configVarsProvider(
   return { declared, configVars };
 }
 
+/** Only the declared variables, as AntelopeJS publishes them. */
 function computeConfigVars(
   id: string,
   provider: ConfigVarsProvider,
@@ -184,7 +176,6 @@ function computeConfigVars(
       { cause: error },
     );
   }
-  // Only the declared ones, as AntelopeJS publishes them.
   return Object.fromEntries(
     provider.declared
       .filter((name) => name in computed)
@@ -333,6 +324,10 @@ export function readShippingVersion(sourcePath: string): string | undefined {
   }
 }
 
+/**
+ * The layer a module registration resolves to. A build is deployed, whatever a
+ * module returns: its private options are emptied and no secret is written.
+ */
 function toLayer(registration: FrontendRegistration): ResolvedLayer {
   const name = readLayerPackage(registration.sourcePath)?.name;
   return {
@@ -343,7 +338,6 @@ function toLayer(registration: FrontendRegistration): ResolvedLayer {
     priority: registration.priority ?? 0,
     configKey: registration.configKey,
     options: registration.options ?? {},
-    // A build is deployed: whatever a module returns, no secret is written.
     privateOptions:
       registration.privateOptions &&
       emptiedOptions(registration.privateOptions),
@@ -415,6 +409,15 @@ function keepHighestPriority(
 /**
  * The project's frontend modules, highest priority first, with the options
  * their `frontendModule` computes from the project's configuration.
+ *
+ * Frontend modules are read from the project itself: its `antelope.config.ts`,
+ * evaluated by AntelopeJS's own config loader, and the packages of its modules.
+ * Each module declares in its package.json, as `dmsFrontend`, a file exporting
+ * `frontendModule(config, context)`, the pure function its backend passes to
+ * `AddFrontendModule`. No backend is asked. The `${@<module>.<VAR>}` references
+ * resolve the same way: each provider declares, as `antelopeJs.configVarsFile`,
+ * a file exporting the pure `configVars(config)` its own `provide` publishes
+ * from.
  */
 export async function readProjectFrontendModules(
   options: ProjectModulesOptions,

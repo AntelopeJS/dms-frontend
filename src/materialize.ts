@@ -1,8 +1,3 @@
-// Writing the workspace out: static templates, its package.json, the
-// frontend-module sources copied in, and the generated module registry.
-//
-// Split out of common.ts, which stays the barrel every command imports from.
-
 import {
   copyFileSync,
   cpSync,
@@ -45,10 +40,6 @@ import {
   sanitizedPackageContent,
   toPosixPath,
 } from "./fs-sync";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 export function getPackageRoot(): string {
   return resolve(__dirname, "..");

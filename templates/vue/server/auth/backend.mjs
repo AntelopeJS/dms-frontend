@@ -21,8 +21,10 @@ export class UpstreamError extends Error {
 }
 
 const PUBLIC_AUTH_MESSAGE = /^error\.[a-z0-9_.-]{1,100}$/;
-// The API error contract's generic key: the technical cause of a failure the
-// backend did not describe stays in the server log.
+/**
+ * The API error contract's generic key: the technical cause of a failure the
+ * backend did not describe stays in the server log.
+ */
 export const GENERIC_ERROR_MESSAGE = "error.500.description";
 
 export function publicBackendMessage(data) {

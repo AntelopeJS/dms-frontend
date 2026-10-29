@@ -1,9 +1,3 @@
-// The session logic the server runs outside any route: renewing a session the
-// backend refused, the session a page carries, and where a signed-out visit
-// goes. The module that owns sign-in provides it through `registerAuth` in its
-// `dms.server.ts`. Without one, a page carries no session and a refused
-// session is not renewed.
-
 import { readSession, setRequestSession } from "./auth/session.mjs";
 import { createServerEvent } from "./module-event.mjs";
 import { compilePathPattern } from "./path-patterns.mjs";
@@ -39,6 +33,12 @@ function hookView(publicSession, session) {
 
 /**
  * The server's session logic for a set of server modules.
+ *
+ * The session logic the server runs outside any route: renewing a session the
+ * backend refused, the session a page carries, and where a signed-out visit
+ * goes. The module that owns sign-in provides it through `registerAuth` in its
+ * `dms.server.ts`. Without one, a page carries no session and a refused session
+ * is not renewed.
  *
  * @param provider The resolved auth hooks, `undefined` when no module
  *   registers any

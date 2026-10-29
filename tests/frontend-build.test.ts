@@ -186,7 +186,6 @@ describe("The generated build declarations loader", () => {
   });
 
   it("is what Vite's config loads, resolving the public import, as a config dependency", async () => {
-    // Inside the repository, so the bundled config finds `vite` installed.
     const workspace = mkdtempSync(resolve(".frontend-build-"));
     try {
       copyStaticTemplates(workspace);
@@ -194,8 +193,6 @@ describe("The generated build declarations loader", () => {
       const layers = sources();
       const registry = createFrontendModuleRegistry(workspace, layers);
       writeFrontendModuleRegistry(workspace, layers);
-      // As `ajs dms` lays a module out: copied, with its own package.json,
-      // which is the scope Vite 8's config bundler resolves `#` imports in.
       materializeLayers(workspace, layers);
       const declaration = join(registry.modules[0].root, BUILD_FILE);
       writeFixture(

@@ -1,7 +1,3 @@
-// Page path patterns, as the modules' `dms.server.ts` name them: `/x` is the
-// page itself, `/x/*` one segment below it, `/x/**` the page and everything
-// below it. Nothing else: no prefix match inside a segment, no query string.
-
 const SEGMENT = /^[A-Za-z0-9._~-]+$/;
 
 /**
@@ -9,6 +5,10 @@ const SEGMENT = /^[A-Za-z0-9._~-]+$/;
  *
  * `specificity` orders matching patterns from the least to the most specific:
  * more literal segments first, then a single-segment `*` over `**`.
+ *
+ * Page path patterns, as the modules' `dms.server.ts` name them: `/x` is the
+ * page itself, `/x/*` one segment below it, `/x/**` the page and everything
+ * below it. Nothing else: no prefix match inside a segment, no query string.
  */
 export function compilePathPattern(pattern) {
   if (typeof pattern !== "string" || !pattern.startsWith("/")) return undefined;

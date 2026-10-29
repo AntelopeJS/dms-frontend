@@ -17,8 +17,10 @@ interface BackendRequest {
 }
 
 const MEBIBYTE = 1024 * 1024;
-// Above the antelope API module's default request body limit (1 MiB): the
-// proxy must not stand in for it.
+/**
+ * Above the antelope API module's default request body limit (1 MiB): the
+ * proxy must not stand in for it.
+ */
 const TRANSFER_BYTES = 3 * MEBIBYTE;
 const MAX_BODY_BYTES = 4 * MEBIBYTE;
 const TOO_LARGE_BYTES = 5 * MEBIBYTE;
@@ -34,8 +36,6 @@ const STORAGE_PROXIES = JSON.stringify([
     maxBodyBytes: MAX_BODY_BYTES,
   },
   { path: "/file-storage/files/**", auth: "none" },
-  // dms-media's MEDIA_DELIVERY_PROXY: a relative Location on it stays a
-  // frontend path (see proxy-redirects.mjs).
   { path: "/media/**", auth: "session" },
 ]);
 
@@ -92,7 +92,6 @@ describe("the proxy streams large file-storage transfers", () => {
     };
     requests.push(seen);
     if (request.url?.startsWith("/api/relative-redirect")) {
-      // Media's canonical link, relative, with a cookie the backend sets.
       response.writeHead(302, {
         location: RELATIVE_LOCATION,
         "set-cookie": ["first=1; Path=/; HttpOnly", "second=2; Path=/"],
@@ -100,8 +99,6 @@ describe("the proxy streams large file-storage transfers", () => {
       return response.end();
     }
     if (request.url?.startsWith("/api/redirect")) {
-      // Media's link to a file: the storage's signed URL, on an origin the
-      // frontend server cannot reach.
       response.writeHead(302, { location: UNREACHABLE_STORAGE_URL });
       return response.end();
     }

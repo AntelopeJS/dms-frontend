@@ -1,5 +1,3 @@
-// Creates a temporary workspace, reports its path on stdout, then ends the
-// way argv asks: "succeed", "throw" or "reject".
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createTemporaryWorkspace } from "../../src/temporary-workspace";

@@ -1,10 +1,3 @@
-// The layers' app configs: each asset root of each module may hold an
-// `app/app.config.ts`, which the application merges into `useDmsAppConfig()`
-// before any module is set up, and the email renderer into the config of each
-// email.
-//
-// Split out of derived-outputs.ts, whose size the linter caps.
-
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { affectsAssetDirectory, moduleAssetRoots } from "./asset-roots";
@@ -97,7 +90,13 @@ if (import.meta.hot) {
 `;
 }
 
-/** Write the module that imports every layer's app config. */
+/**
+ * Write the module that imports every layer's app config.
+ *
+ * Each asset root of each module may hold an `app/app.config.ts`, which the
+ * application merges into `useDmsAppConfig()` before any module is set up,
+ * and the email renderer into the config of each email.
+ */
 export function writeAppConfigs(
   workspaceDir: string,
   registry: AppConfigModules,

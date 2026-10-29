@@ -1,9 +1,3 @@
-// Answers for requests the server cannot serve at all: an unreadable URL, or a
-// failure while it was already rendering the error page.
-//
-// Lives apart from server.mjs so the file stays under the size the linter
-// allows.
-
 const FRONTEND_ORIGIN = "http://frontend.local";
 const TEXT_TYPE = "text/plain; charset=utf-8";
 
@@ -33,6 +27,10 @@ export function isResponseGone(error, response) {
   );
 }
 
+/**
+ * Answers for requests the server cannot serve at all: an unreadable URL, or
+ * a failure while it was already rendering the error page.
+ */
 export function writeBadRequest(response) {
   response.writeHead(400, { "content-type": TEXT_TYPE });
   response.end("Bad Request");

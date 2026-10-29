@@ -1,14 +1,3 @@
-// The workspace files derived from the frontend-module sources rather than
-// copied from them: the module registry and loader, the type paths, the public
-// assets, the locale catalogs, the aggregated shortcuts and the layers' app
-// configs.
-//
-// Materialization writes all of them. In development the layer watcher
-// rewrites those a change can affect (`DERIVED_OUTPUTS`), from the same
-// writers.
-//
-// Split out of materialize.ts, whose size the linter caps.
-
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import {
@@ -611,6 +600,12 @@ export interface DerivedOutput {
  * the layer directories, from which the generated Vite configs also derive the
  * `#<layer>` aliases and the auto-imported directories, once, at startup. An
  * added or removed layer is applied by a restart only, and the watcher says so.
+ *
+ * The workspace files derived from the frontend-module sources rather than
+ * copied from them: the module registry and loader, the type paths, the public
+ * assets, the locale catalogs, the aggregated shortcuts and the layers' app
+ * configs. Materialization writes all of them; in development the layer watcher
+ * rewrites those a change can affect, from the same writers.
  */
 export const DERIVED_OUTPUTS: readonly DerivedOutput[] = [
   {

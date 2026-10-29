@@ -10,18 +10,23 @@ const EMAIL_BUNDLE_WATCH_URL = new URL(
   "./email-bundle-watch.mjs",
   import.meta.url,
 );
-// Bound the request's wait, but never read a bundle being replaced.
+/** Bound the request's wait, but never read a bundle being replaced. */
 const EMAIL_BUILD_WAIT_MS = 60_000;
 
-// Settled whenever no email build is running. The version changes with each
-// finished build: Node caches an imported module by URL, so the renderer is
-// imported under a new one to pick up rebuilt templates.
+/**
+ * Settled whenever no email build is running. The version changes with each
+ * finished build: Node caches an imported module by URL, so the renderer is
+ * imported under a new one to pick up rebuilt templates.
+ */
 let emailBuild = Promise.resolve();
 let settleEmailBuild;
 let emailBundleVersion = 0;
-// A build empties dist/server before it writes the new bundle, so it never
-// starts while a render still imports from the previous one: the builder asks
-// first, and gets the go-ahead once the renders in progress have finished.
+/**
+ * A build empties dist/server before it writes the new bundle, so it never
+ * starts while a render still imports from the previous one: the builder
+ * asks first, and gets the go-ahead once the renders in progress have
+ * finished.
+ */
 let rendersInProgress = 0;
 let startPendingBuild;
 
@@ -56,7 +61,8 @@ function renderFinished() {
  * Build the email bundle now and again on every template change, for
  * development: only the production build otherwise produces it. The builder
  * runs in a child process at low priority, so the dev server keeps answering
- * while it works.
+ * while it works. Lowering the priority is skipped where the platform does not
+ * permit it: the build then runs at normal priority.
  */
 export function watchEmailBundle() {
   emailBuildStarted();
@@ -65,9 +71,7 @@ export function watchEmailBundle() {
   });
   try {
     setPriority(builder.pid, constants.priority.PRIORITY_BELOW_NORMAL);
-  } catch {
-    // Not permitted on this platform; the build only runs at normal priority.
-  }
+  } catch {}
   builder.on("message", (message) => {
     if (message?.state !== "building") {
       emailBuildSettled();
@@ -85,9 +89,9 @@ export function watchEmailBundle() {
   return builder;
 }
 
+/** Another build may start while a render waits for the previous one. */
 async function waitForEmailBuild() {
   const deadline = Date.now() + EMAIL_BUILD_WAIT_MS;
-  // Another build may start while a render waits for the previous one.
   while (settleEmailBuild && Date.now() < deadline) {
     let timer;
     await Promise.race([
@@ -113,15 +117,16 @@ function loadEmailRenderer() {
  * Renders an email template of the application's email bundle, waiting for a
  * development build in progress.
  *
+ * The render is counted with no await in between, so a build the builder asks
+ * for now waits for this render, which imports templates and reads catalogs
+ * from the bundle until it ends.
+ *
  * @param template The template's name
  * @param props The template's props
  * @param options `locale`, the language to render in
  */
 export async function renderEmailTemplate(template, props, options = {}) {
   await waitForEmailBuild();
-  // Counted from here, with no await in between, so a build the builder asks
-  // for now waits for this render, which imports templates and reads catalogs
-  // from the bundle until it ends.
   rendersInProgress += 1;
   try {
     const { renderEmail } = await loadEmailRenderer();

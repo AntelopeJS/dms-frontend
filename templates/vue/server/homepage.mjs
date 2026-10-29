@@ -1,13 +1,3 @@
-// Working out which page a visit to `/` means.
-//
-// The answer lives in the module registry the workspace was materialized with:
-// a module declares `homepage` somewhere in its options, at whatever depth its
-// own configuration shape puts it, and the highest-priority declaration wins —
-// the registry is already sorted. Read once at boot, because the registry is a
-// build artifact and cannot change while the server is up.
-//
-// Split out of server.mjs, whose size the linter caps.
-
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +19,14 @@ function findHomepage(options) {
 
 const OPTIONS = publicOptionsOf(REGISTRY);
 
+/**
+ * Works out which page a visit to `/` means. The answer lives in the module
+ * registry the workspace was materialized with: a module declares `homepage`
+ * somewhere in its options, at whatever depth its own configuration shape
+ * puts it, and the highest-priority declaration wins, since the registry is
+ * already sorted. Read once at boot, because the registry is a build
+ * artifact and cannot change while the server is up.
+ */
 export const HOMEPAGE =
   REGISTRY.modules
     .map((module) => findHomepage(OPTIONS[module.id]))

@@ -182,7 +182,7 @@ function projectHome(sandbox: string): void {
 
 const projectBuild = ["build"];
 
-// The fake pnpm is a shell script, like the one cli-signals puts on PATH.
+/** The fake pnpm is a shell script, like the one cli-signals puts on PATH. */
 const describePosix = process.platform === "win32" ? describe.skip : describe;
 
 describePosix("framing pnpm install and the production build", () => {
@@ -420,8 +420,6 @@ describePosix("framing verify-source", () => {
       new RegExp(
         `✔ Materialized 1 module${DONE}✔ Installed 3 packages${DONE}` +
           `✔ Generated the type declarations${DONE}` +
-          // The bundles build and the type check runs at once: the steps
-          // that passed end in any order.
           `(?:✔ .+\n)*` +
           "✖ SSR bundle failed(?: \\S+)?\n" +
           `(?:✔ .+\n)*` +

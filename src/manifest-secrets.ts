@@ -1,15 +1,15 @@
-// Secrets the generated server reads from its environment, and where the
-// DMS backend publishes them in the frontend manifest.
-//
-// The backend serves these values to the renderer as a module's
-// `privateOptions`; the generated server only ever reads environment
-// variables, so `dev` and `start` hand each value over under the variable
-// named here. The table is closed on purpose: modules cannot add entries, so
-// a manifest can only ever fill the variables listed below.
-
 import { getProcessUi, type Ui } from "@antelopejs/core/cli";
 import type { FrontendModuleValue, ManifestModule } from "./workspace";
 
+/**
+ * Secrets the generated server reads from its environment, and where the DMS
+ * backend publishes them in the frontend manifest. The backend serves these
+ * values to the renderer as a module's `privateOptions`; the generated
+ * server only ever reads environment variables, so `dev` and `start` hand
+ * each value over under the variable named here. The table is closed on
+ * purpose: modules cannot add entries, so a manifest can only ever fill the
+ * variables listed.
+ */
 export const MANIFEST_SECRET_ENV = {
   DMS_HTML_RENDER_SECRET: ["htmlRender", "serviceSecret"],
   DMS_OAUTH_RELAY_SECRET: ["oauth", "relaySecret"],

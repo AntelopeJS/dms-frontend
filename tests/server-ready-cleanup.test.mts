@@ -13,8 +13,6 @@ it(
   { timeout: LIMIT_MS + 10_000 },
   async () => {
     const privateTmp = mkdtempSync(join(tmpdir(), "dms-cleanup-"));
-    // The inner run is a run of its own: NODE_OPTIONS may carry this run's
-    // --test-shard, and NODE_TEST_CONTEXT would make it report to this one.
     const {
       NODE_OPTIONS: _sharded,
       NODE_TEST_CONTEXT: _reporting,
@@ -31,8 +29,6 @@ it(
         "--test-name-pattern=loopback address without HOST",
         "tests/server-ready.test.mts",
       ],
-      // Its own process group: a hung run is stopped with every server it
-      // left behind.
       {
         env: { ...env, TMPDIR: privateTmp },
         detached: true,

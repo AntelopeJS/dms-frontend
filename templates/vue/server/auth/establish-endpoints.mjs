@@ -1,17 +1,17 @@
-// The backend endpoints a module may open a session from: what the backend's
-// modules declared in the frontend manifest, and what the environment adds
-// (`DMS_AUTH_ESTABLISH_ENDPOINTS`). The module that owns sign-in reads them as
-// `event.app.authEstablishEndpoints`.
-
 import { readFileSync } from "node:fs";
 
-// Absolute backend API paths only: no scheme, no authority, no query string,
-// and no segment that could climb out of `/api/`.
+/**
+ * Absolute backend API paths only: no scheme, no authority, no query string,
+ * and no segment that could climb out of `/api/`.
+ */
 const BACKEND_API_PATH =
   /^\/api\/[A-Za-z0-9][A-Za-z0-9._~-]*(?:\/[A-Za-z0-9][A-Za-z0-9._~-]*)*$/;
 
-// Written at the workspace root by the loader, from the endpoints each backend
-// module declared in the frontend manifest. This file sits two directories up.
+/**
+ * Written at the workspace root by the loader, from the endpoints each
+ * backend module declared in the frontend manifest. This file sits two
+ * directories up.
+ */
 const DECLARED_ENDPOINTS_FILE = new URL(
   "../../generated-auth-establish.json",
   import.meta.url,
@@ -48,6 +48,11 @@ export function readDeclaredEstablishEndpoints(file = DECLARED_ENDPOINTS_FILE) {
  * an operator extends the list for a route no module owns. Everything else
  * stays refused, so no backend endpoint that happens to mint a token pair can
  * be turned into a login by a request from the browser.
+ *
+ * The backend endpoints a module may open a session from: what the backend's
+ * modules declared in the frontend manifest, and what the environment adds
+ * (`DMS_AUTH_ESTABLISH_ENDPOINTS`). The module that owns sign-in reads them as
+ * `event.app.authEstablishEndpoints`.
  *
  * @param declaration Comma-separated absolute backend paths from the environment
  * @param declared Paths declared by the backend's frontend modules

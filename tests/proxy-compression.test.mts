@@ -18,7 +18,7 @@ interface ServerTemplate {
 
 type Route = (request: IncomingMessage, response: ServerResponse) => void;
 
-// Above the 1 KiB the server compresses from.
+/** Above the 1 KiB the server compresses from. */
 const ROWS = JSON.stringify({
   results: Array.from({ length: 200 }, (_, index) => ({
     _id: String(index),
@@ -61,7 +61,6 @@ describe("the proxy compresses what the backend did not", () => {
   ): Promise<RawAnswer> {
     return new Promise((resolve, reject) => {
       const outgoing = httpRequest(
-        // A fresh connection each: a broken answer must not leak into the next.
         {
           host: "127.0.0.1",
           port: frontendPort,
@@ -90,7 +89,6 @@ describe("the proxy compresses what the backend did not", () => {
 
   before(async () => {
     routes.set("/api/rows", (_request, response) => {
-      // Chunked, as the antelope API module answers: no content-length.
       response.writeHead(200, {
         "content-type": "application/json; charset=utf-8",
         vary: "Origin",
@@ -106,8 +104,6 @@ describe("the proxy compresses what the backend did not", () => {
       response.end("{}");
     });
     routes.set("/api/negotiated", (request, response) => {
-      // Compresses whenever the client allows it, as a reverse proxy in front
-      // of the backend may.
       const gzipped = /gzip/.test(request.headers["accept-encoding"] ?? "");
       const body = gzipped ? gzipSync(ROWS) : Buffer.from(ROWS);
       response.writeHead(200, {
@@ -147,7 +143,6 @@ describe("the proxy compresses what the backend did not", () => {
     assert.equal(answer.headers["content-encoding"], "br");
     assert.equal(answer.headers["content-length"], undefined);
     assert.equal(answer.headers.vary, "Origin, Accept-Encoding");
-    // These bytes are not the backend's any more.
     assert.equal(answer.headers.etag, 'W/"rows-1"');
     assert.ok(answer.body.length < ROWS.length / 2);
     assert.equal(brotliDecompressSync(answer.body).toString(), ROWS);
@@ -319,7 +314,6 @@ describe("the proxy compresses what the backend did not", () => {
             incoming.on("data", (chunk: Buffer) => {
               chunks.push(chunk);
               const received = Buffer.concat(chunks);
-              // A sync flush ends each part on an empty stored block.
               if (received.subarray(-4).equals(SYNC_FLUSH_MARKER)) {
                 clearTimeout(timer);
                 resolve(received);

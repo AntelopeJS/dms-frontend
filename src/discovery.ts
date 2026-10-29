@@ -3,10 +3,6 @@ import { dirname, join, resolve } from "node:path";
 import type { CliProblem } from "@antelopejs/core/cli";
 import { showPath } from "./output";
 
-// ============================================================================
-// Backend autodiscovery via .antelope/dev.json
-// ============================================================================
-
 /**
  * Shared contract with the antelopejs core: `ajs project dev` writes
  * `.antelope/dev.json` at the project root, listing the endpoints each
@@ -41,13 +37,13 @@ export interface DiscoveryOptions {
   isPidAlive?: (pid: number) => boolean;
 }
 
+/** EPERM means the process exists but belongs to another user. */
 export function isPidAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch (err: any) {
-    // EPERM means the process exists but belongs to another user.
     return err?.code === "EPERM";
   }
 }
@@ -182,10 +178,6 @@ export function describeDiscoveryFailure(result: DiscoveryResult): CliProblem {
       return { title: "" };
   }
 }
-
-// ============================================================================
-// Bootstrap credential handshake via .antelope/dms-dev.json
-// ============================================================================
 
 /**
  * Shared contract with the DMS backend: a development instance writes its

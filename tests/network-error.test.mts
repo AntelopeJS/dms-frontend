@@ -5,8 +5,10 @@ import {
   showNetworkErrors,
 } from "../templates/vue/network-error.ts";
 
-// What Inertia dispatches when a visit never got a response: a cancelable
-// event whose default is to reject the visit, an uncaught error in the page.
+/**
+ * What Inertia dispatches when a visit never got a response: a cancelable
+ * event whose default is to reject the visit, an uncaught error in the page.
+ */
 function failVisit(): CustomEvent {
   const event = new CustomEvent("inertia:networkError", {
     cancelable: true,
@@ -29,7 +31,6 @@ describe("network error feedback", () => {
   let removeListener: (() => void) | undefined;
 
   beforeEach(() => {
-    // Inertia only listens in a browser.
     globals.window = globalThis;
     globals.document = new EventTarget();
   });

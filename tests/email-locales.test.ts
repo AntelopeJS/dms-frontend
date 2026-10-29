@@ -96,8 +96,6 @@ const { t } = useI18n();
       );
       assert.equal(browserMessages.subject, subject);
       assert.equal(browserMessages.dynamic.chosen, dynamic);
-      // The application's catalog of a locale is completed with English; the
-      // email catalog keeps the locale's own messages.
       assert.equal(browserMessages.fallback, "English fallback");
       const { fallback, ...own } = browserMessages;
       assert.deepEqual(

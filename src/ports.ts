@@ -1,10 +1,6 @@
 import { type AddressInfo, createServer, type Server } from "node:net";
 import { CliError } from "@antelopejs/core/cli";
 
-// ============================================================================
-// Frontend port reservation
-// ============================================================================
-
 /**
  * How many consecutive ports we try after the requested one before
  * giving up.

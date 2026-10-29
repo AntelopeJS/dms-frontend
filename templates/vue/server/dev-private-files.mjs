@@ -1,15 +1,3 @@
-// The files of the workspace the development server never hands to a browser.
-//
-// Vite's root is the workspace root, where the generated server options (the
-// modules' private options: the backend's secrets) and the cached manifest are
-// written, and the modules' server code is materialized under it. Vite serves
-// any file under its root, as is, `?raw`, `?import` or `?url`. Its
-// `server.fs.deny` list covers most of these, but not every query combination
-// (`?import&raw` got through in Vite 7.2; Vite 8.3 refuses it itself), so a middleware ahead of Vite's own
-// answers 403 by path, whatever the query, and a load guard refuses them to
-// any client request that reaches the transform pipeline another way.
-// `ssrLoadModule`, which loads the server modules, is left alone.
-
 import { relative, resolve, sep } from "node:path";
 
 const PRIVATE_FILE_NAMES = new Set([
@@ -22,7 +10,8 @@ const FORBIDDEN_STATUS = 403;
 
 /**
  * Vite's `server.fs.deny` for the development server: Vite's own defaults,
- * which a `deny` list replaces, and the private files.
+ * which a `deny` list replaces, and the private files: the generated secrets
+ * and the modules' server code are never served.
  */
 export const DEV_FS_DENY = [
   ".env",
@@ -68,7 +57,24 @@ function requestedFile(url, root) {
   return resolve(root, `.${sep}${pathname.replace(/^[\\/]+/, "")}`);
 }
 
-/** Answers 403 to private files, and fails a client load of one. */
+/**
+ * Answers 403 to private files, and fails a client load of one.
+ *
+ * The files of the workspace the development server never hands to a
+ * browser. Vite's root is the workspace root, where the generated server
+ * options (the modules' private options: the backend's secrets) and the
+ * cached manifest are written, and the modules' server code is materialized
+ * under it. Vite serves any file under its root, as is, `?raw`, `?import` or
+ * `?url`. Its `server.fs.deny` list covers most of these, but not every
+ * query combination (`?import&raw` got through in Vite 7.2; Vite 8.3 refuses
+ * it itself), so a middleware ahead of Vite's own answers 403 by path,
+ * whatever the query, and a load guard refuses them to any client request
+ * that reaches the transform pipeline another way. `ssrLoadModule`, which
+ * loads the server modules, is left alone.
+ *
+ * The middleware is registered directly, not returned: it runs before Vite's
+ * middlewares.
+ */
 export function denyPrivateFiles() {
   let root = process.cwd();
   return {
@@ -79,7 +85,6 @@ export function denyPrivateFiles() {
       root = config.root;
     },
     configureServer(server) {
-      // Registered directly, not returned: it runs before Vite's middlewares.
       server.middlewares.use((request, response, next) => {
         const file = requestedFile(request.url, root);
         if (!file || !isPrivateFile(file, root)) return next();

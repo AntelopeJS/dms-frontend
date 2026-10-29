@@ -1,7 +1,3 @@
-// Private module options are the secrets a backend serves the frontend. They
-// are needed by the running server only, which reads them from its
-// environment, so nothing a build writes keeps their values.
-
 import { UsageError } from "./config";
 import type { FrontendModuleOptions, FrontendModuleValue } from "./workspace";
 
@@ -17,6 +13,10 @@ function emptied(value: FrontendModuleValue): FrontendModuleValue {
  * server fills an empty secret from its environment (`DMS_HTML_RENDER_SECRET`,
  * `DMS_OAUTH_RELAY_SECRET`, or any of them from `DMS_PRIVATE_OPTIONS`), and
  * only a section that exists can be filled.
+ *
+ * Private module options are the secrets a backend serves the frontend. They
+ * are needed by the running server only, which reads them from its environment,
+ * so nothing a build writes keeps their values.
  */
 export function emptiedOptions(
   options: FrontendModuleOptions,

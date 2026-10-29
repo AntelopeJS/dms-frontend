@@ -1,5 +1,3 @@
-// A Ui writing to strings, and the text of a reported problem, for tests that
-// check what the CLI says without a terminal.
 import { CliError, createUi, type Ui } from "@antelopejs/core/cli";
 
 export interface MemoryUi {

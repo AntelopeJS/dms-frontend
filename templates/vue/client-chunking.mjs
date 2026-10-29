@@ -1,8 +1,3 @@
-// How the client bundle is cut into files, and what the build says about it.
-//
-// Kept beside vite.config.ts rather than inside it so the options can be
-// exercised on their own, the way head-order.mjs and client-server-guard.mjs are.
-
 /**
  * Rolldown's `output.codeSplitting` for the client build.
  *

@@ -100,15 +100,12 @@ describe("public endpoints", () => {
         const { anonymous, isRefused } = access(url);
         assert.equal(anonymous, false, url);
         assert.equal(isRefused, true, url);
-        // The proxy sends the backend the same normalized path it matched.
         assert.equal(
           new URL(url, "http://backend.local").pathname,
           new URL(url, "http://frontend.local").pathname,
           url,
         );
       }
-      // A traversal that lands on the declared route reaches that route, as
-      // the backend sees it.
       const reached = access("/api/other/../hooks/resend");
       assert.equal(reached.anonymous, true);
       assert.equal(reached.isRefused, false);

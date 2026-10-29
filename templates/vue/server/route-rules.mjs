@@ -1,7 +1,3 @@
-// Route rules the modules declare in their `dms.server.ts`: how a page is
-// rendered and which headers its document and Inertia answers carry. They
-// change rendering and caching, never who may see a page.
-
 import { compilePathPattern } from "./path-patterns.mjs";
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
@@ -60,7 +56,13 @@ function cacheRejection(cache) {
   return undefined;
 }
 
-/** Why a rule is ignored, or `undefined`. */
+/**
+ * Why a rule is ignored, or `undefined`.
+ *
+ * Route rules the modules declare in their `dms.server.ts`: how a page is
+ * rendered and which headers its document and Inertia answers carry. They
+ * change rendering and caching, never who may see a page.
+ */
 export function ruleRejection(pattern, rule) {
   if (!compilePathPattern(pattern))
     return "the pattern is not /x, /x/* or /x/**";

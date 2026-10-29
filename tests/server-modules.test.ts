@@ -233,7 +233,6 @@ describe("Module server declarations", () => {
         '"GET /auth/oauth/:provider/callback" of oauth (priority 5) can match ' +
         "the same request, which google answers: it has fewer parameters.",
     ]);
-    // The order is unchanged: the literal route still answers its path.
     assert.equal(
       matchModuleRoute(routes, "GET", "/auth/oauth/google/callback")?.route.id,
       "google",
@@ -517,8 +516,6 @@ export default defineDmsServer((server) => {
 `;
 
 describe("Module server routes in the production server", () => {
-  // Inside the repository, so the bundle and the server find their
-  // dependencies installed.
   const workspace = realpathSync(mkdtempSync(resolve(".server-modules-")));
   const source = mkdtempSync(join(tmpdir(), "dms-server-fixture-"));
   const backendCalls: BackendCall[] = [];
@@ -612,7 +609,6 @@ describe("Module server routes in the production server", () => {
       name: "ada",
       module: "acme__fixture-frontend",
       options: { greeting: "hi" },
-      // The manifest's secret wins: the environment only fills a gap.
       relaySecret: "relay-from-manifest",
       origin: frontendUrl,
       query: "1",
@@ -714,7 +710,6 @@ describe("Module server routes in the production server", () => {
     const [call] = backendCalls;
     assert.equal(call.url, "/api/echo");
     assert.equal(call.headers["x-forwarded-for"], "127.0.0.1");
-    // The client headers the proxy relays reach a module's backend call too.
     assert.equal(call.headers["x-realtime-connection"], "connection-7");
     assert.equal(call.headers["x-time-zone"], undefined);
     assert.equal(call.headers["x-custom"], undefined);
@@ -804,7 +799,6 @@ describe("Module server routes in the production server", () => {
 
 describe("Module server routes in development", () => {
   it("answers with an edited handler on the next request", async () => {
-    // Resolved, because Vite reports a change under the path it resolved.
     const workspace = realpathSync(
       mkdtempSync(resolve(".server-modules-dev-")),
     );
@@ -867,7 +861,6 @@ describe("Module server routes in development", () => {
         ) => Promise<boolean>;
         loadServerModules: (devServer: unknown) => Promise<unknown>;
       };
-      // What server.mjs does for each request in development.
       frontend = createServer(async (request, response) => {
         void handleModuleRoute(
           request,
@@ -883,7 +876,6 @@ describe("Module server routes in development", () => {
         ((await (await fetch(url)).json()) as { version: string }).version;
 
       assert.equal(await version(), "v1");
-      // Vite's watcher drops a second change to a file within 50 ms on Linux.
       await new Promise((settle) => setTimeout(settle, 100));
       writeHandler("v2");
       const deadline = Date.now() + 15_000;
@@ -985,13 +977,11 @@ describe("The module testing helper", () => {
       const account = await call("/api/_dms-auth/write/dms_account_1");
       assert.equal(account.status, 204);
       assert.match(account.cookie, /^dms_account_1_[0-9a-f]{12}=/);
-      // Another module can neither read nor write the owner's cookies.
       assert.equal(
         (await call("/api/_shop/read/dms_account_1", account.cookie)).status,
         502,
       );
       assert.equal((await call("/api/_shop/write/dms_account_1")).status, 502);
-      // Its own cookies carry its id, and the owner's same name is another.
       const flow = await call("/api/_shop/write/flow");
       assert.match(flow.cookie, /^shop\.flow_[0-9a-f]{12}=/);
       assert.deepEqual((await call("/api/_shop/read/flow", flow.cookie)).body, {

@@ -32,11 +32,10 @@ function write(path: string, content: string): void {
   writeFileSync(path, content);
 }
 
-// Markers only one catalog carries, to find where each one ends up.
+/** Markers only one catalog carries, to find where each one ends up. */
 const ENGLISH = {
   greeting: "Hello",
   only_english: "english-only-marker",
-  // A message the renderer translates itself, overridden in English alone.
   error: { network: { title: "Offline" } },
 };
 const FRENCH = { greeting: "Bonjour-french-marker" };
@@ -86,8 +85,6 @@ describe("generated locale catalogs", () => {
       greeting: FRENCH.greeting,
       only_english: ENGLISH.only_english,
     });
-    // The email bundle resolves its fallback itself, from each locale's own
-    // messages.
     assert.deepEqual(
       JSON.parse(readText(join(workspace, "locales.generated", "fr.json"))),
       FRENCH,
@@ -107,7 +104,6 @@ describe("generated locale catalogs", () => {
       fallbackLocale: "en",
       messages: { fr: french.default },
     });
-    // Inertia only listens in a browser.
     const globals = globalThis as Record<string, unknown>;
     globals.window = globalThis;
     globals.document = new EventTarget();
@@ -135,8 +131,6 @@ describe("generated locale catalogs", () => {
         "void loadLocaleMessages(navigator.language).then(console.log);\n",
     );
     const outDir = join(workspace, "dist");
-    // Imported here, as the other tests that run Vite from a TypeScript test
-    // file do: the static import goes through the CommonJS transform.
     const { build } = await import("vite");
     await build({
       root: workspace,

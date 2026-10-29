@@ -49,7 +49,6 @@ const active = computed(() => page.url === props.to || page.url.startsWith(\`\${
 </script>
 <template><a :href="to" :data-active="active"><slot /></a></template>
 `,
-  // Nuxt UI 4.10's useState, verbatim: one record of refs for the module.
   "dist/runtime/vue/stubs/base.js": `import { ref } from "vue";
 const state = {};
 export const useState = (key, init) => {
@@ -145,8 +144,6 @@ async function withServerRenderer(
   page: string,
   run: (renderer: ServerRenderer) => Promise<void>,
 ): Promise<void> {
-  // Inside the repository, like the other server render tests, so the
-  // renderer's dependencies resolve; with the template's own Vite config.
   const workspace = realpathSync(mkdtempSync(resolve(".ui-request-page-")));
   let server: ViteDevServer | undefined;
   try {
@@ -213,8 +210,6 @@ it("gives Nuxt UI's Link and route stub their own request's URL while another re
   Reflect.set(globalThis, "__dmsUiRequestPage", probe);
   try {
     await withServerRenderer(PAGE, async (renderer) => {
-      // The first request suspends once its app has set up; the second
-      // renders whole meanwhile, then the first one resumes.
       let release = () => {};
       probe.gate = new Promise<void>((settle) => (release = settle));
       const waiting = new Promise<void>((settle) => (probe.waiting = settle));

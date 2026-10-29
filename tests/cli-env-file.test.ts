@@ -41,8 +41,6 @@ describe("project .env loading", () => {
   });
 
   it("treats a variable set to the empty string as set", () => {
-    // Commander's `.env()` binding makes the same distinction: an exported
-    // but empty variable is a deliberate "no value", not an absent one.
     const cwd = project({ ".env": "DMS_BOOTSTRAP_SECRET=from-file\n" });
     const env: NodeJS.ProcessEnv = { DMS_BOOTSTRAP_SECRET: "" };
 
@@ -75,7 +73,6 @@ describe("project .env loading", () => {
 
   it("reports an unreadable file instead of failing the command", () => {
     const cwd = project({ ".env": "DMS_API_BASE_URL=http://kept\n" });
-    // A directory named `.env.local` stands in for any read failure.
     mkdirSync(join(cwd, ".env.local"));
     const warnings: string[] = [];
     const env: NodeJS.ProcessEnv = {};

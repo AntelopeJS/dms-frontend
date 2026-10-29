@@ -1,8 +1,3 @@
-// Installing the workspace's dependencies, running commands inside it, and the
-// setupWorkspace entry point the commands call.
-//
-// Split out of common.ts, which stays the barrel every command imports from.
-
 import {
   type ChildProcess,
   type SpawnOptions,
@@ -62,10 +57,6 @@ import { CancelledError, exitCodeForSignal } from "./cancellation";
 import { endInterruptedTask } from "./output";
 import { canonicalizeBackendUrl, DEPS_HASH_FILE } from "./config";
 import { InvalidLocaleFileError } from "./locale-files";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 const WORKSPACE_PNPM_CONFIG = "pnpm-workspace.yaml";
 const WORKSPACE_PATCHES_DIR = "patches";
@@ -150,6 +141,9 @@ const PNPM_INSTALL_ARGS = ["install", "--reporter=append-only"];
  * pnpm's progress. Its output is kept and replayed on failure, or streamed
  * behind a gutter in a verbose run. `extraArgs` follow pnpm's own, e.g.
  * `--ignore-scripts`.
+ *
+ * Disables npm's update notifier: the workspace pins its own pnpm, which a DMS
+ * user has no reason to upgrade.
  */
 export async function installDeps(
   workspaceDir: string,
@@ -165,8 +159,6 @@ export async function installDeps(
       {
         name: "pnpm",
         cwd: workspaceDir,
-        // The workspace pins its own pnpm, which a DMS user has no reason to
-        // upgrade.
         env: { ...process.env, npm_config_update_notifier: "false" },
         mapLine,
         onLine: (line) => {
@@ -192,10 +184,6 @@ export async function installDeps(
   }
 }
 
-// ============================================================================
-// Process Spawning
-// ============================================================================
-
 /** Signals the CLI forwards to the child instead of dying on its own. */
 const FORWARDED_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
@@ -216,6 +204,15 @@ const CHILD_SHUTDOWN_TIMEOUT_MS = 5000;
  * Resolves with the child's exit code; rejects with a `CancelledError` when
  * the CLI received SIGINT, SIGTERM or SIGHUP while the child was running.
  * `onSpawn` receives the child as soon as it exists, to read its piped output.
+ *
+ * A shell is spawned only on Windows, where npm-installed binaries are `.cmd`
+ * shims. On POSIX dash would fork rather than exec, so the pid held here would
+ * be the shell's and the signals would never reach the server.
+ *
+ * Windows gets no detached group, which would open a new console window.
+ *
+ * After the group signal, SIGKILL follows on POSIX: a grandchild that ignored
+ * it would be reparented to init and outlive the CLI.
  */
 export function runCommand(
   command: string,
@@ -227,14 +224,8 @@ export function runCommand(
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
-      // A shell is only needed on Windows, where npm-installed binaries are
-      // .cmd shims. On POSIX it would put /bin/sh between us and the server:
-      // dash forks rather than execs here, so the pid we hold would be the
-      // shell's and the signals below would never reach the actual process.
       shell: isWindows,
       ...options,
-      // A new process group on POSIX, whose id is the child's pid. On
-      // Windows it would open a new console window instead.
       detached: !isWindows,
     });
     onSpawn?.(child);
@@ -248,17 +239,13 @@ export function runCommand(
       if (child.pid === undefined) return;
       try {
         if (isWindows) {
-          // Windows has no signal delivery: the tree is terminated at once,
-          // so the escalation below is a no-op there.
           spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
             stdio: "ignore",
           });
         } else {
           process.kill(-child.pid, signal);
         }
-      } catch {
-        // The whole group already exited.
-      }
+      } catch {}
     };
 
     const stopChild = (signal: NodeJS.Signals) => {
@@ -276,9 +263,6 @@ export function runCommand(
       stopChild(signal);
     };
 
-    // "exit" is synchronous, so there is no room for a graceful shutdown:
-    // this is the last-resort net for an uncaught exception or a
-    // process.exit() raised elsewhere in the CLI.
     const onParentExit = () => {
       if (alive()) signalTree("SIGKILL");
     };
@@ -299,8 +283,6 @@ export function runCommand(
     child.on("exit", (code, signal) => {
       cleanup();
       if (forwarded) {
-        // A grandchild that ignored the signal would be reparented to init
-        // and keep running after the CLI exits.
         if (!isWindows) signalTree("SIGKILL");
         return reject(new CancelledError(forwarded));
       }
@@ -390,10 +372,6 @@ export async function runFramedCommand(
   await Promise.race([ended, drainTimeout()]);
   return { code, lines: tails.flatMap((tail) => tail.lines()) };
 }
-
-// ============================================================================
-// Full Workspace Setup (orchestration)
-// ============================================================================
 
 export interface SetupWorkspaceOptions {
   force: boolean;
@@ -578,6 +556,10 @@ function workspaceSource(
  * with `workspace:*` deps, materialize each module under
  * `<workspace>/frontend-modules/<safeName>/`, write the generated module
  * registry and dms-main.css, and install deps.
+ *
+ * `materializeLayers` wipes and recreates `<workspace>/frontend-modules/` from
+ * the current module set, and must run before `pnpm install` so pnpm sees the
+ * workspace packages.
  */
 export async function setupWorkspace(
   opts: SetupWorkspaceOptions,
@@ -599,9 +581,6 @@ export async function setupWorkspace(
   const layerPaths = layers.map((layer) => layer.path);
   const shouldInstall = needsInstall(workspaceDir, layerPaths, opts.force);
 
-  // `materializeLayers` always wipes `<workspace>/frontend-modules/` and
-  // re-creates it from the current module set. It must run before
-  // `pnpm install` so pnpm sees the workspace packages.
   if (shouldInstall) {
     await opts.beforeInstall?.();
     await installDeps(workspaceDir, createPathMapper(workspaceDir, layers));
@@ -616,14 +595,6 @@ export async function setupWorkspace(
     manifestSecrets: secrets,
   };
 }
-
-// ============================================================================
-// Dev-mode source watcher
-// ============================================================================
-
-// ============================================================================
-// Workspace apply primitives (shared by the dev watcher and ZIP/HTTP sync)
-// ============================================================================
 
 /** Debounce window for coalescing a burst of watcher events into one apply. */
 

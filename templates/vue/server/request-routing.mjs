@@ -1,14 +1,3 @@
-// Who answers a request: one owner per path, whoever asks and whatever the
-// method, in this order:
-//
-// 1. the renderer: its icon endpoint, Vite's URLs and the built assets, and
-//    any file it has (a development source, a built asset);
-// 2. the module routes of the modules' `dms.server.ts`;
-// 3. the backend proxies the modules declare (`registerBackendProxy`, the
-//    manifest's `backendProxies`);
-// 4. the pages, for everything else: a method other than `GET` and `HEAD` on a
-//    page path is a `404`.
-
 import { matchBackendProxy } from "./backend-proxies.mjs";
 import { isRendererFilePath, moduleRouteMethods } from "./module-routes.mjs";
 
@@ -16,6 +5,14 @@ const PAGE_METHODS = new Set(["GET", "HEAD"]);
 
 /**
  * The owner of a request.
+ *
+ * Who answers a request: one owner per path, whoever asks and whatever the
+ * method, in this order: 1. the renderer: its icon endpoint, Vite's URLs and
+ * the built assets, and any file it has (a development source, a built asset);
+ * 2. the module routes of the modules' `dms.server.ts`; 3. the backend proxies
+ * the modules declare (`registerBackendProxy`, the manifest's
+ * `backendProxies`); 4. the pages, for everything else: a method other than
+ * `GET` and `HEAD` on a page path is a `404`.
  *
  * @param method The request's method
  * @param pathname The request's normalized path

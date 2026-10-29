@@ -1,18 +1,17 @@
-// Reading a failed DMS backend response for the page a visitor gets instead.
-//
-// Lives apart from server.mjs so the file stays under the size the linter
-// allows.
-
 import { GENERIC_ERROR_MESSAGE } from "./auth/backend.mjs";
 import { isFrontendVisit, redirectFrontendVisit } from "./inertia.mjs";
 
-// What a JSON caller gets when the backend fails: the generic i18n key of the
-// API error contract. A page gets the status code alone, which the DMS error
-// page describes in the visitor's language; the technical cause only reaches
-// the server log.
+/**
+ * What a JSON caller gets when the backend fails: the generic i18n key of
+ * the API error contract. A page gets the status code alone, which the DMS
+ * error page describes in the visitor's language; the technical cause only
+ * reaches the server log.
+ */
 export const UNEXPECTED_ERROR_BODY = { message: GENERIC_ERROR_MESSAGE };
-// A typed refusal carries a machine-readable i18n key as its body, bare or
-// JSON-encoded, e.g. `saas.errors.workspace.access_blocked`.
+/**
+ * A typed refusal carries a machine-readable i18n key as its body, bare or
+ * JSON-encoded, e.g. `saas.errors.workspace.access_blocked`.
+ */
 const REFUSAL_CODE = /^[a-z0-9_-]+(?:\.[a-z0-9_-]+)+$/i;
 const REFUSAL_CODE_MAX_LENGTH = 200;
 const FORBIDDEN = 403;
@@ -26,6 +25,10 @@ export class BackendResponseError extends Error {
   }
 }
 
+/**
+ * The refusal code in a backend answer: the string or the `message` of its
+ * JSON body, or the body itself when it is not JSON (a bare code).
+ */
 async function refusalCode(response) {
   const text = (await response.text().catch(() => "")).trim();
   if (text.length > REFUSAL_CODE_MAX_LENGTH) return undefined;
@@ -33,9 +36,7 @@ async function refusalCode(response) {
   try {
     const data = JSON.parse(text);
     value = typeof data === "string" ? data : data?.message;
-  } catch {
-    // A bare code.
-  }
+  } catch {}
   return typeof value === "string" && REFUSAL_CODE.test(value)
     ? value
     : undefined;

@@ -1,10 +1,3 @@
-// What the CLI says around the core output module: the line a command opens
-// with, paths and dates as the user reads them, the block a ready server
-// prints, the time-stamped lines of a running one, and the line a stopped run
-// ends on. A quiet run leaves out what the core leaves out of its own output:
-// everything but results, warnings and errors. On a terminal, these lines wrap
-// to its width between words, as the core wraps its own.
-
 import { homedir } from "node:os";
 import {
   basename,

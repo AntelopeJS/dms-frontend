@@ -1,8 +1,3 @@
-// A backend redirect is the browser's to follow. Followed server-side, a
-// redirect to another site served that site's page, and set its cookies, on
-// the frontend's origin, and a redirect on the backend lost its Location.
-// The proxy fetches with `redirect: "manual"` and relays the redirect instead.
-
 /** The statuses that send the client to their `Location`. */
 export const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -32,6 +27,13 @@ export function isBackendUrl(
  * declared backend proxy) stays an absolute backend URL, which the browser
  * follows to the backend. Another site's location is kept.
  *
+ * A backend redirect is the browser's to follow. Followed server-side, a
+ * redirect to another site served that site's page, and set its cookies, on the
+ * frontend's origin, and a redirect on the backend lost its Location. The proxy
+ * fetches with `redirect: "manual"` and relays the redirect instead.
+ *
+ * `//host` would name another host, so `/.` keeps the location a path.
+ *
  * @param location The backend's `Location`
  * @param fetchedUrl The backend URL the answer came from
  * @param isProxiedPath `(pathname) => boolean`, whether the frontend server
@@ -51,7 +53,6 @@ export function relayedLocation(
   if (target.origin !== originOf(fetchedUrl)) return location;
   if (!isProxiedPath(target.pathname)) return target.href;
   const path = `${target.pathname}${target.search}${target.hash}`;
-  // `//host` would name another host: `/.` keeps it a path.
   return path.startsWith("//") ? `/.${path}` : path;
 }
 

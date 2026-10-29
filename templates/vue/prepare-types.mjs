@@ -1,10 +1,3 @@
-// Writes the files Vite generates and the type check reads (auto-imports.d.ts
-// and the Nuxt UI templates) without building anything: it resolves
-// vite.config.ts and runs its build hooks over an empty entry, in seconds
-// where a client build takes a minute. `ajs dms verify-source` runs it first
-// (`pnpm run build:types`), so the type check no longer waits for the client
-// bundle.
-
 import { build } from "vite";
 
 const ENTRY = "dms-prepare-types-entry";
@@ -23,7 +16,6 @@ await build({
   build: {
     write: false,
     emptyOutDir: false,
-    // The entry is empty on purpose; Rolldown does not warn about it.
     rolldownOptions: { input: ENTRY },
   },
 });

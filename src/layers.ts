@@ -1,9 +1,3 @@
-// Resolving the manifest's frontend modules onto disk -- downloading and
-// extracting them, or rebuilding them from cache -- so the workspace can
-// materialize them and build its module registry.
-//
-// Split out of common.ts, which stays the barrel every command imports from.
-
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CliError } from "@antelopejs/core/cli";
@@ -11,10 +5,6 @@ import { displayUrl, ServedWithPath } from "./manifest";
 import { ManifestModule, ResolvedLayer } from "./workspace";
 import { LAYERS_SUBDIR } from "./config";
 import { formatAge } from "./output";
-
-// ============================================================================
-// Constants
-// ============================================================================
 
 /** What the user does when a backend never sends layer source paths. */
 const BUILD_FIX =
@@ -76,10 +66,6 @@ export function assertLayerPathsServed(
     fixes: [fix, BUILD_FIX],
   });
 }
-
-// ============================================================================
-// Layer Resolution
-// ============================================================================
 
 /**
  * Sort frontend modules by descending priority.
@@ -147,10 +133,6 @@ export function buildLayersFromPaths(
   );
 }
 
-// ============================================================================
-// Generated Layers Data
-// ============================================================================
-
 /**
  * Derive a filesystem-safe directory name for a layer from its package name,
  * falling back to the basename of its path. Used to name each module's
@@ -173,10 +155,6 @@ export function getLayerWorkspacePath(
 ): string {
   return join(workspaceDir, LAYERS_SUBDIR, getLayerSafeName(layer));
 }
-
-// ============================================================================
-// Workspace File Generation
-// ============================================================================
 
 /**
  * Get the package root directory (where the package.json and

@@ -6,10 +6,12 @@ import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 
-// A path whose last percent-escape is cut short: Vite's HTML transform and the
-// router both run `decodeURI` on it, which throws.
+/**
+ * A path whose last percent-escape is cut short: Vite's HTML transform and
+ * the router both run `decodeURI` on it, which throws.
+ */
 const MALFORMED_PATH = "/cloud/projects/%E0%A4%A";
-// A request the server dropped would otherwise wait forever.
+/** A request the server dropped would otherwise wait forever. */
 const REQUEST_TIMEOUT_MS = 10_000;
 
 interface ServerTemplate {
@@ -40,9 +42,6 @@ describe("requests the frontend server cannot serve", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
-    // The real development server: Vite in middleware mode, rooted in a
-    // directory of its own, without the watcher and HMR socket that would keep
-    // the test process alive.
     writeFileSync(
       join(root, "vite.config.mjs"),
       "export default { logLevel: 'silent', server: { watch: null, ws: false } };",
@@ -104,8 +103,6 @@ describe("requests the frontend server cannot serve", () => {
         body = content;
       },
     };
-    // Every read of the URL fails, the error page's included: before the
-    // guard this rejection escaped the request handler and ended the process.
     const request = {
       headers: { accept: "text/html" },
       method: "GET",
@@ -127,7 +124,6 @@ describe("requests the frontend server cannot serve", () => {
       headersSent: false,
       writableEnded: false,
       writeHead() {
-        // The error page started its response, then its rendering failed.
         response.headersSent = true;
         throw new Error("render failed mid-response");
       },
@@ -139,7 +135,6 @@ describe("requests the frontend server cannot serve", () => {
     const request = {
       headers: { accept: "application/json" },
       method: "GET",
-      // Unreadable once, so the request fails and its JSON error is written.
       get url(): string {
         reads += 1;
         if (reads === 1) throw new Error("unreadable request");
