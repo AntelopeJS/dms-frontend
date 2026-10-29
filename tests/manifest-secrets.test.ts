@@ -1,7 +1,6 @@
 import * as assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -16,9 +15,10 @@ import {
   reportManifestSecrets,
   resolveManifestSecrets,
 } from "../src/manifest-secrets";
-import type { ManifestModule } from "../src/workspace";
+import type { FrontendModuleValue, ManifestModule } from "../src/workspace";
 import { memoryUi } from "./fixtures/memory-ui";
 import { OWN_PACKAGE } from "./helpers/own-package";
+import { addressOf } from "./helpers/net";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST_SECRET = "manifest-render-secret";
@@ -26,16 +26,16 @@ const RELAY_SECRET = "manifest-relay-secret";
 const SESSION_SECRET = "html-render-secret-test-session-secret";
 
 function dmsModule(
-  serviceSecret: unknown,
-  relaySecret: unknown = RELAY_SECRET,
+  serviceSecret: FrontendModuleValue,
+  relaySecret: FrontendModuleValue = RELAY_SECRET,
   overrides: Partial<ManifestModule> = {},
 ): ManifestModule {
   return {
     name: "@antelopejs/dms-frontend-vue",
     priority: 0,
     privateOptions: {
-      htmlRender: { serviceSecret } as never,
-      oauth: { relaySecret } as never,
+      htmlRender: { serviceSecret },
+      oauth: { relaySecret },
     },
     ...overrides,
   };
@@ -421,7 +421,7 @@ describe("ajs dms start", () => {
       response.end();
     });
     await new Promise<void>((done) => backend.listen(0, "127.0.0.1", done));
-    const { port } = backend.address() as AddressInfo;
+    const { port } = addressOf(backend);
     const backendUrl = `http://127.0.0.1:${port}`;
     try {
       const taken = await start(

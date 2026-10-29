@@ -7,19 +7,15 @@ import {
   isOriginForm,
 } from "../templates/vue/server/request-target.mjs";
 import "./fixtures/dms-backend-proxies.mts";
+import { addressOf } from "./helpers/net";
 
 const BACKEND = "http://127.0.0.1:8080";
 /** A request the server dropped would otherwise wait forever. */
 const REQUEST_TIMEOUT_MS = 10_000;
 
-interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
-}
-
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return address.port;
 }
 
@@ -136,8 +132,7 @@ describe("the proxy with a target naming another host", () => {
   before(async () => {
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
     attackerHost = `127.0.0.1:${await listen(attacker)}`;
-    const runtime =
-      (await import("../templates/vue/server.mjs")) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     frontendPort = await listen(frontend);
   });

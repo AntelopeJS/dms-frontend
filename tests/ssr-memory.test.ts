@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import type { App } from "vue";
+import { addressOf } from "./helpers/net";
 
 const RENDERS = 40;
 
@@ -130,8 +131,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     );
     writeFileSync(join(workspace, "dist/client/.vite/manifest.json"), "{}");
     await new Promise<void>((settle) => backend.listen(0, "127.0.0.1", settle));
-    const backendAddress = backend.address();
-    assert.ok(backendAddress && typeof backendAddress === "object");
+    const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     Reflect.set(globalThis, "__dmsLeakProbe", probe);
     const { handleRequestSafely } = await import(
@@ -141,8 +141,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     await new Promise<void>((settle) =>
       frontend!.listen(0, "127.0.0.1", settle),
     );
-    const address = frontend.address();
-    assert.ok(address && typeof address === "object");
+    const address = addressOf(frontend);
     for (let render = 0; render < RENDERS; render += 1) {
       const response = await fetch(
         `http://127.0.0.1:${address.port}/page?render=${render}`,

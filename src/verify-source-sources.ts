@@ -214,11 +214,13 @@ function notCoreLayer(
   };
 }
 
-/** The packages at --layer: the one there, or each directory in it. */
-function readLayerSource(layerSource: string): {
+interface LayerSource {
   sourceRoot: string;
   layers: ResolvedLayer[];
-} {
+}
+
+/** The packages at --layer: the one there, or each directory in it. */
+function readLayerSource(layerSource: string): LayerSource {
   const sourceRoot = resolve(layerSource);
   if (!statSync(sourceRoot, { throwIfNoEntry: false })?.isDirectory())
     throw new UsageError({

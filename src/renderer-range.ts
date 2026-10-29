@@ -9,6 +9,7 @@ import semver from "semver";
 import { readLayerPackage } from "./layers";
 import { showPath } from "./output";
 import { ResolvedLayer } from "./workspace";
+import { isText } from "./internal/guards";
 
 /** The loader a module's range is checked against: a package name and release. */
 export interface RendererRelease {
@@ -105,7 +106,7 @@ function describeProblem(
   version: string,
 ): string | undefined {
   const { shown, range } = declaration;
-  if (typeof range !== "string" || semver.validRange(range) === null)
+  if (!isText(range) || semver.validRange(range) === null)
     return `${shown} declares an unreadable range: ${JSON.stringify(range)}`;
   if (semver.satisfies(releaseLine(version), range)) return undefined;
   return `${shown} supports ${range}`;

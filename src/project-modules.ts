@@ -1,7 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import type { ConfigLoader } from "@antelopejs/core";
 import { CliError, getProcessUi } from "@antelopejs/core/cli";
+import { isCallable, isObjectLike, isText } from "./internal/guards";
 import { readLayerPackage } from "./layers";
 import { emptiedOptions } from "./private-values";
 import type {
@@ -75,8 +77,10 @@ export interface ProjectModulesOptions {
   dev?: boolean;
 }
 
+type FileSystem = ConstructorParameters<typeof ConfigLoader>[0];
+
 /** AntelopeJS's file system interface, on Node's own. */
-const NODE_FILE_SYSTEM = {
+const NODE_FILE_SYSTEM: FileSystem = {
   readFile: (path: string) => fsPromises.readFile(path),
   readFileString: (path: string, encoding: BufferEncoding = "utf-8") =>
     fsPromises.readFile(path, encoding),
@@ -120,9 +124,12 @@ type ConfigVarLookup = (
 /** A module's `antelopeJs` block, from antelope.module.json when it has one, as AntelopeJS reads it. */
 function readAntelopeManifest(folder: string): ConfigVarsManifest | undefined {
   const dedicated = join(folder, MODULE_MANIFEST_FILE);
-  if (existsSync(dedicated))
-    return JSON.parse(readFileSync(dedicated, "utf-8")) as ConfigVarsManifest;
-  return readLayerPackage(folder)?.antelopeJs as ConfigVarsManifest | undefined;
+  if (existsSync(dedicated)) {
+    const manifest: unknown = JSON.parse(readFileSync(dedicated, "utf-8"));
+    return isObjectLike(manifest) ? manifest : undefined;
+  }
+  const block = readLayerPackage(folder)?.antelopeJs;
+  return isObjectLike(block) ? block : undefined;
 }
 
 function warnUndeclaredConfigVars(id: string): void {
@@ -139,21 +146,21 @@ function configVarsProvider(
 ): ConfigVarsProvider | undefined {
   const manifest = readAntelopeManifest(folder);
   const file = manifest?.configVarsFile;
-  if (typeof file !== "string") {
+  if (!isText(file)) {
     warnUndeclaredConfigVars(id);
     return undefined;
   }
   const { configVars } = require(join(folder, file)) as {
     configVars?: ConfigVarsFunction;
   };
-  if (typeof configVars !== "function") {
+  if (!isCallable(configVars)) {
     throw new CliError({
       title: `${id}: ${file} exports no configVars function`,
       fixes: [`Export configVars(config) from ${file}`],
     });
   }
   const declared = Array.isArray(manifest?.configVars)
-    ? manifest.configVars.filter((name) => typeof name === "string")
+    ? manifest.configVars.filter(isText)
     : [];
   return { declared, configVars };
 }
@@ -252,11 +259,10 @@ export async function loadProjectConfig(
   environment: string,
 ): Promise<ProjectConfig> {
   const { ConfigLoader } = await import("@antelopejs/core");
-  type FileSystem = ConstructorParameters<typeof ConfigLoader>[0];
-  const loader = new ConfigLoader(NODE_FILE_SYSTEM as FileSystem);
+  const loader = new ConfigLoader(NODE_FILE_SYSTEM);
   let loaded: ProjectConfig;
   try {
-    loaded = (await loader.load(projectDir, environment)) as ProjectConfig;
+    loaded = await loader.load(projectDir, environment);
   } catch (error) {
     throw new CliError(
       {
@@ -315,10 +321,12 @@ function moduleFolder(
  */
 export function readShippingVersion(sourcePath: string): string | undefined {
   try {
-    const pkg = JSON.parse(
+    const pkg: unknown = JSON.parse(
       readFileSync(join(dirname(sourcePath), "package.json"), "utf-8"),
-    ) as { version?: unknown };
-    return typeof pkg.version === "string" ? pkg.version : undefined;
+    );
+    return isObjectLike(pkg) && "version" in pkg && isText(pkg.version)
+      ? pkg.version
+      : undefined;
   } catch {
     return undefined;
   }
@@ -334,7 +342,7 @@ function toLayer(registration: FrontendRegistration): ResolvedLayer {
     path: registration.sourcePath,
     name: registration.name,
     sourcePath: registration.sourcePath,
-    packageName: typeof name === "string" ? name : undefined,
+    packageName: isText(name) ? name : undefined,
     priority: registration.priority ?? 0,
     configKey: registration.configKey,
     options: registration.options ?? {},
@@ -370,14 +378,14 @@ function registrationOf(
   context: FrontendModuleContext,
 ): FrontendRegistration | undefined {
   const declaration = readLayerPackage(folder)?.[FRONTEND_DECLARATION_FIELD];
-  if (typeof declaration !== "string") {
+  if (!isText(declaration)) {
     warnUndeclaredFrontend(id, folder);
     return undefined;
   }
   const { frontendModule } = require(join(folder, declaration)) as {
     frontendModule?: FrontendModuleFunction;
   };
-  if (typeof frontendModule !== "function") {
+  if (!isCallable(frontendModule)) {
     throw new CliError({
       title: `${id}: ${declaration} exports no frontendModule function`,
       fixes: [`Export frontendModule(config, context) from ${declaration}`],

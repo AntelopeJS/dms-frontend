@@ -7,6 +7,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, type TestContext } from "node:test";
 import { listenHost } from "../templates/vue/server/listen-host.mjs";
+import { addressOf } from "./helpers/net";
+import { isNumber } from "./helpers/guards";
 
 const SERVER = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -123,9 +125,7 @@ function occupiedPort(context: TestContext): Promise<number> {
     const holder: Server = createServer();
     context.after(() => holder.close());
     holder.listen(0, "127.0.0.1", () => {
-      const address = holder.address();
-      if (address === null || typeof address === "string")
-        throw new Error("No address");
+      const address = addressOf(holder);
       settle(address.port);
     });
   });
@@ -170,7 +170,7 @@ describe("Frontend server startup", () => {
       const message = await firstMessage(started);
       assert.equal(message.type, "dms:ready");
       assert.equal(message.address, "127.0.0.1");
-      assert.equal(typeof message.port, "number");
+      assert.ok(isNumber(message.port));
       await canConnect(message.port as number);
       assert.doesNotMatch(started.output(), READY);
     },

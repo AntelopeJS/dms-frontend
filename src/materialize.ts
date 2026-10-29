@@ -29,6 +29,7 @@ import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
 import { MANIFEST_SECRET_ENV } from "./manifest-secrets";
 import {
   BackendProxyDeclaration,
+  FrontendModuleValue,
   PublicEndpointDeclaration,
   ResolvedLayer,
 } from "./workspace";
@@ -40,6 +41,7 @@ import {
   sanitizedPackageContent,
   toPosixPath,
 } from "./fs-sync";
+import { isObjectLike, isText } from "./internal/guards";
 
 export function getPackageRoot(): string {
   return resolve(__dirname, "..");
@@ -223,7 +225,7 @@ export function collectAuthEstablishEndpoints(
   const endpoints = new Set<string>();
   for (const layer of layers) {
     for (const endpoint of layer.authEstablishEndpoints ?? []) {
-      if (typeof endpoint === "string" && BACKEND_API_PATH.test(endpoint)) {
+      if (isText(endpoint) && BACKEND_API_PATH.test(endpoint)) {
         endpoints.add(endpoint);
         continue;
       }
@@ -270,7 +272,7 @@ function collectPublicEndpoints(
 ): PublicEndpointDeclaration[] {
   return layers.flatMap((layer) =>
     (Array.isArray(layer.publicEndpoints) ? layer.publicEndpoints : []).filter(
-      (endpoint) => typeof endpoint === "object" && endpoint !== null,
+      isObjectLike,
     ),
   );
 }
@@ -286,7 +288,7 @@ function collectBackendProxies(
 ): (BackendProxyDeclaration & { module: string })[] {
   return layers.flatMap((layer) =>
     (Array.isArray(layer.backendProxies) ? layer.backendProxies : [])
-      .filter((proxy) => typeof proxy === "object" && proxy !== null)
+      .filter(isObjectLike)
       .map((proxy) => ({
         ...proxy,
         module: layer.name ?? layer.packageName ?? "unknown",
@@ -309,10 +311,9 @@ function writePublicEndpoints(
 }
 
 /** Whether private options carry a value rather than only their shape. */
-function holdsValue(value: unknown): boolean {
-  if (typeof value === "string") return value !== "";
-  if (value !== null && typeof value === "object")
-    return Object.values(value).some(holdsValue);
+function holdsValue(value: FrontendModuleValue): boolean {
+  if (isText(value)) return value !== "";
+  if (isObjectLike(value)) return Object.values(value).some(holdsValue);
   return false;
 }
 

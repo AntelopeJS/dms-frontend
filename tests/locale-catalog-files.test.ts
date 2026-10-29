@@ -104,22 +104,22 @@ describe("generated locale catalogs", () => {
       fallbackLocale: "en",
       messages: { fr: french.default },
     });
-    const globals = globalThis as Record<string, unknown>;
-    globals.window = globalThis;
-    globals.document = new EventTarget();
+    const document = new EventTarget();
+    Reflect.set(globalThis, "window", globalThis);
+    Reflect.set(globalThis, "document", document);
     const titles: string[] = [];
     const removeListener = showNetworkErrors(
       (toast) => titles.push(toast.title),
       i18n.global,
     );
     try {
-      (globals.document as EventTarget).dispatchEvent(
+      document.dispatchEvent(
         new CustomEvent("inertia:networkError", { cancelable: true }),
       );
     } finally {
       removeListener();
-      delete globals.window;
-      delete globals.document;
+      Reflect.deleteProperty(globalThis, "window");
+      Reflect.deleteProperty(globalThis, "document");
     }
     assert.deepEqual(titles, ["Connexion perdue"]);
   });

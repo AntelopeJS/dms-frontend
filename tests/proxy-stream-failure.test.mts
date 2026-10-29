@@ -9,6 +9,7 @@ import {
 import { setTimeout as delay } from "node:timers/promises";
 import { after, before, describe, it } from "node:test";
 import "./fixtures/dms-backend-proxies.mts";
+import { addressOf } from "./helpers/net";
 
 interface ServerTemplate {
   handleRequestSafely: (
@@ -38,8 +39,7 @@ const EVENT_STREAM = "text/event-stream";
 
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return address.port;
 }
 
@@ -91,9 +91,8 @@ describe("a backend stream that fails", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
-    runtime = (await import("../templates/vue/server.mjs")) as ServerTemplate;
-    compression =
-      (await import("../templates/vue/server/proxy-compression.mjs")) as ProxyCompression;
+    runtime = await import("../templates/vue/server.mjs");
+    compression = await import("../templates/vue/server/proxy-compression.mjs");
     frontendPort = await listen(frontend);
   });
 

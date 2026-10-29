@@ -10,6 +10,7 @@ import {
   runViteMiddlewares,
   writeViteError,
 } from "../templates/vue/server/vite-errors.mjs";
+import { addressOf } from "./helpers/net";
 
 const PAGE_FALLBACK_STATUS = 404;
 
@@ -48,7 +49,7 @@ describe("the dev server's answer to a module Vite cannot transform", () => {
       response.end();
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
-    const address = server.address() as { port: number };
+    const address = addressOf(server);
     base = `http://127.0.0.1:${address.port}`;
   });
 

@@ -27,18 +27,17 @@ function translator(locale: string, messages: Record<string, string> = {}) {
 }
 
 describe("network error feedback", () => {
-  const globals = globalThis as Record<string, unknown>;
   let removeListener: (() => void) | undefined;
 
   beforeEach(() => {
-    globals.window = globalThis;
-    globals.document = new EventTarget();
+    Reflect.set(globalThis, "window", globalThis);
+    Reflect.set(globalThis, "document", new EventTarget());
   });
 
   afterEach(() => {
     removeListener?.();
-    delete globals.window;
-    delete globals.document;
+    Reflect.deleteProperty(globalThis, "window");
+    Reflect.deleteProperty(globalThis, "document");
   });
 
   it("shows a toast and keeps the failed visit from rejecting", () => {

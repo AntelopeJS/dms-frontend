@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { listNames } from "./helpers/files";
 import { OWN_PACKAGE } from "./helpers/own-package";
+import { addressOf, boundAddress } from "./helpers/net";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const builtEntry = join(repository, "dist/index.js");
@@ -383,8 +384,8 @@ function listenOnFreePort(): Promise<{ server: Server; port: number }> {
     const server = createServer();
     server.once("error", reject);
     server.listen({ port: 0 }, () => {
-      const address = server.address();
-      if (address === null || typeof address === "string") {
+      const address = boundAddress(server);
+      if (address === undefined) {
         reject(new Error("No address"));
         return;
       }
@@ -649,7 +650,7 @@ describe("validating options before any work", () => {
       });
     });
     await new Promise<void>((resolve) => backend.listen(0, resolve));
-    const backendUrl = `http://127.0.0.1:${(backend.address() as { port: number }).port}`;
+    const backendUrl = `http://127.0.0.1:${addressOf(backend).port}`;
     try {
       const result = await runCli(["start", "-b", backendUrl, "-p", "0"], {
         files: {
@@ -908,9 +909,7 @@ describe("telling a skipped prepare from a failed one", () => {
     await new Promise<void>((settle) =>
       server.listen({ port: 0, host: "127.0.0.1" }, settle),
     );
-    const address = server.address();
-    if (address === null || typeof address === "string")
-      throw new Error("No address");
+    const address = addressOf(server);
     try {
       await run(`http://127.0.0.1:${address.port}`);
     } finally {

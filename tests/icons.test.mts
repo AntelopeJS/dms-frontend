@@ -6,7 +6,12 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createServer, type Server } from "node:http";
+import {
+  createServer,
+  type Server,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -22,6 +27,7 @@ import {
   installedCollections,
   isIconRequest,
 } from "../templates/vue/server/icons.mjs";
+import { addressOf } from "./helpers/net";
 
 const ORIGIN = "http://frontend.local";
 const CHECK_ICON = { body: '<path d="M1 1h2"/>' };
@@ -34,7 +40,10 @@ const COLLECTION = {
 };
 
 interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
+  handleRequestSafely: (
+    request: IncomingMessage,
+    response: ServerResponse,
+  ) => Promise<void>;
 }
 
 function writeFixture(root: string, path: string, content: string): void {
@@ -49,8 +58,7 @@ function iconUrl(path: string): URL {
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return `http://127.0.0.1:${address.port}`;
 }
 

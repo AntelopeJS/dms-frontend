@@ -3,10 +3,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { connect } from "node:net";
 import { after, afterEach, before, describe, it } from "node:test";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
-
-interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
-}
+import { addressOf } from "./helpers/net";
 
 interface BackendRequest {
   method?: string;
@@ -41,8 +38,7 @@ const STORAGE_PROXIES = JSON.stringify([
 
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return address.port;
 }
 
@@ -134,8 +130,7 @@ describe("the proxy streams large file-storage transfers", () => {
     });
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
     process.env.DMS_BACKEND_PROXIES = STORAGE_PROXIES;
-    const runtime =
-      (await import("../templates/vue/server.mjs")) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     frontendUrl = `http://127.0.0.1:${await listen(frontend)}`;
   });

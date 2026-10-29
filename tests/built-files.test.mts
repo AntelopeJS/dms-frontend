@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { brotliCompressSync, gzipSync } from "node:zlib";
+import { addressOf } from "./helpers/net";
 
 interface BuiltFiles {
   isPublicBuildPath: (relativePath: string) => boolean;
@@ -96,8 +97,7 @@ export function registerDmsIconCollections() {}\n`,
 
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return address.port;
 }
 

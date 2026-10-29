@@ -12,6 +12,7 @@ import {
   type DevHandshake,
   readDevBootstrapCredential,
 } from "../src/discovery";
+import { isText } from "./helpers/guards";
 
 const alive = () => true;
 const dead = () => false;
@@ -60,9 +61,7 @@ function makeProject(
   if (handshake !== undefined) {
     writeFileSync(
       join(root, ".antelope", "dms-dev.json"),
-      typeof handshake === "string"
-        ? handshake
-        : JSON.stringify(handshake, null, 2),
+      isText(handshake) ? handshake : JSON.stringify(handshake, null, 2),
     );
   }
   return { root, nested };

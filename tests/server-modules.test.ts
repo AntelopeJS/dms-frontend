@@ -34,6 +34,7 @@ import {
   defineDmsServer,
 } from "../templates/vue/server-module";
 import { readText } from "./helpers/files";
+import { addressOf } from "./helpers/net";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const SERVER_ENTRY = "dms.server.ts";
@@ -424,8 +425,7 @@ interface BackendCall {
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((settle) => server.listen(0, "127.0.0.1", settle));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
+  const address = addressOf(server);
   return `http://127.0.0.1:${address.port}`;
 }
 

@@ -5,6 +5,7 @@ import { displayUrl, ServedWithPath } from "./manifest";
 import { ManifestModule, ResolvedLayer } from "./workspace";
 import { LAYERS_SUBDIR } from "./config";
 import { formatAge } from "./output";
+import { isText } from "./internal/guards";
 
 /** What the user does when a backend never sends layer source paths. */
 const BUILD_FIX =
@@ -102,7 +103,7 @@ export function readLayerPackage(layerPath: string): LayerPackage | undefined {
  */
 function readLayerPackageName(layerPath: string): string | undefined {
   const name = readLayerPackage(layerPath)?.name;
-  return typeof name === "string" ? name : undefined;
+  return isText(name) ? name : undefined;
 }
 
 function resolveLayer(layerPath: string, mod: ManifestModule): ResolvedLayer {

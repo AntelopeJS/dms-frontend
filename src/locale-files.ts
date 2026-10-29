@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { baseCompile, type CompileError } from "@intlify/message-compiler";
+import { isObjectLike, isText } from "./internal/guards";
 
 /**
  * A locale file that does not parse, or holds a message vue-i18n cannot
@@ -18,12 +19,20 @@ export class InvalidLocaleFileError extends Error {
 }
 
 /** The characters vue-i18n's syntax reserves, as a message writes them literally. */
-const LITERAL_ESCAPES: Record<string, string> = {
+const LITERAL_ESCAPES = {
   "@": "{'@'}",
   "{": "{'{'}",
   "}": "{'}'}",
   "|": "{'|'}",
 };
+
+type ReservedCharacter = keyof typeof LITERAL_ESCAPES;
+
+function isReservedCharacter(
+  character: string,
+): character is ReservedCharacter {
+  return Object.prototype.hasOwnProperty.call(LITERAL_ESCAPES, character);
+}
 
 /** One message that does not compile, with the key that holds it. */
 interface MessageProblem {
@@ -36,9 +45,13 @@ interface MessageProblem {
  * The reserved character the compiler stopped on: the nearest one at or
  * before where it reports the error.
  */
-function reservedCharacterAt(message: string, offset: number): string | null {
+function reservedCharacterAt(
+  message: string,
+  offset: number,
+): ReservedCharacter | null {
   for (let index = Math.min(offset, message.length - 1); index >= 0; index--) {
-    if (message[index] in LITERAL_ESCAPES) return message[index];
+    const character = message[index];
+    if (isReservedCharacter(character)) return character;
   }
   return null;
 }
@@ -69,11 +82,11 @@ function firstCompileError(message: string): CompileError | undefined {
 
 /** Every message under `value` that does not compile, by its dotted key. */
 function messageProblems(value: unknown, key: string): MessageProblem[] {
-  if (typeof value === "string") {
+  if (isText(value)) {
     const error = firstCompileError(value);
     return error ? [{ key, message: value, error }] : [];
   }
-  if (typeof value !== "object" || value === null) return [];
+  if (!isObjectLike(value)) return [];
   return Object.entries(value).flatMap(([child, nested]) =>
     messageProblems(nested, key ? `${key}.${child}` : child),
   );
@@ -88,7 +101,7 @@ function messageProblems(value: unknown, key: string): MessageProblem[] {
  * dev instead of reaching a page.
  */
 export function readLocaleFile(path: string): Record<string, unknown> {
-  let value: Record<string, unknown>;
+  let value: unknown;
   try {
     value = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
@@ -103,5 +116,5 @@ export function readLocaleFile(path: string): Record<string, unknown> {
     ].join("\n");
     throw new InvalidLocaleFileError(path, reason);
   }
-  return value;
+  return value as Record<string, unknown>;
 }
