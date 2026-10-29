@@ -97,7 +97,6 @@ interface LocaleState {
   version: number;
 }
 
-/** @internal */
 export const supportedLocales = ${JSON.stringify(supportedLocales)};
 const fallbackLocale: string | undefined = ${JSON.stringify(fallback)};
 const localeLoaders: Record<string, LocaleLoader> = {
@@ -109,7 +108,6 @@ const state: LocaleState = shared ?? {
   targets: new Set(),
   version: 0,
 };
-/** @internal */
 export const localeMessages = state.messages;
 
 async function readLocaleMessages(locale: string): Promise<LocaleMessages> {
@@ -119,14 +117,12 @@ async function readLocaleMessages(locale: string): Promise<LocaleMessages> {
 /**
  * The catalog that serves \`locale\`: its own when the application has one,
  * else the fallback locale's.
- * @internal
  */
 export function catalogLocale(locale: string): string | undefined {
   const normalized = locale.slice(0, 2);
   return normalized in localeLoaders ? normalized : fallbackLocale;
 }
 
-/** @internal */
 export async function loadLocaleMessages(locale: string): Promise<LocaleMessages> {
   const catalog = catalogLocale(locale);
   if (!catalog) return {};
@@ -134,11 +130,7 @@ export async function loadLocaleMessages(locale: string): Promise<LocaleMessages
   return localeMessages[catalog];
 }
 
-/**
- * Development only: applies every regenerated catalog to \`target\`.
- *
- * @internal
- */
+/** Development only: applies every regenerated catalog to \`target\`. */
 export function syncLocaleMessages(target: LocaleMessagesTarget): void {
   if (import.meta.hot) state.targets.add(target);
 }
