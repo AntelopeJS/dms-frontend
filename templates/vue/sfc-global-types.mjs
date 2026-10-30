@@ -129,11 +129,12 @@ export function sfcGlobalTypesWatcher(dirs, cwd, file) {
         pending = setTimeout(() => {
           sfcGlobalTypes(dirs, cwd)
             .then((content) => writeIfChanged(file, content))
-            .catch((error) =>
-              server.config.logger.warn(
-                `Could not update ${file}, the types Vue's SFC compiler ` +
-                  `reads: ${error instanceof Error ? error.message : error}`,
-              ),
+            .catch(
+              /** @param {unknown} error */ (error) =>
+                server.config.logger.warn(
+                  `Could not update ${file}, the types Vue's SFC compiler ` +
+                    `reads: ${error instanceof Error ? error.message : String(error)}`,
+                ),
             );
         }, 100);
       };

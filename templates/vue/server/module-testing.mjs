@@ -57,7 +57,9 @@ export async function serveModuleRoutes(declarations, deployment = {}) {
       .then((answered) => {
         if (!answered) response.writeHead(404).end();
       })
-      .catch((error) => writeFailure(error, response));
+      .catch(
+        /** @param {unknown} error */ (error) => writeFailure(error, response),
+      );
   });
   await new Promise((settle) => server.listen(0, "127.0.0.1", settle));
   const { port } = server.address();

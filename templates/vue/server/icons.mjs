@@ -144,11 +144,12 @@ export function provideIconCollections(renderer, root = WORKSPACE_ROOT) {
       renderer,
       installedCollections(root)
         .then((loaded) => renderer.registerDmsIconCollections(loaded))
-        .catch((error) =>
-          console.error(
-            "DMS icon collections not loaded; server renders draw bundled icons only",
-            error,
-          ),
+        .catch(
+          /** @param {unknown} error */ (error) =>
+            console.error(
+              "DMS icon collections not loaded; server renders draw bundled icons only",
+              error,
+            ),
         ),
     );
   return rendererCollections.get(renderer);

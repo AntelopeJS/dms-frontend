@@ -138,10 +138,12 @@ async function developmentServer() {
       vite = server;
       return server;
     })
-    .catch((error) => {
-      vitePromise = undefined;
-      throw error;
-    });
+    .catch(
+      /** @param {unknown} error */ (error) => {
+        vitePromise = undefined;
+        throw error;
+      },
+    );
   return vitePromise;
 }
 
@@ -535,8 +537,9 @@ export async function handleRequestSafely(request, response) {
     if (refuseForeignTarget(request, response)) return;
     await handleRequest(request, response);
   } catch (error) {
-    await writeRequestFailure(error, request, response).catch((failure) =>
-      requestFailure.abandonResponse(failure, response),
+    await writeRequestFailure(error, request, response).catch(
+      /** @param {unknown} failure */ (failure) =>
+        requestFailure.abandonResponse(failure, response),
     );
   }
 }
