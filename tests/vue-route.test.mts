@@ -30,7 +30,7 @@ function pageProps(url: string) {
 async function render(
   url: string,
   page: Component,
-  props: Record<string, unknown> = {},
+  props: { delay?: number } = {},
   setUpPlugins: (app: App) => void = () => {},
 ): Promise<string> {
   const runtime = createDmsFrontendRuntime(undefined, {}, true);
