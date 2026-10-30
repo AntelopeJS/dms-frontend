@@ -6,16 +6,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import {
-  createServer,
-  type Server,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { _api, addAPIProvider, loadIcon } from "@iconify/vue";
 import {
   ICON_API_PATH,
@@ -39,13 +33,6 @@ const COLLECTION = {
   icons: { check: CHECK_ICON, gear: { body: '<path d="M2 2h4"/>' } },
   aliases: { tick: { parent: "check" } },
 };
-
-interface ServerTemplate {
-  handleRequestSafely: (
-    request: IncomingMessage,
-    response: ServerResponse,
-  ) => Promise<void>;
-}
 
 function writeFixture(root: string, path: string, content: string): void {
   const destination = join(root, path);
@@ -159,9 +146,7 @@ describe("the generated server's icon route", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
-    const runtime = (await import(
-      pathToFileURL(join("templates", "vue", "server.mjs")).href
-    )) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     base = await listen(frontend);
   });
