@@ -60,7 +60,7 @@ export async function runCli(
     mkdirSync(dirname(join(sandbox, name)), { recursive: true });
     writeFileSync(join(sandbox, name), content);
   }
-  const env: Record<string, string | undefined> = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: sandbox,
     USERPROFILE: sandbox,
@@ -87,7 +87,7 @@ export async function runCli(
         ...cliCommand,
         ...args,
       ],
-      { cwd: sandbox, env: env as NodeJS.ProcessEnv },
+      { cwd: sandbox, env },
     );
     return { code: 0, stdout, stderr, sandbox };
   } catch (err: any) {
@@ -120,7 +120,7 @@ export const PRODUCTION_WORKSPACE = ".dms-frontend";
  * A project without frontend modules, built: its server prints the port it
  * was given, then exits.
  */
-export function builtWorkspace(): Record<string, string> {
+export function builtWorkspace() {
   return {
     "antelope.config.ts": 'export default { name: "sandbox", modules: {} };\n',
     [join(PRODUCTION_WORKSPACE, "server.mjs")]:

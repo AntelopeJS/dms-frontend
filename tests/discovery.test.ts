@@ -13,10 +13,7 @@ import { isText } from "./helpers/guards";
 const alive = () => true;
 const dead = () => false;
 
-function makeProject(registry?: DevRegistry | string): {
-  root: string;
-  nested: string;
-} {
+function makeProject(registry?: DevRegistry | string) {
   const root = mkdtempSync(join(tmpdir(), "dms-discovery-"));
   cleanupDirs.push(root);
   const nested = join(root, "apps", "frontend");

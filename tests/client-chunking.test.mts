@@ -54,7 +54,7 @@ function fixture(): string {
       `export const ${name} = "${name}".repeat(40) + Math.random();\n`,
     );
   }
-  const components: Record<string, string[]> = {
+  const components = {
     shared: ["a", "b"],
     cell: ["a", "c"],
     one: ["a"],
@@ -80,7 +80,7 @@ function fixture(): string {
     "registry.ts",
     `import cell from "./components/cell";\nexport const registry = new Map([["cell", cell]]);\n`,
   );
-  const pages: Record<string, string> = {
+  const pages = {
     home: "one",
     list: "two",
     edit: "three",
@@ -106,7 +106,7 @@ function fixture(): string {
 /** Files the entry loads before running: the entry and its static imports. */
 async function entryClosure(
   root: string,
-  codeSplitting: unknown,
+  codeSplitting: typeof clientCodeSplitting | undefined,
 ): Promise<{ closure: string[]; files: string[] }> {
   await build({
     root,

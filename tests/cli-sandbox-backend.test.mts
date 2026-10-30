@@ -116,12 +116,12 @@ describe("telling a skipped prepare from a failed one", () => {
   /** A backend answering every request with `status` and `body`. */
   async function withBackend(
     status: number,
-    body: unknown,
+    body: string,
     run: (backendUrl: string) => Promise<void>,
   ): Promise<void> {
     const server = createHttpServer((_req, res) => {
       res.writeHead(status, { "content-type": "application/json" });
-      res.end(JSON.stringify(body));
+      res.end(body);
     });
     await new Promise<void>((settle) =>
       server.listen({ port: 0, host: "127.0.0.1" }, settle),
@@ -198,7 +198,7 @@ describe("telling a skipped prepare from a failed one", () => {
   });
 
   it("reports a refused credential as a failure, an error with --strict", async () => {
-    await withBackend(401, {}, async (backendUrl) => {
+    await withBackend(401, "{}", async (backendUrl) => {
       const env = { DMS_BOOTSTRAP_SECRET: undefined };
       const failed = await runCli(["prepare", "-b", backendUrl], { env });
       assert.equal(failed.code, 0);
@@ -222,25 +222,29 @@ describe("telling a skipped prepare from a failed one", () => {
   });
 
   it("reports an incompatible manifest as a failure, an error with DMS_PREPARE_STRICT", async () => {
-    await withBackend(200, { version: 3, modules: [] }, async (backendUrl) => {
-      const args = ["prepare", "-b", backendUrl];
-      const failed = await runCli(args);
-      assert.equal(failed.code, 0);
-      assert.match(
-        failed.stderr,
-        /▲ Prepare failed: The backend serves frontend manifest version 3, which @antelopejs\/dms-frontend \S+ cannot read\n/,
-      );
+    await withBackend(
+      200,
+      JSON.stringify({ version: 3, modules: [] }),
+      async (backendUrl) => {
+        const args = ["prepare", "-b", backendUrl];
+        const failed = await runCli(args);
+        assert.equal(failed.code, 0);
+        assert.match(
+          failed.stderr,
+          /▲ Prepare failed: The backend serves frontend manifest version 3, which @antelopejs\/dms-frontend \S+ cannot read\n/,
+        );
 
-      const strict = await runCli(args, { env: { DMS_PREPARE_STRICT: "1" } });
-      assert.equal(strict.code, 1);
-      assert.match(
-        strict.stderr,
-        /\n✖ The backend serves frontend manifest version 3, which @antelopejs\/dms-frontend \S+ cannot read\n {2}This loader reads version 2; the backend's @antelopejs\/dms is newer than this loader\.\n {2}→ Upgrade the loader \(ajs update dms\) to a release that reads version 3\n/,
-      );
+        const strict = await runCli(args, { env: { DMS_PREPARE_STRICT: "1" } });
+        assert.equal(strict.code, 1);
+        assert.match(
+          strict.stderr,
+          /\n✖ The backend serves frontend manifest version 3, which @antelopejs\/dms-frontend \S+ cannot read\n {2}This loader reads version 2; the backend's @antelopejs\/dms is newer than this loader\.\n {2}→ Upgrade the loader \(ajs update dms\) to a release that reads version 3\n/,
+        );
 
-      const off = await runCli(args, { env: { DMS_PREPARE_STRICT: "0" } });
-      assert.equal(off.code, 0);
-    });
+        const off = await runCli(args, { env: { DMS_PREPARE_STRICT: "0" } });
+        assert.equal(off.code, 0);
+      },
+    );
   });
 });
 

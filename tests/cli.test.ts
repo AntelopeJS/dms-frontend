@@ -34,7 +34,7 @@ import { memoryUi, problemText } from "./fixtures/memory-ui";
  * Match a UsageError on its title and on the rest of what it prints.
  */
 function usageError(title: RegExp, ...details: RegExp[]) {
-  return (err: unknown) => {
+  return (err: Error) => {
     assert.ok(err instanceof UsageError);
     assert.equal(err.exitCode, 2);
     assert.match(err.problem.title, title);
