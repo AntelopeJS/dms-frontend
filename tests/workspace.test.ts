@@ -22,6 +22,7 @@ import {
   projectWorkspaceKey,
   readCachedManifest,
 } from "../src/common";
+import { CliError } from "@antelopejs/core/cli";
 import { problemText } from "./fixtures/memory-ui";
 
 describe("dependency fingerprint", () => {
@@ -174,6 +175,7 @@ describe("layer paths withheld by the backend", () => {
     try {
       assertLayerPathsServed(pathless, backendUrl, { bootstrapSecret, cache });
     } catch (err) {
+      assert.ok(err instanceof CliError);
       return problemText(err);
     }
     assert.fail("expected the pathless manifest to be refused");
