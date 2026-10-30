@@ -1,9 +1,15 @@
 import * as assert from "node:assert/strict";
 import { cpSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
 import {
   copyStaticTemplates,
   createFrontendModuleRegistry,
@@ -20,7 +26,6 @@ import {
   FIXTURE_HANDLERS,
   FIXTURE_ENTRY,
 } from "./fixtures/server-modules";
-import { builtServer } from "./helpers/built-templates";
 
 describe("Module server routes in the production server", () => {
   const workspace = realpathSync(mkdtempSync(resolve(".server-modules-")));
@@ -83,7 +88,14 @@ describe("Module server routes in the production server", () => {
     });
 
     console.warn = (message: string) => warnings.push(message);
-    const server = await builtServer(workspace);
+    const server = (await import(
+      pathToFileURL(join(workspace, "server.mjs")).href
+    )) as {
+      handleRequestSafely: (
+        request: IncomingMessage,
+        response: ServerResponse,
+      ) => Promise<void>;
+    };
     frontend = createServer((request, response) => {
       void server.handleRequestSafely(request, response);
     });

@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { it } from "node:test";
+import { pathToFileURL } from "node:url";
 import { writeSsrErrorsWorkspace } from "./fixtures/ssr-errors-workspace";
-import { builtServer, builtSession } from "./helpers/built-templates";
-import { responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 
 it("renders setup errors as HTTP errors without corrupting simultaneous successful SSR", async () => {
@@ -49,7 +48,9 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
     );
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    const { handleRequestSafely } = await builtServer(workspace);
+    const { handleRequestSafely } = await import(
+      pathToFileURL(join(workspace, "server.mjs")).href
+    );
     frontend = createServer(handleRequestSafely);
     await new Promise<void>((resolve) =>
       frontend!.listen(0, "127.0.0.1", resolve),
@@ -223,19 +224,27 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
     assert.deepEqual(await unreadCount.json(), { unreadCount: 7 });
     process.env.DMS_SESSION_SECRET =
       "disposable-ssr-session-secret-at-least-32";
-    const { writeSession } = await builtSession(workspace);
+    const { writeSession } = await import(
+      pathToFileURL(join(workspace, "server/auth/session.mjs")).href
+    );
     const sessionCookie = (id: string, language: string) => {
-      const response = responseOf();
-      writeSession(response, {
-        user: { _id: id, language },
-        accountId: `account-${id}`,
-        activeTenantId: `tenant-${id}`,
-        accessToken: "private-access-token",
-        refreshToken: "private-refresh-token",
-        persistent: false,
-      });
-      const [cookie = ""] = [response.getHeaders()["set-cookie"] ?? []].flat();
-      return cookie.split(";")[0];
+      let cookie = "";
+      writeSession(
+        {
+          getHeader: () => undefined,
+          setHeader: (_name: string, value: string) => {
+            cookie = value.split(";")[0];
+          },
+        },
+        {
+          user: { _id: id, language },
+          accountId: `account-${id}`,
+          activeTenantId: `tenant-${id}`,
+          accessToken: "private-access-token",
+          refreshToken: "private-refresh-token",
+        },
+      );
+      return cookie;
     };
     const sessions = await Promise.all([
       fetch(`${base}/session`, {

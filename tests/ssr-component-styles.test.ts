@@ -4,9 +4,9 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { it } from "node:test";
+import { pathToFileURL } from "node:url";
 import { readText } from "./helpers/files";
 import { isFlag, isObjectLike, isText } from "../src/internal/guards";
-import { builtServer } from "./helpers/built-templates";
 import { addressOf } from "./helpers/net";
 
 interface ManifestEntry {
@@ -164,7 +164,9 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     await new Promise<void>((settle) => backend.listen(0, "127.0.0.1", settle));
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    const { handleRequestSafely } = await builtServer(workspace);
+    const { handleRequestSafely } = await import(
+      pathToFileURL(join(workspace, "server.mjs")).href
+    );
     frontend = createServer(handleRequestSafely);
     await new Promise<void>((settle) =>
       frontend!.listen(0, "127.0.0.1", settle),
