@@ -16,6 +16,7 @@ import {
   ManifestModule,
 } from "./workspace";
 import { isNumber, isText } from "./internal/guards";
+import { ownRelease } from "./internal/own-release";
 
 export class ManifestUnauthorizedError extends CliError {
   constructor(
@@ -169,10 +170,6 @@ export class ManifestRefusedError extends CliError {
   }
 }
 
-const OWN_RELEASE: {
-  name: string;
-  version: string;
-} = require("../package.json");
 const BACKEND_PACKAGE = "@antelopejs/dms";
 const LOADER_UPDATE_COMMAND = "ajs update dms";
 
@@ -181,7 +178,7 @@ const LOADER_UPDATE_COMMAND = "ajs update dms";
  * on both, and the side to upgrade.
  */
 export function describeManifestVersion(version: unknown): CliProblem {
-  const loader = `${OWN_RELEASE.name} ${OWN_RELEASE.version}`;
+  const loader = `${ownRelease.name} ${ownRelease.version}`;
   const supported = `This loader reads version ${FRONTEND_MANIFEST_VERSION}`;
   if (!isNumber(version)) {
     return {
@@ -207,7 +204,7 @@ export function describeManifestVersion(version: unknown): CliProblem {
     title,
     reason: `${supported}; the backend's ${BACKEND_PACKAGE} is older than this loader.`,
     fixes: [
-      `Upgrade ${BACKEND_PACKAGE} on the backend, or use a ${OWN_RELEASE.name} release that reads version ${version}`,
+      `Upgrade ${BACKEND_PACKAGE} on the backend, or use a ${ownRelease.name} release that reads version ${version}`,
     ],
   };
 }
