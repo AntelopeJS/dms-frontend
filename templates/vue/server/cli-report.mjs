@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
-import { isNonNullObject, isString } from "./type-guards.mjs";
+import { isObjectLike, isRecord, isString } from "./type-guards.mjs";
 
 const WILDCARD_ADDRESSES = ["0.0.0.0", "::"];
 
@@ -68,16 +68,23 @@ export async function reportListenError(error, host, port) {
 /** The `[PARSE_ERROR] ` Rolldown puts in front of what it says. */
 const RULE_PREFIX = /^\[[A-Z_]+\]\s*/;
 
-/** The first problem Rolldown reports when it cannot bundle a config. */
+/**
+ * The first problem Rolldown reports when it cannot bundle a config.
+ *
+ * @param {unknown} error What the startup threw
+ */
 function bundlerError(error) {
-  const first = error?.errors?.[0];
-  return isNonNullObject(first) ? first : undefined;
+  const errors = isObjectLike(error) ? error.errors : undefined;
+  const first = isObjectLike(errors) ? errors[0] : undefined;
+  return isRecord(first) ? first : undefined;
 }
 
 /**
  * Where a startup error points, when it says: Rolldown's location for a config
  * it could not bundle (the line is read back from the file, which Rolldown
  * only draws in a colored frame), Rollup's for a plugin that failed on a file.
+ *
+ * @param {unknown} error What the startup threw
  */
 function errorLocation(error) {
   const source = bundlerError(error) ?? error;
@@ -107,7 +114,11 @@ function readLine(file, line) {
   }
 }
 
-/** The first line of what went wrong, without Rolldown's rule and frame. */
+/**
+ * The first line of what went wrong, without Rolldown's rule and frame.
+ *
+ * @param {unknown} error What the startup threw
+ */
 function errorText(error) {
   const reported = bundlerError(error);
   const message = reported
@@ -123,6 +134,8 @@ function errorText(error) {
 /**
  * Vite could not start, so no page can be served: the error and where it
  * points instead of a stack trace, then the server exits.
+ *
+ * @param {unknown} error What the startup threw
  */
 export async function reportStartError(error) {
   const message = errorText(error);
@@ -131,7 +144,12 @@ export async function reportStartError(error) {
     ? `${location.file}${location.line ? `:${location.line}:${location.column ?? 0}` : ""}: `
     : "";
   await report(
-    { type: "dms:start-error", message, code: error?.code, location },
+    {
+      type: "dms:start-error",
+      message,
+      code: isObjectLike(error) ? error.code : undefined,
+      location,
+    },
     `DMS development server failed to start: ${where}${message}`,
     console.error,
   );

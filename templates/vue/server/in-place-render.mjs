@@ -90,7 +90,7 @@ export function serverReads(backendHeaders) {
  * same path. Any other redirect keeps its own response.
  *
  * @param {import("node:http").IncomingMessage} request
- * @param {string} from
+ * @param {string | undefined} from
  * @param {string} location
  * @returns {boolean}
  */
@@ -114,7 +114,7 @@ function rendersInPlace(request, from, location) {
  * A page that completes its query as it renders is rendered at that query in
  * the same request, rather than answered with a redirect.
  *
- * @template {{ url: string, props: unknown }} Page
+ * @template {{ url: string | undefined, props: unknown }} Page
  * @template {{ redirect?: string }} Rendered
  * @param {import("node:http").IncomingMessage} request
  * @param {Page} page

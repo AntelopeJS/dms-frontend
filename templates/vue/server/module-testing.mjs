@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { RequestBodyError, UpstreamError } from "./auth/backend.mjs";
 import { UNEXPECTED_ERROR_BODY } from "./backend-response.mjs";
 import { createServerModules, handleModuleRoute } from "./module-server.mjs";
+import { failureStatus } from "./request-failure.mjs";
 
 /**
  * What the frontend server answers an API request whose handler failed.
@@ -10,7 +11,7 @@ import { createServerModules, handleModuleRoute } from "./module-server.mjs";
  * @param {import("node:http").ServerResponse} response
  */
 function writeFailure(error, response) {
-  const status = Number.isInteger(error?.status) ? error.status : 502;
+  const status = failureStatus(error);
   const body =
     error instanceof UpstreamError || error instanceof RequestBodyError
       ? { message: error.message }

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { json } from "./auth/backend.mjs";
 import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./auth/client-ip.mjs";
-import { isNonNullObject, isString } from "./type-guards.mjs";
+import { isNonNullObject, isObjectLike, isString } from "./type-guards.mjs";
 
 /**
  * A public endpoint, compiled from a declaration that passed every check.
@@ -76,7 +76,8 @@ export function readDeclaredPublicEndpoints(file = DECLARED_ENDPOINTS_FILE) {
   try {
     /** @type {unknown} */
     const parsed = JSON.parse(readFileSync(file, "utf8"));
-    return Array.isArray(parsed?.endpoints) ? parsed.endpoints : [];
+    const endpoints = isObjectLike(parsed) ? parsed.endpoints : undefined;
+    return Array.isArray(endpoints) ? endpoints : [];
   } catch {
     return [];
   }
@@ -99,7 +100,8 @@ export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
   try {
     /** @type {unknown} */
     const parsed = JSON.parse(readFileSync(file, "utf8"));
-    if (Array.isArray(parsed?.proxies)) proxies = parsed.proxies;
+    const listed = isObjectLike(parsed) ? parsed.proxies : undefined;
+    if (Array.isArray(listed)) proxies = listed;
   } catch {}
   if (file === DECLARED_ENDPOINTS_FILE) declaredProxies = proxies;
   return proxies;
