@@ -36,14 +36,14 @@ export class ManifestUnauthorizedError extends CliError {
   }
 }
 
-const UNREACHABLE_REASONS: Record<string, string> = {
-  ECONNREFUSED: "Connection refused",
-  ECONNRESET: "Connection reset",
-  ENOTFOUND: "Unknown host",
-  EAI_AGAIN: "Host name lookup failed",
-  ETIMEDOUT: "Connection timed out",
-  UND_ERR_CONNECT_TIMEOUT: "Connection timed out",
-};
+const UNREACHABLE_REASONS = new Map([
+  ["ECONNREFUSED", "Connection refused"],
+  ["ECONNRESET", "Connection reset"],
+  ["ENOTFOUND", "Unknown host"],
+  ["EAI_AGAIN", "Host name lookup failed"],
+  ["ETIMEDOUT", "Connection timed out"],
+  ["UND_ERR_CONNECT_TIMEOUT", "Connection timed out"],
+]);
 
 const UNKNOWN_HOST_CODES = ["ENOTFOUND", "EAI_AGAIN"];
 
@@ -63,7 +63,7 @@ export class BackendUnreachableError extends CliError {
       (hasProperties(failure) ? failure.cause : undefined) ?? failure;
     const code = errorCode(cause);
     const detail = code
-      ? (UNREACHABLE_REASONS[code] ?? errorMessage(cause))
+      ? (UNREACHABLE_REASONS.get(code) ?? errorMessage(cause))
       : `The request failed: ${errorMessage(cause)}`;
     const fix =
       code && UNKNOWN_HOST_CODES.includes(code)

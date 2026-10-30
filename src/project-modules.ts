@@ -228,7 +228,7 @@ function substituteConfigVars(
   value: unknown,
   lookup: ConfigVarLookup,
 ): unknown {
-  if (typeof value === "string") {
+  if (isText(value)) {
     const pure = value.match(PURE_CONFIG_VAR);
     if (pure) return lookup(pure[1], pure[2]);
     return value.replace(CONFIG_VAR_PATTERN, (token, module, name) => {
@@ -238,7 +238,7 @@ function substituteConfigVars(
   }
   if (Array.isArray(value))
     return value.map((item) => substituteConfigVars(item, lookup));
-  if (value && typeof value === "object") {
+  if (isObjectLike(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
