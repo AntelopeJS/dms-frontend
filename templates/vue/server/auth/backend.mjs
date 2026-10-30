@@ -14,6 +14,10 @@ export const CLIENT_HEADERS = [
 ];
 
 export class UpstreamError extends Error {
+  /**
+   * @param {number} status
+   * @param {string} message
+   */
   constructor(status, message) {
     super(message);
     this.status = status;
@@ -27,6 +31,11 @@ const PUBLIC_AUTH_MESSAGE = /^error\.[a-z0-9_.-]{1,100}$/;
  */
 export const GENERIC_ERROR_MESSAGE = "error.500.description";
 
+/**
+ * @param {unknown} data A backend answer: any JSON value, or the text of one
+ *   that is not JSON
+ * @returns {string | undefined}
+ */
 export function publicBackendMessage(data) {
   const message = typeof data === "string" ? data : data?.message;
   return typeof message === "string" && PUBLIC_AUTH_MESSAGE.test(message)
@@ -37,8 +46,10 @@ export function publicBackendMessage(data) {
 /**
  * The headers of a client request the server relays to the backend.
  *
- * @param request The client request
- * @param names Lowercase names of the request headers to copy when present
+ * @param {import("./client-ip.mjs").ForwardedRequest} request The client
+ *   request
+ * @param {readonly string[]} names Lowercase names of the request headers to
+ *   copy when present
  * @returns The client country header, then the copied headers
  */
 export function relayedHeaders(request, names) {
@@ -58,8 +69,22 @@ export function relayedHeaders(request, names) {
  * `options.headers` adds request headers; the client's address and the
  * relayed client headers are set after them, so no caller replaces those.
  * A redirect is not followed: it is no JSON answer, so it fails with a 502.
+ *
+ * @param {string} path
+ * @param {import("./client-ip.mjs").ForwardedRequest} request The client
+ *   request
+ * @param {{
+ *   method?: string,
+ *   body?: unknown,
+ *   token?: string,
+ *   relay?: boolean,
+ *   headers?: Record<string, string>
+ * }} [options]
+ * @returns {Promise<unknown>} The answer's JSON, `{}` for a successful one that
+ *   is not JSON
  */
 export async function backend(path, request, options = {}) {
+  /** @type {Record<string, string | string[]>} */
   const headers = Object.fromEntries(
     Object.entries(options.headers ?? {}).map(([name, value]) => [
       name.toLowerCase(),
@@ -87,6 +112,7 @@ export async function backend(path, request, options = {}) {
     throw new UpstreamError(502, GENERIC_ERROR_MESSAGE);
   }
   const text = await response.text();
+  /** @type {unknown} */
   let data;
   try {
     data = JSON.parse(text);
@@ -105,12 +131,21 @@ export async function backend(path, request, options = {}) {
 }
 
 export class RequestBodyError extends Error {
+  /**
+   * @param {number} status
+   * @param {string} message
+   */
   constructor(status, message) {
     super(message);
     this.status = status;
   }
 }
 
+/**
+ * @param {import("node:http").ServerResponse} response
+ * @param {number} status
+ * @param {unknown} value Anything `JSON.stringify` writes
+ */
 export function json(response, status, value) {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify(value));

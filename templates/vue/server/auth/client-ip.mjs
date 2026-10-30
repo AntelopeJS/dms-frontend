@@ -1,5 +1,19 @@
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
 
+/**
+ * A request, whose socket is a TLS one (`encrypted`) when the server itself
+ * terminates TLS.
+ *
+ * @typedef {import("node:http").IncomingMessage & {
+ *   socket: import("node:net").Socket & { encrypted?: boolean }
+ * }} ForwardedRequest
+ */
+
+/**
+ * @param {string | undefined} value A header name from the environment
+ * @returns {string | undefined} The lowercase name, `undefined` when it is not
+ *   a header name
+ */
 function headerName(value) {
   const name = (value ?? "").trim().toLowerCase();
   return HEADER_NAME.test(name) ? name : undefined;
@@ -17,6 +31,9 @@ function trustedHops() {
  * so its presence also vouches for the platform's `X-Forwarded-*`. On a path
  * the platform does not front (a private call from another service), it is
  * absent and the request falls back to `DMS_TRUSTED_PROXY_HOPS`.
+ *
+ * @param {ForwardedRequest} request
+ * @returns {string | undefined}
  */
 function platformClientIp(request) {
   const name = headerName(process.env.DMS_CLIENT_IP_HEADER);
@@ -25,10 +42,15 @@ function platformClientIp(request) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/** @param {ForwardedRequest} request */
 function isProxyTrusted(request) {
   return Boolean(platformClientIp(request)) || trustedHops() > 0;
 }
 
+/**
+ * @param {ForwardedRequest} request
+ * @returns {string}
+ */
 export function requestScheme(request) {
   if (isProxyTrusted(request)) {
     const forwarded = String(request.headers["x-forwarded-proto"] ?? "")
@@ -41,6 +63,10 @@ export function requestScheme(request) {
   return request.socket?.encrypted ? "https" : "http";
 }
 
+/**
+ * @param {ForwardedRequest} request
+ * @returns {string | undefined}
+ */
 function requestHost(request) {
   if (!isProxyTrusted(request)) return request.headers.host;
   return (
@@ -62,8 +88,12 @@ function requestHost(request) {
  * proxy wrote it (`DMS_TRUSTED_PROXY_HOPS` above `0`): otherwise any caller
  * could have, and the socket's address replaces it. The scheme and the host
  * are read the same way as the CSRF origin check reads them.
+ *
+ * @param {ForwardedRequest} request
+ * @returns {Record<string, string>}
  */
 export function forwardedHeaders(request) {
+  /** @type {Record<string, string>} */
   const headers = {
     "x-forwarded-for": forwardedFor(request),
     "x-forwarded-proto": requestScheme(request),
@@ -74,6 +104,10 @@ export function forwardedHeaders(request) {
   return headers;
 }
 
+/**
+ * @param {ForwardedRequest} request
+ * @returns {string}
+ */
 function forwardedFor(request) {
   const platformIp = platformClientIp(request);
   if (platformIp) return platformIp;
@@ -92,12 +126,19 @@ function forwardedFor(request) {
  * address this server resolved, so the backend reads the same address
  * without counting hops. Always written, never relayed: a value the caller
  * sent is replaced. None when the variable is unset.
+ *
+ * @param {ForwardedRequest} request
+ * @returns {Record<string, string>}
  */
 export function clientIpHeader(request) {
   const name = headerName(process.env.DMS_CLIENT_IP_HEADER);
   return name ? { [name]: clientIp(request) } : {};
 }
 
+/**
+ * @param {ForwardedRequest} request
+ * @returns {boolean}
+ */
 export function isSameOrigin(request) {
   const origin = request.headers.origin;
   if (!origin) return false;
@@ -111,6 +152,10 @@ export function isSameOrigin(request) {
   }
 }
 
+/**
+ * @param {ForwardedRequest} request
+ * @returns {string}
+ */
 export function clientIp(request) {
   const platformIp = platformClientIp(request);
   if (platformIp) return platformIp;
@@ -136,6 +181,9 @@ const DEFAULT_COUNTRY_HEADER = "CF-IPCountry";
  * from a trusted reverse proxy (the platform's client IP header, or
  * `DMS_TRUSTED_PROXY_HOPS` above `0`): otherwise any caller could have set
  * it, so nothing is relayed.
+ *
+ * @param {ForwardedRequest} request
+ * @returns {Record<string, string>}
  */
 export function clientCountryHeader(request) {
   const name = headerName(
