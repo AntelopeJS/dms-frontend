@@ -1,4 +1,5 @@
 import { compilePathPattern } from "./path-patterns.mjs";
+import { isNonNullObject, isString } from "./type-guards.mjs";
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
 /** Whether a header value holds a control character other than a tab: a CR
@@ -26,13 +27,13 @@ function isSeconds(value) {
 
 function headersRejection(headers) {
   if (headers === undefined) return undefined;
-  if (typeof headers !== "object" || headers === null || Array.isArray(headers))
+  if (!isNonNullObject(headers) || Array.isArray(headers))
     return "headers is not an object";
   for (const [name, value] of Object.entries(headers)) {
     const lower = name.toLowerCase();
     if (
       !HEADER_NAME.test(lower) ||
-      typeof value !== "string" ||
+      !isString(value) ||
       hasControlCharacter(value)
     )
       return `"${name}" is not a header with a text value`;
@@ -45,8 +46,7 @@ function headersRejection(headers) {
 function cacheRejection(cache) {
   if (cache === undefined || cache === false) return undefined;
   if (
-    typeof cache !== "object" ||
-    cache === null ||
+    !isNonNullObject(cache) ||
     cache.public !== true ||
     !isSeconds(cache.maxAge) ||
     (cache.staleWhileRevalidate !== undefined &&
@@ -66,7 +66,7 @@ function cacheRejection(cache) {
 export function ruleRejection(pattern, rule) {
   if (!compilePathPattern(pattern))
     return "the pattern is not /x, /x/* or /x/**";
-  if (typeof rule !== "object" || rule === null) return "it is not an object";
+  if (!isNonNullObject(rule)) return "it is not an object";
   if (rule.ssr !== undefined && rule.ssr !== false)
     return "ssr is either left out or false";
   return headersRejection(rule.headers) ?? cacheRejection(rule.cache);

@@ -1,4 +1,5 @@
 import { compilePathPattern } from "./path-patterns.mjs";
+import { isNonNullObject } from "./type-guards.mjs";
 
 /** How the proxy authenticates a request to the backend. */
 export const PROXY_AUTH_MODES = Object.freeze(["session", "none"]);
@@ -29,7 +30,7 @@ export function proxyRejection(pattern, options) {
     )
   )
     return `${RENDERER_PREFIXES.join(", ")} are the renderer's own paths`;
-  if (options !== undefined && (typeof options !== "object" || !options))
+  if (options !== undefined && !isNonNullObject(options))
     return "its options are not an object";
   if (options?.auth !== undefined && !PROXY_AUTH_MODES.includes(options.auth))
     return `auth is not one of ${PROXY_AUTH_MODES.map((mode) => `"${mode}"`).join(", ")}`;

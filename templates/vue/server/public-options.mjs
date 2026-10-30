@@ -1,3 +1,5 @@
+import { isNonNullObject } from "./type-guards.mjs";
+
 const VARIABLE = "DMS_PUBLIC_OPTIONS";
 export const PUBLIC_OPTIONS_ELEMENT_ID = "dms-public-options";
 
@@ -5,9 +7,7 @@ function parse(raw) {
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw);
-    return typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed)
+    return isNonNullObject(parsed) && !Array.isArray(parsed)
       ? parsed
       : undefined;
   } catch {

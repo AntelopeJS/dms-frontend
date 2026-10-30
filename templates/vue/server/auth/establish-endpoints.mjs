@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { isString } from "../type-guards.mjs";
 
 /**
  * Absolute backend API paths only: no scheme, no authority, no query string,
@@ -68,7 +69,7 @@ export function allowedEstablishEndpoints(
   return [
     ...new Set(
       [...declared, ...fromEnvironment].filter(
-        (entry) => typeof entry === "string" && BACKEND_API_PATH.test(entry),
+        (entry) => isString(entry) && BACKEND_API_PATH.test(entry),
       ),
     ),
   ];

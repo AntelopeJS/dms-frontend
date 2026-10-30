@@ -2,6 +2,12 @@ import { resolveBackendProxies } from "./backend-proxies.mjs";
 import { compilePathPattern } from "./path-patterns.mjs";
 import { matchPublicEndpoint } from "./public-endpoints.mjs";
 import { ruleRejection } from "./route-rules.mjs";
+import {
+  isBoolean,
+  isFunction,
+  isNonNullObject,
+  isString,
+} from "./type-guards.mjs";
 
 const METHODS = new Set([
   "GET",
@@ -48,8 +54,7 @@ function normalizedPath(path) {
 }
 
 function pathRejection(path) {
-  if (typeof path !== "string" || !path.startsWith("/"))
-    return "a path starts with /";
+  if (!isString(path) || !path.startsWith("/")) return "a path starts with /";
   const normalized = normalizedPath(path);
   if (!mayHaveModuleRoute(normalized))
     return `${RESERVED_PREFIXES.join(", ")} are the renderer's own paths`;
@@ -73,12 +78,8 @@ function pathRejection(path) {
 
 function optionsRejection(options) {
   if (options === undefined) return undefined;
-  if (typeof options !== "object" || options === null)
-    return "its options are not an object";
-  if (
-    options.sameOrigin !== undefined &&
-    typeof options.sameOrigin !== "boolean"
-  )
+  if (!isNonNullObject(options)) return "its options are not an object";
+  if (options.sameOrigin !== undefined && !isBoolean(options.sameOrigin))
     return "sameOrigin is not a boolean";
   if (
     options.bodyLimit !== undefined &&
@@ -138,8 +139,7 @@ function methodsOf(method) {
 function registrationRejection(registration) {
   if (!methodsOf(registration.method))
     return `the method is not one of ${[...METHODS].join(", ")}`;
-  if (typeof registration.handler !== "function")
-    return "its handler is not a function";
+  if (!isFunction(registration.handler)) return "its handler is not a function";
   return (
     pathRejection(registration.path) ?? optionsRejection(registration.options)
   );
@@ -320,13 +320,13 @@ function resolveRoutes(modules, warn, publicEndpoints) {
 const AUTH_HOOKS = ["refreshSession", "publicSession"];
 
 function authRejection(auth) {
-  if (typeof auth !== "object" || auth === null) return "it is not an object";
+  if (!isNonNullObject(auth)) return "it is not an object";
   for (const hook of AUTH_HOOKS)
-    if (auth[hook] !== undefined && typeof auth[hook] !== "function")
+    if (auth[hook] !== undefined && !isFunction(auth[hook]))
       return `${hook} is not a function`;
   if (
     auth.signInPath !== undefined &&
-    (typeof auth.signInPath !== "string" ||
+    (!isString(auth.signInPath) ||
       !compilePathPattern(auth.signInPath) ||
       auth.signInPath.includes("*"))
   )
@@ -384,7 +384,7 @@ function resolveRules(modules, warn) {
   const kept = new Map();
   for (const module of modules) {
     for (const rules of module.declared.rules) {
-      if (typeof rules !== "object" || rules === null) {
+      if (!isNonNullObject(rules)) {
         warn(
           `Frontend module ${module.id} declares route rules that are ignored: they are not an object.`,
         );

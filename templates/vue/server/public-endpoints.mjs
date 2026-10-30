@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { json } from "./auth/backend.mjs";
 import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./auth/client-ip.mjs";
+import { isNonNullObject, isString } from "./type-guards.mjs";
 
 /**
  * Written at the workspace root by the loader, from the endpoints each
@@ -150,9 +151,8 @@ function pathMatcher(path) {
  * a bad entry is dropped whole, never widened to what it might have meant.
  */
 export function compilePublicEndpoint(entry) {
-  if (typeof entry !== "object" || entry === null) return undefined;
-  if (typeof entry.path !== "string" || !PUBLIC_PATH.test(entry.path))
-    return undefined;
+  if (!isNonNullObject(entry)) return undefined;
+  if (!isString(entry.path) || !PUBLIC_PATH.test(entry.path)) return undefined;
   const methods = normalizedMethods(entry.methods);
   const headers = normalizedHeaders(entry.headers);
   if (!methods || !headers) return undefined;

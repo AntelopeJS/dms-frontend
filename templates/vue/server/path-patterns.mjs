@@ -1,3 +1,5 @@
+import { isString } from "./type-guards.mjs";
+
 const SEGMENT = /^[A-Za-z0-9._~-]+$/;
 
 /**
@@ -11,7 +13,7 @@ const SEGMENT = /^[A-Za-z0-9._~-]+$/;
  * below it. Nothing else: no prefix match inside a segment, no query string.
  */
 export function compilePathPattern(pattern) {
-  if (typeof pattern !== "string" || !pattern.startsWith("/")) return undefined;
+  if (!isString(pattern) || !pattern.startsWith("/")) return undefined;
   const segments = pattern === "/" ? [] : pattern.slice(1).split("/");
   const deep = segments.at(-1) === "**";
   const literal = deep ? segments.slice(0, -1) : segments;
