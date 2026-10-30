@@ -1,4 +1,5 @@
 import { REDIRECT_STATUSES } from "../proxy-redirects.mjs";
+import { isString } from "../type-guards.mjs";
 import { clientCountryHeader, clientIp, clientIpHeader } from "./client-ip.mjs";
 
 /**
@@ -37,8 +38,8 @@ export const GENERIC_ERROR_MESSAGE = "error.500.description";
  * @returns {string | undefined}
  */
 export function publicBackendMessage(data) {
-  const message = typeof data === "string" ? data : data?.message;
-  return typeof message === "string" && PUBLIC_AUTH_MESSAGE.test(message)
+  const message = isString(data) ? data : data?.message;
+  return isString(message) && PUBLIC_AUTH_MESSAGE.test(message)
     ? message
     : undefined;
 }

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicOptionsOf } from "./public-options.mjs";
+import { isNonNullObject, isString } from "./type-guards.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const REGISTRY_PATH = join(PROJECT_ROOT, "generated-frontend-modules.json");
@@ -10,8 +11,8 @@ const REGISTRY = existsSync(REGISTRY_PATH)
   : { modules: [] };
 
 function findHomepage(options) {
-  if (!options || typeof options !== "object") return undefined;
-  if (typeof options.homepage === "string") return options.homepage;
+  if (!isNonNullObject(options)) return undefined;
+  if (isString(options.homepage)) return options.homepage;
   return Object.values(options)
     .map(findHomepage)
     .find((homepage) => homepage !== undefined);

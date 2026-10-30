@@ -1,3 +1,5 @@
+import { isString } from "../type-guards.mjs";
+
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
 
 /**
@@ -39,7 +41,7 @@ function platformClientIp(request) {
   const name = headerName(process.env.DMS_CLIENT_IP_HEADER);
   if (!name) return undefined;
   const value = request.headers?.[name];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  return isString(value) && value.trim() ? value.trim() : undefined;
 }
 
 /** @param {ForwardedRequest} request */
@@ -191,9 +193,7 @@ export function clientCountryHeader(request) {
   );
   if (!name || !isProxyTrusted(request)) return {};
   const value = request.headers?.[name];
-  return typeof value === "string" && value.trim()
-    ? { [name]: value.trim() }
-    : {};
+  return isString(value) && value.trim() ? { [name]: value.trim() } : {};
 }
 
 /**
