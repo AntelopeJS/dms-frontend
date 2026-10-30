@@ -1,5 +1,5 @@
 import { type InertiaLinkProps } from "@inertiajs/vue3";
-import { type FetchOptions, ofetch } from "ofetch";
+import { type FetchOptions } from "ofetch";
 import {
   type App,
   type ComputedRef,
@@ -246,6 +246,12 @@ export interface UseAsyncDataOptions<T> {
    */
   refreshInterval?: MaybeRefOrGetter<number | null | undefined>;
 }
+/** What the runtime calls to read the backend: `ofetch`, or a stand-in for it. */
+export type DmsServerFetch = (
+  request: string,
+  options?: FetchOptions,
+) => Promise<unknown>;
+
 /**
  * `useDmsFetch`'s options: ofetch's request options, of which the method, the
  * query, the params and the body may be refs or getters, and the async data
@@ -271,7 +277,7 @@ export interface UseFetchOptions<T>
     context: DmsFetchTransformContext,
   ) => T | Promise<T>;
   /** Replaces the fetch function; it receives the run's signal. */
-  $fetch?: typeof ofetch;
+  $fetch?: DmsServerFetch;
 }
 export interface DmsErrorData {
   statusCode?: number;
