@@ -9,7 +9,15 @@ import {
 import { join, resolve } from "node:path";
 import { it } from "node:test";
 import type { ViteDevServer } from "vite";
-import { type Component, createRenderer, h, nextTick, ref } from "vue";
+import {
+  type App,
+  type Component,
+  createRenderer,
+  h,
+  nextTick,
+  ref,
+} from "vue";
+import { isCallable, isObjectLike, isText } from "./helpers/guards";
 
 interface Node {
   parent: Node | null;
@@ -49,10 +57,69 @@ function page(language: string, updatedAt: number, accountId = "account-a") {
   };
 }
 
+type AppRuntime = Pick<
+  typeof import("../templates/vue/app-runtime.ts"),
+  "configureDmsApp" | "resolveDmsInertiaPage"
+>;
+type FrontendModule = Pick<
+  typeof import("../templates/vue/frontend-module.ts"),
+  "createDmsFrontendRuntime" | "setDmsServerRuntimeResolver"
+>;
+type CreateHead = typeof import("@unhead/vue/server").createHead;
+
 interface Fixture {
-  runtime: Record<string, any>;
-  frontend: Record<string, any>;
-  createHead: () => unknown;
+  runtime: AppRuntime;
+  frontend: FrontendModule;
+  createHead: CreateHead;
+}
+
+/** What the page `resolveDmsInertiaPage` answers carries besides its render. */
+type LayoutPage = Component & { layout: Component };
+
+/** The global composer `vue-i18n` installs on the app in composition mode. */
+interface GlobalComposer {
+  locale: { value: string };
+  setLocale: (locale: string) => Promise<void>;
+}
+
+function isAppRuntime(value: unknown): value is AppRuntime {
+  return (
+    isObjectLike(value) &&
+    "configureDmsApp" in value &&
+    isCallable(value.configureDmsApp) &&
+    "resolveDmsInertiaPage" in value &&
+    isCallable(value.resolveDmsInertiaPage)
+  );
+}
+
+function isFrontendModule(value: unknown): value is FrontendModule {
+  return (
+    isObjectLike(value) &&
+    "createDmsFrontendRuntime" in value &&
+    isCallable(value.createDmsFrontendRuntime) &&
+    "setDmsServerRuntimeResolver" in value &&
+    isCallable(value.setDmsServerRuntimeResolver)
+  );
+}
+
+function isComponent(value: unknown): value is Component {
+  return isObjectLike(value) || isCallable(value);
+}
+
+function hasLayout(page: Component): page is LayoutPage {
+  return "layout" in page && isComponent(page.layout);
+}
+
+function isGlobalComposer(value: unknown): value is GlobalComposer {
+  return (
+    isObjectLike(value) &&
+    "locale" in value &&
+    isObjectLike(value.locale) &&
+    "value" in value.locale &&
+    isText(value.locale.value) &&
+    "setLocale" in value &&
+    isCallable(value.setLocale)
+  );
 }
 
 /** The app runtime, loaded through Vite from a copy of the template. */
@@ -90,8 +157,16 @@ async function withRuntime(test: (fixture: Fixture) => Promise<void>) {
         vue(),
       ],
     });
-    const runtime = await server.ssrLoadModule("/app-runtime.ts");
-    const frontend = await server.ssrLoadModule("/frontend-module.ts");
+    const runtime: unknown = await server.ssrLoadModule("/app-runtime.ts");
+    const frontend: unknown = await server.ssrLoadModule("/frontend-module.ts");
+    assert.ok(
+      isAppRuntime(runtime),
+      "the app runtime exports its entry points",
+    );
+    assert.ok(
+      isFrontendModule(frontend),
+      "the frontend module exports its runtime",
+    );
     const { createHead } = await import("@unhead/vue/server");
     await test({ runtime, frontend, createHead });
   } finally {
@@ -106,8 +181,9 @@ async function configuredApp(
   props: { value: ReturnType<typeof page> | AnonymousPage },
   requestCookies?: string,
 ) {
-  const layout = (runtime.resolveDmsInertiaPage() as { layout: Component })
-    .layout;
+  const page = runtime.resolveDmsInertiaPage();
+  assert.ok(hasLayout(page), "the Inertia page carries its layout");
+  const { layout } = page;
   const app = headlessRenderer().createApp({
     render: () => h(layout, props.value, { default: () => h("p") }),
   });
@@ -137,8 +213,11 @@ interface AnonymousPage {
 
 const anonymousPage = (): AnonymousPage => ({ path: "/auth", page: {} });
 
-const localeOf = (app: { config: { globalProperties: Record<string, any> } }) =>
-  app.config.globalProperties.$i18n.locale.value;
+function localeOf(app: App<Node>): string {
+  const i18n: unknown = app.config.globalProperties.$i18n;
+  assert.ok(isGlobalComposer(i18n), "the app installs the global composer");
+  return i18n.locale.value;
+}
 
 it("takes the interface language from the session, not from a restored page", async () => {
   await withRuntime(async (fixture) => {
