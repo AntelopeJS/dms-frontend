@@ -13,6 +13,9 @@ const ICON_LINK = /<link\b[^>]*\srel=(["'])(?:[^"']*\s)?icon(?:\s[^"']*)?\1/i;
  * through `useHead` (light and dark, one per `prefers-color-scheme`)
  * competed with a placeholder carried by the template, and the browser could
  * keep the empty one.
+ *
+ * @param {string} headTags
+ * @returns {string}
  */
 export function withFaviconPlaceholder(headTags) {
   return ICON_LINK.test(headTags)
