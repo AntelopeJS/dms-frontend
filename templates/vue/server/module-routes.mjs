@@ -91,7 +91,7 @@ function optionsRejection(options) {
 
 /**
  * Two declarations of one path whatever their parameters are named share a
- * shape.
+ * path identity.
  */
 function compilePath(path) {
   const normalized = normalizedPath(path);
@@ -107,7 +107,7 @@ function compilePath(path) {
     .join("");
   return {
     path: normalized,
-    shape: segments
+    pathIdentity: segments
       .map((segment) => (PARAM_SEGMENT.test(segment) ? ":" : segment))
       .join("/"),
     params,
@@ -237,8 +237,10 @@ function parameterCount(route) {
  * each position the same literal or a parameter on either side.
  */
 function routesOverlap(left, right) {
-  const leftSegments = left.shape === "" ? [] : left.shape.split("/");
-  const rightSegments = right.shape === "" ? [] : right.shape.split("/");
+  const leftSegments =
+    left.pathIdentity === "" ? [] : left.pathIdentity.split("/");
+  const rightSegments =
+    right.pathIdentity === "" ? [] : right.pathIdentity.split("/");
   return (
     leftSegments.length === rightSegments.length &&
     leftSegments.every(
@@ -279,7 +281,7 @@ function rootParameterWarning(route) {
  */
 function warnOverlaps(routes, warn) {
   for (const [index, route] of routes.entries()) {
-    if (route.shape.startsWith(":")) warn(rootParameterWarning(route));
+    if (route.pathIdentity.startsWith(":")) warn(rootParameterWarning(route));
     for (const later of routes.slice(index + 1))
       if (
         later.method === route.method &&
@@ -294,7 +296,7 @@ function resolveRoutes(modules, warn, publicEndpoints) {
   const kept = new Map();
   for (const module of modules) {
     for (const route of routesOfModule(module, warn)) {
-      const key = `${route.method} ${route.shape}`;
+      const key = `${route.method} ${route.pathIdentity}`;
       const current = kept.get(key);
       if (current) {
         warn(shadowWarning(current, route));
