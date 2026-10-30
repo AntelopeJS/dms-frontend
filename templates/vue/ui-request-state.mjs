@@ -22,7 +22,7 @@ const APPLICATION_STATE =
  * with a Nuxt UI release.
  *
  * @param {(id: string) => boolean} isNuxtUiFile whether a module is Nuxt UI's
- * @returns {import("vite").Plugin}
+ * @returns {import("./ui-inertia-page.mjs").NuxtUiRewrite}
  */
 export function uiRequestState(isNuxtUiFile) {
   return {
