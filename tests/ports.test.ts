@@ -128,7 +128,8 @@ describe("reserveFreePort", () => {
       } finally {
         await reserved.release();
       }
-    } catch (err: any) {
+    } catch (err) {
+      assert.ok(err instanceof Error, "the probe range failed with an error");
       assert.match(err.message, /between 65530 and 65535/);
     }
   });

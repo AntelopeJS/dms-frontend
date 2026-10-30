@@ -12,6 +12,7 @@ import {
 } from "../src/common";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
+import { jsonAt, readJson } from "./helpers/json";
 
 describe("Vite frontend generation", () => {
   it("discovers Vue entries and the stable SDK alias", () => {
@@ -51,10 +52,8 @@ describe("Vite frontend generation", () => {
         ],
       },
     ]);
-    const declared = JSON.parse(
-      readText(join(workspace, "generated-auth-establish.json")),
-    );
-    assert.deepEqual(declared.endpoints, [
+    const declared = readJson(join(workspace, "generated-auth-establish.json"));
+    assert.deepEqual(jsonAt(declared, "endpoints"), [
       "/api/saas/register/finalize",
       "/api/invites/redeem",
     ]);
@@ -66,10 +65,8 @@ describe("Vite frontend generation", () => {
     writeFrontendModuleRegistry(workspace, [
       { path: source, packageName: "@dms/legacy", priority: 0 },
     ]);
-    const declared = JSON.parse(
-      readText(join(workspace, "generated-auth-establish.json")),
-    );
-    assert.deepEqual(declared.endpoints, []);
+    const declared = readJson(join(workspace, "generated-auth-establish.json"));
+    assert.deepEqual(jsonAt(declared, "endpoints"), []);
   });
 
   it("writes the public endpoints the modules declare for the server", () => {
@@ -88,11 +85,11 @@ describe("Vite frontend generation", () => {
       },
       { path: source, packageName: "@dms/legacy", priority: 1 },
     ]);
-    const declared = JSON.parse(
-      readText(join(workspace, "generated-public-endpoints.json")),
+    const declared = readJson(
+      join(workspace, "generated-public-endpoints.json"),
     );
-    assert.deepEqual(declared.endpoints, [webhook]);
-    assert.deepEqual(declared.proxies, []);
+    assert.deepEqual(jsonAt(declared, "endpoints"), [webhook]);
+    assert.deepEqual(jsonAt(declared, "proxies"), []);
   });
 
   it("writes the backend proxies the modules declare, with the module that declared each", () => {
@@ -110,10 +107,10 @@ describe("Vite frontend generation", () => {
         ],
       },
     ]);
-    const declared = JSON.parse(
-      readText(join(workspace, "generated-public-endpoints.json")),
+    const declared = readJson(
+      join(workspace, "generated-public-endpoints.json"),
     );
-    assert.deepEqual(declared.proxies, [
+    assert.deepEqual(jsonAt(declared, "proxies"), [
       { path: "/media/**", auth: "none", module: "@dms/media" },
     ]);
   });
@@ -195,10 +192,8 @@ describe("Vite frontend generation", () => {
       readText(join(workspace, "public", "images", "logo.svg")),
       "high",
     );
-    const paths = JSON.parse(
-      readText(join(workspace, "frontend-paths.generated.json")),
-    );
-    assert.deepEqual(paths.compilerOptions.paths["#shared/*"], [
+    const paths = readJson(join(workspace, "frontend-paths.generated.json"));
+    assert.deepEqual(jsonAt(paths, "compilerOptions", "paths", "#shared/*"), [
       "./frontend-modules/dms__high/layers/shared/*",
     ]);
     assert.match(

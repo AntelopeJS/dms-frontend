@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import { assertLayersSupportRenderer, type ResolvedLayer } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
 import { listNames, readText } from "./helpers/files";
+import { isNumber, isObjectLike, isText } from "./helpers/guards";
 import type { JsonValue } from "./helpers/json";
 import { OWN_PACKAGE } from "./helpers/own-package";
 import { addressOf } from "./helpers/net";
@@ -271,6 +272,22 @@ interface Run {
   output: string;
 }
 
+/** What a command that exited non-zero rejects with. */
+interface CommandFailure {
+  code?: number | null;
+  stdout?: string;
+  stderr?: string;
+}
+
+function isCommandFailure(value: unknown): value is CommandFailure {
+  return (
+    isObjectLike(value) &&
+    (!("code" in value) || value.code === null || isNumber(value.code)) &&
+    (!("stdout" in value) || isText(value.stdout)) &&
+    (!("stderr" in value) || isText(value.stderr))
+  );
+}
+
 interface RunOptions {
   env?: Record<string, string>;
   /** Home to run in, so a second run finds what the first one cached. */
@@ -306,7 +323,8 @@ async function runTypeScript(
       },
     );
     return { status: 0, output: `${stdout}${stderr}` };
-  } catch (err: any) {
+  } catch (err) {
+    if (!isCommandFailure(err)) throw err;
     return {
       status: err.code ?? 1,
       output: `${err.stdout ?? ""}${err.stderr ?? ""}`,

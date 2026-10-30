@@ -189,7 +189,8 @@ describe("The module testing helper", () => {
       return {
         status: response.status,
         cookie: response.headers.getSetCookie()[0]?.split(";", 1)[0] ?? "",
-        body: response.status === 200 ? await response.json() : undefined,
+        body:
+          response.status === 200 ? await responseJson(response) : undefined,
       };
     };
     try {

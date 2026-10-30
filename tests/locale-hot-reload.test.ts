@@ -18,6 +18,7 @@ import {
   writeFrontendModuleRegistry,
   writeLocaleMessages,
 } from "../src/common";
+import { isCallable, isObjectLike, isText } from "./helpers/guards";
 
 type Messages = Record<string, string>;
 
@@ -27,6 +28,14 @@ interface LocaleCatalogs {
   syncLocaleMessages(target: {
     setLocaleMessage(locale: string, messages: Messages): void;
   }): void;
+}
+
+function isGreeter(
+  value: unknown,
+): value is { greeting: (locale: string) => Promise<string> } {
+  return (
+    isObjectLike(value) && "greeting" in value && isCallable(value.greeting)
+  );
 }
 
 const TIMEOUT_MS = 15_000;
@@ -105,8 +114,13 @@ describe("regenerated locale catalogs in the dev server", () => {
   });
 
   it("serves the regenerated catalogs to the next server render", async () => {
-    const render = async (locale: string) =>
-      (await server.ssrLoadModule("/server-entry.ts")).greeting(locale);
+    const render = async (locale: string): Promise<string> => {
+      const entry: unknown = await server.ssrLoadModule("/server-entry.ts");
+      assert.ok(isGreeter(entry), "the server entry exports greeting");
+      const greeting: unknown = await entry.greeting(locale);
+      assert.ok(isText(greeting), "greeting answers a message");
+      return greeting;
+    };
     assert.equal(await render("en"), "Hello");
     assert.equal(await render("fr"), "Bonjour");
     await regenerate({ "en-GB": { greeting: "Hello from the server" } });
