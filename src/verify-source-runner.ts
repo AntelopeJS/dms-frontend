@@ -16,6 +16,7 @@ import {
   getProcessUi,
 } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
+import { isText } from "./internal/guards";
 import {
   assertLayersSupportRenderer,
   CancelledError,
