@@ -4,20 +4,7 @@ import { once } from "node:events";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
-import { pathToFileURL } from "node:url";
-
-/** The props of the fixture's `Welcome.vue`. */
-interface WelcomeProps {
-  footer?: boolean;
-}
-
-interface EmailTemplate {
-  renderEmailTemplate: (
-    template: string,
-    props: WelcomeProps,
-  ) => Promise<string>;
-  watchEmailBundle: () => ChildProcess;
-}
+import { type BuiltEmail, builtEmail } from "./helpers/built-templates";
 
 function writeTemplate(moduleRoot: string, text: string): void {
   writeFileSync(
@@ -33,7 +20,7 @@ function writeTemplate(moduleRoot: string, text: string): void {
 async function emailWorkspace(templates: Record<string, string>): Promise<{
   workspace: string;
   moduleRoot: string;
-  email: EmailTemplate;
+  email: BuiltEmail;
 }> {
   const workspace = mkdtempSync(resolve(".email-bundle-watch-"));
   const moduleRoot = join(workspace, "frontend-modules", "fixture");
@@ -61,9 +48,7 @@ async function emailWorkspace(templates: Record<string, string>): Promise<{
   for (const [name, source] of Object.entries(templates)) {
     writeFileSync(join(moduleRoot, "emails", name), source);
   }
-  const email = (await import(
-    pathToFileURL(join(workspace, "server", "email.mjs")).href
-  )) as EmailTemplate;
+  const email = await builtEmail(workspace);
   return { workspace, moduleRoot, email };
 }
 

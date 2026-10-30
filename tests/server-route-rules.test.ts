@@ -7,16 +7,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import {
   copyStaticTemplates,
   createFrontendModuleRegistry,
@@ -28,6 +22,7 @@ import {
   ruleHeaders,
 } from "../templates/vue/server/route-rules.mjs";
 import type { DmsServerSetup } from "../templates/vue/server-module";
+import { builtServer } from "./helpers/built-templates";
 import { addressOf } from "./helpers/net";
 
 const PUBLIC_CACHE = {
@@ -260,14 +255,7 @@ describe("Route rules in the production server", () => {
       root: workspace,
       logLevel: "silent",
     });
-    const server = (await import(
-      pathToFileURL(join(workspace, "server.mjs")).href
-    )) as {
-      handleRequestSafely: (
-        request: IncomingMessage,
-        response: ServerResponse,
-      ) => Promise<void>;
-    };
+    const server = await builtServer(workspace);
     frontend = createServer((request, response) => {
       void server.handleRequestSafely(request, response);
     });

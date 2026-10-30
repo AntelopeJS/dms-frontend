@@ -4,10 +4,15 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { parse } from "devalue";
 import { isObjectLike } from "./helpers/guards";
-import { isJsonObject, parseJson } from "./helpers/json";
+import {
+  isJsonObject,
+  isJsonValue,
+  type JsonValue,
+  parseJson,
+} from "./helpers/json";
+import { builtServer } from "./helpers/built-templates";
 import { addressOf } from "./helpers/net";
 
 /**
@@ -40,21 +45,36 @@ export const frontendModules=[{options:{public:{}},module:{setup(sdk){
   return()=>h('p',['payload '+status.value+':'+seen.value.size,h(Icon,{icon:'fixture:dot'})])}}));
 }}}];`;
 
+/** What `devalue` revives beyond JSON: dates and sets of JSON values. */
+type Revived = JsonValue | Date | Set<JsonValue>;
+
 interface Payload {
-  data: Record<string, unknown>;
-  errors: Record<string, unknown>;
-  state: Record<string, unknown>;
+  data: Record<string, Revived>;
+  errors: Record<string, Revived>;
+  state: Record<string, Revived>;
+}
+
+function isRevived(value: unknown): value is Revived {
+  return (
+    isJsonValue(value) ||
+    value instanceof Date ||
+    (value instanceof Set && [...value].every(isJsonValue))
+  );
+}
+
+function isRevivedTable(value: unknown): value is Record<string, Revived> {
+  return isObjectLike(value) && Object.values(value).every(isRevived);
 }
 
 function isPayload(value: unknown): value is Payload {
   return (
     isObjectLike(value) &&
     "data" in value &&
-    isObjectLike(value.data) &&
+    isRevivedTable(value.data) &&
     "errors" in value &&
-    isObjectLike(value.errors) &&
+    isRevivedTable(value.errors) &&
     "state" in value &&
-    isObjectLike(value.state)
+    isRevivedTable(value.state)
   );
 }
 
@@ -68,7 +88,7 @@ function serverPayload(html: string): Payload {
   return parsed;
 }
 
-function payload(html: string): Record<string, unknown> {
+function payload(html: string): Record<string, Revived> {
   return serverPayload(html).data;
 }
 
@@ -139,9 +159,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     await new Promise<void>((done) => backend.listen(0, "127.0.0.1", done));
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    const { handleRequestSafely } = await import(
-      pathToFileURL(join(workspace, "server.mjs")).href
-    );
+    const { handleRequestSafely } = await builtServer(workspace);
     frontend = createServer(handleRequestSafely);
     await new Promise<void>((done) => frontend!.listen(0, "127.0.0.1", done));
     const address = addressOf(frontend);
