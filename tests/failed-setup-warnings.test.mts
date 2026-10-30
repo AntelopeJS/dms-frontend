@@ -20,7 +20,7 @@ import {
   provideDmsFrontendRuntime,
   setupFrontendModules,
 } from "../templates/vue/frontend-module.ts";
-import { isNumber } from "./helpers/guards";
+import { isCallable, isNumber, isObjectLike } from "./helpers/guards";
 
 /** Inside the repository, so the compiled modules resolve its `vue`. */
 const directory = mkdtempSync(resolve(".failed-setup-"));
@@ -49,7 +49,16 @@ async function devComponent(name: string, source: string): Promise<Component> {
     `${script.content}\n${template.code.replace("export function ssrRender", "function ssrRender")}\n` +
       `_sfc_main.ssrRender = ssrRender;\n_sfc_main.__file = ${JSON.stringify(filename)};\nexport default _sfc_main;\n`,
   );
-  return (await import(pathToFileURL(file).href)).default;
+  const compiled: unknown = await import(pathToFileURL(file).href);
+  if (
+    isObjectLike(compiled) &&
+    "default" in compiled &&
+    isObjectLike(compiled.default) &&
+    "ssrRender" in compiled.default &&
+    isCallable(compiled.default.ssrRender)
+  )
+    return compiled.default;
+  throw new Error(`${name} did not compile to a server-rendered component`);
 }
 
 const card = `<script setup>const tone = "neutral";</script>

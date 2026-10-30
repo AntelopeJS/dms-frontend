@@ -312,10 +312,10 @@ describe("Polling", () => {
 describe("useDmsFetch keys", () => {
   it("follows a reactive key, and requests nothing while it is null", async () => {
     const requests: string[] = [];
-    const runtime = createDmsFrontendRuntime((async (url: string) => {
+    const runtime = createDmsFrontendRuntime(async (url: string) => {
       requests.push(url);
       return url;
-    }) as never);
+    });
     const { app } = clientApp(runtime);
     const id = ref<string | null>(null);
     const result = app.runWithContext(() =>
@@ -335,7 +335,7 @@ describe("useDmsFetch keys", () => {
   });
 
   it("gives tests and refreshDmsData the key of a request", async () => {
-    const runtime = createDmsFrontendRuntime((async () => "ok") as never);
+    const runtime = createDmsFrontendRuntime(async () => "ok");
     const { app } = clientApp(runtime);
     const result = await app.runWithContext(() =>
       useDmsFetch("/api/orders", { query: { page: 2, sort: "date" } }),
