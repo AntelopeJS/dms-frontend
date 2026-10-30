@@ -1,20 +1,14 @@
 import * as assert from "node:assert/strict";
 import { cpSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
-import type { ViteDevServer } from "vite";
 import {
   type DmsServerSetup,
   defineDmsServer,
 } from "../templates/vue/server-module";
 import { writeFixture, listen, close } from "./fixtures/server-modules";
+import { builtModuleServer } from "./helpers/built-templates";
 import { jsonAt, responseJson } from "./helpers/json";
 
 describe("Module server routes in development", () => {
@@ -70,17 +64,8 @@ describe("Module server routes in development", () => {
         },
       });
       const devServer = vite;
-      const { handleModuleRoute, loadServerModules } = (await import(
-        pathToFileURL(join(workspace, "server", "module-server.mjs")).href
-      )) as {
-        handleModuleRoute: (
-          request: IncomingMessage,
-          response: ServerResponse,
-          pathname: string,
-          modules: unknown,
-        ) => Promise<boolean>;
-        loadServerModules: (devServer: ViteDevServer) => Promise<unknown>;
-      };
+      const { handleModuleRoute, loadServerModules } =
+        await builtModuleServer(workspace);
       frontend = createServer(async (request, response) => {
         void handleModuleRoute(
           request,

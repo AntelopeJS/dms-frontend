@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
+import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 
 /**
@@ -14,10 +14,6 @@ import { addressOf } from "./helpers/net";
 const MALFORMED_PATH = "/cloud/projects/%E0%A4%A";
 /** A request the server dropped would otherwise wait forever. */
 const REQUEST_TIMEOUT_MS = 10_000;
-
-interface ServerTemplate {
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
-}
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -38,7 +34,7 @@ describe("requests the frontend server cannot serve", () => {
   });
   let frontend: Server | undefined;
   let base = "";
-  let runtime: ServerTemplate;
+  let runtime: typeof import("../templates/vue/server.mjs");
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
@@ -48,9 +44,7 @@ describe("requests the frontend server cannot serve", () => {
     );
     process.env.DMS_DEV = "true";
     process.chdir(root);
-    runtime = (await import(
-      pathToFileURL(join(previousCwd, "templates", "vue", "server.mjs")).href
-    )) as ServerTemplate;
+    runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     base = await listen(frontend);
   });
@@ -92,24 +86,23 @@ describe("requests the frontend server cannot serve", () => {
   it("answers 500 when rendering the error page fails too", async () => {
     const writes: Array<[number, Record<string, string>]> = [];
     let body: string | undefined;
-    const response = {
-      destroyed: false,
-      headersSent: false,
-      writableEnded: false,
+    const response = Object.assign(responseOf(), {
       writeHead(status: number, headers: Record<string, string>) {
         writes.push([status, headers]);
       },
       end(content: string) {
         body = content;
       },
-    };
-    const request = {
-      headers: { accept: "text/html" },
-      method: "GET",
-      get url(): string {
-        throw new Error("unreadable request");
+    });
+    const request = Object.defineProperty(
+      requestOf({ headers: { accept: "text/html" }, method: "GET" }),
+      "url",
+      {
+        get(): string {
+          throw new Error("unreadable request");
+        },
       },
-    };
+    );
     await runtime.handleRequestSafely(request, response);
     assert.deepEqual(writes, [
       [500, { "content-type": "text/plain; charset=utf-8" }],
@@ -119,28 +112,32 @@ describe("requests the frontend server cannot serve", () => {
 
   it("drops the connection when the failed response had already started", async () => {
     let destroyed = false;
-    const response = {
-      destroyed: false,
-      headersSent: false,
-      writableEnded: false,
-      writeHead() {
-        response.headersSent = true;
-        throw new Error("render failed mid-response");
-      },
-      destroy() {
-        destroyed = true;
-      },
-    };
+    let headersSent = false;
+    const response = Object.defineProperty(
+      Object.assign(responseOf(), {
+        writeHead() {
+          headersSent = true;
+          throw new Error("render failed mid-response");
+        },
+        destroy() {
+          destroyed = true;
+        },
+      }),
+      "headersSent",
+      { get: () => headersSent },
+    );
     let reads = 0;
-    const request = {
-      headers: { accept: "application/json" },
-      method: "GET",
-      get url(): string {
-        reads += 1;
-        if (reads === 1) throw new Error("unreadable request");
-        return "/fixture";
+    const request = Object.defineProperty(
+      requestOf({ headers: { accept: "application/json" }, method: "GET" }),
+      "url",
+      {
+        get(): string {
+          reads += 1;
+          if (reads === 1) throw new Error("unreadable request");
+          return "/fixture";
+        },
       },
-    };
+    );
     await runtime.handleRequestSafely(request, response);
     assert.equal(destroyed, true);
   });

@@ -8,6 +8,7 @@ import { after, describe, it } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { assertLayersSupportRenderer, type ResolvedLayer } from "../src/common";
+import { CliError } from "@antelopejs/core/cli";
 import { problemText } from "./fixtures/memory-ui";
 import { listNames, readText } from "./helpers/files";
 import { isNumber, isObjectLike, isText } from "./helpers/guards";
@@ -72,6 +73,7 @@ describe("renderer range", () => {
     assert.throws(
       () => check([declaring("@acme/dms-billing", ">=0.2.8 <0.4.0")]),
       (err: Error) => {
+        assert.ok(err instanceof CliError);
         assert.match(
           err.message,
           /do not run on @antelopejs\/dms-frontend 0\.4\.0/,
@@ -91,6 +93,7 @@ describe("renderer range", () => {
     assert.throws(
       () => check([first, second]),
       (err: Error) => {
+        assert.ok(err instanceof CliError);
         assert.equal(
           problemText(err),
           [
@@ -115,6 +118,7 @@ describe("renderer range", () => {
           declaring("too-new", ">=0.5.0"),
         ]),
       (err: Error) => {
+        assert.ok(err instanceof CliError);
         const text = problemText(err);
         assert.match(text, /too-old \(.+\) supports <0\.4\.0/);
         assert.match(text, /too-new \(.+\) supports >=0\.5\.0/);
@@ -128,7 +132,9 @@ describe("renderer range", () => {
     for (const range of ["latest", 3, null]) {
       assert.throws(
         () => check([declaring(`unreadable-${String(range)}`, range)]),
-        (err) => /declares an unreadable range/.test(problemText(err)),
+        (err) =>
+          err instanceof CliError &&
+          /declares an unreadable range/.test(problemText(err)),
       );
     }
   });
@@ -160,6 +166,7 @@ describe("renderer range", () => {
     assert.throws(
       () => check([first, second]),
       (err: Error) =>
+        err instanceof CliError &&
         problemText(err).includes(`playground-frontend-vue (${first.path})`) &&
         problemText(err).includes(`playground-frontend-vue (${second.path})`),
     );
@@ -187,6 +194,7 @@ describe("renderer range", () => {
     assert.throws(
       () => check([archived]),
       (err) =>
+        err instanceof CliError &&
         problemText(err).includes(`archived (${source}) supports <0.4.0`),
     );
   });
@@ -194,7 +202,9 @@ describe("renderer range", () => {
   it("checks a prerelease as the release it leads to", () => {
     assert.throws(
       () => check([declaring("before-0.4", "<0.4.0")], "0.4.0-next.1"),
-      (err) => /before-0\.4 \(.+\) supports <0\.4\.0/.test(problemText(err)),
+      (err) =>
+        err instanceof CliError &&
+        /before-0\.4 \(.+\) supports <0\.4\.0/.test(problemText(err)),
     );
     assert.deepEqual(
       check([declaring("on-0.3", ">=0.3.2 <0.4.0")], "0.3.3-next.0"),

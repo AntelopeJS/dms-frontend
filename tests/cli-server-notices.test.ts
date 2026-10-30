@@ -19,6 +19,7 @@ import {
   describeStartError,
   runServer,
 } from "../src/server-process";
+import { CliError } from "@antelopejs/core/cli";
 import { memoryUi, problemText } from "./fixtures/memory-ui";
 describe("CLI output", () => {
   it("puts the time before a running server's notices", () => {
@@ -232,7 +233,8 @@ describe("CLI output", () => {
           line.replace(join(workspace, "frontend-modules/demo"), "./demo"),
         onReady: () => (isReady = true),
       }),
-      (err) => {
+      (err: Error) => {
+        assert.ok(err instanceof CliError);
         assert.equal(
           problemText(err),
           [

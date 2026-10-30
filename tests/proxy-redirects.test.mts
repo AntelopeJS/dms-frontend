@@ -11,24 +11,6 @@ import { addressOf } from "./helpers/net";
  * the dashboard's origin.
  */
 
-interface ServedModules {
-  url: string;
-  close: () => Promise<void>;
-}
-
-interface ModuleEvent {
-  backend: (path: string) => Promise<unknown>;
-  backendUrl: (path: string) => URL;
-}
-
-interface ModuleServer {
-  registerRoute: (
-    method: string,
-    path: string,
-    handler: (event: ModuleEvent) => unknown,
-  ) => void;
-}
-
 const ENVIRONMENT = [
   "DMS_API_BASE_URL",
   "DMS_PUBLIC_ENDPOINTS",
@@ -196,16 +178,22 @@ describe("backend redirects", () => {
   });
 
   describe("from a module route", () => {
-    let served: ServedModules | undefined;
+    let served:
+      | Awaited<
+          ReturnType<
+            typeof import("../templates/vue/server/module-testing.mjs").serveModuleRoutes
+          >
+        >
+      | undefined;
 
     before(async () => {
       const { serveModuleRoutes } =
         await import("../templates/vue/server/module-testing.mjs");
-      served = (await serveModuleRoutes(
+      served = await serveModuleRoutes(
         [
           {
             id: "relay",
-            setup: (server: ModuleServer) => {
+            setup: (server) => {
               server.registerRoute("GET", "/api/_relay/json", (event) =>
                 event.backend("/api/maps?status=302"),
               );
@@ -235,7 +223,7 @@ describe("backend redirects", () => {
           },
         ],
         { backendProxies: [{ module: "dms", path: "/api/**" }] },
-      )) as ServedModules;
+      );
     });
 
     after(() => served?.close());

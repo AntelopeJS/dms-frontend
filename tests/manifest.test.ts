@@ -297,6 +297,7 @@ describe("fetchManifest", () => {
         await assert.rejects(
           () => fetchManifest(baseUrl, "http://localhost:3001"),
           (err: Error) => {
+            assert.ok(err instanceof CliError);
             assert.ok(problemText(err).includes(`${baseUrl}/dms/frontend`));
             assert.doesNotMatch(problemText(err), /\?|renderer=|clientUrl/);
             return true;
