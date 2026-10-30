@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
+import { jsonAt } from "./helpers/json";
 import { addressOf } from "./helpers/net";
 import {
   ACCESS_BLOCKED_CODE,
@@ -264,11 +265,7 @@ describe("Site layout as an Inertia once prop", () => {
       const holding = await visit("/auth/custom", {
         "x-inertia-except-once-props": held,
       });
-      assert.equal(
-        (holding.page.props.page as { isFrontendOnly?: boolean })
-          .isFrontendOnly,
-        true,
-      );
+      assert.equal(jsonAt(holding.page.props.page, "isFrontendOnly"), true);
       assert.deepEqual(holding.page.onceProps, {
         [held]: { prop: "shared", expiresAt: null },
       });
