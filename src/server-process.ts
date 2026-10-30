@@ -148,7 +148,7 @@ function readListenError(message: Serializable): ListenError | undefined {
 function readStartError(message: Serializable): StartError | undefined {
   if (!isServerMessage(message) || message.type !== START_ERROR_MESSAGE)
     return undefined;
-  const { location } = message;
+  const location: unknown = message.location;
   const isLocated = hasFile(location);
   return {
     message: String(message.message),
