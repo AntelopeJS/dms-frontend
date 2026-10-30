@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isNonNullObject, isString } from "./type-guards.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const BUILT_TEMPLATE_PATH = join(PROJECT_ROOT, "dist/client/index.html");
@@ -12,22 +11,10 @@ const CLIENT_MANIFEST_PATH = join(
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
 
 /**
- * A chunk of the client build, as far as the server reads it: its file, the
- * stylesheets it brings and the chunks it imports.
- *
- * @typedef {{
- *   file?: string,
- *   css?: string[] | null,
- *   imports?: string[] | null
- * }} ManifestEntry
- */
-
-/**
  * Read once and kept: both files are build output and cannot change while
  * the server is up.
- *
- * @type {Record<string, ManifestEntry> | undefined}
  */
+/** @type {import("vite").Manifest | undefined} */
 let clientManifest;
 /** @type {string | undefined} */
 let productionTemplate;
@@ -46,63 +33,16 @@ export function productionHtmlTemplate() {
   return productionTemplate;
 }
 
-/**
- * @param {unknown} value
- * @returns {value is string[]}
- */
-function isStringArray(value) {
-  return Array.isArray(value) && value.every(isString);
-}
-
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-function isRecord(value) {
-  return isNonNullObject(value);
-}
-
-/**
- * Whether `value` is a chunk whose `file`, `css` and `imports`, when it has
- * them, are what the server reads them as.
- *
- * @param {unknown} value
- * @returns {value is ManifestEntry}
- */
-function isManifestEntry(value) {
-  return (
-    isRecord(value) &&
-    (value.file === undefined || isString(value.file)) &&
-    (value.css === undefined ||
-      value.css === null ||
-      isStringArray(value.css)) &&
-    (value.imports === undefined ||
-      value.imports === null ||
-      isStringArray(value.imports))
-  );
-}
-
-/**
- * @param {unknown} value
- * @returns {value is Record<string, ManifestEntry>}
- */
-function isClientManifest(value) {
-  return isNonNullObject(value) && Object.values(value).every(isManifestEntry);
-}
-
-/** @returns {Record<string, ManifestEntry> | undefined} */
+/** @returns {import("vite").Manifest | undefined} */
 function productionClientManifest() {
   if (clientManifest) return clientManifest;
   if (!existsSync(CLIENT_MANIFEST_PATH)) return undefined;
-  /** @type {unknown} */
-  const manifest = JSON.parse(readFileSync(CLIENT_MANIFEST_PATH, "utf8"));
-  if (!isClientManifest(manifest)) return undefined;
-  clientManifest = manifest;
+  clientManifest = JSON.parse(readFileSync(CLIENT_MANIFEST_PATH, "utf8"));
   return clientManifest;
 }
 
 /**
- * @param {Record<string, ManifestEntry>} manifest
+ * @param {import("vite").Manifest} manifest
  * @param {string} key
  * @param {Set<string>} styles
  * @param {Set<string>} visited
