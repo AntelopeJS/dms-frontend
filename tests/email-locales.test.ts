@@ -5,10 +5,36 @@ import { join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { materializeLayers, writeFrontendModuleRegistry } from "../src/common";
+import { isObjectLike } from "../src/internal/guards";
 import { listNames, readBytes, readText } from "./helpers/files";
+import { isText } from "./helpers/guards";
 import { copyEmailRendererFiles } from "./helpers/templates";
 
-type LocaleMessages = Record<string, unknown>;
+interface LocaleMessages {
+  [key: string]: string | LocaleMessages;
+}
+
+function isLocaleMessages(value: unknown): value is LocaleMessages {
+  return (
+    isObjectLike(value) &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      (entry) => isText(entry) || isLocaleMessages(entry),
+    )
+  );
+}
+
+function isBuiltManifest(
+  value: unknown,
+): value is Record<string, { file: string }> {
+  return (
+    isObjectLike(value) &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      (entry) => isObjectLike(entry) && "file" in entry && isText(entry.file),
+    )
+  );
+}
 
 it("keeps large locale catalogs out of email code without pruning dynamic translations", async (context) => {
   const workspace = mkdtempSync(resolve(".email-locales-"));
@@ -91,10 +117,18 @@ const { t } = useI18n();
       ["en", "Override English", "Dynamic English"],
       ["fr", "Override French", "Dynamic French"],
     ]) {
-      const { default: browserMessages } = await import(
+      const loaded: unknown = await import(
         pathToFileURL(join(workspace, "locales.generated", `${locale}.ts`)).href
       );
+      assert.ok(
+        isObjectLike(loaded) &&
+          "default" in loaded &&
+          isLocaleMessages(loaded.default),
+        `the ${locale} messages are a catalog`,
+      );
+      const browserMessages = loaded.default;
       assert.equal(browserMessages.subject, subject);
+      assert.ok(isLocaleMessages(browserMessages.dynamic));
       assert.equal(browserMessages.dynamic.chosen, dynamic);
       assert.equal(browserMessages.fallback, "English fallback");
       const { fallback, ...own } = browserMessages;
@@ -122,9 +156,10 @@ const { t } = useI18n();
     cpSync(join(workspace, "dist/server"), output, { recursive: true });
     rmSync(join(workspace, "dist"), { recursive: true });
     rmSync(join(workspace, "locales.generated"), { recursive: true });
-    const manifest = JSON.parse(
+    const manifest: unknown = JSON.parse(
       readText(join(output, ".vite/manifest.json")),
-    ) as Record<string, { file: string }>;
+    );
+    assert.ok(isBuiltManifest(manifest), "the build manifest lists files");
     const javascript = [
       ...new Set(Object.values(manifest).map((entry) => entry.file)),
     ]
@@ -157,74 +192,48 @@ const { t } = useI18n();
     const { renderEmail } = await import(
       pathToFileURL(join(output, "email-renderer.js")).href
     );
-    const layout = await renderEmail("EmailFixture", {
-      translationKey: "arbitrary",
-    });
+    const render = async (
+      translationKey: string,
+      locale?: string,
+    ): Promise<string> => {
+      const html: unknown = await renderEmail(
+        "EmailFixture",
+        { translationKey },
+        locale === undefined ? undefined : { locale },
+      );
+      assert.ok(isText(html), "the email renders to text");
+      return html;
+    };
+    const layout = await render("arbitrary");
     assert.match(
       layout,
       /<table[^>]*align="center"[^>]*width="100%"[^>]*style="max-width:37\.5em;padding:20px 0;"[^>]*><tbody><tr[^>]*><td><table/,
     );
     assert.match(
-      await renderEmail(
-        "EmailFixture",
-        { translationKey: "dynamic.chosen" },
-        { locale: "fr-FR" },
-      ),
+      await render("dynamic.chosen", "fr-FR"),
       /Override French\|English fallback\|Dynamic French/,
     );
     assert.match(
-      await renderEmail(
-        "EmailFixture",
-        { translationKey: "arbitrary" },
-        { locale: "en" },
-      ),
+      await render("arbitrary", "en"),
       /Override English\|English fallback\|Arbitrary English/,
     );
     writeFileSync(germanPath, german);
     assert.match(
-      await renderEmail(
-        "EmailFixture",
-        { translationKey: "arbitrary" },
-        { locale: "de" },
-      ),
+      await render("arbitrary", "de"),
       /Override English\|English fallback\|Arbitrary German/,
     );
     assert.match(
-      await renderEmail(
-        "EmailFixture",
-        { translationKey: "arbitrary" },
-        { locale: "es" },
-      ),
+      await render("arbitrary", "es"),
       /Override English\|English fallback\|Arbitrary English/,
     );
     assert.match(
-      await renderEmail(
-        "EmailFixture",
-        { translationKey: "unrelated.key2999" },
-        { locale: "fr" },
-      ),
+      await render("unrelated.key2999", "fr"),
       /UNRELATED_APPLICATION_TRANSLATION_2999/,
     );
     writeFileSync(join(output, "locales/it.json"), "invalid JSON");
-    await assert.rejects(
-      () =>
-        renderEmail(
-          "EmailFixture",
-          { translationKey: "arbitrary" },
-          { locale: "it" },
-        ),
-      SyntaxError,
-    );
+    await assert.rejects(() => render("arbitrary", "it"), SyntaxError);
     rmSync(join(output, "locales/nl.json"));
-    await assert.rejects(
-      () =>
-        renderEmail(
-          "EmailFixture",
-          { translationKey: "arbitrary" },
-          { locale: "nl" },
-        ),
-      { code: "ENOENT" },
-    );
+    await assert.rejects(() => render("arbitrary", "nl"), { code: "ENOENT" });
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }

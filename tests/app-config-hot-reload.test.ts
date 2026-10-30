@@ -20,8 +20,74 @@ import {
   writeAppConfigs,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { isFlag, isObjectLike } from "../src/internal/guards";
+import { isText } from "./helpers/guards";
 
-type AppConfig = Record<string, any>;
+interface Branding {
+  name?: string;
+  logo?: string;
+}
+
+interface Colors {
+  primary?: string;
+  neutral?: string;
+}
+
+/** What a layer's `app.config.ts` of the fixture exports. */
+interface AppConfigSource {
+  branding?: Branding;
+  ui?: { colors?: Colors };
+  addedBySetup?: boolean;
+}
+
+/** What the running app holds once the fixture's layers are merged. */
+interface AppConfig {
+  branding: Branding;
+  ui: { colors: Colors };
+  addedBySetup?: boolean;
+}
+
+function isBranding(value: unknown): value is Branding {
+  return (
+    isObjectLike(value) &&
+    (!("name" in value) || value.name === undefined || isText(value.name)) &&
+    (!("logo" in value) || value.logo === undefined || isText(value.logo))
+  );
+}
+
+function isColors(value: unknown): value is Colors {
+  return (
+    isObjectLike(value) &&
+    (!("primary" in value) ||
+      value.primary === undefined ||
+      isText(value.primary)) &&
+    (!("neutral" in value) ||
+      value.neutral === undefined ||
+      isText(value.neutral))
+  );
+}
+
+function isAppConfig(value: unknown): value is AppConfig {
+  return (
+    isObjectLike(value) &&
+    "branding" in value &&
+    isBranding(value.branding) &&
+    "ui" in value &&
+    isObjectLike(value.ui) &&
+    "colors" in value.ui &&
+    isColors(value.ui.colors) &&
+    (!("addedBySetup" in value) ||
+      value.addedBySetup === undefined ||
+      isFlag(value.addedBySetup))
+  );
+}
+
+/** Whether an entry module exports the merged app config. */
+function exportsAppConfig(entry: unknown): entry is { appConfig: AppConfig } {
+  return (
+    isObjectLike(entry) && "appConfig" in entry && isAppConfig(entry.appConfig)
+  );
+}
 
 interface HotReloadProbe {
   evaluations: number;
@@ -49,7 +115,7 @@ function writeFile(path: string, content: string): void {
   writeFileSync(path, content);
 }
 
-function configSource(config: AppConfig): string {
+function configSource(config: AppConfigSource): string {
   return `export default ${JSON.stringify(config)};\n`;
 }
 
@@ -83,7 +149,7 @@ describe("edited layer app configs in the dev server", () => {
   const probe: HotReloadProbe = { evaluations: 0 };
   let server: ViteDevServer;
 
-  const edit = async (path: string, config: AppConfig): Promise<void> => {
+  const edit = async (path: string, config: AppConfigSource): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     writeFile(path, configSource(config));
   };
@@ -147,8 +213,11 @@ describe("edited layer app configs in the dev server", () => {
   });
 
   it("sets the next server render up from the edited config", async () => {
-    const render = async (): Promise<AppConfig> =>
-      toRaw((await server.ssrLoadModule("/server-entry.ts")).appConfig);
+    const render = async (): Promise<AppConfig> => {
+      const entry: unknown = await server.ssrLoadModule("/server-entry.ts");
+      assert.ok(exportsAppConfig(entry), "the entry exports the app config");
+      return toRaw(entry.appConfig);
+    };
     assert.deepEqual((await render()).branding, {
       name: "Project",
       logo: "/dms.svg",
@@ -170,9 +239,9 @@ describe("edited layer app configs in the dev server", () => {
       invalidated.push(payload.path);
     });
     try {
-      const { appConfig } = (await runner.import("/client-entry.ts")) as {
-        appConfig: AppConfig;
-      };
+      const entry: unknown = await runner.import("/client-entry.ts");
+      assert.ok(exportsAppConfig(entry), "the entry exports the app config");
+      const { appConfig } = entry;
       const branding = appConfig.branding;
       assert.equal(probe.evaluations, 1);
 
