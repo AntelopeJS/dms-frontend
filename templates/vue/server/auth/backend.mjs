@@ -38,6 +38,7 @@ export const GENERIC_ERROR_MESSAGE = "error.500.description";
  * @returns {string | undefined}
  */
 export function publicBackendMessage(data) {
+  /** @type {unknown} */
   const message = isString(data) ? data : data?.message;
   return isString(message) && PUBLIC_AUTH_MESSAGE.test(message)
     ? message
