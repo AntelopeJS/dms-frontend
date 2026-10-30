@@ -16,8 +16,6 @@ import {
   getProcessUi,
 } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
-import { isFlag, isObjectLike, isText } from "./internal/guards";
-import { isPlainObject } from "./internal/plain-object";
 import {
   assertLayersSupportRenderer,
   CancelledError,
@@ -52,23 +50,10 @@ import {
   ViteWarnings,
 } from "./vite-output";
 
-/** A chunk of a Vite build manifest, as far as the checks read it. */
-interface BuildChunk {
-  file: string;
-  isEntry?: boolean;
-}
-
-function isBuildChunk(value: unknown): value is BuildChunk {
-  return (
-    isObjectLike(value) &&
-    "file" in value &&
-    isText(value.file) &&
-    (!("isEntry" in value) || isFlag(value.isEntry))
-  );
-}
-
-function isBuildManifest(value: unknown): value is Record<string, BuildChunk> {
-  return isPlainObject(value) && Object.values(value).every(isBuildChunk);
+interface LayerPackage {
+  name?: string;
+  devDependencies?: Record<string, string>;
+  pnpm?: { overrides: Record<string, string> };
 }
 
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;
@@ -79,6 +64,10 @@ const LAZY_LIBRARIES = [
   { name: "Tiptap", pattern: /tiptap/i },
 ];
 const RUNTIME_MARKERS = ["auth/login", "DefaultLayout", "error.500.title"];
+
+function readJson(path: string): unknown {
+  return JSON.parse(readFileSync(path, "utf8"));
+}
 
 /** Fails the running check with `title` unless `condition` holds. */
 function ensure(
@@ -92,8 +81,8 @@ function ensure(
 function removeDevelopmentDependencies(root: string): void {
   const packagePath = join(root, "package.json");
   if (!existsSync(packagePath)) return;
-  const packageData: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
-  if (isPlainObject(packageData)) delete packageData.devDependencies;
+  const packageData = readJson(packagePath) as LayerPackage;
+  delete packageData.devDependencies;
   writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
 }
 
@@ -122,23 +111,14 @@ function materializeWorkspace(
   );
   writeWorkspacePackageJson(workspace, layers);
   const packagePath = join(workspace, "package.json");
-  const workspacePackage: unknown = JSON.parse(
-    readFileSync(packagePath, "utf8"),
-  );
-  ensure(
-    isPlainObject(workspacePackage),
-    "The workspace package.json is not an object",
-  );
+  const workspacePackage = readJson(packagePath) as LayerPackage;
   workspacePackage.pnpm = {
     overrides: {
       ...Object.fromEntries(
-        layers.map((layer): [string, string] => [
-          String(layer.packageName),
-          "workspace:*",
-        ]),
+        layers.map((layer) => [layer.packageName, "workspace:*"]),
       ),
       ...Object.fromEntries(
-        Object.entries(localPackages).map(([name, path]): [string, string] => [
+        Object.entries(localPackages).map(([name, path]) => [
           name,
           `link:${resolve(path)}`,
         ]),
@@ -155,10 +135,9 @@ function materializeWorkspace(
  */
 function checkClientBundle(workspace: string): void {
   const clientRoot = join(workspace, "dist", "client");
-  const manifest: unknown = JSON.parse(
-    readFileSync(join(clientRoot, ".vite", "manifest.json"), "utf8"),
-  );
-  ensure(isBuildManifest(manifest), "The Vite manifest does not list chunks");
+  const manifest = readJson(
+    join(clientRoot, ".vite", "manifest.json"),
+  ) as Record<string, { file: string; isEntry?: boolean }>;
   const mainEntry = Object.values(manifest).find((entry) => entry.isEntry);
   ensure(mainEntry !== undefined, "The Vite manifest names no entry chunk");
   const mainJavascript = readFileSync(join(clientRoot, mainEntry.file), "utf8");
@@ -303,11 +282,10 @@ async function checkEmailContracts(workspace: string): Promise<string> {
     "The e-mail manifest references browser-only modules",
     BROWSER_ONLY_REASON,
   );
-  const emailManifest: unknown = JSON.parse(emailManifestContent);
-  ensure(
-    isBuildManifest(emailManifest),
-    "The e-mail manifest does not list chunks",
-  );
+  const emailManifest = JSON.parse(emailManifestContent) as Record<
+    string,
+    { file: string }
+  >;
   const emailJavascriptFiles = [
     ...new Set([
       "email-renderer.js",
