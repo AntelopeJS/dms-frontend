@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readSession } from "./auth/session.mjs";
 import { BackendResponseError } from "./backend-response.mjs";
 import { heldOnceProps, requestedProps } from "./inertia.mjs";
+import { isNonNullObject } from "./type-guards.mjs";
 
 export const SHARED_PROP = "shared";
 /**
@@ -127,6 +128,14 @@ function frontendOnlyPage(pathname, signInPath) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isRecord(value) {
+  return isNonNullObject(value);
+}
+
+/**
  * @param {URL} url
  * @param {boolean} withShared
  * @param {PageBackend} backend
@@ -140,7 +149,10 @@ async function loadPage(
 ) {
   const { pathname } = url;
   try {
-    const { shared, ...page } = await fetchJson(pagePath(url, withShared));
+    const answer = await fetchJson(pagePath(url, withShared));
+    if (!isRecord(answer))
+      throw new TypeError("The backend's page answer is not an object");
+    const { shared, ...page } = answer;
     return { page, shared };
   } catch (error) {
     if (!(error instanceof BackendResponseError) || error.status !== NOT_FOUND)

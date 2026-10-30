@@ -17,8 +17,9 @@ const EMAIL_BUILD_WAIT_MS = 60_000;
  * Settled whenever no email build is running. The version changes with each
  * finished build: Node caches an imported module by URL, so the renderer is
  * imported under a new one to pick up rebuilt templates.
+ *
+ * @type {Promise<void>}
  */
-/** @type {Promise<void>} */
 let emailBuild = Promise.resolve();
 /** @type {(() => void) | undefined} */
 let settleEmailBuild;
