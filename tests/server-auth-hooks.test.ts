@@ -209,11 +209,10 @@ export default defineDmsServer((server) => {
 });
 `;
 
-interface SessionTemplate {
-  writeSession(response: unknown, session: Record<string, unknown>): void;
-  writeSealedCookie(response: unknown, name: string, value: unknown): void;
-  readSession(request: unknown): Record<string, unknown> | undefined;
-}
+type SessionTemplate = Pick<
+  typeof import("../templates/vue/server/auth/session.mjs"),
+  "writeSession" | "writeSealedCookie" | "readSession"
+>;
 
 function cookieJar() {
   const headers = new Map<string, string | string[]>();
