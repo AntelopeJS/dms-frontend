@@ -103,6 +103,7 @@ describe("public endpoints through the proxy", () => {
       const cookie = await sessionCookie({
         accessToken: jwt,
         refreshToken: "refresh-1",
+        persistent: false,
         user: { id: "user-1" },
       });
 

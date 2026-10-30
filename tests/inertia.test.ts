@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
@@ -103,13 +104,13 @@ describe("Inertia HTTP protocol", () => {
         | { status: number; headers: Record<string, string> }
         | undefined;
       runtime.redirectFrontendVisit(
-        { method: "GET", headers: { "x-inertia": "true" } },
-        {
+        requestOf({ method: "GET", headers: { "x-inertia": "true" } }),
+        Object.assign(responseOf(), {
           end: () => undefined,
           writeHead: (status: number, headers: Record<string, string>) => {
             result = { status, headers };
           },
-        },
+        }),
         location,
       );
       return result;
