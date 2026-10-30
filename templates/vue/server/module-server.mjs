@@ -17,6 +17,28 @@ import {
 import { reachesBackend } from "./request-routing.mjs";
 
 import { publicOptionsOf } from "./public-options.mjs";
+/** @typedef {import("./module-route-types.mjs").ServerModuleDeclaration} ServerModuleDeclaration */
+/**
+ * What a handler of a module reads besides its request.
+ *
+ * @typedef {object} ModuleContext
+ * @property {{ id: string, options: unknown, privateOptions: unknown }} module
+ * @property {{ authEstablishEndpoints: readonly string[] }} app
+ * @property {string | undefined} authOwner The module that owns sign-in
+ */
+/**
+ * A deployment's data, which the server hands to a set of server modules.
+ *
+ * @typedef {object} Deployment
+ * @property {Record<string, unknown>} [publicOptions] Each module's public options by id
+ * @property {Record<string, unknown>} [privateOptions] Each module's private options by id
+ * @property {() => readonly string[]} [authEstablishEndpoints]
+ * @property {import("./public-endpoints.mjs").PublicEndpoint[]} [publicEndpoints]
+ * @property {import("./backend-proxies.mjs").ManifestProxy[]} [backendProxies]
+ * @property {(message: string) => void} warn
+ */
+/** @typedef {ReturnType<typeof createServerModules>} ServerModules */
+
 const WORKSPACE_ROOT = new URL("../", import.meta.url);
 const SOURCE_LOADER = "/server-modules.generated.ts";
 const BUILT_LOADER = new URL(
@@ -32,11 +54,19 @@ const SERVER_OPTIONS_FILE = new URL(
   WORKSPACE_ROOT,
 );
 
+/** @type {Promise<ServerModuleDeclaration[]> | undefined} */
 let builtDeclarations;
+/** @type {ServerModuleDeclaration[]} */
 let lastDeclarations = [];
+/** @type {string | undefined} */
 let lastLoadError;
+/** @type {WeakMap<ServerModuleDeclaration[], ServerModules>} */
 const resolved = new WeakMap();
 
+/**
+ * @param {URL} url
+ * @param {unknown} fallback
+ */
 function readJsonFile(url, fallback) {
   try {
     return JSON.parse(readFileSync(url, "utf8"));
@@ -47,7 +77,12 @@ function readJsonFile(url, fallback) {
 
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
-/** The object holding `path`'s last key, when every key up to it is own. */
+/**
+ * The object holding `path`'s last key, when every key up to it is own.
+ *
+ * @param {Record<string, unknown>} target
+ * @param {string[]} path
+ */
 function holderOf(target, path) {
   let node = target;
   for (const key of path.slice(0, -1)) {
@@ -58,7 +93,13 @@ function holderOf(target, path) {
   return UNSAFE_KEYS.has(path.at(-1)) ? undefined : node;
 }
 
-/** Sets `value` at `path` when the object holding it exists but lacks it. */
+/**
+ * Sets `value` at `path` when the object holding it exists but lacks it.
+ *
+ * @param {Record<string, unknown>} target
+ * @param {string[]} path
+ * @param {string} value
+ */
 function fillPath(target, path, value) {
   const holder = holderOf(target, path);
   const key = path.at(-1);
@@ -66,7 +107,13 @@ function fillPath(target, path, value) {
     holder[key] = value;
 }
 
-/** Sets `value` at `path` only where the build left an empty string. */
+/**
+ * Sets `value` at `path` only where the build left an empty string.
+ *
+ * @param {Record<string, unknown>} target
+ * @param {string[]} path
+ * @param {string} value
+ */
 function fillEmptied(target, path, value) {
   const holder = holderOf(target, path);
   const key = path.at(-1);
@@ -79,10 +126,10 @@ function fillEmptied(target, path, value) {
  * the environment variable of a secret (`DMS_HTML_RENDER_SECRET`,
  * `DMS_OAUTH_RELAY_SECRET`) only fills in a section that carries none.
  *
- * @param modules The private options by module id, as the manifest published
+ * @param {Record<string, Record<string, unknown>>} modules The private options by module id, as the manifest published
  *   them
- * @param environment The variables by the path of the secret they stand for
- * @param env The process environment
+ * @param {Record<string, string[]>} environment The variables by the path of the secret they stand for
+ * @param {NodeJS.ProcessEnv} env The process environment
  */
 export function privateOptionsWithFallbacks(modules, environment, env) {
   for (const options of Object.values(modules))
@@ -91,7 +138,13 @@ export function privateOptionsWithFallbacks(modules, environment, env) {
   return modules;
 }
 
-/** Each string leaf of `value`, array items included, with its path. */
+/**
+ * Each string leaf of `value`, array items included, with its path.
+ *
+ * @param {unknown} value
+ * @param {string[]} [path]
+ * @returns {Generator<[string[], string]>}
+ */
 function* stringLeaves(value, path = []) {
   if (typeof value === "string") yield [path, value];
   else if (typeof value === "object" && value !== null)
@@ -107,12 +160,13 @@ function* stringLeaves(value, path = []) {
  * a value the build emptied is filled, array items included: a value the
  * manifest carries wins, and no option or section is added or replaced.
  *
- * @param modules The private options by module id
- * @param json The variable's value; nothing is filled when unset
- * @param warn Reports a value that is not a JSON object, never its content
+ * @param {Record<string, Record<string, unknown>>} modules The private options by module id
+ * @param {string | undefined} json The variable's value; nothing is filled when unset
+ * @param {(message: string) => void} warn Reports a value that is not a JSON object, never its content
  */
 export function privateOptionsFromJson(modules, json, warn) {
   if (!json) return modules;
+  /** @type {unknown} */
   let given;
   try {
     given = JSON.parse(json);
@@ -131,6 +185,7 @@ export function privateOptionsFromJson(modules, json, warn) {
   return modules;
 }
 
+/** @param {NodeJS.ProcessEnv} [env] */
 function readPrivateOptions(env = process.env) {
   const { modules = {}, environment = {} } = readJsonFile(
     SERVER_OPTIONS_FILE,
@@ -147,6 +202,10 @@ function readPublicOptions() {
   return publicOptionsOf(readJsonFile(REGISTRY_FILE, { modules: [] }));
 }
 
+/**
+ * @param {import("vite").ViteDevServer | undefined} devServer
+ * @returns {Promise<ServerModuleDeclaration[]>}
+ */
 async function loadDeclarations(devServer) {
   if (devServer)
     return (await devServer.ssrLoadModule(SOURCE_LOADER)).serverModules;
@@ -161,6 +220,8 @@ async function loadDeclarations(devServer) {
  * The declarations to serve. A module entry that fails to load in development
  * (a syntax error being typed) is reported once, and the last routes that
  * loaded keep answering meanwhile.
+ *
+ * @param {import("vite").ViteDevServer | undefined} devServer
  */
 async function currentDeclarations(devServer) {
   try {
@@ -181,8 +242,8 @@ async function currentDeclarations(devServer) {
  *
  * `authOwner` is the module whose sealed cookies are the `dms_*` ones.
  *
- * @param declarations `{ id, priority, setup }` per module with a dms.server.ts
- * @param deployment `{ publicOptions, privateOptions, authEstablishEndpoints,
+ * @param {readonly ServerModuleDeclaration[]} declarations `{ id, priority, setup }` per module with a dms.server.ts
+ * @param {Deployment} deployment `{ publicOptions, privateOptions, authEstablishEndpoints,
  *   publicEndpoints, backendProxies, warn }`: each module's options by id,
  *   the session-opening endpoints as a function (the environment can change
  *   them), the public endpoints, the backend proxies the manifest declares
@@ -198,7 +259,7 @@ export function createServerModules(declarations, deployment) {
     deployment.publicEndpoints ?? [],
     deployment.backendProxies ?? [],
   );
-  const context = (id) => ({
+  const context = (/** @type {string} */ id) => ({
     module: {
       id,
       options: deployment.publicOptions?.[id],
@@ -216,7 +277,11 @@ export function createServerModules(declarations, deployment) {
   };
 }
 
-/** Resolved once per set of declarations: in development, once per edit. */
+/**
+ * Resolved once per set of declarations: in development, once per edit.
+ *
+ * @param {ServerModuleDeclaration[]} declarations
+ */
 function serverModules(declarations) {
   let modules = resolved.get(declarations);
   if (!modules) {
@@ -245,7 +310,7 @@ function serverModules(declarations) {
  * next request; in production from the bundle `ajs dms build` makes
  * (`dist/server-modules`). A workspace built before the feature has none.
  *
- * @param devServer Vite in development, `undefined` in production
+ * @param {import("vite").ViteDevServer | undefined} devServer Vite in development, `undefined` in production
  */
 export async function loadServerModules(devServer) {
   return serverModules(await currentDeclarations(devServer));
@@ -256,10 +321,10 @@ export async function loadServerModules(devServer) {
  * module route serves is the module's for every method: another method is
  * answered `405`.
  *
- * @param request The Node request
- * @param response The Node response
- * @param pathname The request's normalized path
- * @param modules What `loadServerModules` or `createServerModules` returned
+ * @param {import("node:http").IncomingMessage} request The Node request
+ * @param {import("node:http").ServerResponse} response The Node response
+ * @param {string} pathname The request's normalized path
+ * @param {ServerModules} modules What `loadServerModules` or `createServerModules` returned
  * @returns Whether a module route answered
  */
 export async function handleModuleRoute(request, response, pathname, modules) {

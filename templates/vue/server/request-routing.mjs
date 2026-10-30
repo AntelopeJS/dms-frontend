@@ -1,6 +1,19 @@
 import { matchBackendProxy } from "./backend-proxies.mjs";
 import { isRendererFilePath, moduleRouteMethods } from "./module-routes.mjs";
 
+/**
+ * @typedef {object} RoutingModules
+ * @property {import("./module-route-types.mjs").ServerRoute[]} routes
+ * @property {import("./backend-proxies.mjs").BackendProxy[]} [proxies]
+ */
+/**
+ * @typedef {{ kind: "renderer" }
+ *   | { kind: "module", id: string }
+ *   | { kind: "backend", proxy: import("./backend-proxies.mjs").BackendProxy }
+ *   | { kind: "page" }
+ *   | { kind: "not-found" }} RequestOwner
+ */
+
 const PAGE_METHODS = new Set(["GET", "HEAD"]);
 
 /**
@@ -14,12 +27,12 @@ const PAGE_METHODS = new Set(["GET", "HEAD"]);
  * `backendProxies`); 4. the pages, for everything else: a method other than
  * `GET` and `HEAD` on a page path is a `404`.
  *
- * @param method The request's method
- * @param pathname The request's normalized path
- * @param modules What `loadServerModules` returned: `routes` and `proxies`
- * @param hasRendererFile `(pathname) => boolean`, whether the renderer has a
+ * @param {string} method The request's method
+ * @param {string} pathname The request's normalized path
+ * @param {RoutingModules} modules What `loadServerModules` returned: `routes` and `proxies`
+ * @param {(pathname: string) => boolean} hasRendererFile `(pathname) => boolean`, whether the renderer has a
  *   file at that path
- * @returns `{ kind: "renderer" }`, `{ kind: "module", id }`,
+ * @returns {RequestOwner} `{ kind: "renderer" }`, `{ kind: "module", id }`,
  *   `{ kind: "backend", proxy }`, `{ kind: "page" }` or
  *   `{ kind: "not-found" }`
  */
@@ -41,9 +54,9 @@ export function requestOwner(method, pathname, modules, hasRendererFile) {
  * `Location` on such a path can become a frontend path (see
  * `proxy-redirects.mjs`).
  *
- * @param pathname A normalized path
- * @param modules What `loadServerModules` returned: `routes` and `proxies`
- * @param hasRendererFile `(pathname) => boolean`, whether the renderer has a
+ * @param {string} pathname A normalized path
+ * @param {RoutingModules} modules What `loadServerModules` returned: `routes` and `proxies`
+ * @param {(pathname: string) => boolean} [hasRendererFile] `(pathname) => boolean`, whether the renderer has a
  *   file at that path
  */
 export function reachesBackend(
@@ -56,7 +69,11 @@ export function reachesBackend(
   );
 }
 
-/** The `x-dms-route-owner` value of an owner, for the development server. */
+/**
+ * The `x-dms-route-owner` value of an owner, for the development server.
+ *
+ * @param {RequestOwner} owner
+ */
 export function ownerLabel(owner) {
   if (owner.kind === "module") return `module:${owner.id}`;
   if (owner.kind === "backend") return `backend:${owner.proxy.path}`;

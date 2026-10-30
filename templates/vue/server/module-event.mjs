@@ -25,12 +25,32 @@ import {
 import { backendUrl } from "./request-target.mjs";
 import { pipeWebBody } from "./web-body.mjs";
 
+/** @typedef {import("node:http").IncomingMessage} IncomingMessage */
+/** @typedef {import("node:http").ServerResponse} ServerResponse */
+/** @typedef {import("../server-module.ts").DmsServerEvent} ServerEvent */
+/** @typedef {import("../server-module.ts").DmsSession} Session */
+/** @typedef {(session: Session | undefined) => import("../server-module.ts").DmsPublicSession} SessionView */
+/**
+ * What an event is made from.
+ *
+ * @typedef {object} EventContext
+ * @property {IncomingMessage} request
+ * @property {ServerResponse} response
+ * @property {Pick<import("./module-route-types.mjs").ServerRoute, "bodyLimit">} route
+ * @property {Readonly<Record<string, string>>} params
+ * @property {{ id: string, options?: unknown, privateOptions?: unknown }} module
+ * @property {{ authEstablishEndpoints?: readonly string[] }} [app]
+ * @property {SessionView} [view] What a session shows a page
+ * @property {string} [authOwner] The module that owns sign-in
+ */
+
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const COOKIE_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 /** The sealed cookies of the module that owns sign-in: session, accounts, flows. */
 const RESERVED_COOKIE_PREFIX = "dms_";
 const BODY_TOO_LARGE = "Request body too large";
 
+/** @param {IncomingMessage} request */
 function requestOrigin(request) {
   const host = request.headers.host;
   try {
@@ -40,6 +60,7 @@ function requestOrigin(request) {
   }
 }
 
+/** @param {IncomingMessage} request */
 function requestHeaders(request) {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
@@ -49,12 +70,17 @@ function requestHeaders(request) {
   return headers;
 }
 
-/** The request body as a Web stream that errors past `limit` bytes. */
+/**
+ * The request body as a Web stream that errors past `limit` bytes.
+ *
+ * @param {IncomingMessage} request
+ * @param {number} limit
+ */
 function limitedBody(request, limit) {
   let size = 0;
   return Readable.toWeb(request).pipeThrough(
     new TransformStream({
-      transform(chunk, controller) {
+      transform(/** @type {Uint8Array} */ chunk, controller) {
         size += chunk.byteLength;
         if (size > limit)
           controller.error(new RequestBodyError(413, BODY_TOO_LARGE));
@@ -64,6 +90,10 @@ function limitedBody(request, limit) {
   );
 }
 
+/**
+ * @param {IncomingMessage} request
+ * @param {EventContext["route"]} route
+ */
 function webRequest(request, route) {
   const url = new URL(request.url, requestOrigin(request));
   const hasBody = !["GET", "HEAD"].includes(request.method);
@@ -78,8 +108,13 @@ function webRequest(request, route) {
   });
 }
 
+/**
+ * @param {Request} webRequestValue
+ * @returns {Promise<unknown>}
+ */
 async function readJson(webRequestValue) {
   if (!webRequestValue.body) return {};
+  /** @type {Uint8Array[]} */
   const chunks = [];
   const reader = webRequestValue.body.getReader();
   for (;;) {
@@ -95,6 +130,7 @@ async function readJson(webRequestValue) {
   }
 }
 
+/** @param {unknown} name */
 function checkedCookieName(name) {
   if (typeof name !== "string" || !COOKIE_NAME.test(name))
     throw new Error(`Invalid cookie name: ${String(name)}`);
@@ -105,6 +141,12 @@ function checkedCookieName(name) {
   return name;
 }
 
+/**
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ * @param {SessionView | undefined} view
+ * @returns {ServerEvent["session"]}
+ */
 function sessionAccess(request, response, view) {
   return {
     read: () => readSession(request),
@@ -124,6 +166,10 @@ function sessionAccess(request, response, view) {
  * module's are prefixed with its id and a dot, which no name of the owner's
  * holds, so no module reads or overwrites another's, nor the owner's session
  * and account cookies.
+ *
+ * @param {unknown} name
+ * @param {string} moduleId
+ * @param {string | undefined} authOwner
  */
 function moduleCookieName(name, moduleId, authOwner) {
   const checked = checkedCookieName(name);
@@ -131,13 +177,21 @@ function moduleCookieName(name, moduleId, authOwner) {
   if (checked.startsWith(RESERVED_COOKIE_PREFIX))
     throw new Error(
       `The ${RESERVED_COOKIE_PREFIX}* cookies belong to the module that owns sign-in` +
-        `${authOwner ? ` (${authOwner})` : ""}: choose another name than ${name}`,
+        `${authOwner ? ` (${authOwner})` : ""}: choose another name than ${checked}`,
     );
   return `${String(moduleId).replaceAll(/[^A-Za-z0-9_-]/g, "-")}.${checked}`;
 }
 
+/**
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ * @param {string} moduleId
+ * @param {string | undefined} authOwner
+ * @returns {ServerEvent["cookies"]}
+ */
 function cookieAccess(request, response, moduleId, authOwner) {
-  const named = (name) => moduleCookieName(name, moduleId, authOwner);
+  const named = (/** @type {unknown} */ name) =>
+    moduleCookieName(name, moduleId, authOwner);
   return {
     readSealed: (name) => readSealedCookie(request, named(name)),
     writeSealed: (name, value, options = {}) =>
@@ -153,6 +207,7 @@ function cookieAccess(request, response, moduleId, authOwner) {
   };
 }
 
+/** @param {unknown} value */
 function frozenCopy(value) {
   return Object.freeze(structuredClone(value ?? {}));
 }
@@ -165,10 +220,11 @@ function frozenCopy(value) {
  * the defaults every route gets once (same-origin on unsafe methods, a body
  * limit, `no-store`). See `server-module.ts` for the types a module reads.
  *
- * @param context `{ request, response, route, params, module, app, view,
+ * @param {EventContext} context `{ request, response, route, params, module, app, view,
  *   authOwner }`, where `module` is `{ id, options, privateOptions }`, `app`
  *   the deployment's read-only data, `view` what a session shows a page and
  *   `authOwner` the id of the module that owns sign-in
+ * @returns {ServerEvent}
  */
 export function createServerEvent(context) {
   const { request, response, route, params } = context;
@@ -182,16 +238,20 @@ export function createServerEvent(context) {
       context.module.id,
       context.authOwner,
     ),
-    backend: (path, init = {}) => backend(path, request, init),
-    backendUrl: (path) => backendUrl(path),
+    backend: (/** @type {string} */ path, init = {}) =>
+      backend(path, request, init),
+    backendUrl: (/** @type {string} */ path) => backendUrl(path),
     clientIp: () => clientIp(request),
     module: Object.freeze({
       id: context.module.id,
       options: frozenCopy(context.module.options),
       privateOptions: frozenCopy(context.module.privateOptions),
     }),
-    renderEmail: (template, props, options = {}) =>
-      renderEmailTemplate(template, props, options),
+    renderEmail: (
+      /** @type {string} */ template,
+      /** @type {Record<string, unknown>} */ props,
+      options = {},
+    ) => renderEmailTemplate(template, props, options),
     app: Object.freeze({
       authEstablishEndpoints: Object.freeze([
         ...(context.app?.authEstablishEndpoints ?? []),
@@ -203,6 +263,7 @@ export function createServerEvent(context) {
   return event;
 }
 
+/** @param {unknown} value */
 function isResponse(value) {
   return (
     value instanceof Response ||
@@ -214,6 +275,10 @@ function isResponse(value) {
   );
 }
 
+/**
+ * @param {unknown} result
+ * @returns {Response}
+ */
 function asResponse(result) {
   if (isResponse(result)) return result;
   if (result === undefined || result === null)
@@ -227,6 +292,11 @@ function asResponse(result) {
  * answer the handler relays goes out as the proxy relays one: its `Location`
  * on the frontend's origin when the frontend proxies its path, no cookie of
  * another site its fetch reached.
+ *
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ * @param {unknown} result
+ * @param {(path: string) => boolean} isProxiedPath
  */
 async function writeServerResponse(request, response, result, isProxiedPath) {
   const answer = asResponse(result);
@@ -261,7 +331,7 @@ async function writeServerResponse(request, response, result, isProxiedPath) {
  * through reaches the server's error handling with the cookies written so
  * far.
  *
- * @param context See `createServerEvent`, plus `isProxiedPath(pathname)`:
+ * @param {Omit<EventContext, "route"> & { route: import("./module-route-types.mjs").ServerRoute, isProxiedPath: (path: string) => boolean }} context See `createServerEvent`, plus `isProxiedPath(pathname)`:
  *   whether the frontend sends that path to the backend
  */
 export async function answerModuleRoute(context) {
