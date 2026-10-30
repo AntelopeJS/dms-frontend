@@ -1,6 +1,10 @@
 /** The statuses that send the client to their `Location`. */
 export const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
+/**
+ * @param {string | URL | undefined} url
+ * @returns {string | undefined}
+ */
 function originOf(url) {
   try {
     return new URL(url).origin;
@@ -9,7 +13,13 @@ function originOf(url) {
   }
 }
 
-/** Whether `url` is on the backend's origin. */
+/**
+ * Whether `url` is on the backend's origin.
+ *
+ * @param {string} url
+ * @param {string} [backendBaseUrl]
+ * @returns {boolean}
+ */
 export function isBackendUrl(
   url,
   backendBaseUrl = process.env.DMS_API_BASE_URL,
@@ -34,16 +44,18 @@ export function isBackendUrl(
  *
  * `//host` would name another host, so `/.` keeps the location a path.
  *
- * @param location The backend's `Location`
- * @param fetchedUrl The backend URL the answer came from
- * @param isProxiedPath `(pathname) => boolean`, whether the frontend server
- *   sends that path to the backend
+ * @param {string} location The backend's `Location`
+ * @param {string | URL} fetchedUrl The backend URL the answer came from
+ * @param {(pathname: string) => boolean} [isProxiedPath] Whether the frontend
+ *   server sends that path to the backend
+ * @returns {string}
  */
 export function relayedLocation(
   location,
   fetchedUrl,
   isProxiedPath = () => false,
 ) {
+  /** @type {URL} */
   let target;
   try {
     target = new URL(location, fetchedUrl);
@@ -60,6 +72,9 @@ export function relayedLocation(
  * The cookies of a `Response` a module route returns. A fetch that followed a
  * redirect to another site would set that site's cookies on the frontend's
  * origin: those are dropped.
+ *
+ * @param {Response} answer
+ * @returns {string[]}
  */
 export function relayableCookies(answer) {
   if (answer.redirected && !isBackendUrl(answer.url)) return [];

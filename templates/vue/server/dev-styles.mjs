@@ -9,6 +9,13 @@ const STYLE_EXTENSION =
   /\.(?:css|less|pcss|postcss|sass|scss|styl|stylus)(?:$|\?)/;
 
 /**
+ * A stylesheet module of the development server's graph: its URL, and the id
+ * its tag is matched by.
+ *
+ * @typedef {{ url: string, id: string }} StyleModule
+ */
+
+/**
  * The workspace's generated entry stylesheet. `main.ts` is its only importer,
  * so it never enters the SSR module graph, yet it carries Tailwind, Nuxt UI and
  * one `@source` per materialized module — nearly every rule a page needs.
@@ -25,6 +32,7 @@ const ENTRY_STYLESHEET_ID = join(PROJECT_ROOT, "dms-main.css")
   .split(sep)
   .join("/");
 
+/** @param {import("vite").ViteDevServer} devServer */
 function ssrModuleGraph(devServer) {
   return devServer.environments?.ssr?.moduleGraph ?? devServer.moduleGraph;
 }
@@ -39,6 +47,10 @@ function ssrModuleGraph(devServer) {
  */
 const TRAILING_LANG = /&(lang\.[^&?]*)$/;
 
+/**
+ * @param {string} url
+ * @returns {string}
+ */
 function directUrl(url) {
   if (SFC_STYLE.test(url) && TRAILING_LANG.test(url)) {
     return url.replace(TRAILING_LANG, "&direct&$1");
@@ -46,6 +58,10 @@ function directUrl(url) {
   return `${url}${url.includes("?") ? "&" : "?"}direct`;
 }
 
+/**
+ * @param {import("vite").ViteDevServer} devServer
+ * @returns {StyleModule[]}
+ */
 function styleModules(devServer) {
   const graph = ssrModuleGraph(devServer);
   if (!graph) return [];
@@ -54,6 +70,7 @@ function styleModules(devServer) {
     .map(([url, module]) => ({ url, id: module?.id ?? url }));
 }
 
+/** @param {StyleModule} module */
 function linkTag({ url, id }) {
   return `<link rel="stylesheet" ${STYLE_ATTRIBUTE}="${id}" href="${directUrl(url)}">`;
 }
@@ -64,6 +81,10 @@ function linkTag({ url, id }) {
  * stylesheet. They are small; inline them instead. A block that could close its
  * own tag is dropped rather than escaped — CSS has no escape that is valid in
  * every position, and a scoped component rule is not worth the risk.
+ *
+ * @param {import("vite").ViteDevServer} devServer
+ * @param {StyleModule} module
+ * @returns {Promise<string>}
  */
 async function inlineTag(devServer, { url, id }) {
   const result = await devServer
@@ -87,6 +108,9 @@ async function inlineTag(devServer, { url, id }) {
  * stylesheet, which is why this module is development-only and lives beside
  * client-manifest.mjs rather than inside server.mjs, whose size the linter
  * caps.
+ *
+ * @param {import("vite").ViteDevServer} devServer
+ * @returns {Promise<string>}
  */
 export async function developmentStyleTags(devServer) {
   const modules = styleModules(devServer);
@@ -106,6 +130,11 @@ export async function developmentStyleTags(devServer) {
  * The style tags a document needs, whichever server is answering it: collected
  * from the live module graph in development, read from the build manifest for
  * the components the render created (`modules`) in production.
+ *
+ * @param {import("vite").ViteDevServer | undefined} devServer
+ * @param {Iterable<string> | undefined} modules
+ * @param {string} template
+ * @returns {Promise<string>}
  */
 export async function documentStyleTags(devServer, modules, template) {
   return devServer
