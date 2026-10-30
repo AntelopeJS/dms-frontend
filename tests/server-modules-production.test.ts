@@ -186,7 +186,7 @@ describe("Module server routes in the production server", () => {
         },
       }),
       duplex: "half",
-    } as RequestInit);
+    });
     assert.equal(response.status, 413);
   });
 

@@ -19,12 +19,29 @@ import {
 } from "../src/common";
 import { clientCodeSplitting } from "../templates/vue/client-chunking.mjs";
 import { readText } from "./helpers/files";
+import { isFlag, isText } from "./helpers/guards";
+import { isJsonObject, isJsonValue, jsonAt, readJson } from "./helpers/json";
 
 interface ManifestChunk {
   file: string;
   isEntry?: boolean;
   isDynamicEntry?: boolean;
   imports?: string[];
+}
+
+function isOptionalFlag(value: unknown): value is boolean | undefined {
+  return value === undefined || isFlag(value);
+}
+
+function isManifestChunk(value: unknown): value is ManifestChunk {
+  if (!isJsonValue(value)) return false;
+  const imports = jsonAt(value, "imports");
+  return (
+    isText(jsonAt(value, "file")) &&
+    isOptionalFlag(jsonAt(value, "isEntry")) &&
+    isOptionalFlag(jsonAt(value, "isDynamicEntry")) &&
+    (imports === undefined || (Array.isArray(imports) && imports.every(isText)))
+  );
 }
 
 function write(path: string, content: string): void {
@@ -148,21 +165,25 @@ describe("generated locale catalogs", () => {
         },
       },
     });
-    const manifest = JSON.parse(
-      readText(join(outDir, ".vite", "manifest.json")),
-    ) as Record<string, ManifestChunk>;
-    const entry = Object.values(manifest).find((chunk) => chunk.isEntry);
+    const built = readJson(join(outDir, ".vite", "manifest.json"));
+    assert.ok(isJsonObject(built), "the build wrote a manifest");
+    const manifest = new Map<string, ManifestChunk>();
+    for (const [key, chunk] of Object.entries(built)) {
+      assert.ok(isManifestChunk(chunk), `${key} is a manifest chunk`);
+      manifest.set(key, chunk);
+    }
+    const entry = [...manifest.values()].find((chunk) => chunk.isEntry);
     assert.ok(entry, "the build has an entry");
     const loadedFirst = [
       entry,
-      ...(entry.imports ?? []).map((key) => manifest[key]!),
+      ...(entry.imports ?? []).map((key) => manifest.get(key)!),
     ]
       .map((chunk) => readText(join(outDir, chunk.file)))
       .join("\n");
     assert.doesNotMatch(loadedFirst, /english-only-marker/);
     assert.doesNotMatch(loadedFirst, /Bonjour-french-marker/);
     for (const locale of ["en", "fr"]) {
-      const chunk = manifest[`locales.generated/${locale}.ts`];
+      const chunk = manifest.get(`locales.generated/${locale}.ts`);
       assert.ok(chunk?.isDynamicEntry, `${locale} is a file of its own`);
     }
   });

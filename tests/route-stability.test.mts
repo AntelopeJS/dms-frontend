@@ -46,7 +46,10 @@ describe("Route stability", () => {
   let runtime: DmsFrontendRuntime;
   let scope: EffectScope;
   function inScope<T>(callback: () => T): T {
-    return scope.run(() => app.runWithContext(callback)) as T;
+    const results: T[] = [];
+    scope.run(() => results.push(app.runWithContext(callback)));
+    assert.equal(results.length, 1, "the effect scope is active");
+    return results[0];
   }
 
   beforeEach(async () => {

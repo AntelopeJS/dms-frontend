@@ -18,6 +18,8 @@ import {
   writeFrontendModuleRegistry,
 } from "../src/common";
 import { readText } from "./helpers/files";
+import { isText } from "./helpers/guards";
+import { isJsonObject, jsonAt, type JsonValue, readJson } from "./helpers/json";
 import {
   eventually,
   memory,
@@ -41,15 +43,29 @@ describe("derived outputs in the dev layer watcher", () => {
 
   const read = (path: string): string => readText(path);
   const workspaceFile = (name: string): string => read(join(workspace, name));
-  const typePaths = (): string[] =>
-    Object.keys(
-      JSON.parse(workspaceFile("frontend-paths.generated.json")).compilerOptions
-        .paths,
+  const typePaths = (): string[] => {
+    const paths = jsonAt(
+      readJson(join(workspace, "frontend-paths.generated.json")),
+      "compilerOptions",
+      "paths",
     );
-  const registryEntries = (): Array<[string, string | undefined]> =>
-    JSON.parse(workspaceFile("generated-frontend-modules.json")).modules.map(
-      (module: { id: string; entry?: string }) => [module.id, module.entry],
+    assert.ok(isJsonObject(paths), "the type paths are an object");
+    return Object.keys(paths);
+  };
+  const registryEntries = (): Array<[string, string | undefined]> => {
+    const modules = jsonAt(
+      readJson(join(workspace, "generated-frontend-modules.json")),
+      "modules",
     );
+    assert.ok(Array.isArray(modules), "the registry lists its modules");
+    return modules.map((module) => {
+      const id = jsonAt(module, "id");
+      const entry = jsonAt(module, "entry");
+      assert.ok(isText(id), "a registry module has an id");
+      assert.ok(entry === undefined || isText(entry), "its entry is a path");
+      return [id, entry];
+    });
+  };
   const isRestartNotice = (warning: string): boolean =>
     warning.includes("Restart ajs dms dev");
 
@@ -446,8 +462,8 @@ describe("a quiet dev run's layer watcher", () => {
   let notices = "";
   let stopWatchers: () => Promise<void> = async () => {};
 
-  const catalog = (): Record<string, any> =>
-    JSON.parse(readText(join(workspace, "locales.generated", "en.json")));
+  const catalog = (): JsonValue =>
+    readJson(join(workspace, "locales.generated", "en.json"));
 
   before(() => {
     writeFile(
@@ -485,7 +501,7 @@ describe("a quiet dev run's layer watcher", () => {
           locale,
           JSON.stringify({ form: { title: "Form", demo_key: "Fixed" } }),
         ),
-      () => catalog().form.demo_key === "Fixed",
+      () => jsonAt(catalog(), "form", "demo_key") === "Fixed",
     );
     assert.match(notices, /^\d\d:\d\d:\d\d ▲ .* is not a valid locale file/);
     assert.doesNotMatch(notices, / ✔ /);

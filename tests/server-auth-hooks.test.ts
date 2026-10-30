@@ -298,8 +298,9 @@ describe("Auth hooks in the production server", () => {
   });
 
   const visit = (path: string, cookie?: string) => {
-    const headers: Record<string, string> = { "x-inertia": "true" };
-    if (cookie) headers.cookie = cookie;
+    const headers = cookie
+      ? { "x-inertia": "true", cookie }
+      : { "x-inertia": "true" };
     return fetch(`${frontendUrl}${path}`, { redirect: "manual", headers });
   };
 
