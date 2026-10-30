@@ -10,6 +10,8 @@ import {
   writeFrontendModuleRegistry,
 } from "../src/common";
 
+type LocaleMessages = { [key: string]: string | LocaleMessages };
+
 /**
  * A message vue-i18n cannot compile stops the generation of the catalogs,
  * which the build and the dev server's start both run first: it never reaches a page.
@@ -18,7 +20,7 @@ describe("locale messages vue-i18n cannot compile", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-locale-files-"));
   after(() => rmSync(root, { recursive: true, force: true }));
 
-  function materializeWith(messages: Record<string, unknown>): unknown {
+  function materializeWith(messages: LocaleMessages): Error | undefined {
     const source = mkdtempSync(join(root, "source-"));
     const workspace = mkdtempSync(join(root, "workspace-"));
     const locales = join(source, "i18n", "locales");
@@ -33,6 +35,7 @@ describe("locale messages vue-i18n cannot compile", () => {
       materializeLayers(workspace, [layer]);
       writeFrontendModuleRegistry(workspace, [layer]);
     } catch (error) {
+      assert.ok(error instanceof Error, "materializing threw a non-error");
       return error;
     }
     return undefined;

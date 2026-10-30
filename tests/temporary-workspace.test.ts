@@ -11,10 +11,7 @@ const FIXTURE = join(
   "temporary-workspace-cli.ts",
 );
 
-function runFixture(mode: string): {
-  status: number | null;
-  workspace: string;
-} {
+function runFixture(mode: string) {
   const result = spawnSync(
     process.execPath,
     ["--import", "tsx", FIXTURE, mode],

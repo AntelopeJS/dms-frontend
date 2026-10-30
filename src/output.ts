@@ -11,7 +11,6 @@ import {
 import { stripVTControlCharacters } from "node:util";
 import {
   CliError,
-  type CliProblem,
   type ColorName,
   detectCapabilities,
   displayPath,
@@ -219,25 +218,27 @@ export function cachedAge(fetchedAt: string | undefined): string {
 }
 
 /**
- * The first line of what went wrong, for a failure reported as a warning
- * rather than through the error boundary.
- */
-function describeProblem(error: unknown): CliProblem {
-  if (error instanceof CliError) return error.problem;
-  const message = error instanceof Error ? error.message : String(error);
-  return { title: message.split(LINE_BREAK)[0] };
-}
-
-/**
  * The detail lines of a failure that does not stop the command, in the order
  * the core reports a problem: its reason, details and stack trace in a
- * verbose run, then its fixes.
+ * verbose run, then its fixes. A failure reported as a warning rather than
+ * through the error boundary gives the first line of its message as the title.
  */
 export function failureDetails(
   error: unknown,
   ui: Ui = getProcessUi(),
 ): string[] {
-  const { title, reason, fixes = [], details = [] } = describeProblem(error);
+  const {
+    title,
+    reason,
+    fixes = [],
+    details = [],
+  } = error instanceof CliError
+    ? error.problem
+    : {
+        title: (error instanceof Error ? error.message : String(error)).split(
+          LINE_BREAK,
+        )[0],
+      };
   const hint = ui.symbols.levels.hint;
   const stack =
     isVerboseRun() && error instanceof Error && !(error instanceof CliError)

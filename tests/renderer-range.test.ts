@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import { assertLayersSupportRenderer, type ResolvedLayer } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
 import { listNames, readText } from "./helpers/files";
+import type { JsonValue } from "./helpers/json";
 import { OWN_PACKAGE } from "./helpers/own-package";
 import { addressOf } from "./helpers/net";
 
@@ -28,19 +29,21 @@ function temporaryDir(prefix: string): string {
   return dir;
 }
 
-function layerWith(name: string, engines?: Record<string, unknown>): string {
+function layerWith(name: string, engines?: Record<string, JsonValue>): string {
   const path = temporaryDir("dms-renderer-range-");
-  const pkg: Record<string, unknown> = { name };
-  if (engines) pkg.engines = engines;
+  const pkg = engines ? { name, engines } : { name };
   writeFileSync(join(path, "package.json"), JSON.stringify(pkg));
   return path;
 }
 
-function layer(name: string, engines?: Record<string, unknown>): ResolvedLayer {
+function layer(
+  name: string,
+  engines?: Record<string, JsonValue>,
+): ResolvedLayer {
   return { path: layerWith(name, engines), packageName: name };
 }
 
-function declaring(name: string, range: unknown): ResolvedLayer {
+function declaring(name: string, range: JsonValue): ResolvedLayer {
   return layer(name, { [RENDERER]: range });
 }
 

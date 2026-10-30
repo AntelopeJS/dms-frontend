@@ -21,8 +21,15 @@ after(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true });
 });
 
+interface JsonFile {
+  name?: string;
+  version?: string;
+  exports?: Record<string, string>;
+  packageManager?: string;
+}
+
 /** A project directory holding `files`, by path relative to its root. */
-function project(files: Record<string, unknown>): string {
+function project(files: Record<string, string | JsonFile>): string {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-sources-")));
   roots.push(root);
   for (const [path, content] of Object.entries(files)) {
@@ -36,7 +43,7 @@ function project(files: Record<string, unknown>): string {
 }
 
 /** A frontend package named `name` at `root`. */
-function frontendPackage(root: string, name: string): Record<string, unknown> {
+function frontendPackage(root: string, name: string) {
   return {
     [`${root}/package.json`]: { name },
     [`${root}/dms.frontend.ts`]: "export default {};\n",
@@ -44,7 +51,7 @@ function frontendPackage(root: string, name: string): Record<string, unknown> {
 }
 
 /** `@antelopejs/dms` at `version`, installed with its core layer. */
-function installedDms(version = "9.9.9"): Record<string, unknown> {
+function installedDms(version = "9.9.9") {
   return {
     [`${INSTALLED_DMS}/package.json`]: {
       name: "@antelopejs/dms",
@@ -70,7 +77,7 @@ function sources(projectDir: string, options: Partial<SourceOptions> = {}) {
 }
 
 /** The problem `run` stops with, as a usage error. */
-function usageProblem(run: () => unknown) {
+function usageProblem(run: () => ReturnType<typeof sources>) {
   try {
     run();
   } catch (error) {

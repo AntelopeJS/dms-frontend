@@ -98,7 +98,7 @@ function shippedRuntimeWorkspace(moduleFiles: Record<string, string>): string {
   return workspace;
 }
 
-function typecheck(workspace: string): { code: number; output: string } {
+function typecheck(workspace: string) {
   try {
     const output = execFileSync(
       process.execPath,

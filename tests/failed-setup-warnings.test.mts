@@ -10,6 +10,7 @@ import {
   defineComponent,
   h,
   Suspense,
+  type VNode,
 } from "vue";
 import { compileScript, compileTemplate, parse } from "vue/compiler-sfc";
 import { createI18n } from "vue-i18n";
@@ -19,6 +20,7 @@ import {
   provideDmsFrontendRuntime,
   setupFrontendModules,
 } from "../templates/vue/frontend-module.ts";
+import { isNumber } from "./helpers/guards";
 
 /** Inside the repository, so the compiled modules resolve its `vue`. */
 const directory = mkdtempSync(resolve(".failed-setup-"));
@@ -91,7 +93,7 @@ before(async () => {
   ParentPage = await devComponent("ParentPage", pageWithChild);
 });
 
-async function render(context: TestContext, ...children: Array<() => unknown>) {
+async function render(context: TestContext, ...children: Array<() => VNode>) {
   const warnings: string[] = [];
   context.mock.method(console, "warn", (...args: unknown[]) => {
     warnings.push(args.map(String).join(" "));
@@ -113,11 +115,15 @@ async function render(context: TestContext, ...children: Array<() => unknown>) {
   await installDmsPlugins(app, i18n.global, runtime, async () => ({}), ["en"]);
   await renderToString(app);
   context.mock.restoreAll();
+  const error = runtime.currentError.value;
+  const statusCode: unknown =
+    error === null
+      ? undefined
+      : Object.getOwnPropertyDescriptor(error, "statusCode")?.value;
   return {
     warnings,
-    error: runtime.currentError.value as
-      | (Error & { statusCode?: number })
-      | null,
+    error,
+    statusCode: isNumber(statusCode) ? statusCode : undefined,
   };
 }
 
@@ -127,8 +133,10 @@ describe("a page whose setup fails", () => {
     ["async", () => AsyncPage],
   ] as const) {
     it(`fails the page without warnings from its unrendered template (${kind} setup)`, async (context) => {
-      const { warnings, error } = await render(context, () => h(component()));
-      assert.equal(error?.statusCode, 400);
+      const { warnings, statusCode } = await render(context, () =>
+        h(component()),
+      );
+      assert.equal(statusCode, 400);
       assert.deepEqual(warnings, []);
     });
   }
@@ -154,18 +162,18 @@ describe("a page whose setup fails", () => {
   });
 
   it("drops the warnings of a component rendered under the failed page", async (context) => {
-    const { warnings, error } = await render(context, () => h(ParentPage));
-    assert.equal(error?.statusCode, 400);
+    const { warnings, statusCode } = await render(context, () => h(ParentPage));
+    assert.equal(statusCode, 400);
     assert.deepEqual(warnings, []);
   });
 
   it("keeps the warnings of the components that did not fail", async (context) => {
-    const { warnings, error } = await render(
+    const { warnings, statusCode } = await render(
       context,
       () => h(SyncPage),
       () => h(Untidy),
     );
-    assert.equal(error?.statusCode, 400);
+    assert.equal(statusCode, 400);
     assert.equal(warnings.length, 1);
     assert.match(
       warnings[0]!,

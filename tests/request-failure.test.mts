@@ -91,7 +91,7 @@ describe("requests the frontend server cannot serve", () => {
 
   it("answers 500 when rendering the error page fails too", async () => {
     const writes: Array<[number, Record<string, string>]> = [];
-    let body: unknown;
+    let body: string | undefined;
     const response = {
       destroyed: false,
       headersSent: false,
@@ -99,7 +99,7 @@ describe("requests the frontend server cannot serve", () => {
       writeHead(status: number, headers: Record<string, string>) {
         writes.push([status, headers]);
       },
-      end(content: unknown) {
+      end(content: string) {
         body = content;
       },
     };

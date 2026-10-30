@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { parse } from "devalue";
+import { isObjectLike } from "./helpers/guards";
 import { addressOf } from "./helpers/net";
 
 /**
@@ -44,12 +45,26 @@ interface Payload {
   state: Record<string, unknown>;
 }
 
+function isPayload(value: unknown): value is Payload {
+  return (
+    isObjectLike(value) &&
+    "data" in value &&
+    isObjectLike(value.data) &&
+    "errors" in value &&
+    isObjectLike(value.errors) &&
+    "state" in value &&
+    isObjectLike(value.state)
+  );
+}
+
 function serverPayload(html: string): Payload {
   const match = html.match(
     /<script id="dms-payload" type="application\/json">(.*?)<\/script>/s,
   );
   assert.ok(match, "every server render carries its payload");
-  return parse(match[1]) as Payload;
+  const parsed: unknown = parse(match[1]);
+  assert.ok(isPayload(parsed), "the payload holds data, errors and state");
+  return parsed;
 }
 
 function payload(html: string): Record<string, unknown> {

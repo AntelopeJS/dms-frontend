@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToString } from "@vue/server-renderer";
+import type { ofetch } from "ofetch";
 import { createSSRApp, defineComponent, h, nextTick, ref, computed } from "vue";
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
 
@@ -17,12 +18,13 @@ import {
   mountRuntime,
 } from "./fixtures/vue-async-data.mts";
 
+type FetchOptions = NonNullable<Parameters<typeof ofetch>[1]>;
+
 describe("useDmsFetch", () => {
   function fetchingRuntime(isServer: boolean) {
-    const requests: Array<{ url: string; options: Record<string, unknown> }> =
-      [];
+    const requests: Array<{ url: string; options: FetchOptions }> = [];
     const runtime = createDmsFrontendRuntime(
-      (async (url: string, options: Record<string, unknown> = {}) => {
+      (async (url: string, options: FetchOptions = {}) => {
         requests.push({ url, options });
         return `data:${url}`;
       }) as never,
@@ -401,7 +403,7 @@ describe("useDmsFetch", () => {
   it("keys a request by its params as well as its query", async () => {
     const { runtime, requests } = fetchingRuntime(false);
     const { app } = clientApp(runtime);
-    const load = (params: Record<string, unknown>) =>
+    const load = (params: FetchOptions["params"]) =>
       app.runWithContext(() =>
         runtimeModule.useDmsFetch("/api/list", { query: { a: 1 }, params }),
       );
