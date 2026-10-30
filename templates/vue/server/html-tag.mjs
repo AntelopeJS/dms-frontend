@@ -3,6 +3,10 @@ const HTML_ATTRIBUTE = /([^\s=]+)(?:="[^"]*")?/g;
 /**
  * The document's `<html>` tag: the template's attributes, overridden by those
  * the render produced (`lang`, `data-scale`…), so none appears twice.
+ *
+ * @param {string} templateAttributes
+ * @param {string} renderedAttributes
+ * @returns {string}
  */
 export function htmlTag(templateAttributes, renderedAttributes) {
   const rendered = new Set(

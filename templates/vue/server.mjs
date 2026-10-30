@@ -105,6 +105,7 @@ defineVueCompileFlags();
 let productionSsrRenderer;
 let vite;
 let vitePromise;
+/** @type {import("node:http").Server | undefined} */
 let frontendHttpServer;
 
 async function developmentServer() {
@@ -553,6 +554,7 @@ if (
   );
   const port = Number(process.env.PORT ?? 3001);
   const host = listenHost();
+  /** @param {NodeJS.ErrnoException} error */
   const onListenError = (error) => void reportListenError(error, host, port);
   frontendHttpServer.once("error", onListenError);
   frontendHttpServer.listen(port, host, () => {

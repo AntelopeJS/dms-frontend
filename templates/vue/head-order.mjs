@@ -1,6 +1,10 @@
 const SCRIPT = /<script[^>]*\stype="module"[^>]*><\/script>/;
 const STYLESHEET = /[ \t]*<link rel="stylesheet"[^>]*>\n?/;
 
+/**
+ * @param {string} html
+ * @returns {string}
+ */
 function deprioritize(html) {
   return html.replace(SCRIPT, (tag) =>
     tag.includes("fetchpriority")
@@ -24,6 +28,9 @@ function deprioritize(html) {
  * HTTP/1.1 the generated server speaks. Kept beside vite.config.ts rather than
  * inside it so the transform can be exercised on its own, the way
  * client-manifest.mjs is.
+ *
+ * @param {string} html
+ * @returns {string}
  */
 export function orderHeadForFirstPaint(html) {
   const prioritized = deprioritize(html);

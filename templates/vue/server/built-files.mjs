@@ -14,6 +14,9 @@ const PUBLIC_DOT_DIRECTORY = ".well-known";
  * source path of every module file), and a module's `public/` may hold dot
  * files too. `/.well-known/`, which RFC 8615 reserves for files meant to be
  * public, stays served.
+ *
+ * @param {string} relativePath
+ * @returns {boolean}
  */
 export function isPublicBuildPath(relativePath) {
   return relativePath
@@ -33,6 +36,10 @@ export function isPublicBuildPath(relativePath) {
  *
  * The prefix uses the native separator: `resolve` answers with backslashes on
  * Windows.
+ *
+ * @param {string} root
+ * @param {string} pathname
+ * @returns {string | undefined}
  */
 export function publicBuildFile(root, pathname) {
   let decoded;

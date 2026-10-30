@@ -5,6 +5,12 @@ import { isNonNullObject, isString } from "./type-guards.mjs";
 
 const WILDCARD_ADDRESSES = ["0.0.0.0", "::"];
 
+/**
+ * @param {import("node:child_process").Serializable} message
+ * @param {string} line
+ * @param {(line: string) => void} write
+ * @returns {Promise<void>}
+ */
 async function report(message, line, write) {
   if (!process.send) return write(line);
   await new Promise((sent) => process.send(message, () => sent()));
@@ -16,6 +22,10 @@ async function report(message, line, write) {
  * What the server tells whoever started it. Started by `ajs dms dev` or `ajs
  * dms start`, it reports over IPC and the CLI words what the user reads.
  * Started on its own, it prints the line itself.
+ *
+ * @param {string} address
+ * @param {number} port
+ * @returns {Promise<void>}
  */
 export async function reportReady(address, port) {
   const host = WILDCARD_ADDRESSES.includes(address)
@@ -34,6 +44,11 @@ export async function reportReady(address, port) {
  * The server cannot listen: a port taken by another process, an address this
  * host does not have. Reported instead of Node's unhandled-error dump, then
  * the server exits.
+ *
+ * @param {NodeJS.ErrnoException} error
+ * @param {string} host
+ * @param {number} port
+ * @returns {Promise<void>}
  */
 export async function reportListenError(error, host, port) {
   await report(
@@ -77,7 +92,13 @@ function errorLocation(error) {
   };
 }
 
-/** Line `line` (1-based) of `file`, `undefined` when it cannot be read. */
+/**
+ * Line `line` (1-based) of `file`, `undefined` when it cannot be read.
+ *
+ * @param {string} file
+ * @param {number} line
+ * @returns {string | undefined}
+ */
 function readLine(file, line) {
   try {
     return readFileSync(file, "utf8").split(/\r?\n/)[line - 1];
