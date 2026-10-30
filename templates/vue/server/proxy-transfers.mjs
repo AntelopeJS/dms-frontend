@@ -26,6 +26,11 @@ export const SERVER_OPTIONS = Object.freeze({
 
 class BodyTooLargeError extends Error {}
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {number} maxBodyBytes
+ * @returns {AsyncGenerator<Buffer>}
+ */
 async function* limitedChunks(request, maxBodyBytes) {
   let received = 0;
   for await (const chunk of request.iterator(BODY_ITERATION)) {
@@ -35,6 +40,10 @@ async function* limitedChunks(request, maxBodyBytes) {
   }
 }
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {number | undefined} maxBodyBytes
+ */
 function requestBody(request, maxBodyBytes) {
   if (BODILESS_METHODS.has(request.method)) return undefined;
   return maxBodyBytes === undefined
@@ -42,6 +51,11 @@ function requestBody(request, maxBodyBytes) {
     : limitedChunks(request, maxBodyBytes);
 }
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {number | undefined} maxBodyBytes
+ * @returns {boolean}
+ */
 function declaresTooLargeBody(request, maxBodyBytes) {
   return (
     maxBodyBytes !== undefined &&
@@ -49,6 +63,10 @@ function declaresTooLargeBody(request, maxBodyBytes) {
   );
 }
 
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
 function isBodyTooLarge(error) {
   return (
     error instanceof BodyTooLargeError ||
@@ -65,6 +83,9 @@ function isBodyTooLarge(error) {
  * the browser's upload failing without a reason. The rest of the body is read
  * and dropped instead (RFC 9112, section 9.6, "tear-down"), for `LINGER_MS`
  * at most; the response ends with it and the connection then closes cleanly.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
  */
 function refuseTooLargeBody(request, response) {
   response.writeHead(PAYLOAD_TOO_LARGE, {
@@ -96,11 +117,18 @@ function refuseTooLargeBody(request, response) {
  * before a byte is passed on, a chunked body is cut off as soon as it goes
  * over.
  *
- * @param send `(body) => Promise<Response>`, the backend request with the
- *   body to stream: none for a GET or a HEAD, the request itself, or its
- *   bytes cut off past the limit
- * @returns The backend's answer, or `undefined` once the body went over and
- *   `response` got the 413
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
+ * @param {number | undefined} maxBodyBytes
+ * @param {(
+ *   body: import("node:http").IncomingMessage | AsyncGenerator<Buffer> | undefined
+ * ) => Promise<Response>} send The backend request with the body to stream:
+ *   none for a GET or a HEAD, the request itself, or its bytes cut off past
+ *   the limit
+ * @returns {Promise<Response | import("node:http").ServerResponse | undefined>}
+ *   The backend's answer, or once the body went over and `response` got the
+ *   413: `undefined`, or `response` itself when the request had been read
+ *   already (`response.end()`'s own return)
  */
 export async function sendWithinLimit(request, response, maxBodyBytes, send) {
   if (declaresTooLargeBody(request, maxBodyBytes))
