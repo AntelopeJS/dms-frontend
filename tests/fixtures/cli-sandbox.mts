@@ -6,6 +6,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { temporaryDirectory } from "../fixtures/temporary-directory.mts";
+import { isObjectLike } from "../../src/internal/guards";
+import { isNumber, isText } from "../helpers/guards";
 import { boundAddress } from "../helpers/net";
 export const repository = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -45,6 +47,27 @@ export interface RunCliOptions {
 }
 
 export const TERMINAL_STDERR = import.meta.resolve("./terminal-stderr.mjs");
+
+interface ExecFailure {
+  code?: number | string | null;
+  stdout?: string;
+  stderr?: string;
+}
+
+function isExecFailure(value: unknown): value is ExecFailure {
+  return (
+    isObjectLike(value) &&
+    (!("code" in value) ||
+      value.code === undefined ||
+      value.code === null ||
+      isNumber(value.code) ||
+      isText(value.code)) &&
+    (!("stdout" in value) ||
+      value.stdout === undefined ||
+      isText(value.stdout)) &&
+    (!("stderr" in value) || value.stderr === undefined || isText(value.stderr))
+  );
+}
 
 /**
  * Run the CLI the way a user outside any DMS project would: an empty cwd and
@@ -90,9 +113,10 @@ export async function runCli(
       { cwd: sandbox, env },
     );
     return { code: 0, stdout, stderr, sandbox };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    if (!isExecFailure(err)) throw err;
     return {
-      code: err.code ?? 1,
+      code: isNumber(err.code) ? err.code : 1,
       stdout: err.stdout ?? "",
       stderr: err.stderr ?? "",
       sandbox,

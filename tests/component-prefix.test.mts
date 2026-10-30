@@ -19,6 +19,11 @@ import {
   setupFrontendModules,
   trackDmsAsyncComponents,
 } from "../templates/vue/frontend-module.ts";
+import { isText } from "./helpers/guards";
+
+function isTextList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isText);
+}
 
 function block(label: string): Component {
   return defineComponent({ render: () => h("p", label) });
@@ -246,7 +251,9 @@ describe("Component prefix", () => {
     assert.equal(await renderToString(server), "<p>billing lazy totals</p>");
 
     await setupModules();
-    await resolveDmsAsyncComponents(JSON.parse(JSON.stringify([...reached])));
+    const serialized: unknown = JSON.parse(JSON.stringify([...reached]));
+    assert.ok(isTextList(serialized), "the reached components are names");
+    await resolveDmsAsyncComponents(serialized);
 
     assert.equal(lazyTotals.loads(), 1);
   });
