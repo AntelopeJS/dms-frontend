@@ -9,6 +9,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
+import type { ViteDevServer } from "vite";
 import {
   type DmsServerSetup,
   defineDmsServer,
@@ -78,7 +79,7 @@ describe("Module server routes in development", () => {
           pathname: string,
           modules: unknown,
         ) => Promise<boolean>;
-        loadServerModules: (devServer: unknown) => Promise<unknown>;
+        loadServerModules: (devServer: ViteDevServer) => Promise<unknown>;
       };
       frontend = createServer(async (request, response) => {
         void handleModuleRoute(
@@ -189,7 +190,8 @@ describe("The module testing helper", () => {
       return {
         status: response.status,
         cookie: response.headers.getSetCookie()[0]?.split(";", 1)[0] ?? "",
-        body: response.status === 200 ? await response.json() : undefined,
+        body:
+          response.status === 200 ? await responseJson(response) : undefined,
       };
     };
     try {

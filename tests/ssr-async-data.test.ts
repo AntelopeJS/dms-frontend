@@ -7,6 +7,7 @@ import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { parse } from "devalue";
 import { isObjectLike } from "./helpers/guards";
+import { isJsonObject, parseJson } from "./helpers/json";
 import { addressOf } from "./helpers/net";
 
 /**
@@ -190,7 +191,9 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       /<script id="dms-ssr-icons" type="application\/json">(.*?)<\/script>/s,
     );
     assert.ok(icons, "the icons script follows the payload");
-    assert.deepEqual(Object.keys(JSON.parse(icons[1])), ["fixture:dot"]);
+    const icon = parseJson(icons[1]);
+    assert.ok(isJsonObject(icon), "the icons script holds an object");
+    assert.deepEqual(Object.keys(icon), ["fixture:dot"]);
     assert.doesNotMatch(page, /dms-ssr-async-data/);
     assert.doesNotMatch(page, /<\/script><script>alert/);
     assert.doesNotMatch(page, /private-value/);

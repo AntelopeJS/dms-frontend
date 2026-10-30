@@ -3,6 +3,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { connect } from "node:net";
 import { after, afterEach, before, describe, it } from "node:test";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
+import { parseJson } from "./helpers/json";
 import { addressOf } from "./helpers/net";
 
 interface BackendRequest {
@@ -25,8 +26,10 @@ const CHUNK_BYTES = 64 * 1024;
 const TOKEN = "query-token-never-logged";
 const RELATIVE_LOCATION = "/media/asset-id/photo%20one.png?v=2";
 const UNREACHABLE_STORAGE_URL = `http://127.0.0.1:1/file-storage/files/key?token=${TOKEN}`;
+const BACKEND_PROXIES = parseJson(DMS_BACKEND_PROXIES);
+assert.ok(Array.isArray(BACKEND_PROXIES), "the backend proxies are a list");
 const STORAGE_PROXIES = JSON.stringify([
-  ...JSON.parse(DMS_BACKEND_PROXIES),
+  ...BACKEND_PROXIES,
   {
     path: "/file-storage/upload/**",
     auth: "none",

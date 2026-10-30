@@ -27,6 +27,7 @@ import {
   installedCollections,
   isIconRequest,
 } from "../templates/vue/server/icons.mjs";
+import { jsonAt, parseJson } from "./helpers/json";
 import { addressOf } from "./helpers/net";
 
 const ORIGIN = "http://frontend.local";
@@ -90,12 +91,12 @@ describe("the same-origin Iconify API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.headers["content-type"], "application/json");
     assert.match(response.headers["cache-control"], /public, max-age=\d+/);
-    const data = JSON.parse(response.body);
-    assert.equal(data.prefix, "demo");
-    assert.deepEqual(data.icons, { check: CHECK_ICON });
-    assert.deepEqual(data.aliases, { tick: { parent: "check" } });
-    assert.deepEqual(data.not_found, ["missing"]);
-    assert.equal(data.width, 256);
+    const data = parseJson(response.body);
+    assert.equal(jsonAt(data, "prefix"), "demo");
+    assert.deepEqual(jsonAt(data, "icons"), { check: CHECK_ICON });
+    assert.deepEqual(jsonAt(data, "aliases"), { tick: { parent: "check" } });
+    assert.deepEqual(jsonAt(data, "not_found"), ["missing"]);
+    assert.equal(jsonAt(data, "width"), 256);
   });
 
   it("answers 404 for a collection that is not installed", async () => {

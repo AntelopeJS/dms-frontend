@@ -27,6 +27,7 @@ import { resolveServerDeclarations } from "../templates/vue/server/module-routes
 import type { DmsServerSetup } from "../templates/vue/server-module";
 import { addressOf } from "./helpers/net";
 import { isNumber } from "./helpers/guards";
+import { jsonAt, responseJson } from "./helpers/json";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const ACCOUNT_ID = "0b5e7c2a-4d1f-4a8e-9c3b-2f6d8e1a7b40";
@@ -330,20 +331,23 @@ describe("Auth hooks in the production server", () => {
     });
     const response = await visit("/private", jar.cookies()[0]);
     assert.equal(response.status, 200);
-    const page = await response.json();
-    assert.deepEqual(page.props.user, {
+    const page = await responseJson(response);
+    assert.deepEqual(jsonAt(page, "props", "user"), {
       name: "Ada",
       language: "fr",
       viaHook: true,
     });
-    assert.equal(page.props.session.accountId, "account-1");
-    assert.ok(isNumber(page.props.session.updatedAt));
+    assert.equal(jsonAt(page, "props", "session", "accountId"), "account-1");
+    assert.ok(isNumber(jsonAt(page, "props", "session", "updatedAt")));
     const [cookie] = response.headers.getSetCookie();
     const renewed = sessions.readSession({
       headers: { cookie: cookie.split(";", 1)[0] },
     });
     assert.equal(renewed?.accessToken, "renewed-acme__auth-frontend");
-    assert.equal(renewed?.updatedAt, page.props.session.updatedAt);
+    assert.equal(
+      renewed?.updatedAt,
+      jsonAt(page, "props", "session", "updatedAt"),
+    );
   });
 
   it("hands the module owning sign-in the session and its own dms_* cookies", async () => {
@@ -363,11 +367,15 @@ describe("Auth hooks in the production server", () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
       headers: { cookie: jar.cookies().join("; ") },
     });
-    const body = await response.json();
-    assert.equal(body.read.accessToken, "a");
-    assert.deepEqual(body.view.user, { _id: "u1", name: "Ada", viaHook: true });
-    assert.equal(body.account.refreshToken, "r");
-    assert.equal(body.account.accountId, ACCOUNT_ID);
+    const body = await responseJson(response);
+    assert.equal(jsonAt(body, "read", "accessToken"), "a");
+    assert.deepEqual(jsonAt(body, "view", "user"), {
+      _id: "u1",
+      name: "Ada",
+      viaHook: true,
+    });
+    assert.equal(jsonAt(body, "account", "refreshToken"), "r");
+    assert.equal(jsonAt(body, "account", "accountId"), ACCOUNT_ID);
   });
 
   it("keeps only a session written persistent for 30 days", () => {
