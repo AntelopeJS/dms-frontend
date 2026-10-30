@@ -2,5 +2,13 @@
   "rules": {},
   "tsExpectError": 3,
   "tsIgnore": 0,
-  "safety": 5
+  "safety": 5,
+  "config": {
+    "eslint/max-lines for tests/**/*.test.mts": 1,
+    "eslint/max-lines for tests/**/*.test.ts": 1,
+    "eslint/max-lines-per-function for tests/**/*.test.mts": 1,
+    "eslint/max-lines-per-function for tests/**/*.test.ts": 1,
+    "typescript/no-floating-promises for tests/**/*.test.mts": 1,
+    "typescript/no-floating-promises for tests/**/*.test.ts": 1
+  }
 }
