@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { isObjectLike } from "../src/internal/guards";
 import { listNames } from "./helpers/files";
+import { isText } from "./helpers/guards";
 import { OWN_PACKAGE } from "./helpers/own-package";
 import {
   runCli,
@@ -13,6 +15,32 @@ import {
   PRODUCTION_WORKSPACE,
   builtWorkspace,
 } from "./fixtures/cli-sandbox.mts";
+
+interface ListedWorkspace {
+  dir: string;
+}
+
+function isListing(value: unknown): value is ListedWorkspace[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) => isObjectLike(entry) && "dir" in entry && isText(entry.dir),
+    )
+  );
+}
+
+interface OutputSettings {
+  ANTELOPEJS_QUIET?: string;
+  ANTELOPEJS_VERBOSE?: string;
+}
+
+function isOutputSettings(value: unknown): value is OutputSettings {
+  return (
+    isObjectLike(value) &&
+    (!("ANTELOPEJS_QUIET" in value) || isText(value.ANTELOPEJS_QUIET)) &&
+    (!("ANTELOPEJS_VERBOSE" in value) || isText(value.ANTELOPEJS_VERBOSE))
+  );
+}
 
 function stampedWorkspace(
   workspaceKey: string,
@@ -64,14 +92,15 @@ describe("listing and removing workspaces", () => {
     assert.equal(result.code, 0);
     assert.doesNotMatch(result.stderr, /999\.0\.0/);
     assert.match(result.stderr, /– Skipped .*stray-dir \(not a workspace\)/);
-    const listed = JSON.parse(result.stdout);
+    const listed: unknown = JSON.parse(result.stdout);
+    assert.ok(isListing(listed), "the listing is an array of workspaces");
     const home = join(result.sandbox, ".antelopejs", "dms-frontend");
     assert.deepEqual(
-      listed.map((entry: { dir: string }) => entry.dir.startsWith(home)),
+      listed.map((entry) => entry.dir.startsWith(home)),
       [true, true],
     );
     assert.deepEqual(
-      listed.map(({ dir: _dir, ...entry }: { dir: string }) => entry),
+      listed.map(({ dir: _dir, ...entry }) => entry),
       [
         {
           id: createHash("sha256").update("project:/srv/demo").digest("hex"),
@@ -262,7 +291,9 @@ describe("global options after the command", () => {
         },
       );
       assert.equal(result.code, 0, result.stderr);
-      return JSON.parse(result.stdout);
+      const printed: unknown = JSON.parse(result.stdout);
+      assert.ok(isOutputSettings(printed), "the server printed its settings");
+      return printed;
     };
     assert.deepEqual(await settings(["start", "-q", "--verbose=vite"]), {
       ANTELOPEJS_QUIET: "1",
