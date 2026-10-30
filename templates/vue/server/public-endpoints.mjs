@@ -4,6 +4,25 @@ import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./auth/client-ip.mjs";
 import { isNonNullObject, isString } from "./type-guards.mjs";
 
 /**
+ * A public endpoint, compiled from a declaration that passed every check.
+ *
+ * @typedef {object} PublicEndpoint
+ * @property {string} path
+ * @property {string[]} methods
+ * @property {string[]} headers
+ * @property {RegExp} matcher
+ */
+
+/**
+ * A declaration as the manifest or the environment holds it, before any check.
+ *
+ * @typedef {object} PublicEndpointDeclaration
+ * @property {unknown} [path]
+ * @property {unknown} [methods]
+ * @property {unknown} [headers]
+ */
+
+/**
  * Written at the workspace root by the loader, from the endpoints each
  * backend module declared in the frontend manifest. This file sits one
  * directory up.
@@ -42,17 +61,20 @@ const HEADER_NAME = /^x-[a-z0-9-]+$/;
 const RESERVED_HEADER =
   /^x-(?:forwarded-|real-ip$|dms-|inertia|http-method|method-override|original-|rewrite-)/;
 
+/** @type {unknown[] | undefined} */
 let declaredEndpoints;
+/** @type {import("./backend-proxies.mjs").ManifestProxy[] | undefined} */
 let declaredProxies;
 
 /**
  * The public endpoints the modules of this deployment declared, unchecked.
  *
- * @param file Generated file to read
- * @returns The declared entries, or none when the file is absent or broken
+ * @param {URL | string} [file] Generated file to read
+ * @returns {unknown[]} The declared entries, or none when the file is absent or broken
  */
 export function readDeclaredPublicEndpoints(file = DECLARED_ENDPOINTS_FILE) {
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(readFileSync(file, "utf8"));
     return Array.isArray(parsed?.endpoints) ? parsed.endpoints : [];
   } catch {
@@ -66,13 +88,16 @@ export function readDeclaredPublicEndpoints(file = DECLARED_ENDPOINTS_FILE) {
  *
  * A missing or broken file declares no proxy.
  *
- * @param file Generated file to read
+ * @param {URL | string} [file] Generated file to read
+ * @returns {import("./backend-proxies.mjs").ManifestProxy[]}
  */
 export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
   if (file === DECLARED_ENDPOINTS_FILE && declaredProxies)
     return declaredProxies;
+  /** @type {import("./backend-proxies.mjs").ManifestProxy[]} */
   let proxies = [];
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(readFileSync(file, "utf8"));
     if (Array.isArray(parsed?.proxies)) proxies = parsed.proxies;
   } catch {}
@@ -85,13 +110,15 @@ export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
  * `{ path, auth?, maxBodyBytes? }`, as the manifest's `backendProxies`, for an
  * operator. A value that is not a JSON array is reported and ignored.
  *
- * @param declaration The variable's value
+ * @param {string} [declaration] The variable's value
+ * @returns {import("./backend-proxies.mjs").ManifestProxy[]}
  */
 export function environmentBackendProxies(
   declaration = process.env.DMS_BACKEND_PROXIES,
 ) {
   if (!declaration?.trim()) return [];
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(declaration);
     if (Array.isArray(parsed))
       return parsed.map((entry) => ({
@@ -103,9 +130,14 @@ export function environmentBackendProxies(
   return [];
 }
 
+/**
+ * @param {string | undefined} declaration
+ * @returns {unknown[]}
+ */
 function environmentEndpoints(declaration) {
   if (!declaration?.trim()) return [];
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(declaration);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -114,6 +146,7 @@ function environmentEndpoints(declaration) {
   }
 }
 
+/** @param {unknown} methods */
 function normalizedMethods(methods) {
   if (methods === undefined) return DEFAULT_METHODS;
   if (!Array.isArray(methods) || methods.length === 0) return undefined;
@@ -123,6 +156,7 @@ function normalizedMethods(methods) {
     : undefined;
 }
 
+/** @param {unknown} headers */
 function normalizedHeaders(headers) {
   if (headers === undefined) return [];
   if (!Array.isArray(headers)) return undefined;
@@ -134,6 +168,7 @@ function normalizedHeaders(headers) {
     : undefined;
 }
 
+/** @param {string} path */
 function pathMatcher(path) {
   const pattern = path
     .split("/")
@@ -149,6 +184,9 @@ function pathMatcher(path) {
 /**
  * A declaration made usable, or `undefined` when any part of it is malformed:
  * a bad entry is dropped whole, never widened to what it might have meant.
+ *
+ * @param {PublicEndpointDeclaration | null | undefined} entry
+ * @returns {PublicEndpoint | undefined}
  */
 export function compilePublicEndpoint(entry) {
   if (!isNonNullObject(entry)) return undefined;
@@ -168,6 +206,10 @@ export function compilePublicEndpoint(entry) {
  * The backend endpoints this deployment serves to anyone: what the backend's
  * modules declared, plus what `DMS_PUBLIC_ENDPOINTS` adds (a JSON array of the
  * same `{ path, methods?, headers? }` entries).
+ *
+ * @param {string} [declaration]
+ * @param {unknown[]} [declared]
+ * @returns {PublicEndpoint[]}
  */
 export function allowedPublicEndpoints(
   declaration = process.env.DMS_PUBLIC_ENDPOINTS,
@@ -189,6 +231,8 @@ export function allowedPublicEndpoints(
 /**
  * Compiled once per value of the environment variable, so a malformed entry
  * is reported once rather than on every request.
+ *
+ * @type {{ declaration: string | undefined, endpoints: PublicEndpoint[] } | undefined}
  */
 let compiled;
 
@@ -202,9 +246,9 @@ function currentPublicEndpoints() {
 /**
  * The public endpoint a request reaches, if any.
  *
- * @param method The request's method
- * @param pathname The request's normalized path, without its query string
- * @param endpoints The endpoints to match, this deployment's by default
+ * @param {string} method The request's method
+ * @param {string} pathname The request's normalized path, without its query string
+ * @param {PublicEndpoint[]} [endpoints] The endpoints to match, this deployment's by default
  */
 export function matchPublicEndpoint(
   method,
@@ -227,9 +271,9 @@ export function matchPublicEndpoint(
  * it reaches a public endpoint, which is why the proxy never sends a public
  * endpoint the session: a cross-site form posting to it acts as nobody.
  *
- * @param request The incoming request
- * @param safeMethods Methods that change nothing and need no Origin
- * @param proxy The backend proxy the request reached
+ * @param {import("node:http").IncomingMessage} request The incoming request
+ * @param {ReadonlySet<string>} safeMethods Methods that change nothing and need no Origin
+ * @param {import("./backend-proxies.mjs").BackendProxy} proxy The backend proxy the request reached
  * @returns `{ anonymous, headers, isRefused }`
  */
 export function proxyAccess(request, safeMethods, proxy) {
@@ -252,7 +296,11 @@ export function proxyAccess(request, safeMethods, proxy) {
   };
 }
 
-/** Answers the 403 of a request `proxyAccess` refused. */
+/**
+ * Answers the 403 of a request `proxyAccess` refused.
+ *
+ * @param {import("node:http").ServerResponse} response
+ */
 export function refuseCrossOrigin(response) {
   json(response, 403, CROSS_ORIGIN_ERROR);
 }

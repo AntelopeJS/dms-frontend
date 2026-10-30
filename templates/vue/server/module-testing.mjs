@@ -3,7 +3,12 @@ import { RequestBodyError, UpstreamError } from "./auth/backend.mjs";
 import { UNEXPECTED_ERROR_BODY } from "./backend-response.mjs";
 import { createServerModules, handleModuleRoute } from "./module-server.mjs";
 
-/** What the frontend server answers an API request whose handler failed. */
+/**
+ * What the frontend server answers an API request whose handler failed.
+ *
+ * @param {unknown} error
+ * @param {import("node:http").ServerResponse} response
+ */
 function writeFailure(error, response) {
   const status = Number.isInteger(error?.status) ? error.status : 502;
   const body =
@@ -26,9 +31,9 @@ function writeFailure(error, response) {
  * `DMS_API_BASE_URL` and `DMS_SESSION_SECRET` from the environment, as in
  * production.
  *
- * @param declarations `{ id, priority?, setup }` per module, `setup` being
+ * @param {readonly import("./module-server.mjs").ServerModuleDeclaration[]} declarations `{ id, priority?, setup }` per module, `setup` being
  *   the default export of its `dms.server.ts`
- * @param deployment `{ publicOptions?, privateOptions?, authEstablishEndpoints?,
+ * @param {Omit<import("./module-server.mjs").Deployment, "warn" | "authEstablishEndpoints"> & { authEstablishEndpoints?: readonly string[] }} [deployment] `{ publicOptions?, privateOptions?, authEstablishEndpoints?,
  *   publicEndpoints?, backendProxies? }`, options by module id, and the
  *   manifest's backend proxies (`{ module, path, auth? }`), which decide
  *   the backend redirects relayed as frontend paths. The private options are
@@ -37,6 +42,7 @@ function writeFailure(error, response) {
  * @returns `{ url, modules, warnings, close() }`
  */
 export async function serveModuleRoutes(declarations, deployment = {}) {
+  /** @type {string[]} */
   const warnings = [];
   const endpoints = deployment.authEstablishEndpoints ?? [];
   const modules = createServerModules(declarations, {

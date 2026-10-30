@@ -4,6 +4,8 @@ const TEXT_TYPE = "text/plain; charset=utf-8";
 /**
  * Whether the path of `url` holds a percent-escape no decoder accepts, such as
  * `/projects/%E0%A4%A`. Vite and the router decode the path, and throw on it.
+ *
+ * @param {string} url
  */
 export function hasMalformedPath(url) {
   try {
@@ -17,6 +19,9 @@ export function hasMalformedPath(url) {
 /**
  * Whether a failed request can no longer be answered: the client went away, or
  * the response already started.
+ *
+ * @param {unknown} error
+ * @param {import("node:http").ServerResponse} response
  */
 export function isResponseGone(error, response) {
   return (
@@ -30,6 +35,8 @@ export function isResponseGone(error, response) {
 /**
  * Answers for requests the server cannot serve at all: an unreadable URL, or
  * a failure while it was already rendering the error page.
+ *
+ * @param {import("node:http").ServerResponse} response
  */
 export function writeBadRequest(response) {
   response.writeHead(400, { "content-type": TEXT_TYPE });
@@ -40,6 +47,9 @@ export function writeBadRequest(response) {
  * The last resort once even the error page failed: a bare 500, or a dropped
  * connection when the response already started. The server keeps running
  * either way.
+ *
+ * @param {unknown} error
+ * @param {import("node:http").ServerResponse} response
  */
 export function abandonResponse(error, response) {
   console.error("DMS error response failed", error);

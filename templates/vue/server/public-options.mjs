@@ -3,9 +3,21 @@ import { isNonNullObject } from "./type-guards.mjs";
 const VARIABLE = "DMS_PUBLIC_OPTIONS";
 export const PUBLIC_OPTIONS_ELEMENT_ID = "dms-public-options";
 
+/**
+ * The registry the workspace was materialized with.
+ *
+ * @typedef {object} FrontendRegistry
+ * @property {{ id: string, options?: unknown }[]} modules The modules, highest priority first
+ */
+
+/**
+ * @param {string | undefined} raw
+ * @returns {object | undefined}
+ */
 function parse(raw) {
   if (!raw) return undefined;
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(raw);
     return isNonNullObject(parsed) && !Array.isArray(parsed)
       ? parsed
@@ -27,7 +39,11 @@ function parse(raw) {
  */
 export const RUNTIME_PUBLIC_OPTIONS = parse(process.env[VARIABLE]);
 
-/** The options of each module of the registry, the runtime ones first. */
+/**
+ * The options of each module of the registry, the runtime ones first.
+ *
+ * @param {FrontendRegistry} registry
+ */
 export function publicOptionsOf(registry) {
   return Object.fromEntries(
     registry.modules.map((module) => [
