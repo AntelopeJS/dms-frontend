@@ -245,7 +245,7 @@ describe("Async data failures and keys", () => {
     const seen: unknown[] = [];
     const entry = await app.runWithContext(() =>
       runtimeModule.useDmsFetch<string>("/api/items", {
-        $fetch: (async () => "raw") as never,
+        $fetch: async () => "raw",
         transform: (value, context) => {
           seen.push(context);
           return `${String(value)}!`;
@@ -488,7 +488,7 @@ describe("Async data a server cannot transfer", () => {
         },
       });
       const { render } = serverRender(Watcher, (runtime) => {
-        runtime.serverFetch = (async (url: string) => url) as never;
+        runtime.serverFetch = async (url: string) => url;
         runtime.devWarnings = true;
         runtime.runAsyncDataHandler = (run) => {
           inHandler = true;
