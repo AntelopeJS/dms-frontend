@@ -44,7 +44,7 @@ export {};
  *
  * @typedef {object} ServerRoute
  * @property {string} path The normalized path
- * @property {string} shape The path with its parameters made anonymous
+ * @property {string} pathIdentity The path with its parameters made anonymous
  * @property {string[]} params The parameter names, in path order
  * @property {RegExp} matcher
  * @property {string} id The serving module
