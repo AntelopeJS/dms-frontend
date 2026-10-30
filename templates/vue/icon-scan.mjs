@@ -19,6 +19,10 @@ const SOURCE_SCRIPT_GLOB = "app/**/*.ts";
  * fetched from the Iconify API at run time. Every frontend source root lives
  * under the workspace (`frontend-modules/`, enforced when the registry is
  * written), so a relative glob reaches it. Globs are POSIX on every platform.
+ *
+ * @param {string} viteRoot
+ * @param {readonly string[]} sourceRoots
+ * @returns {string[]}
  */
 export function iconScanGlobs(viteRoot, sourceRoots) {
   const sourceGlobs = sourceRoots.map((root) =>

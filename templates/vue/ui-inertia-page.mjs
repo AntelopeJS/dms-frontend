@@ -16,7 +16,8 @@ const ANY_INERTIA_PAGE_IMPORT =
  * a form this rewrite does not know, rather than letting the leak come back
  * unnoticed with a Nuxt UI release.
  *
- * @param isNuxtUiFile `(id) => boolean`, whether a module is Nuxt UI's
+ * @param {(id: string) => boolean} isNuxtUiFile whether a module is Nuxt UI's
+ * @returns {import("vite").Plugin}
  */
 export function uiInertiaPage(isNuxtUiFile) {
   return {
