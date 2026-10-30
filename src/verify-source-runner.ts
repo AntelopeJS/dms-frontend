@@ -200,9 +200,9 @@ async function checkServerModulesBundle(workspace: string): Promise<string> {
     "The server modules bundle loads application code",
     "A dms.server.ts imports server code only, never .vue files or dms.frontend.ts.",
   );
-  const { serverModules }: { serverModules: unknown } = await import(
-    join(root, "server-modules.generated.js")
-  );
+  const serverModules: unknown = (
+    await import(join(root, "server-modules.generated.js"))
+  ).serverModules;
   ensure(
     Array.isArray(serverModules),
     "The server modules bundle exports none",
@@ -338,9 +338,9 @@ async function checkEmailContracts(workspace: string): Promise<string> {
   );
   const { renderEmail } = await import(join(emailRoot, "email-renderer.js"));
   for (const emailCase of EMAIL_CASES) {
-    const html: string = await renderEmail(emailCase.name, emailCase.props);
+    const html: unknown = await renderEmail(emailCase.name, emailCase.props);
     ensure(
-      html.startsWith("<!doctype html>"),
+      isText(html) && html.startsWith("<!doctype html>"),
       `${emailCase.name} does not render a full HTML document`,
     );
     if (emailCase.name === "EmailLayout") checkLayoutEmail(html);

@@ -10,6 +10,7 @@ import { readLayerPackage } from "./layers";
 import { showPath } from "./output";
 import { ResolvedLayer } from "./workspace";
 import { isText } from "./internal/guards";
+import { ownRelease } from "./internal/own-release";
 
 /** The loader a module's range is checked against: a package name and release. */
 export interface RendererRelease {
@@ -36,8 +37,6 @@ interface DeclaredRange {
   shown: string;
   range: unknown;
 }
-
-const OWN_RELEASE: RendererRelease = require("../package.json");
 
 /**
  * Modules already named in an undeclared-range notice. A process only ever
@@ -173,7 +172,7 @@ export function assertLayersSupportRenderer(
   layers: ResolvedLayer[],
   options: RendererRangeCheckOptions = {},
 ): void {
-  const renderer = options.renderer ?? OWN_RELEASE;
+  const renderer = options.renderer ?? ownRelease;
   const declarations = layers.map((layer) =>
     declaredRange(layer, renderer.name),
   );

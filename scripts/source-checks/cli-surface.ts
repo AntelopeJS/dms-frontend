@@ -2,7 +2,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { ENVIRONMENT_VARIABLES } from "../../src/help";
-import { type Problem, ROOT, type SourceCheck } from "./repository";
+import {
+  isJsonObject,
+  type Problem,
+  ROOT,
+  type SourceCheck,
+} from "./repository";
 
 /**
  * Set by the CLI for the processes it spawns, never by a user: dev mode for
@@ -57,49 +62,50 @@ function helpListsEveryVariableRead(): Problem[] {
   ];
 }
 
-function manifestPublishesOnlyTheDiscoverableExecutable(): Problem[] {
-  const manifest: { name?: unknown; bin?: unknown } = JSON.parse(
+/** The fields of the repository's package.json, by name. */
+function readManifestFields(): Map<string, unknown> {
+  const manifest: unknown = JSON.parse(
     readFileSync(join(ROOT, "package.json"), "utf8"),
   );
+  if (!isJsonObject(manifest)) throw new Error("package.json is not an object");
+  return new Map<string, unknown>(Object.entries(manifest));
+}
+
+function manifestPublishesOnlyTheDiscoverableExecutable(): Problem[] {
+  const manifest = readManifestFields();
   return [
-    ...(manifest.name === "@antelopejs/dms-frontend"
+    ...(manifest.get("name") === "@antelopejs/dms-frontend"
       ? []
-      : [`package.json is named ${JSON.stringify(manifest.name)}`]),
-    ...(isDeepStrictEqual(manifest.bin, { "ajs-dms": "./dist/index.js" })
+      : [`package.json is named ${JSON.stringify(manifest.get("name"))}`]),
+    ...(isDeepStrictEqual(manifest.get("bin"), { "ajs-dms": "./dist/index.js" })
       ? []
-      : [`package.json bin is ${JSON.stringify(manifest.bin)}`]),
+      : [`package.json bin is ${JSON.stringify(manifest.get("bin"))}`]),
   ];
 }
 
 function manifestRequiresTheAntelopeJsCli(): Problem[] {
-  const manifest: {
-    peerDependencies?: Record<string, string>;
-    peerDependenciesMeta?: unknown;
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  const manifest = readManifestFields();
+  const peers = manifest.get("peerDependencies");
   return [
-    ...(manifest.peerDependencies?.["@antelopejs/core"] === ">=1.16.0 <2"
+    ...(isJsonObject(peers) &&
+    "@antelopejs/core" in peers &&
+    peers["@antelopejs/core"] === ">=1.16.0 <2"
       ? []
       : ["package.json must require @antelopejs/core >=1.16.0 <2 as a peer"]),
-    ...(manifest.peerDependenciesMeta === undefined
+    ...(manifest.get("peerDependenciesMeta") === undefined
       ? []
       : ["package.json must not make a peer dependency optional"]),
     ...["figlet", "boxen", "chalk", "@types/figlet"].flatMap((dependency) =>
-      [manifest.dependencies, manifest.devDependencies].flatMap((group) =>
-        group?.[dependency] === undefined
-          ? []
-          : [
-              `package.json must not depend on ${dependency}: the core output module draws the banner`,
-            ],
+      [manifest.get("dependencies"), manifest.get("devDependencies")].flatMap(
+        (group) =>
+          isJsonObject(group) && dependency in group
+            ? [
+                `package.json must not depend on ${dependency}: the core output module draws the banner`,
+              ]
+            : [],
       ),
     ),
   ];
-}
-
-interface EntryConditions {
-  types: string;
-  default: string;
 }
 
 /**
@@ -109,10 +115,9 @@ interface EntryConditions {
  * part of the contract, not a detail of the map.
  */
 function manifestKeepsTheDeepPathsReachable(): Problem[] {
-  const {
-    exports: map,
-  }: { exports: Record<string, string | EntryConditions> } = JSON.parse(
-    readFileSync(join(ROOT, "package.json"), "utf8"),
+  const exported = readManifestFields().get("exports");
+  const map = new Map<string, unknown>(
+    isJsonObject(exported) ? Object.entries(exported) : [],
   );
   const expected = {
     "./dist/*.js": { types: "./dist/*.d.ts", default: "./dist/*.js" },
@@ -122,10 +127,10 @@ function manifestKeepsTheDeepPathsReachable(): Problem[] {
     "./common": { types: "./dist/common.d.ts", default: "./dist/common.js" },
   };
   return Object.entries(expected)
-    .filter(([key, value]) => !isDeepStrictEqual(map[key], value))
+    .filter(([key, value]) => !isDeepStrictEqual(map.get(key), value))
     .map(
       ([key, value]) =>
-        `package.json exports ${key} is ${JSON.stringify(map[key])}, consumers need ${JSON.stringify(value)}`,
+        `package.json exports ${key} is ${JSON.stringify(map.get(key))}, consumers need ${JSON.stringify(value)}`,
     );
 }
 

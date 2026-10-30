@@ -304,7 +304,7 @@ function readLocaleMessages(
   const roots = new Map(
     registry.modules.map((module) => [module.id, module.root]),
   );
-  const messages: Record<string, Record<string, unknown>> = {};
+  const messages = new Map<string, Record<string, unknown>>();
   for (const asset of assets) {
     const locale = asset.relativePath.match(
       /(?:^|[/-])([a-z]{2})-[A-Z]{2}\.json$/,
@@ -312,9 +312,12 @@ function readLocaleMessages(
     const root = roots.get(asset.moduleId);
     if (!locale || !root) continue;
     const value = readLocaleFile(join(root, asset.relativePath));
-    messages[locale] = mergeLocaleMessages(value, messages[locale] ?? {});
+    messages.set(
+      locale,
+      mergeLocaleMessages(value, messages.get(locale) ?? {}),
+    );
   }
-  return messages;
+  return Object.fromEntries(messages);
 }
 
 /** Whether a change at `relativePath` can change the generated catalogs. */
