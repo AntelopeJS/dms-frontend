@@ -1,5 +1,5 @@
 import { compilePathPattern } from "./path-patterns.mjs";
-import { isNonNullObject, isString } from "./type-guards.mjs";
+import { isNonNullObject, isObjectLike, isString } from "./type-guards.mjs";
 
 /** @typedef {import("../server-module.ts").DmsRouteRule} RouteRule */
 /** @typedef {RouteRule & { headers: Record<string, string> }} MergedRouteRule */
@@ -134,7 +134,7 @@ function publicCacheControl(cache) {
  *
  * @param {MergedRouteRule} rule What `routeRuleFor` returned
  * @param {import("node:http").IncomingMessage} request The page request
- * @param {{ publicAccess?: boolean } | null | undefined} route The page's route, as the backend described it
+ * @param {unknown} route The page's route, as the backend described it: any JSON value, only `publicAccess` is read
  * @param {number} status The answer's status: only a 200 is cached
  */
 export function ruleHeaders(rule, request, route, status) {
@@ -145,7 +145,8 @@ export function ruleHeaders(rule, request, route, status) {
     request.method === "GET" &&
     !request.headers.cookie &&
     !request.headers["x-content-language"] &&
-    route?.publicAccess === true
+    isObjectLike(route) &&
+    route.publicAccess === true
   ) {
     headers["cache-control"] = publicCacheControl(rule.cache);
     headers.vary = "X-Inertia, Cookie";

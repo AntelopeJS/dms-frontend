@@ -52,7 +52,11 @@ import {
 } from "./server/page-redirects.mjs";
 import { publicOptionsScript } from "./server/public-options.mjs";
 import { renderInPlace } from "./server/in-place-render.mjs";
-import { loadPageProps, propsForQuery } from "./server/page-props.mjs";
+import {
+  loadPageProps,
+  pageRoute,
+  propsForQuery,
+} from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
 import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
@@ -324,7 +328,7 @@ function renderDocument(page, request, rule, auth) {
  */
 async function writeBackendError(error, request, response) {
   const auth = await currentAuth();
-  const status = Number.isInteger(error?.status) ? error.status : 502;
+  const status = requestFailure.failureStatus(error);
   const pathname = new URL(request.url, "http://frontend.local").pathname;
   if (
     error instanceof BackendResponseError &&
@@ -471,7 +475,7 @@ export async function handleRequest(request, response) {
   const rule = routeRuleFor(rules, pathname);
   /** @param {number} status */
   const headersFor = (status) =>
-    ruleHeaders(rule, request, props.page?.route, status);
+    ruleHeaders(rule, request, pageRoute(props), status);
   if (request.headers[INERTIA_HEADER]) {
     return writeContent(
       request,

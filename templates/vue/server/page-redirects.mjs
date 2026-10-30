@@ -1,6 +1,8 @@
 import { readSession } from "./auth/session.mjs";
 import { HOMEPAGE } from "./homepage.mjs";
 import { redirectFrontendVisit } from "./inertia.mjs";
+import { pageRoute } from "./page-props.mjs";
+import { isObjectLike } from "./type-guards.mjs";
 
 /**
  * @param {import("node:http").IncomingMessage} request
@@ -22,10 +24,11 @@ export function redirectToHomepage(request, response, pathname) {
  * @returns {boolean}
  */
 export function redirectSignedOutPrivatePage(request, response, props, auth) {
-  const route = props.page?.route;
+  const route = pageRoute(props);
   if (
-    route?.publicAccess === true ||
-    route?.hasAccess !== false ||
+    !isObjectLike(route) ||
+    route.publicAccess === true ||
+    route.hasAccess !== false ||
     readSession(request)
   )
     return false;

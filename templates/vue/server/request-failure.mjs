@@ -1,3 +1,5 @@
+import { isNumber, isObjectLike } from "./type-guards.mjs";
+
 const FRONTEND_ORIGIN = "http://frontend.local";
 const TEXT_TYPE = "text/plain; charset=utf-8";
 
@@ -14,6 +16,17 @@ export function hasMalformedPath(url) {
   } catch {
     return true;
   }
+}
+
+/**
+ * The status an error asks to be answered with: its integer `status`, else 502.
+ *
+ * @param {unknown} error
+ * @returns {number}
+ */
+export function failureStatus(error) {
+  const status = isObjectLike(error) ? error.status : undefined;
+  return isNumber(status) && Number.isInteger(status) ? status : 502;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { isString } from "../type-guards.mjs";
+import { isObjectLike, isString } from "../type-guards.mjs";
 
 /**
  * Absolute backend API paths only: no scheme, no authority, no query string,
@@ -35,8 +35,10 @@ let declaredEndpoints;
  */
 export function readDeclaredEstablishEndpoints(file = DECLARED_ENDPOINTS_FILE) {
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(readFileSync(file, "utf8"));
-    return Array.isArray(parsed?.endpoints) ? parsed.endpoints : [];
+    const endpoints = isObjectLike(parsed) ? parsed.endpoints : undefined;
+    return Array.isArray(endpoints) ? endpoints : [];
   } catch {
     return [];
   }

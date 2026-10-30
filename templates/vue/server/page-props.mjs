@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readSession } from "./auth/session.mjs";
 import { BackendResponseError } from "./backend-response.mjs";
 import { heldOnceProps, requestedProps } from "./inertia.mjs";
-import { isNonNullObject } from "./type-guards.mjs";
+import { isNonNullObject, isObjectLike } from "./type-guards.mjs";
 
 export const SHARED_PROP = "shared";
 /**
@@ -47,6 +47,17 @@ const NOT_FOUND = 404;
  *   view: (session: unknown) => { user?: unknown, session?: unknown }
  * }} PageAuth
  */
+
+/**
+ * The route the backend described for the page of `props`, as the backend
+ * sent it: any JSON value, `undefined` when the page has none.
+ *
+ * @param {PageProps} props
+ * @returns {unknown}
+ */
+export function pageRoute(props) {
+  return isObjectLike(props.page) ? props.page.route : undefined;
+}
 
 /**
  * The once-prop key of the site layout: one per account and workspace. A
