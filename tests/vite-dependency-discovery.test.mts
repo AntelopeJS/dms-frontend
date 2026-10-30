@@ -12,6 +12,7 @@ import {
   type DepOptimizationOptions,
 } from "vite";
 import { readText } from "./helpers/files";
+import { isText } from "./helpers/guards";
 
 function templateSource(): string {
   return readText(resolve("templates/vue/vite.config.ts"));
@@ -188,7 +189,11 @@ it("names no dependency the DMS dropped for SortableJS", () => {
     /const optimizedDependencies = (\[[^\]]*\])/,
   );
   assert.ok(list, "the template lists the dependencies it pre-bundles");
-  const names = runInNewContext(list[1]) as string[];
+  const names: unknown = runInNewContext(list[1]);
+  assert.ok(
+    Array.isArray(names) && names.every(isText),
+    "the template lists names",
+  );
   assert.ok(names.includes("vue"));
   assert.ok(!names.includes("vuedraggable"));
 });

@@ -4,19 +4,26 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { createServer as createViteServer, type ViteDevServer } from "vite";
+import {
+  createServer as createViteServer,
+  type CustomPayload,
+  type ErrorPayload,
+  type HotPayload,
+  type ViteDevServer,
+} from "vite";
 import {
   captureViteErrors,
   runViteMiddlewares,
   writeViteError,
 } from "../templates/vue/server/vite-errors.mjs";
+import { isText } from "./helpers/guards";
 import { addressOf } from "./helpers/net";
 
 const PAGE_FALLBACK_STATUS = 404;
 
 describe("the dev server's answer to a module Vite cannot transform", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-vite-errors-"));
-  const overlayErrors: unknown[] = [];
+  const overlayErrors: Array<ErrorPayload["err"]> = [];
   let vite: ViteDevServer;
   let server: Server;
   let base: string;
@@ -36,10 +43,14 @@ describe("the dev server's answer to a module Vite cannot transform", () => {
       plugins: [captureViteErrors()],
     });
     const send = vite.ws.send.bind(vite.ws);
-    vite.ws.send = ((payload: { type: string; err?: unknown }) => {
-      if (payload.type === "error") overlayErrors.push(payload.err);
-      return send(payload as never);
-    }) as typeof vite.ws.send;
+    vite.ws.send = (
+      first: HotPayload | string,
+      payload?: CustomPayload["data"],
+    ) => {
+      if (isText(first)) return send(first, payload);
+      if (first.type === "error") overlayErrors.push(first.err);
+      return send(first);
+    };
     server = createServer(async (request, response) => {
       const result = await runViteMiddlewares(vite, request, response);
       if (result.status === "handled") return;
@@ -67,11 +78,9 @@ describe("the dev server's answer to a module Vite cannot transform", () => {
 
   it("hands the error to the client overlay", async () => {
     await fetch(`${base}/broken.ts`);
-    assert.ok(overlayErrors.length > 0);
-    assert.match(
-      (overlayErrors.at(-1) as { message: string }).message,
-      /#dms-demo\/app\/utils\/x/,
-    );
+    const overlayError = overlayErrors.at(-1);
+    assert.ok(overlayError);
+    assert.match(overlayError.message, /#dms-demo\/app\/utils\/x/);
   });
 
   it("still serves a module that transforms", async () => {
