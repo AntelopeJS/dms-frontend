@@ -375,14 +375,20 @@ export function writeReadyBlock(
   writeInfo("");
 }
 
-/** The levels a running server's notices use, with the color of their symbol. */
-const TIMED_LEVEL_COLORS = {
-  success: "green",
-  info: "blue",
-  warn: "yellow",
-} as const satisfies Record<string, ColorName>;
+/** The levels a running server's notices use. */
+type TimedLevel = "success" | "info" | "warn";
 
-type TimedLevel = keyof typeof TIMED_LEVEL_COLORS;
+/** The color of the symbol of a level. */
+function timedLevelColor(level: TimedLevel): ColorName {
+  switch (level) {
+    case "success":
+      return "green";
+    case "info":
+      return "blue";
+    case "warn":
+      return "yellow";
+  }
+}
 
 /** `14:03:22`, in local time. */
 function clockTime(date: Date): string {
@@ -411,7 +417,7 @@ export function formatTimedMessage(
 ): string {
   const { details = [], fixes = [], columns = feedbackColumns() } = options;
   const palette = ui.palette();
-  const paint = palette[TIMED_LEVEL_COLORS[level]];
+  const paint = palette[timedLevelColor(level)];
   const hint = palette.cyan(ui.symbols.levels.hint);
   const indent = " ".repeat(TIME_LENGTH + 1) + BLOCK_INDENT;
   return [
