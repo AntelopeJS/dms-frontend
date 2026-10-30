@@ -194,7 +194,7 @@ describe("Key hints in a server render", () => {
 
 describe("Key hints mounted in the browser", () => {
   it("print the browser's platform at once without a platform source", () => {
-    globalThis.window = {} as Window & typeof globalThis;
+    Reflect.set(globalThis, "window", {});
     const mac = mountFresh(hint(true));
     assert.equal(mac.text(), "⌘|⌃|⌥|⇧|k");
     const pc = mountFresh(hint(false));
@@ -202,7 +202,7 @@ describe("Key hints mounted in the browser", () => {
   });
 
   it("follow the platform source when the application gives one", async () => {
-    globalThis.window = {} as Window & typeof globalThis;
+    Reflect.set(globalThis, "window", {});
     const platform = ref<"mac" | "other">("other");
     const mounted = mountFresh(hint(true), (app) =>
       provideDmsKbdPlatform(app, () => platform),
