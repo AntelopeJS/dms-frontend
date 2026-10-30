@@ -9,6 +9,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
+import type { ViteDevServer } from "vite";
 import {
   type DmsServerSetup,
   defineDmsServer,
@@ -78,7 +79,7 @@ describe("Module server routes in development", () => {
           pathname: string,
           modules: unknown,
         ) => Promise<boolean>;
-        loadServerModules: (devServer: unknown) => Promise<unknown>;
+        loadServerModules: (devServer: ViteDevServer) => Promise<unknown>;
       };
       frontend = createServer(async (request, response) => {
         void handleModuleRoute(
