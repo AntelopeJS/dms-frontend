@@ -13,6 +13,7 @@ import {
 } from "vite";
 import { readText } from "./helpers/files";
 import { isText } from "./helpers/guards";
+import { isObjectLike } from "../src/internal/guards";
 
 function templateSource(): string {
   return readText(resolve("templates/vue/vite.config.ts"));
@@ -114,8 +115,12 @@ it("optimizes a module's CommonJS dependency discovered after startup", async ()
         lib: { entry: join(root, pagePath), formats: ["es"], fileName: "page" },
       },
     });
-    const builtModule = await import(
+    const builtModule: unknown = await import(
       pathToFileURL(join(root, "dist/page.js")).href
+    );
+    assert.ok(
+      isObjectLike(builtModule) && "answer" in builtModule,
+      "the built page exports answer",
     );
     assert.equal(builtModule.answer, 42);
   } finally {

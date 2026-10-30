@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import { renderToString } from "@vue/server-renderer";
 import {
   type App,
+  type Component,
   computed,
   createRenderer,
   createSSRApp,
@@ -118,10 +119,7 @@ function hint(isMac: boolean, values = ["meta", "ctrl", "alt", "shift", "k"]) {
 }
 
 /** Mounts components without a DOM, the way the browser runtime runs them. */
-function mountFresh(
-  root: ReturnType<typeof defineComponent>,
-  setup?: (app: App) => void,
-) {
+function mountFresh(root: Component, setup?: (app: App) => void) {
   interface Node {
     text: string;
     parent: Node | null;

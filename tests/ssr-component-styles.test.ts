@@ -105,7 +105,8 @@ function componentStylesheet(
   manifest: Record<string, ManifestEntry>,
   name: string,
 ): string {
-  const entry = manifest[`${COMPONENTS}/${name}.vue`];
+  const key = `${COMPONENTS}/${name}.vue`;
+  const entry = Object.hasOwn(manifest, key) ? manifest[key] : undefined;
   assert.ok(entry?.isDynamicEntry, `${name}.vue is a lazily loaded chunk`);
   assert.equal(entry.css?.length, 1, `${name}.vue has a stylesheet`);
   return entry.css[0];
