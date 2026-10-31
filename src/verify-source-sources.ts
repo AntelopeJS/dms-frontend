@@ -2,6 +2,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { CliProblem } from "@antelopejs/core/cli";
 import { type ResolvedLayer, UsageError } from "./common";
+import { isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
 import { showPath } from "./output";
 import { LAYER_PATH_FIX, VERIFY_SOURCE_COMMAND } from "./verify-source-result";
 
@@ -50,23 +52,51 @@ const LOCKFILES: [string, string][] = [
   ["bun.lockb", "bun"],
 ];
 
+/** What a variable that must hold JSON of a given shape did not. */
+function malformedVariable(variable: string, expected: string): UsageError {
+  return new UsageError({
+    title: `${variable} is not ${expected}`,
+    reason: `\`ajs dms verify-source\` starts the runner with ${variable} set to ${expected}.`,
+  });
+}
+
+function readTextList(variable: string): string[] {
+  const value: unknown = JSON.parse(process.env[variable] ?? "[]");
+  if (Array.isArray(value) && value.every(isText)) return value;
+  throw malformedVariable(variable, "a JSON list of paths");
+}
+
+function readTextRecord(variable: string): Record<string, string> {
+  const value: unknown = JSON.parse(process.env[variable] ?? "{}");
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value);
+    if (entries.every((entry): entry is [string, string] => isText(entry[1]))) {
+      return Object.fromEntries(entries);
+    }
+  }
+  throw malformedVariable(variable, "a JSON record of paths by package name");
+}
+
 /** The environment variables `ajs dms verify-source` starts the runner with. */
 export function readSourceOptions(): SourceOptions {
   return {
     projectDir: process.cwd(),
     layerSource: process.env.DMS_LAYER_SOURCE || undefined,
-    moduleSources: JSON.parse(
-      process.env.DMS_MODULE_SOURCES ?? "[]",
-    ) as string[],
-    localPackages: JSON.parse(process.env.DMS_LOCAL_PACKAGES ?? "{}") as Record<
-      string,
-      string
-    >,
+    moduleSources: readTextList("DMS_MODULE_SOURCES"),
+    localPackages: readTextRecord("DMS_LOCAL_PACKAGES"),
   };
 }
 
+/** The text fields of a package.json that verify-source reads; any other value of them reads as absent. */
 function readManifest(packagePath: string): PackageManifest {
-  return JSON.parse(readFileSync(packagePath, "utf8")) as PackageManifest;
+  const parsed: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
+  if (!isPlainObject(parsed)) return {};
+  const { name, version, packageManager } = parsed;
+  return {
+    name: isText(name) ? name : undefined,
+    version: isText(version) ? version : undefined,
+    packageManager: isText(packageManager) ? packageManager : undefined,
+  };
 }
 
 function readLayer(root: string): ResolvedLayer {
@@ -161,6 +191,12 @@ function installedCoreLayer(projectDir: string): Sources {
       ],
     });
   const { version } = readManifest(packagePath);
+  if (version === undefined)
+    throw new UsageError({
+      title: `${DMS_PACKAGE} has no text "version" in its package.json`,
+      reason: `${showPath(packagePath)} has no "version" that is text, and the verification names the installed ${DMS_PACKAGE} by it.`,
+      fixes: [`Reinstall it: ${addDmsCommand(projectDir, "@latest")}`],
+    });
   const root = join(dirname(packagePath), CORE_LAYER_DIRECTORY);
   const layer = existsSync(join(root, "package.json"))
     ? readLayer(root)
