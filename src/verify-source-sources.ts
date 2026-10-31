@@ -191,6 +191,12 @@ function installedCoreLayer(projectDir: string): Sources {
       ],
     });
   const { version } = readManifest(packagePath);
+  if (version === undefined)
+    throw new UsageError({
+      title: `${DMS_PACKAGE} has no text "version" in its package.json`,
+      reason: `${showPath(packagePath)} has no "version" that is text, and the verification names the installed ${DMS_PACKAGE} by it.`,
+      fixes: [`Reinstall it: ${addDmsCommand(projectDir, "@latest")}`],
+    });
   const root = join(dirname(packagePath), CORE_LAYER_DIRECTORY);
   const layer = existsSync(join(root, "package.json"))
     ? readLayer(root)
