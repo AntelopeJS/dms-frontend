@@ -213,6 +213,54 @@ describe("reading the packages verify-source builds", () => {
     ]);
   });
 
+  it("names a --layer package whose name is not text as a package without a name", () => {
+    const root = project({ ...DEMO_PROJECT, ...installedDms() });
+    for (const name of [5, { a: 1 }]) {
+      const layer = project({
+        "package.json": JSON.stringify({ name }),
+        "dms.frontend.ts": "export default {};\n",
+      });
+      const problem = usageProblem(() => sources(root, { layerSource: layer }));
+      assert.match(
+        problem.reason ?? "",
+        /holds a package without a name\./,
+        JSON.stringify(name),
+      );
+    }
+  });
+
+  it("refuses an installed @antelopejs/dms whose version is not text, naming the field", () => {
+    for (const version of [5, {}, undefined]) {
+      for (const withCoreLayer of [true, false]) {
+        const files = withCoreLayer
+          ? { ...DEMO_PROJECT, ...installedDms() }
+          : { ...DEMO_PROJECT };
+        files[`${INSTALLED_DMS}/package.json`] = JSON.stringify({
+          name: "@antelopejs/dms",
+          version,
+        });
+        const root = project(files);
+        const problem = usageProblem(() => sources(root));
+        const label = `${JSON.stringify(version)} ${withCoreLayer}`;
+        assert.equal(
+          problem.title,
+          '@antelopejs/dms has no text "version" in its package.json',
+          label,
+        );
+        assert.doesNotMatch(
+          JSON.stringify(problem),
+          /undefined|\[object/,
+          label,
+        );
+        assert.deepEqual(
+          problem.fixes,
+          ["Reinstall it: pnpm add -D @antelopejs/dms@latest"],
+          label,
+        );
+      }
+    }
+  });
+
   it("sends a frontend module passed with -l to -m", () => {
     const root = project({ ...DEMO_PROJECT, ...installedDms() });
     const module = join(root, "frontend-vue");
