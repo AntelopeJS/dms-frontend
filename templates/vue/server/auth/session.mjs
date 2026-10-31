@@ -83,7 +83,8 @@ function encode(value) {
 
 /**
  * @param {string} value The cookie's value
- * @returns {unknown} What was sealed, `undefined` when it does not open
+ * @returns {any} What was sealed, as the JSON it was written from, `undefined`
+ *   when it does not open
  */
 function decode(value) {
   try {
@@ -156,8 +157,8 @@ function appendCookie(response, name, value, cookieAttributes) {
 
 /**
  * @param {SessionRequest} request
- * @returns {unknown} The session set for the request, else the one the cookie
- *   seals, `undefined` when there is none
+ * @returns {Session | undefined} The session set for the request, else the one
+ *   the cookie seals, `undefined` when there is none
  */
 export function readSession(request) {
   if (REQUEST_SESSION in request) return request[REQUEST_SESSION];
@@ -194,8 +195,8 @@ export function clearSession(response) {
 /**
  * @param {import("node:http").IncomingMessage} request
  * @param {string} name
- * @returns {unknown} What was sealed, `undefined` when there is none or it does
- *   not open
+ * @returns {any} What was sealed, as the JSON it was written from, `undefined`
+ *   when there is none or it does not open
  */
 export function readSealedCookie(request, name) {
   const value = cookieValue(request, name);

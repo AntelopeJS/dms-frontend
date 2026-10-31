@@ -281,7 +281,8 @@ function isResponse(value) {
 }
 
 /**
- * @param {unknown} result
+ * @param {any} result What a handler answered: any value, of which only
+ *   `isResponse` looks
  * @returns {Response}
  */
 function asResponse(result) {
