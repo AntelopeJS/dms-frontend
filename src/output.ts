@@ -217,6 +217,22 @@ export function cachedAge(fetchedAt: string | undefined): string {
   return fetchedAt ? ` cached ${formatAge(fetchedAt)}` : "";
 }
 
+/** A thrown value, sorted by how the CLI words it. */
+export type Failure =
+  | { kind: "cli"; error: CliError }
+  | { kind: "error"; error: Error }
+  | { kind: "thrown"; text: string };
+
+/**
+ * Sorts a thrown value. A value that is no Error is worded by its `String()`
+ * form, read here, at the catch that reports it.
+ */
+export function classifyFailure(thrown: unknown): Failure {
+  if (thrown instanceof CliError) return { kind: "cli", error: thrown };
+  if (thrown instanceof Error) return { kind: "error", error: thrown };
+  return { kind: "thrown", text: String(thrown) };
+}
+
 /**
  * The detail lines of a failure that does not stop the command, in the order
  * the core reports a problem: its reason, details and stack trace in a
@@ -224,7 +240,7 @@ export function cachedAge(fetchedAt: string | undefined): string {
  * through the error boundary gives the first line of its message as the title.
  */
 export function failureDetails(
-  error: unknown,
+  failure: Failure,
   ui: Ui = getProcessUi(),
 ): string[] {
   const {
@@ -232,17 +248,18 @@ export function failureDetails(
     reason,
     fixes = [],
     details = [],
-  } = error instanceof CliError
-    ? error.problem
+  } = failure.kind === "cli"
+    ? failure.error.problem
     : {
-        title: (error instanceof Error ? error.message : String(error)).split(
-          LINE_BREAK,
-        )[0],
+        title: (failure.kind === "error"
+          ? failure.error.message
+          : failure.text
+        ).split(LINE_BREAK)[0],
       };
   const hint = ui.symbols.levels.hint;
   const stack =
-    isVerboseRun() && error instanceof Error && !(error instanceof CliError)
-      ? (error.stack ?? "").split(LINE_BREAK).slice(1)
+    isVerboseRun() && failure.kind === "error"
+      ? (failure.error.stack ?? "").split(LINE_BREAK).slice(1)
       : [];
   return [
     title,

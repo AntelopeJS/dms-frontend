@@ -11,6 +11,7 @@ import {
 } from "../common";
 import {
   cachedAge,
+  classifyFailure,
   failureDetails,
   showWorkspace,
   writeHeader,
@@ -86,7 +87,7 @@ export async function runPrepare(options: PrepareOptions): Promise<void> {
     });
   } catch (err) {
     if (err instanceof CancelledError || strict) throw err;
-    const [title, ...details] = failureDetails(err, ui);
+    const [title, ...details] = failureDetails(classifyFailure(err), ui);
     const outcome = isSkip(err) ? "Skipped prepare" : "Prepare failed";
     ui.message("warn", `${outcome}: ${title}`, {
       details: [...details, NOT_GENERATED, STRICT_HINT],
