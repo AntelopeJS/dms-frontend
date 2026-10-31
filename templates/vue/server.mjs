@@ -58,6 +58,7 @@ import {
   propsForQuery,
 } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
+import { isString } from "./server/type-guards.mjs";
 import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
@@ -589,7 +590,10 @@ async function announceReady() {
     await reportStartError(error);
     return;
   }
-  const { address, port } = frontendHttpServer.address();
+  const listening = frontendHttpServer.address();
+  if (listening === null || isString(listening))
+    throw new TypeError("The DMS server is not listening on a port");
+  const { address, port } = listening;
   await reportReady(address, port);
   await reportRouting();
   if (process.env.DMS_DEV === "true") watchEmailBundle();
