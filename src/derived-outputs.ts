@@ -25,6 +25,7 @@ import {
   toPosixPath,
 } from "./fs-sync";
 import {
+  type LocaleMessages,
   mergeLocaleMessages,
   FALLBACK_LOCALE,
   RENDERER_TRANSLATED_KEYS,
@@ -300,11 +301,11 @@ const LOCALE_DIRECTORY = "i18n/locales";
 function readLocaleMessages(
   assets: DiscoveredAsset[],
   registry: FrontendModuleRegistry,
-): Record<string, Record<string, unknown>> {
+): Record<string, LocaleMessages> {
   const roots = new Map(
     registry.modules.map((module) => [module.id, module.root]),
   );
-  const messages = new Map<string, Record<string, unknown>>();
+  const messages = new Map<string, LocaleMessages>();
   for (const asset of assets) {
     const locale = asset.relativePath.match(
       /(?:^|[/-])([a-z]{2})-[A-Z]{2}\.json$/,

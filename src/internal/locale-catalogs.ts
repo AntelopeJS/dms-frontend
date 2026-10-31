@@ -1,18 +1,57 @@
-/** @internal */
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+import { isFlag, isNumber, isObjectLike, isText } from "./guards";
+
+/**
+ * A value of a locale file: a message is text, and the file may hold any
+ * other JSON next to the messages.
+ * @internal
+ */
+export type LocaleValue =
+  | string
+  | number
+  | boolean
+  | null
+  | LocaleValue[]
+  | LocaleMessages;
+
+/**
+ * The entries of a locale file or catalog, keyed by message name or group.
+ * @internal
+ */
+export interface LocaleMessages {
+  [key: string]: LocaleValue;
+}
+
+/**
+ * Whether `value` is made of the arms of `LocaleValue`, which is all that a
+ * `JSON.parse` yields.
+ * @internal
+ */
+export function isLocaleValue(value: unknown): value is LocaleValue {
+  if (value === null || isText(value) || isNumber(value) || isFlag(value)) {
+    return true;
+  }
+  if (Array.isArray(value)) return value.every(isLocaleValue);
+  return isObjectLike(value) && Object.values(value).every(isLocaleValue);
+}
+
+/**
+ * Whether `value` is a group of messages: the object arm of `LocaleValue`.
+ * @internal
+ */
+export function isMessageGroup(value: LocaleValue): value is LocaleMessages {
+  return isObjectLike(value) && !Array.isArray(value);
 }
 
 /** @internal */
 export function mergeLocaleMessages(
-  source: Record<string, unknown>,
-  existing: Record<string, unknown>,
-): Record<string, unknown> {
+  source: LocaleMessages,
+  existing: LocaleMessages,
+): LocaleMessages {
   const merged = { ...source };
   for (const [key, value] of Object.entries(existing)) {
     const sourceValue = merged[key];
     merged[key] =
-      isRecord(sourceValue) && isRecord(value)
+      isMessageGroup(sourceValue) && isMessageGroup(value)
         ? mergeLocaleMessages(sourceValue, value)
         : value;
   }
@@ -41,14 +80,14 @@ export const RENDERER_TRANSLATED_KEYS = ["error.network"];
  * @internal
  */
 export function withoutMessage(
-  messages: Record<string, unknown>,
+  messages: LocaleMessages,
   key: string,
-): Record<string, unknown> {
+): LocaleMessages {
   const [head, ...rest] = key.split(".");
   if (!Object.prototype.hasOwnProperty.call(messages, head)) return messages;
   const { [head]: value, ...others } = messages;
   if (!rest.length) return others;
-  if (!isRecord(value)) return messages;
+  if (!isMessageGroup(value)) return messages;
   const remaining = withoutMessage(value, rest.join("."));
   return Object.keys(remaining).length
     ? { ...others, [head]: remaining }
