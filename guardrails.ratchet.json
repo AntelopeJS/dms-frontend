@@ -3,7 +3,7 @@
   "rules": {
     "anti-slop/no-unknown-parameters": 12,
     "anti-slop/no-unknown-returns": 2,
-    "anti-slop/require-safety-comment-for-type-assertion": 29,
+    "anti-slop/require-safety-comment-for-type-assertion": 22,
     "typescript/no-unsafe-argument": 14,
     "typescript/no-unsafe-assignment": 32,
     "typescript/no-unsafe-return": 10
