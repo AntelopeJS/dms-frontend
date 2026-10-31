@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { describe, it } from "node:test";
 import { renderToString } from "@vue/server-renderer";
 import { createSSRApp, defineComponent, h, nextTick, ref, computed } from "vue";
@@ -16,8 +17,41 @@ import {
   clientApp,
   mountRuntime,
 } from "./fixtures/vue-async-data.mts";
+import { addressOf } from "./helpers/net";
 
 describe("useDmsFetch", () => {
+  it("keeps created fetch defaults and error hooks for raw requests", async (context) => {
+    let requestHeader: string | string[] | undefined;
+    const server = createServer((request, response) => {
+      requestHeader = request.headers["x-fetch-default"];
+      response.writeHead(403);
+      response.end("Forbidden");
+    });
+    context.after(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        }),
+    );
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const statuses: number[] = [];
+    const fetcher = runtimeModule.$fetch.create({
+      headers: { "x-fetch-default": "inherited" },
+      onResponseError({ response }) {
+        statuses.push(response.status);
+      },
+    });
+
+    await assert.rejects(
+      fetcher.raw(`http://127.0.0.1:${addressOf(server).port}/forbidden`),
+      { name: "FetchError", status: 403 },
+    );
+    assert.deepEqual(statuses, [403]);
+    assert.equal(requestHeader, "inherited");
+  });
+
   function fetchingRuntime(isServer: boolean) {
     const requests: Array<{ url: string; options: Record<string, unknown> }> =
       [];

@@ -58,6 +58,7 @@ function warnUntransferredRead(
 }
 
 function createDmsFetch(defaults: FetchOptions = {}): typeof ofetch {
+  const configuredFetch = ofetch.create(defaults);
   const execute = (request: string, options?: FetchOptions) => {
     const runtime = useDmsRuntime();
     warnUntransferredRead(runtime, request);
@@ -69,8 +70,8 @@ function createDmsFetch(defaults: FetchOptions = {}): typeof ofetch {
   return Object.assign(execute, {
     create: (options: FetchOptions) =>
       createDmsFetch({ ...defaults, ...options }),
-    native: ofetch.native,
-    raw: ofetch.raw,
+    native: configuredFetch.native,
+    raw: configuredFetch.raw,
   }) as typeof ofetch;
 }
 
