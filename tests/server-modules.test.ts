@@ -72,11 +72,13 @@ describe("Module server declarations", () => {
       {
         id: "billing",
         setup: (server) => {
-          server.registerRoute("FETCH" as never, "/api/_billing/a", handler);
+          // @ts-expect-error FETCH is not an HTTP method the contract names, an off-contract route that must be ignored with a warning
+          server.registerRoute("FETCH", "/api/_billing/a", handler);
           server.registerRoute("GET", "api/_billing/b", handler);
           server.registerRoute("GET", "/api/_billing/../c", handler);
           server.registerRoute("GET", "/api/_billing/:id/:id", handler);
-          server.registerRoute("GET", "/api/_billing/d", "nope" as never);
+          // @ts-expect-error the handler is the string "nope", an off-contract route that must be ignored with a warning
+          server.registerRoute("GET", "/api/_billing/d", "nope");
           server.registerRoute("GET", "/api/_billing/e", handler, {
             bodyLimit: -1,
           });
