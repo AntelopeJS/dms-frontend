@@ -13,7 +13,7 @@
     "paths": {
       "@antelopejs/dms-frontend/templates/*": ["../templates/*"]
     },
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["./**/*.ts"]
 }
