@@ -32,7 +32,16 @@ const ENTRY_STYLESHEET_ID = join(PROJECT_ROOT, "dms-main.css")
   .split(sep)
   .join("/");
 
-/** @param {import("vite").ViteDevServer} devServer */
+/**
+ * @typedef {{ urlToModuleMap: ReadonlyMap<string, { id: string | null } | undefined> }} StyleGraph
+ * @typedef {{
+ *   environments?: { ssr?: { moduleGraph?: StyleGraph } },
+ *   moduleGraph?: StyleGraph,
+ *   transformRequest(url: string): Promise<{ code: string } | null>,
+ * }} StyleServer
+ */
+
+/** @param {StyleServer} devServer */
 function ssrModuleGraph(devServer) {
   return devServer.environments?.ssr?.moduleGraph ?? devServer.moduleGraph;
 }
@@ -59,7 +68,7 @@ function directUrl(url) {
 }
 
 /**
- * @param {import("vite").ViteDevServer} devServer
+ * @param {StyleServer} devServer
  * @returns {StyleModule[]}
  */
 function styleModules(devServer) {
@@ -82,7 +91,7 @@ function linkTag({ url, id }) {
  * own tag is dropped rather than escaped — CSS has no escape that is valid in
  * every position, and a scoped component rule is not worth the risk.
  *
- * @param {import("vite").ViteDevServer} devServer
+ * @param {StyleServer} devServer
  * @param {StyleModule} module
  * @returns {Promise<string>}
  */
@@ -109,7 +118,7 @@ async function inlineTag(devServer, { url, id }) {
  * client-manifest.mjs rather than inside server.mjs, whose size the linter
  * caps.
  *
- * @param {import("vite").ViteDevServer} devServer
+ * @param {StyleServer} devServer
  * @returns {Promise<string>}
  */
 export async function developmentStyleTags(devServer) {
