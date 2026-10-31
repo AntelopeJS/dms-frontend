@@ -10,6 +10,7 @@ import { readLayerPackage } from "./layers";
 import { showPath } from "./output";
 import { ResolvedLayer } from "./workspace";
 import { isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
 import { ownRelease } from "./internal/own-release";
 
 /** The loader a module's range is checked against: a package name and release. */
@@ -84,10 +85,11 @@ function declaredRange(
   layer: ResolvedLayer,
   rendererName: string,
 ): DeclaredRange {
+  const engines = readLayerPackage(layer.path)?.engines;
   return {
     module: moduleLabel(layer),
     shown: shownModule(layer),
-    range: readLayerPackage(layer.path)?.engines?.[rendererName],
+    range: isPlainObject(engines) ? engines[rendererName] : undefined,
   };
 }
 
