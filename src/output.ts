@@ -267,10 +267,10 @@ function lineStartAfter(signal: NodeJS.Signals): string {
  */
 export function endInterruptedTask(
   task: TaskHandle,
-  error: unknown,
+  error: CancelledError | undefined,
   stopped: string,
 ): void {
-  if (!(error instanceof CancelledError)) return task.dismiss();
+  if (!error) return task.dismiss();
   const lineStart = lineStartAfter(error.signal);
   if (lineStart) getProcessTasks().write(process.stderr, lineStart);
   task.skip(stopped);

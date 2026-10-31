@@ -174,7 +174,11 @@ async function runBuildStep(
       onLine: (line) => context.warnings.read(line),
     });
   } catch (error) {
-    endInterruptedTask(task, error, step.stopped);
+    endInterruptedTask(
+      task,
+      error instanceof CancelledError ? error : undefined,
+      step.stopped,
+    );
     throw error;
   }
   if (result.code !== 0) {

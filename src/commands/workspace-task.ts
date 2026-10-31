@@ -1,4 +1,5 @@
 import { getProcessTasks } from "@antelopejs/core/cli";
+import { CancelledError } from "../cancellation";
 import {
   type SetupWorkspaceOptions,
   type SetupWorkspaceResult,
@@ -30,7 +31,11 @@ export async function setUpWorkspace(
     if (!isInstalling) task.succeed("Workspace ready");
     return result;
   } catch (error) {
-    endInterruptedTask(task, error, "Workspace setup stopped");
+    endInterruptedTask(
+      task,
+      error instanceof CancelledError ? error : undefined,
+      "Workspace setup stopped",
+    );
     throw error;
   }
 }
