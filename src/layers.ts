@@ -6,6 +6,7 @@ import { ManifestModule, ResolvedLayer } from "./workspace";
 import { LAYERS_SUBDIR } from "./config";
 import { formatAge } from "./output";
 import { isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
 
 /** What the user does when a backend never sends layer source paths. */
 const BUILD_FIX =
@@ -78,7 +79,7 @@ function sortModulesByPriority<T extends ManifestModule>(modules: T[]): T[] {
 /** The fields of a layer's package.json the loader reads. */
 export interface LayerPackage {
   name?: unknown;
-  engines?: Record<string, unknown>;
+  engines?: unknown;
   /** The module's frontend registration file, see `project-modules.ts`. */
   dmsFrontend?: unknown;
   /** AntelopeJS's manifest block, whose config variables `project-modules.ts` reads. */
@@ -92,7 +93,8 @@ export function readLayerPackage(layerPath: string): LayerPackage | undefined {
   const pkgPath = join(layerPath, "package.json");
   if (!existsSync(pkgPath)) return undefined;
   try {
-    return JSON.parse(readFileSync(pkgPath, "utf-8"));
+    const parsed: unknown = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    return isPlainObject(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }
