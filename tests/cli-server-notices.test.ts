@@ -129,6 +129,46 @@ describe("CLI output", () => {
     ]);
   });
 
+  it("titles a failure that is not a CliError by the first line of its message", () => {
+    const { ui } = memoryUi();
+    assert.deepEqual(failureDetails(new Error("disk full\nretry later"), ui), [
+      "disk full",
+    ]);
+    assert.deepEqual(failureDetails("plain text\nsecond line", ui), [
+      "plain text",
+    ]);
+    assert.deepEqual(failureDetails(42, ui), ["42"]);
+    assert.deepEqual(failureDetails(null, ui), ["null"]);
+    assert.deepEqual(failureDetails({ toString: () => "own text\nmore" }, ui), [
+      "own text",
+    ]);
+  });
+
+  it("adds the stack of an Error, minus its first line, only in a verbose run", () => {
+    const { ui } = memoryUi();
+    const error = new Error("boom");
+    error.stack =
+      "Error: boom\n    at first (a.ts:1:1)\n    at second (b.ts:2:2)";
+    const verbose = process.env.ANTELOPEJS_VERBOSE;
+    try {
+      delete process.env.ANTELOPEJS_VERBOSE;
+      assert.deepEqual(failureDetails(error, ui), ["boom"]);
+      process.env.ANTELOPEJS_VERBOSE = "1";
+      assert.deepEqual(failureDetails(error, ui), [
+        "boom",
+        "at first (a.ts:1:1)",
+        "at second (b.ts:2:2)",
+      ]);
+      assert.deepEqual(failureDetails("boom", ui), ["boom"]);
+      assert.deepEqual(failureDetails(new UsageError({ title: "Usage" }), ui), [
+        "Usage",
+      ]);
+    } finally {
+      if (verbose === undefined) delete process.env.ANTELOPEJS_VERBOSE;
+      else process.env.ANTELOPEJS_VERBOSE = verbose;
+    }
+  });
+
   it("cuts lines in ASCII where the terminal has no Unicode", () => {
     const ascii = memoryUi({ isUnicode: false }).ui;
     const home = "/home/user";
