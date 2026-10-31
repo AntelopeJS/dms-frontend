@@ -7,8 +7,8 @@
     "anti-slop/no-unknown-parameters": 13,
     "anti-slop/no-unknown-returns": 2,
     "anti-slop/no-unsafe-dictionary-type": 10,
-    "anti-slop/require-safety-comment-for-type-assertion": 35,
-    "typescript/no-unsafe-argument": 16,
+    "anti-slop/require-safety-comment-for-type-assertion": 33,
+    "typescript/no-unsafe-argument": 14,
     "typescript/no-unsafe-assignment": 31,
     "typescript/no-unsafe-return": 8
   },
