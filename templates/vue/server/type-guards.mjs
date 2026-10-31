@@ -47,3 +47,25 @@ export function isFunction(value) {
 export function isNonNullObject(value) {
   return typeof value === "object" && value !== null;
 }
+
+/**
+ * Whether `value` can carry properties a caller reads: an object or a
+ * function, `null` excluded. Every property read through it is `unknown`.
+ *
+ * @param {unknown} value The value to test
+ * @returns {value is Record<string, unknown>} Whether `value` is an object or a function
+ */
+export function isObjectLike(value) {
+  return isNonNullObject(value) || isFunction(value);
+}
+
+/**
+ * Whether `value` is an object other than `null`, read by its properties:
+ * arrays are objects, functions are not.
+ *
+ * @param {unknown} value The value to test
+ * @returns {value is Record<string, unknown>} Whether `typeof value` is `"object"` and `value` is not `null`
+ */
+export function isRecord(value) {
+  return isNonNullObject(value);
+}

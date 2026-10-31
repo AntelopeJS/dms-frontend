@@ -8,12 +8,15 @@ import { pathToFileURL } from "node:url";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import type { App, getCurrentInstance } from "vue";
+import { isCallable } from "./helpers/guards";
 import { addressOf } from "./helpers/net";
 
 const RENDERS = 40;
 
 setFlagsFromString("--expose-gc");
-const collectGarbage = runInNewContext("gc") as () => void;
+const exposedGc: unknown = runInNewContext("gc");
+assert.ok(isCallable(exposedGc), "the gc function is exposed");
+const collectGarbage = exposedGc;
 
 interface LeakProbe {
   hooks: Set<() => ReturnType<typeof getCurrentInstance>>;

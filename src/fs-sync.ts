@@ -12,6 +12,7 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 import ignore from "ignore";
 import { layerCopyIgnore, PNPM_LIFECYCLE_SCRIPTS } from "./config";
+import { isPlainObject } from "./internal/plain-object";
 
 /**
  * Strip the Windows extended-length path prefix (`\\?\`). Node's `cpSync`
@@ -67,11 +68,13 @@ export function isBlocklistedCopyPath(src: string, srcPath: string): boolean {
 }
 
 export function sanitizedPackageContent(raw: string): string {
-  const pkg = JSON.parse(raw);
-  delete pkg.devDependencies;
-  if (pkg.scripts) {
-    for (const name of PNPM_LIFECYCLE_SCRIPTS) {
-      delete pkg.scripts[name];
+  const pkg: unknown = JSON.parse(raw);
+  if (isPlainObject(pkg)) {
+    delete pkg.devDependencies;
+    if (isPlainObject(pkg.scripts)) {
+      for (const name of PNPM_LIFECYCLE_SCRIPTS) {
+        delete pkg.scripts[name];
+      }
     }
   }
   return `${JSON.stringify(pkg, null, 2)}\n`;

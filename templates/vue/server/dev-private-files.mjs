@@ -28,6 +28,10 @@ export const DEV_FS_DENY = [
  * file, a module's server entry, or a file under a `server/` directory of a
  * module materialized under `root`. Compared without case, as a
  * case-insensitive file system would serve them.
+ *
+ * @param {string} file
+ * @param {string} root
+ * @returns {boolean}
  */
 export function isPrivateFile(file, root) {
   const name = (resolve(file).split(/[\\/]/).at(-1) ?? "").toLowerCase();
@@ -39,12 +43,22 @@ export function isPrivateFile(file, root) {
   );
 }
 
+/**
+ * @param {string} id
+ * @returns {string}
+ */
 function stripQuery(id) {
   const query = id.search(/[?#]/);
   return query === -1 ? id : id.slice(0, query);
 }
 
-/** The file a request URL names under `root`, `undefined` when it names none. */
+/**
+ * The file a request URL names under `root`, `undefined` when it names none.
+ *
+ * @param {string | undefined} url
+ * @param {string} root
+ * @returns {string | undefined}
+ */
 function requestedFile(url, root) {
   let pathname;
   try {
@@ -74,6 +88,8 @@ function requestedFile(url, root) {
  *
  * The middleware is registered directly, not returned: it runs before Vite's
  * middlewares.
+ *
+ * @returns {import("vite").Plugin}
  */
 export function denyPrivateFiles() {
   let root = process.cwd();

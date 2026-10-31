@@ -45,7 +45,7 @@ export function withoutMessage(
   key: string,
 ): Record<string, unknown> {
   const [head, ...rest] = key.split(".");
-  if (!(head in messages)) return messages;
+  if (!Object.prototype.hasOwnProperty.call(messages, head)) return messages;
   const { [head]: value, ...others } = messages;
   if (!rest.length) return others;
   if (!isRecord(value)) return messages;

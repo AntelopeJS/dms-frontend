@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { isString } from "../type-guards.mjs";
+import { isObjectLike, isString } from "../type-guards.mjs";
 
 /**
  * Absolute backend API paths only: no scheme, no authority, no query string,
@@ -18,6 +18,7 @@ const DECLARED_ENDPOINTS_FILE = new URL(
   import.meta.url,
 );
 
+/** @type {unknown[] | undefined} */
 let declaredEndpoints;
 
 /**
@@ -29,13 +30,15 @@ let declaredEndpoints;
  * workspace built from a DMS that predates the declaration simply has no file,
  * and the list falls back to whatever the environment names.
  *
- * @param file Generated file to read
- * @returns The declared paths, unfiltered
+ * @param {URL | string} [file] Generated file to read
+ * @returns {unknown[]} The declared paths, unfiltered
  */
 export function readDeclaredEstablishEndpoints(file = DECLARED_ENDPOINTS_FILE) {
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(readFileSync(file, "utf8"));
-    return Array.isArray(parsed?.endpoints) ? parsed.endpoints : [];
+    const endpoints = isObjectLike(parsed) ? parsed.endpoints : undefined;
+    return Array.isArray(endpoints) ? endpoints : [];
   } catch {
     return [];
   }
@@ -55,8 +58,8 @@ export function readDeclaredEstablishEndpoints(file = DECLARED_ENDPOINTS_FILE) {
  * (`DMS_AUTH_ESTABLISH_ENDPOINTS`). The module that owns sign-in reads them as
  * `event.app.authEstablishEndpoints`.
  *
- * @param declaration Comma-separated absolute backend paths from the environment
- * @param declared Paths declared by the backend's frontend modules
+ * @param {string} [declaration] Comma-separated absolute backend paths from the environment
+ * @param {unknown[]} [declared] Paths declared by the backend's frontend modules
  * @returns The well-formed backend API paths, without duplicates
  */
 export function allowedEstablishEndpoints(

@@ -8,7 +8,6 @@ import { useHead } from "@unhead/vue";
 import type { VueHeadClient } from "@unhead/vue/types";
 import type { IconifyIcon } from "@iconify/vue";
 import { parse } from "devalue";
-import type { FetchOptions } from "ofetch";
 import {
   type App,
   type Component,
@@ -27,6 +26,7 @@ import {
   type DmsLocaleLoader,
   type DmsPageProps,
   type DmsPayload,
+  type DmsServerFetch,
   type DmsUser,
   createDmsFrontendRuntime,
   dmsPageSuspenseProps,
@@ -92,11 +92,6 @@ export interface DmsConfiguredApp {
   runtime: ReturnType<typeof createDmsFrontendRuntime>;
 }
 
-export type DmsServerFetch = (
-  request: string,
-  options?: FetchOptions,
-) => Promise<unknown>;
-
 export const DMS_PAYLOAD_ID = "dms-payload";
 export const SSR_ASYNC_COMPONENTS_ID = "dms-ssr-async-components";
 const DEFAULT_LOCALE = "en";
@@ -141,9 +136,7 @@ drawLoadedIconsAtOnce();
 function createBrowserRuntime(
   serverFetch?: DmsServerFetch,
 ): DmsConfiguredApp["runtime"] {
-  const runtime = createDmsFrontendRuntime(
-    serverFetch as typeof import("ofetch").ofetch,
-  );
+  const runtime = createDmsFrontendRuntime(serverFetch);
   // Nothing when the server did not render the page: no hydration then.
   const payload = readServerRendered<DmsPayload | undefined>(
     DMS_PAYLOAD_ID,

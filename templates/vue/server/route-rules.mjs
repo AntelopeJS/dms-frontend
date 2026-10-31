@@ -1,11 +1,25 @@
 import { compilePathPattern } from "./path-patterns.mjs";
-import { isNonNullObject, isString } from "./type-guards.mjs";
+import { isNonNullObject, isObjectLike, isString } from "./type-guards.mjs";
+
+/** @typedef {import("../server-module.ts").DmsRouteRule} RouteRule */
+/** @typedef {RouteRule & { headers: Record<string, string> }} MergedRouteRule */
+/**
+ * @typedef {object} ResolvedRouteRule
+ * @property {string} id The declaring module
+ * @property {number} priority The declaring module's priority
+ * @property {import("./path-patterns.mjs").CompiledPathPattern} pattern
+ * @property {RouteRule} rule
+ */
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
-/** Whether a header value holds a control character other than a tab: a CR
- * or an LF would split the answer. */
+/**
+ * Whether a header value holds a control character other than a tab: a CR
+ * or an LF would split the answer.
+ *
+ * @param {string} value
+ */
 function hasControlCharacter(value) {
-  return [...value].some((character) => {
+  return Array.from(value).some((character) => {
     const code = character.charCodeAt(0);
     return (code < 0x20 && code !== 0x09) || code === 0x7f;
   });
@@ -21,10 +35,12 @@ const RESERVED_HEADERS = new Set([
   "x-inertia-version",
 ]);
 
+/** @param {unknown} value */
 function isSeconds(value) {
   return Number.isSafeInteger(value) && value >= 0;
 }
 
+/** @param {unknown} headers */
 function headersRejection(headers) {
   if (headers === undefined) return undefined;
   if (!isNonNullObject(headers) || Array.isArray(headers))
@@ -43,6 +59,7 @@ function headersRejection(headers) {
   return undefined;
 }
 
+/** @param {unknown} cache */
 function cacheRejection(cache) {
   if (cache === undefined || cache === false) return undefined;
   if (
@@ -62,6 +79,9 @@ function cacheRejection(cache) {
  * Route rules the modules declare in their `dms.server.ts`: how a page is
  * rendered and which headers its document and Inertia answers carry. They
  * change rendering and caching, never who may see a page.
+ *
+ * @param {string} pattern
+ * @param {unknown} rule
  */
 export function ruleRejection(pattern, rule) {
   if (!compilePathPattern(pattern))
@@ -77,10 +97,12 @@ export function ruleRejection(pattern, rule) {
  * specific pattern: a more specific rule overrides `ssr`, `cache` and each
  * header it sets.
  *
- * @param rules The resolved rules, `{ pattern, rule }` each
- * @param pathname The page's path
+ * @param {readonly ResolvedRouteRule[]} rules The resolved rules, `{ pattern, rule }` each
+ * @param {string} pathname The page's path
+ * @returns {MergedRouteRule}
  */
 export function routeRuleFor(rules, pathname) {
+  /** @type {MergedRouteRule} */
   const merged = { headers: {} };
   const matching = rules
     .filter(({ pattern }) => pattern.test(pathname))
@@ -95,6 +117,7 @@ export function routeRuleFor(rules, pathname) {
   return merged;
 }
 
+/** @param {{ maxAge: number, staleWhileRevalidate?: number }} cache */
 function publicCacheControl(cache) {
   const stale =
     cache.staleWhileRevalidate === undefined
@@ -109,10 +132,10 @@ function publicCacheControl(cache) {
  * content language: the answer then holds nobody's data, and `Vary: Cookie`
  * keeps a shared cache from serving it to a visitor who has some.
  *
- * @param rule What `routeRuleFor` returned
- * @param request The page request
- * @param route The page's route, as the backend described it
- * @param status The answer's status: only a 200 is cached
+ * @param {MergedRouteRule} rule What `routeRuleFor` returned
+ * @param {import("node:http").IncomingMessage} request The page request
+ * @param {unknown} route The page's route, as the backend described it: any JSON value, only `publicAccess` is read
+ * @param {number} status The answer's status: only a 200 is cached
  */
 export function ruleHeaders(rule, request, route, status) {
   const headers = { ...rule.headers };
@@ -122,7 +145,8 @@ export function ruleHeaders(rule, request, route, status) {
     request.method === "GET" &&
     !request.headers.cookie &&
     !request.headers["x-content-language"] &&
-    route?.publicAccess === true
+    isObjectLike(route) &&
+    route.publicAccess === true
   ) {
     headers["cache-control"] = publicCacheControl(rule.cache);
     headers.vary = "X-Inertia, Cookie";

@@ -3,6 +3,13 @@ import { isString } from "./type-guards.mjs";
 const SEGMENT = /^[A-Za-z0-9._~-]+$/;
 
 /**
+ * @typedef {object} CompiledPathPattern
+ * @property {string} pattern The pattern as declared
+ * @property {number} specificity Orders patterns from the least to the most specific
+ * @property {(pathname: string) => boolean} test Whether the pattern covers `pathname`
+ */
+
+/**
  * A pattern made usable, or `undefined` when it is malformed.
  *
  * `specificity` orders matching patterns from the least to the most specific:
@@ -11,6 +18,9 @@ const SEGMENT = /^[A-Za-z0-9._~-]+$/;
  * Page path patterns, as the modules' `dms.server.ts` name them: `/x` is the
  * page itself, `/x/*` one segment below it, `/x/**` the page and everything
  * below it. Nothing else: no prefix match inside a segment, no query string.
+ *
+ * @param {unknown} pattern
+ * @returns {CompiledPathPattern | undefined}
  */
 export function compilePathPattern(pattern) {
   if (!isString(pattern) || !pattern.startsWith("/")) return undefined;

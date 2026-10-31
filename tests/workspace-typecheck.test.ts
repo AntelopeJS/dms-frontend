@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { writeAppConfigs } from "../src/common";
+import { isNumber, isObjectLike, isText } from "../src/internal/guards";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templateTsconfig = join(repoRoot, "templates", "vue", "tsconfig.json");
@@ -106,8 +107,16 @@ function typecheck(workspace: string) {
       { cwd: workspace, encoding: "utf8" },
     );
     return { code: 0, output };
-  } catch (err: any) {
-    return { code: err.status ?? 1, output: `${err.stdout ?? ""}` };
+  } catch (err: unknown) {
+    const code =
+      isObjectLike(err) && "status" in err && isNumber(err.status)
+        ? err.status
+        : 1;
+    const output =
+      isObjectLike(err) && "stdout" in err && isText(err.stdout)
+        ? err.stdout
+        : "";
+    return { code, output };
   }
 }
 
@@ -201,7 +210,7 @@ describe("generated workspace typecheck", () => {
 
   it("covers Vue single-file components too", () => {
     const workspace = generatedWorkspace({ "probe.ts": "export {};\n" });
-    const config = JSON.parse(
+    const config: unknown = JSON.parse(
       execFileSync(
         process.execPath,
         [tsc, "--showConfig", "-p", "tsconfig.json"],
@@ -212,6 +221,14 @@ describe("generated workspace typecheck", () => {
       ),
     );
 
+    assert.ok(
+      isObjectLike(config) &&
+        "include" in config &&
+        "exclude" in config &&
+        Array.isArray(config.exclude) &&
+        config.exclude.every(isText),
+      "the showConfig output lists include and exclude",
+    );
     assert.deepEqual(config.include, [
       "frontend-modules/**/*.ts",
       "frontend-modules/**/*.vue",

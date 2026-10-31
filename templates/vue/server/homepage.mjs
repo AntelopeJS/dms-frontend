@@ -10,6 +10,10 @@ const REGISTRY = existsSync(REGISTRY_PATH)
   ? JSON.parse(readFileSync(REGISTRY_PATH, "utf8"))
   : { modules: [] };
 
+/**
+ * @param {Readonly<Record<string, unknown>> | undefined} options
+ * @returns {string | undefined}
+ */
 function findHomepage(options) {
   if (!isNonNullObject(options)) return undefined;
   if (isString(options.homepage)) return options.homepage;

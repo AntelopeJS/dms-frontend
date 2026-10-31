@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { responseOf } from "../helpers/http-doubles";
 import { addressOf } from "../helpers/net";
 import "./dms-backend-proxies.mts";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -12,35 +13,9 @@ import {
   type JsonObject,
 } from "../helpers/json";
 
-export interface ServerTemplate {
-  assetVersion: () => string;
-  createInertiaPage: (url: string, props: unknown) => Record<string, unknown>;
-  inertiaAppHtml: (page: unknown) => string;
-  inertiaHeaders: () => Record<string, string>;
-  htmlHeaders: () => Record<string, string>;
-  handleRequestSafely: (request: unknown, response: unknown) => Promise<void>;
-  redirectFrontendVisit: (
-    request: unknown,
-    response: unknown,
-    location: string,
-  ) => void;
-  renderHtml: (
-    page: unknown,
-    requestUrl: string,
-  ) => Promise<{ html: string; status: number }>;
-}
+export const server = import("../../templates/vue/server.mjs");
 
-export const server = import(
-  join(process.cwd(), "templates", "vue", "server.mjs")
-) as Promise<ServerTemplate>;
-
-export interface SessionTemplate {
-  writeSession: (response: unknown, session: Record<string, unknown>) => void;
-}
-
-export const sessions = import(
-  join(process.cwd(), "templates", "vue", "server", "auth", "session.mjs")
-) as Promise<SessionTemplate>;
+export const sessions = import("../../templates/vue/server/auth/session.mjs");
 
 /** A prop the server sent once, and when the browser may stop holding it. */
 export interface OnceProp {
@@ -105,34 +80,23 @@ export async function writeSsrRendererFixture(): Promise<void> {
  * it, for the backend `DMS_API_BASE_URL` names.
  */
 export async function sessionCookie(
-  session: Record<string, unknown>,
+  session: Parameters<
+    typeof import("../../templates/vue/server/auth/session.mjs").writeSession
+  >[1],
 ): Promise<string> {
   process.env.DMS_SESSION_SECRET ??=
     "test-secret-with-at-least-thirty-two-characters";
-  const sessionRuntime = await sessions;
-  const headers = new Map<string, string | string[]>();
-  sessionRuntime.writeSession(
-    {
-      getHeader: (name: string) => headers.get(name),
-      setHeader: (name: string, value: string | string[]) =>
-        headers.set(name, value),
-    },
-    session,
-  );
-  return [headers.get("set-cookie") ?? []]
+  const { writeSession } = await sessions;
+  const response = responseOf();
+  writeSession(response, session);
+  return [response.getHeaders()["set-cookie"] ?? []]
     .flat()
     .map((value) => value.split(";")[0])
     .join("; ");
 }
 
-export interface PagePropsTemplate {
-  sharedOnceKey: (session?: Record<string, unknown>) => string;
-  SHARED_PROP_TTL_MS: number;
-}
-
-export const pagePropsModule = import(
-  join(process.cwd(), "templates", "vue", "server", "page-props.mjs")
-) as Promise<PagePropsTemplate>;
+export const pagePropsModule =
+  import("../../templates/vue/server/page-props.mjs");
 
 export const PAGE = {
   route: { fullSlug: "/articles" },
@@ -194,6 +158,7 @@ export function accountCookie(accountId: string): Promise<string> {
     accessToken: "access",
     accountId,
     activeTenantId: "tenant-1",
+    persistent: false,
     user: { id: accountId },
   });
 }

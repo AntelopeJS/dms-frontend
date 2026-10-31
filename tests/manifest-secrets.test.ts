@@ -392,7 +392,7 @@ describe("ajs dms start", () => {
         "DMS_PRIVATE_OPTIONS",
         PUBLIC_KEY_VARIABLE,
       ])
-        if (!(name in env)) delete environment[name];
+        if (!Object.hasOwn(env, name)) delete environment[name];
       const { stdout, stderr } = await promisify(execFile)(
         process.execPath,
         [

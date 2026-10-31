@@ -23,7 +23,30 @@ import {
   ENTRY_WEIGHT_FILE,
   recordEntryWeight,
 } from "../templates/vue/entry-weight.mjs";
+import { isObjectLike } from "../src/internal/guards";
 import { readText, readBytes, listNames } from "./helpers/files";
+import { isNumber, isText } from "./helpers/guards";
+
+interface RecordedWeight {
+  files: string[];
+  bytes: number;
+  owners: Record<string, number>;
+}
+
+function isRecordedWeight(value: unknown): value is RecordedWeight {
+  return (
+    isObjectLike(value) &&
+    "files" in value &&
+    Array.isArray(value.files) &&
+    value.files.every(isText) &&
+    "bytes" in value &&
+    isNumber(value.bytes) &&
+    "owners" in value &&
+    isObjectLike(value.owners) &&
+    !Array.isArray(value.owners) &&
+    Object.values(value.owners).every(isNumber)
+  );
+}
 
 const roots: string[] = [];
 after(() => {
@@ -97,12 +120,13 @@ async function buildFixture(): Promise<string> {
 describe("the client entry's weight by module", () => {
   it("records, from the client build, what each module's sources add to the entry", async () => {
     const root = await buildFixture();
-    const recorded = JSON.parse(
+    const recorded: unknown = JSON.parse(
       readText(join(root, "dist", "client", ENTRY_WEIGHT_FILE)),
     );
+    assert.ok(isRecordedWeight(recorded), "the build recorded the entry");
     const entrySize = recorded.files
-      .map((file: string) => readBytes(join(root, "dist", "client", file)))
-      .reduce((sum: number, code: Buffer) => sum + code.length, 0);
+      .map((file) => readBytes(join(root, "dist", "client", file)))
+      .reduce((sum, code) => sum + code.length, 0);
     assert.equal(recorded.bytes, entrySize);
     assert.ok(recorded.owners["@acme/heavy"] > 25_000);
     assert.ok((recorded.owners["@acme/light"] ?? 0) < 1_000);
@@ -119,10 +143,10 @@ describe("the client entry's weight by module", () => {
     assert.ok(weight);
     assert.equal(weight.shares[0]?.owner, "@acme/heavy");
     const brotli = recorded.files
-      .map((file: string) =>
+      .map((file) =>
         brotliCompressSync(readBytes(join(root, "dist", "client", file))),
       )
-      .reduce((sum: number, code: Buffer) => sum + code.length, 0);
+      .reduce((sum, code) => sum + code.length, 0);
     assert.ok(Math.abs(weight.brotli - brotli) <= 16, "Brotli of the entry");
   });
 

@@ -34,14 +34,15 @@ async function render(
   setUpPlugins: (app: App) => void = () => {},
 ): Promise<string> {
   const runtime = createDmsFrontendRuntime(undefined, {}, true);
-  const result = await createInertiaApp({
+  let body: string | undefined;
+  await createInertiaApp({
     page: {
       component: "Page",
       props: { ...pageProps(url), ...props },
       url,
       version: "",
     },
-    render: renderToString,
+    render: async (app: App) => (body = await renderToString(app)),
     resolve: () => page,
     setup({ App, props: inertiaProps }) {
       const app = createSSRApp({ render: () => h(App, inertiaProps) });
@@ -51,8 +52,8 @@ async function render(
       return app;
     },
   });
-  assert.ok(result);
-  return result.body;
+  assert.ok(body !== undefined, "Inertia rendered the page");
+  return body;
 }
 
 describe("Route of the page", () => {

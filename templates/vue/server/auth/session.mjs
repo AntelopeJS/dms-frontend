@@ -10,6 +10,21 @@ const REQUEST_SESSION = Symbol("dms-request-session");
 const MAX_AGE = 60 * 60 * 24 * 30;
 
 /**
+ * The session a module writes: the `DmsSession` of `#dms/server`.
+ *
+ * @typedef {import("../../server-module.ts").DmsSession} Session
+ */
+
+/**
+ * A request, and the session `setRequestSession` set on it for the rest of the
+ * request.
+ *
+ * @typedef {import("node:http").IncomingMessage & {
+ *   [REQUEST_SESSION]?: Session | undefined
+ * }} SessionRequest
+ */
+
+/**
  * A suffix that keeps this instance's cookies apart from another's on the same
  * host. Browsers scope cookies by hostname, not port: without it, two DMS
  * frontends on localhost:3000 and localhost:3001 would overwrite each other's
@@ -31,7 +46,11 @@ function cookieScope() {
   return createHash("sha256").update(canonical).digest("hex").slice(0, 12);
 }
 
-/** The name `name` takes in this instance's cookie jar. */
+/**
+ * The name `name` takes in this instance's cookie jar.
+ *
+ * @param {string} name
+ */
 export function scopedCookieName(name) {
   return `${name}_${cookieScope()}`;
 }
@@ -46,6 +65,10 @@ function key() {
   return createHash("sha256").update(secret).digest();
 }
 
+/**
+ * @param {unknown} value A session, or the value of a module's sealed cookie
+ * @returns {string}
+ */
 function encode(value) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key(), iv);
@@ -58,6 +81,11 @@ function encode(value) {
   );
 }
 
+/**
+ * @param {string} value The cookie's value
+ * @returns {any} What was sealed, as the JSON it was written from, `undefined`
+ *   when it does not open
+ */
 function decode(value) {
   try {
     const payload = Buffer.from(value, "base64url");
@@ -75,6 +103,11 @@ function decode(value) {
   }
 }
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {string} name
+ * @returns {string | undefined}
+ */
 function cookieValue(request, name) {
   const scoped = scopedCookieName(name);
   const cookies = request.headers.cookie?.split(";") ?? [];
@@ -86,6 +119,9 @@ function cookieValue(request, name) {
 /**
  * Cookie attributes. Without a `maxAge` the cookie lasts as long as the
  * browser session: it is gone once the browser is closed.
+ *
+ * @param {number | undefined} maxAge
+ * @param {string} [path]
  */
 function attributes(maxAge, path = "/") {
   const secure = process.env.DMS_COOKIE_SECURE !== "false" ? "; Secure" : "";
@@ -93,11 +129,21 @@ function attributes(maxAge, path = "/") {
   return `Path=${path}; HttpOnly; SameSite=Lax${lifetime}${secure}`;
 }
 
-/** A session outlives the browser only when it is written `persistent: true`. */
+/**
+ * A session outlives the browser only when it is written `persistent: true`.
+ *
+ * @param {Session} session
+ */
 function lifetime(session) {
   return session.persistent === true ? MAX_AGE : undefined;
 }
 
+/**
+ * @param {import("node:http").ServerResponse} response
+ * @param {string} name
+ * @param {string} value
+ * @param {string} cookieAttributes
+ */
 function appendCookie(response, name, value, cookieAttributes) {
   const cookie = `${scopedCookieName(name)}=${value}; ${cookieAttributes}`;
   const current = response.getHeader("set-cookie");
@@ -109,16 +155,29 @@ function appendCookie(response, name, value, cookieAttributes) {
   );
 }
 
+/**
+ * @param {SessionRequest} request
+ * @returns {Session | undefined} The session set for the request, else the one
+ *   the cookie seals, `undefined` when there is none
+ */
 export function readSession(request) {
   if (REQUEST_SESSION in request) return request[REQUEST_SESSION];
   const value = cookieValue(request, SESSION_COOKIE);
   return value ? decode(value) : undefined;
 }
 
+/**
+ * @param {SessionRequest} request
+ * @param {Session | undefined} session
+ */
 export function setRequestSession(request, session) {
   request[REQUEST_SESSION] = session;
 }
 
+/**
+ * @param {import("node:http").ServerResponse} response
+ * @param {Session} session
+ */
 export function writeSession(response, session) {
   appendCookie(
     response,
@@ -128,19 +187,38 @@ export function writeSession(response, session) {
   );
 }
 
+/** @param {import("node:http").ServerResponse} response */
 export function clearSession(response) {
   appendCookie(response, SESSION_COOKIE, "", attributes(0));
 }
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {string} name
+ * @returns {any} What was sealed, as the JSON it was written from, `undefined`
+ *   when there is none or it does not open
+ */
 export function readSealedCookie(request, name) {
   const value = cookieValue(request, name);
   return value ? decode(value) : undefined;
 }
 
+/**
+ * @param {import("node:http").ServerResponse} response
+ * @param {string} name
+ * @param {unknown} value
+ * @param {number | undefined} maxAge
+ * @param {string} [path]
+ */
 export function writeSealedCookie(response, name, value, maxAge, path = "/") {
   appendCookie(response, name, encode(value), attributes(maxAge, path));
 }
 
+/**
+ * @param {import("node:http").ServerResponse} response
+ * @param {string} name
+ * @param {string} [path]
+ */
 export function clearSealedCookie(response, name, path = "/") {
   appendCookie(response, name, "", attributes(0, path));
 }

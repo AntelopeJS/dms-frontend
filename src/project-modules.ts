@@ -203,9 +203,11 @@ function configVarLookup(
   const lookup: ConfigVarLookup = (id, name) => {
     if (!published.has(id)) {
       published.set(id, undefined);
-      const module = modules[id];
+      const module = Object.prototype.hasOwnProperty.call(modules, id)
+        ? modules[id]
+        : undefined;
       const provider = module?.folder && configVarsProvider(id, module.folder);
-      if (provider)
+      if (module && provider)
         published.set(
           id,
           computeConfigVars(
@@ -231,10 +233,13 @@ function substituteConfigVars(
   if (isText(value)) {
     const pure = value.match(PURE_CONFIG_VAR);
     if (pure) return lookup(pure[1], pure[2]);
-    return value.replace(CONFIG_VAR_PATTERN, (token, module, name) => {
-      const resolved = lookup(module, name);
-      return resolved === undefined ? token : String(resolved);
-    });
+    return value.replace(
+      CONFIG_VAR_PATTERN,
+      (token: string, module: string, name: string) => {
+        const resolved = lookup(module, name);
+        return resolved === undefined ? token : String(resolved);
+      },
+    );
   }
   if (Array.isArray(value))
     return value.map((item) => substituteConfigVars(item, lookup));

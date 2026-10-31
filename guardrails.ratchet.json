@@ -1,17 +1,16 @@
 {
   "pack": "0.2.17",
   "rules": {
-    "antelopejs/no-inherited-key-lookup": 11,
-    "anti-slop/no-known-value-widening": 3,
+    "antelopejs/no-inherited-key-lookup": 2,
+    "anti-slop/no-known-value-widening": 2,
     "anti-slop/no-shape-in-symbol-names": 2,
-    "anti-slop/no-unknown-parameters": 32,
-    "anti-slop/no-unknown-returns": 5,
-    "anti-slop/no-unsafe-dictionary-type": 21,
-    "anti-slop/require-safety-comment-for-type-assertion": 54,
-    "typescript/no-unsafe-argument": 200,
-    "typescript/no-unsafe-assignment": 406,
-    "typescript/no-unsafe-return": 163,
-    "typescript/use-unknown-in-catch-callback-variable": 5
+    "anti-slop/no-unknown-parameters": 13,
+    "anti-slop/no-unknown-returns": 2,
+    "anti-slop/no-unsafe-dictionary-type": 10,
+    "anti-slop/require-safety-comment-for-type-assertion": 33,
+    "typescript/no-unsafe-argument": 14,
+    "typescript/no-unsafe-assignment": 32,
+    "typescript/no-unsafe-return": 11
   },
   "oversizeFiles": {}
 }
