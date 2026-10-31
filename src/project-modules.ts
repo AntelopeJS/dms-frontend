@@ -184,9 +184,11 @@ function computeConfigVars(
     );
   }
   return Object.fromEntries(
-    provider.declared
-      .filter((name) => name in computed)
-      .map((name) => [name, computed[name]]),
+    provider.declared.flatMap((name) =>
+      Object.prototype.hasOwnProperty.call(computed, name)
+        ? [[name, computed[name]]]
+        : [],
+    ),
   );
 }
 
@@ -217,7 +219,10 @@ function configVarLookup(
           ),
         );
     }
-    return published.get(id)?.[name];
+    const variables = published.get(id);
+    return variables && Object.prototype.hasOwnProperty.call(variables, name)
+      ? variables[name]
+      : undefined;
   };
   return lookup;
 }
