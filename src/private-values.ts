@@ -60,11 +60,11 @@ function filled(
  * left out, as it would be in production.
  */
 export function filledOptions(
-  shape: FrontendModuleOptions,
+  declared: FrontendModuleOptions,
   values: FrontendModuleOptions | undefined,
 ): FrontendModuleOptions {
   return Object.fromEntries(
-    Object.entries(shape).map(([key, value]) => [
+    Object.entries(declared).map(([key, value]) => [
       key,
       filled(value, values?.[key]),
     ]),
