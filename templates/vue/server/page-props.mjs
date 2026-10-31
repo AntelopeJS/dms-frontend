@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readSession } from "./auth/session.mjs";
 import { BackendResponseError } from "./backend-response.mjs";
 import { heldOnceProps, requestedProps } from "./inertia.mjs";
+import { isObjectLike } from "./type-guards.mjs";
 
 export const SHARED_PROP = "shared";
 /**
@@ -16,9 +17,57 @@ const SITE_LAYOUT_PATH = "/dms/sitelayout";
 const NOT_FOUND = 404;
 
 /**
+ * The props of a page, each only when the request asks for it.
+ *
+ * @typedef {{
+ *   path?: string,
+ *   user?: unknown,
+ *   session?: unknown,
+ *   page?: unknown,
+ *   shared?: unknown
+ * }} PageProps
+ */
+
+/**
+ * What a page request reads of the backend: its JSON for a path (any value;
+ * `loadPage` reads the page answer as an object, as the backend sends it), and
+ * whether the frontend itself serves a path.
+ *
+ * @typedef {{
+ *   fetchJson: (path: string) => Promise<any>,
+ *   isFrontendPage: (pathname: string) => Promise<boolean>
+ * }} PageBackend
+ */
+
+/**
+ * What a page request reads of the auth hooks: where sign-in is, and what a
+ * session shows a page.
+ *
+ * @typedef {{
+ *   signInPath: string,
+ *   view: (session: unknown) => { user?: unknown, session?: unknown }
+ * }} PageAuth
+ */
+
+/**
+ * The route the backend described for the page of `props`, as the backend
+ * sent it: any JSON value, `undefined` when the page has none.
+ *
+ * @param {PageProps} props
+ * @returns {unknown}
+ */
+export function pageRoute(props) {
+  return isObjectLike(props.page) ? props.page.route : undefined;
+}
+
+/**
  * The once-prop key of the site layout: one per account and workspace. A
  * browser holding the layout of another account or workspace, after a sign-in,
  * a sign-out or a switch, holds another key, so it is sent the right one.
+ *
+ * @param {unknown} session The sealed session: any JSON value, since only its
+ *   `accountId` and `activeTenantId` are read, as empty when it holds none
+ * @returns {string}
  */
 export function sharedOnceKey(session) {
   const identity = `${session?.accountId ?? ""}\n${session?.activeTenantId ?? ""}`;
@@ -30,6 +79,10 @@ export function sharedOnceKey(session) {
  * Whether the browser holds this session's layout and no other: a browser
  * that holds another session's key too (a switch back and forth without a
  * full visit) may show that one under `shared`, so it is sent this one.
+ *
+ * @param {Set<string>} held
+ * @param {string} sharedKey
+ * @returns {boolean}
  */
 function holdsOnlyThisLayout(held, sharedKey) {
   if (!held.has(sharedKey)) return false;
@@ -50,9 +103,14 @@ const PAGE_REQUEST_PARAMETERS = new Set(["path", SHARED_PROP]);
  * on), so the layout is resolved for the query the browser shows and the
  * browser does not ask it again. One value per name, the last, as the
  * browser's own page layout request sends it.
+ *
+ * @param {URL} url
+ * @param {boolean} withShared
+ * @returns {string}
  */
 function pagePath(url, withShared) {
   const query = new URLSearchParams({ path: url.pathname });
+  /** @type {Map<string, string>} */
   const pageQuery = new Map();
   for (const [name, value] of url.searchParams) {
     if (!PAGE_REQUEST_PARAMETERS.has(name)) pageQuery.set(name, value);
@@ -62,7 +120,12 @@ function pagePath(url, withShared) {
   return `/dms/page?${query}`;
 }
 
-/** A page only the frontend has: a custom page, with no backend data. */
+/**
+ * A page only the frontend has: a custom page, with no backend data.
+ *
+ * @param {string} pathname
+ * @param {string} signInPath
+ */
 function frontendOnlyPage(pathname, signInPath) {
   return {
     componentName: pathname,
@@ -76,6 +139,13 @@ function frontendOnlyPage(pathname, signInPath) {
   };
 }
 
+/**
+ * @param {URL} url
+ * @param {boolean} withShared
+ * @param {PageBackend} backend
+ * @param {string} signInPath
+ * @returns {Promise<{ page: PageProps["page"], shared: unknown }>}
+ */
 async function loadPage(
   url,
   withShared,
@@ -101,6 +171,12 @@ async function loadPage(
  * The props of the same page at another query of its path (`url`): the page
  * is read again, since its layout reads the query, and the rest is kept,
  * the site layout included.
+ *
+ * @param {PageProps} props
+ * @param {URL} url
+ * @param {PageBackend} backend
+ * @param {PageAuth} auth
+ * @returns {Promise<PageProps>}
  */
 export async function propsForQuery(props, url, backend, auth) {
   const { page } = await loadPage(url, false, backend, auth.signInPath);
@@ -125,6 +201,14 @@ export async function propsForQuery(props, url, backend, auth) {
  * The shared layout is declared only when the browser ends up with this
  * session's layout, sent now or already held: declaring it otherwise would let
  * a layout of another session pass for this one.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {PageBackend} backend
+ * @param {PageAuth} auth
+ * @returns {Promise<{
+ *   props: PageProps,
+ *   onceProps: import("./inertia.mjs").OnceProps | undefined
+ * }>}
  */
 export async function loadPageProps(request, backend, auth) {
   const url = new URL(request.url, "http://frontend.local");
@@ -135,10 +219,12 @@ export async function loadPageProps(request, backend, auth) {
   const sharedKey = sharedOnceKey(sealed);
   const holdsShared = holdsOnlyThisLayout(heldOnceProps(request), sharedKey);
   const withShared = (partial && wants(SHARED_PROP)) || !holdsShared;
+  /** @type {PageProps} */
   const props = {};
   if (wants("path")) props.path = pathname;
   if (wants("user") && (user || partial)) props.user = user ?? null;
   if (wants("session") && (session || partial)) props.session = session ?? null;
+  /** @type {unknown} */
   let shared;
   if (wants("page")) {
     const loaded = await loadPage(url, withShared, backend, auth.signInPath);

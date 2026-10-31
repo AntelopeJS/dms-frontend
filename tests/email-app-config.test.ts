@@ -9,6 +9,7 @@ import {
   type ResolvedLayer,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { isText } from "./helpers/guards";
 import { copyEmailRendererFiles } from "./helpers/templates";
 
 function writeFile(path: string, content: string): void {
@@ -77,10 +78,9 @@ const branding = useDmsAppConfig().branding as Record<string, any>;
     const { renderEmail } = await import(
       pathToFileURL(join(workspace, "dist", "server", "email-renderer.js")).href
     );
-    assert.match(
-      await renderEmail("Branding", {}),
-      /<p>DMS mail\|\/project-email\.png\|\/dms\.svg<\/p>/,
-    );
+    const html: unknown = await renderEmail("Branding", {});
+    assert.ok(isText(html), "the email renders to text");
+    assert.match(html, /<p>DMS mail\|\/project-email\.png\|\/dms\.svg<\/p>/);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }

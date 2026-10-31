@@ -5,31 +5,58 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runInNewContext } from "node:vm";
 import { it } from "node:test";
-import {
-  build,
-  createServer,
-  normalizePath,
-  type DepOptimizationOptions,
-} from "vite";
+import { build, createServer, normalizePath } from "vite";
 import { readText } from "./helpers/files";
+import { isText } from "./helpers/guards";
+import { isFlag, isObjectLike } from "../src/internal/guards";
 
 function templateSource(): string {
   return readText(resolve("templates/vue/vite.config.ts"));
 }
 
+interface TemplateOptimization {
+  include?: string[];
+  entries?: string[];
+  noDiscovery?: boolean;
+}
+
+function isTextList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isText);
+}
+
+function isTemplateOptimization(value: unknown): value is TemplateOptimization {
+  return (
+    isObjectLike(value) &&
+    (!("include" in value) ||
+      value.include === undefined ||
+      isTextList(value.include)) &&
+    (!("entries" in value) ||
+      value.entries === undefined ||
+      isTextList(value.entries)) &&
+    (!("noDiscovery" in value) ||
+      value.noDiscovery === undefined ||
+      isFlag(value.noDiscovery))
+  );
+}
+
 function templateOptimization(
   optimizerEntries: string[] = [],
-): DepOptimizationOptions {
+): TemplateOptimization {
   const template = templateSource();
   const options = template.match(/optimizeDeps: (\{[^}]+\})/);
   assert.ok(
     options,
     "the generated template configures the dependency optimizer",
   );
-  return runInNewContext(`(${options[1]})`, {
+  const evaluated: unknown = runInNewContext(`(${options[1]})`, {
     optimizedDependencies: [],
     optimizerEntries,
-  }) as DepOptimizationOptions;
+  });
+  assert.ok(
+    isTemplateOptimization(evaluated),
+    "the template configures what it pre-bundles and where the crawl starts",
+  );
+  return evaluated;
 }
 
 function writeFixture(root: string, path: string, content: string): void {
@@ -113,8 +140,12 @@ it("optimizes a module's CommonJS dependency discovered after startup", async ()
         lib: { entry: join(root, pagePath), formats: ["es"], fileName: "page" },
       },
     });
-    const builtModule = await import(
+    const builtModule: unknown = await import(
       pathToFileURL(join(root, "dist/page.js")).href
+    );
+    assert.ok(
+      isObjectLike(builtModule) && "answer" in builtModule,
+      "the built page exports answer",
     );
     assert.equal(builtModule.answer, 42);
   } finally {
@@ -188,7 +219,11 @@ it("names no dependency the DMS dropped for SortableJS", () => {
     /const optimizedDependencies = (\[[^\]]*\])/,
   );
   assert.ok(list, "the template lists the dependencies it pre-bundles");
-  const names = runInNewContext(list[1]) as string[];
+  const names: unknown = runInNewContext(list[1]);
+  assert.ok(
+    Array.isArray(names) && names.every(isText),
+    "the template lists names",
+  );
   assert.ok(names.includes("vue"));
   assert.ok(!names.includes("vuedraggable"));
 });

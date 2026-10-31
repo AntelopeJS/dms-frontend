@@ -75,13 +75,13 @@ describe("public endpoints through the proxy", () => {
       { path: "/api/hooks/*", headers: ["x-hook-secret"] },
     ]);
     const jwt = `x.${Buffer.from('{"tenantId":"tenant-1"}').toString("base64url")}.x`;
-    const seen: Record<string, string | undefined>[] = [];
+    const seen: Record<string, string | string[] | undefined>[] = [];
     const backend = createServer((request, response) => {
       seen.push({
         url: request.url,
         authorization: request.headers.authorization,
-        secret: request.headers["x-hook-secret"] as string | undefined,
-        other: request.headers["x-other"] as string | undefined,
+        secret: request.headers["x-hook-secret"],
+        other: request.headers["x-other"],
         ifMatch: request.headers["if-match"],
       });
       response.writeHead(202, { "content-type": "application/json" });
@@ -103,6 +103,7 @@ describe("public endpoints through the proxy", () => {
       const cookie = await sessionCookie({
         accessToken: jwt,
         refreshToken: "refresh-1",
+        persistent: false,
         user: { id: "user-1" },
       });
 

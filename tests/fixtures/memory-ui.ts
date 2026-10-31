@@ -44,10 +44,7 @@ export function memoryUi(options: MemoryUiOptions = {}): MemoryUi {
 }
 
 /** What the error boundary prints for a `CliError`, without colors. */
-export function problemText(error: unknown): string {
-  if (!(error instanceof CliError)) {
-    throw new Error(`expected a CliError, got ${String(error)}`);
-  }
+export function problemText(error: CliError): string {
   const output = memoryUi();
   output.ui.problem(error.problem);
   return output.stderr();

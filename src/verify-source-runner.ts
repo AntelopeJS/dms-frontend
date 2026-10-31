@@ -16,6 +16,7 @@ import {
   getProcessUi,
 } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
+import { isText } from "./internal/guards";
 import {
   assertLayersSupportRenderer,
   CancelledError,
@@ -179,9 +180,9 @@ async function checkServerModulesBundle(workspace: string): Promise<string> {
     "The server modules bundle loads application code",
     "A dms.server.ts imports server code only, never .vue files or dms.frontend.ts.",
   );
-  const { serverModules }: { serverModules: unknown } = await import(
-    join(root, "server-modules.generated.js")
-  );
+  const serverModules: unknown = (
+    await import(join(root, "server-modules.generated.js"))
+  ).serverModules;
   ensure(
     Array.isArray(serverModules),
     "The server modules bundle exports none",
@@ -316,9 +317,9 @@ async function checkEmailContracts(workspace: string): Promise<string> {
   );
   const { renderEmail } = await import(join(emailRoot, "email-renderer.js"));
   for (const emailCase of EMAIL_CASES) {
-    const html: string = await renderEmail(emailCase.name, emailCase.props);
+    const html: unknown = await renderEmail(emailCase.name, emailCase.props);
     ensure(
-      html.startsWith("<!doctype html>"),
+      isText(html) && html.startsWith("<!doctype html>"),
       `${emailCase.name} does not render a full HTML document`,
     );
     if (emailCase.name === "EmailLayout") checkLayoutEmail(html);
@@ -338,21 +339,6 @@ async function checkEmailContracts(workspace: string): Promise<string> {
 
 const LINE_BREAK = /\r?\n/;
 const STACK_TRACE_HINT = "Run with --verbose for the full trace.";
-
-/**
- * A failure as the result carries it: a check's own problem, or the first
- * line of an unexpected error, with its stack trace in a verbose run.
- */
-function describeError(error: unknown, isVerbose: boolean): CliProblem {
-  if (error instanceof CliError) return error.problem;
-  if (!(error instanceof Error)) return { title: String(error) };
-  const [title] = error.message.split(LINE_BREAK);
-  const stack = (error.stack ?? "").split(LINE_BREAK);
-  return {
-    title: title || error.name,
-    details: isVerbose ? stack : [STACK_TRACE_HINT],
-  };
-}
 
 /**
  * The renderer range is asserted before the first task, so its notice does
@@ -430,7 +416,20 @@ async function main(): Promise<void> {
       process.exitCode = error.exitCode;
       return;
     }
-    result = { ok: false, problem: describeError(error, isVerboseRun()) };
+    let problem: CliProblem;
+    if (error instanceof CliError) {
+      problem = error.problem;
+    } else if (error instanceof Error) {
+      const [title] = error.message.split(LINE_BREAK);
+      const stack = (error.stack ?? "").split(LINE_BREAK);
+      problem = {
+        title: title || error.name,
+        details: isVerboseRun() ? stack : [STACK_TRACE_HINT],
+      };
+    } else {
+      problem = { title: String(error) };
+    }
+    result = { ok: false, problem };
   }
   if (process.send) {
     process.exitCode = result.ok ? 0 : 1;

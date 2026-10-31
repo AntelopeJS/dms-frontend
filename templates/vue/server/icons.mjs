@@ -24,14 +24,39 @@ const COLLECTION_PACKAGES = join("node_modules", "@iconify-json");
 const ICON_CACHE_CONTROL =
   "public, max-age=604800, stale-while-revalidate=86400";
 const ERROR_CACHE_CONTROL = "no-store";
+
+/**
+ * An Iconify icon collection: the JSON file of an `@iconify-json/<prefix>`
+ * package.
+ *
+ * @typedef {Parameters<typeof import("@iconify/utils").getIcons>[0]} IconCollection
+ */
+
+/**
+ * The answer to an icon query, to send.
+ *
+ * @typedef {{
+ *   status: number,
+ *   headers: Record<string, string>,
+ *   body: string
+ * }} IconAnswer
+ */
+
+/** @type {Map<string, Promise<IconCollection | undefined>>} */
 const collections = new Map();
 /**
  * Kept by renderer module: a development server evaluates a new one after a
  * layer changes, and each must find the collections loaded before it
  * renders.
+ *
+ * @type {WeakMap<typeof import("../ssr-renderer.ts"), Promise<void>>}
  */
 const rendererCollections = new WeakMap();
 
+/**
+ * @param {string} prefix
+ * @returns {string[]}
+ */
 function collectionSpecifiers(prefix) {
   return [
     `@iconify-json/${prefix}/icons.json`,
@@ -42,6 +67,10 @@ function collectionSpecifiers(prefix) {
 /**
  * The file of an icon collection from the first source installed under its
  * name; a source not installed is skipped and the next one tried.
+ *
+ * @param {string} root
+ * @param {string} prefix
+ * @returns {string | undefined}
  */
 function resolveCollectionFile(root, prefix) {
   const require = createRequire(join(root, "package.json"));
@@ -53,6 +82,11 @@ function resolveCollectionFile(root, prefix) {
   return undefined;
 }
 
+/**
+ * @param {string} root
+ * @param {string} prefix
+ * @returns {Promise<IconCollection | undefined>}
+ */
 async function loadCollection(root, prefix) {
   const file = resolveCollectionFile(root, prefix);
   if (!file) return undefined;
@@ -62,6 +96,10 @@ async function loadCollection(root, prefix) {
 /**
  * Parsed once per collection: a collection file is several megabytes, and
  * one page asks for icons of the same few collections many times.
+ *
+ * @param {string} root
+ * @param {string} prefix
+ * @returns {Promise<IconCollection | undefined>}
  */
 function collection(root, prefix) {
   const key = join(root, prefix);
@@ -77,6 +115,8 @@ function collection(root, prefix) {
  * Every `@iconify-json/<prefix>` collection installed in the workspace under
  * `root`, the ones the server render draws from. The workspace hoists every
  * dependency, a module's collections included.
+ *
+ * @param {string} root
  */
 export async function installedCollections(root) {
   const prefixes = await readdir(join(root, COLLECTION_PACKAGES)).catch(
@@ -94,6 +134,9 @@ export async function installedCollections(root) {
  * Hand a server renderer the installed collections, once per renderer module,
  * before its first render. A collection that fails to load leaves the render
  * with the bundled icons only.
+ *
+ * @param {typeof import("../ssr-renderer.ts")} renderer
+ * @param {string} [root]
  */
 export function provideIconCollections(renderer, root = WORKSPACE_ROOT) {
   if (!rendererCollections.has(renderer))
@@ -101,16 +144,23 @@ export function provideIconCollections(renderer, root = WORKSPACE_ROOT) {
       renderer,
       installedCollections(root)
         .then((loaded) => renderer.registerDmsIconCollections(loaded))
-        .catch((error) =>
-          console.error(
-            "DMS icon collections not loaded; server renders draw bundled icons only",
-            error,
-          ),
+        .catch(
+          /** @param {unknown} error */ (error) =>
+            console.error(
+              "DMS icon collections not loaded; server renders draw bundled icons only",
+              error,
+            ),
         ),
     );
   return rendererCollections.get(renderer);
 }
 
+/**
+ * @param {number} status
+ * @param {string} cacheControl
+ * @param {IconCollection | null | { message: string }} payload
+ * @returns {IconAnswer}
+ */
 function jsonResponse(status, cacheControl, payload) {
   return {
     status,
@@ -119,10 +169,19 @@ function jsonResponse(status, cacheControl, payload) {
   };
 }
 
+/**
+ * @param {number} status
+ * @param {string} message
+ * @returns {IconAnswer}
+ */
 function errorResponse(status, message) {
   return jsonResponse(status, ERROR_CACHE_CONTROL, { message });
 }
 
+/**
+ * @param {URL} url
+ * @returns {string[] | undefined}
+ */
 function requestedIcons(url) {
   const names = (url.searchParams.get("icons") ?? "")
     .split(ICON_NAME_SEPARATOR)
@@ -132,7 +191,12 @@ function requestedIcons(url) {
   return [...new Set(names)];
 }
 
-/** Whether the generated server answers `pathname` with `iconResponse`. */
+/**
+ * Whether the generated server answers `pathname` with `iconResponse`.
+ *
+ * @param {string} pathname
+ * @returns {boolean}
+ */
 export function isIconRequest(pathname) {
   return pathname.startsWith(ICON_API_PATH);
 }
@@ -142,6 +206,11 @@ export function isIconRequest(pathname) {
  * `root`: the subset of `@iconify-json/<prefix>` (or `@iconify/json`) holding
  * the requested icons, and a `not_found` list for the others, as
  * `api.iconify.design` does. Returns the status, headers and body to send.
+ *
+ * @param {string} root
+ * @param {string | undefined} method
+ * @param {URL} url
+ * @returns {Promise<IconAnswer>}
  */
 export async function iconResponse(root, method, url) {
   if (!READ_METHODS.has(method)) {
@@ -163,6 +232,9 @@ export async function iconResponse(root, method, url) {
 /**
  * Serve an Iconify API query from the collections installed in the workspace,
  * the same way under `ajs dms dev` and `ajs dms start`: both run this server.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
  */
 export async function handleIcons(request, response) {
   const url = new URL(request.url, "http://frontend.local");

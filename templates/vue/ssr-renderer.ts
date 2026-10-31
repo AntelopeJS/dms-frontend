@@ -7,7 +7,6 @@ import { createSSRApp, h, readonly } from "vue";
 import { appConfigs } from "./app-configs.generated";
 import {
   DMS_PAYLOAD_ID,
-  type DmsServerFetch,
   SSR_ASYNC_COMPONENTS_ID,
   configureDmsApp,
   resolveDmsInertiaPage,
@@ -19,6 +18,7 @@ import {
   type DmsInertiaPage,
   type DmsPageProps,
   type DmsPayload,
+  type DmsServerFetch,
   createDmsFrontendRuntime,
   hasDmsPage,
   pageErrorData,
@@ -159,7 +159,7 @@ export async function renderDmsPage(
   requestCookies?: string,
 ): Promise<DmsSsrResult> {
   const runtime = createDmsFrontendRuntime(
-    serverFetch as typeof import("ofetch").ofetch,
+    serverFetch,
     {},
     true,
     requestCookies,

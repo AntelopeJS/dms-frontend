@@ -2,18 +2,14 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, maxHeaderSize } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { RequestBodyError, UpstreamError } from "./server/auth/backend.mjs";
 import {
-  CLIENT_HEADERS,
-  relayedHeaders,
-  RequestBodyError,
-  UpstreamError,
-} from "./server/auth/backend.mjs";
-import { forwardedHeaders } from "./server/auth/client-ip.mjs";
-import { proxyAccess, refuseCrossOrigin } from "./server/public-endpoints.mjs";
+  backendJson,
+  serverComponentFetch,
+} from "./server/backend-request.mjs";
 import { readSession } from "./server/auth/session.mjs";
 import {
   BackendResponseError,
-  backendResponseError,
   redirectAccessRefusal,
   UNEXPECTED_ERROR_BODY,
 } from "./server/backend-response.mjs";
@@ -50,20 +46,25 @@ import {
   handleModuleRoute,
   loadServerModules,
 } from "./server/module-server.mjs";
-import { HOMEPAGE } from "./server/homepage.mjs";
+import {
+  redirectSignedOutPrivatePage,
+  redirectToHomepage,
+} from "./server/page-redirects.mjs";
 import { publicOptionsScript } from "./server/public-options.mjs";
-import { renderInPlace, serverReads } from "./server/in-place-render.mjs";
-import { loadPageProps, propsForQuery } from "./server/page-props.mjs";
+import { renderInPlace } from "./server/in-place-render.mjs";
+import {
+  loadPageProps,
+  pageRoute,
+  propsForQuery,
+} from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
+import { isString } from "./server/type-guards.mjs";
 import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
-import {
-  PLAIN_ANSWER_HEADERS,
-  relayAnswer,
-} from "./server/proxy-compression.mjs";
-import { backendUrl, refuseForeignTarget } from "./server/request-target.mjs";
-import { sendWithinLimit, SERVER_OPTIONS } from "./server/proxy-transfers.mjs";
+import { proxy } from "./server/proxy-request.mjs";
+import { refuseForeignTarget } from "./server/request-target.mjs";
+import { SERVER_OPTIONS } from "./server/proxy-transfers.mjs";
 import {
   createInertiaPage,
   htmlHeaders,
@@ -75,10 +76,15 @@ import {
 } from "./server/inertia.mjs";
 export * from "./server/inertia.mjs";
 
+/** @typedef {import("node:http").IncomingMessage} IncomingMessage */
+/** @typedef {import("node:http").ServerResponse} ServerResponse */
+/** @typedef {import("vite").ViteDevServer} ViteDevServer */
+/** @typedef {import("./server/inertia.mjs").InertiaPage} InertiaPage */
+/** @typedef {import("./server/in-place-render.mjs").ServerReads} ServerReads */
+
 const INERTIA_HEADER = "x-inertia";
 const JSON_TYPE = "application/json";
 const PROJECT_ROOT = fileURLToPath(new URL(".", import.meta.url));
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const CLIENT_ROOT = join(PROJECT_ROOT, "dist/client");
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
@@ -102,16 +108,22 @@ function defineVueCompileFlags() {
 }
 
 defineVueCompileFlags();
+/** @type {Promise<typeof import("./ssr-renderer.ts")> | undefined} */
 let productionSsrRenderer;
+/** @type {ViteDevServer | undefined} */
 let vite;
+/** @type {Promise<ViteDevServer> | undefined} */
 let vitePromise;
+/** @type {import("node:http").Server | undefined} */
 let frontendHttpServer;
 
+/** @returns {Promise<ViteDevServer | undefined>} */
 async function developmentServer() {
   if (process.env.DMS_DEV !== "true") return undefined;
   if (vite) return vite;
   vitePromise ??= import("vite")
     .then(({ createServer: createViteServer }) => {
+      /** @type {import("vite").ServerOptions} */
       const serverOptions = {
         middlewareMode: true,
         fs: { deny: DEV_FS_DENY },
@@ -127,50 +139,13 @@ async function developmentServer() {
       vite = server;
       return server;
     })
-    .catch((error) => {
-      vitePromise = undefined;
-      throw error;
-    });
+    .catch(
+      /** @param {unknown} error */ (error) => {
+        vitePromise = undefined;
+        throw error;
+      },
+    );
   return vitePromise;
-}
-
-/**
- * The headers of a backend request: the relayed client headers, the client's
- * Origin and Referer as received, the `X-Forwarded-*` headers (set last, so no
- * caller writes them), and the session's access token unless the request goes
- * anonymously.
- */
-function backendHeaders(request, access = { anonymous: false, headers: [] }) {
-  const headers = {
-    ...relayedHeaders(request, [
-      "accept",
-      "content-type",
-      "if-match",
-      "origin",
-      "referer",
-      ...CLIENT_HEADERS,
-      ...access.headers,
-    ]),
-    ...forwardedHeaders(request),
-  };
-  const session = access.anonymous ? undefined : readSession(request);
-  if (session?.accessToken)
-    headers.authorization = `Bearer ${session.accessToken}`;
-  return headers;
-}
-
-function serverComponentFetch(request) {
-  return serverReads(() => backendHeaders(request));
-}
-
-async function backendJson(path, request) {
-  const response = await fetch(new URL(path, process.env.DMS_API_BASE_URL), {
-    headers: backendHeaders(request),
-  });
-  if (!response.ok) {
-    throw await backendResponseError(response);
-  }
-  return response.json();
 }
 
 /** The session logic of the module that owns sign-in. */
@@ -178,6 +153,10 @@ async function currentAuth() {
   return (await loadServerModules(await developmentServer())).serverAuth;
 }
 
+/**
+ * @param {IncomingMessage} request
+ * @returns {import("./server/page-props.mjs").PageBackend}
+ */
 function pageBackend(request) {
   return {
     fetchJson: (path) => backendJson(path, request),
@@ -188,76 +167,23 @@ function pageBackend(request) {
   };
 }
 
+/**
+ * @param {IncomingMessage} request
+ * @param {import("./server/page-props.mjs").PageAuth} auth
+ */
 function pageProps(request, auth) {
   return loadPageProps(request, pageBackend(request), auth);
-}
-
-function redirectToHomepage(request, response, pathname) {
-  if (pathname !== "/" || HOMEPAGE === "/") return false;
-  redirectFrontendVisit(request, response, HOMEPAGE);
-  return true;
-}
-
-function redirectSignedOutPrivatePage(request, response, props, auth) {
-  const route = props.page?.route;
-  if (
-    route?.publicAccess === true ||
-    route?.hasAccess !== false ||
-    readSession(request)
-  )
-    return false;
-  redirectFrontendVisit(request, response, auth.signInLocation(request.url));
-  return true;
-}
-
-/**
- * Sends a request to the backend through the proxy it reached.
- * `isProxiedPath` says which backend paths a relayed `Location` may name on
- * the frontend's origin.
- *
- * A client that left while the request was routed closed the response already,
- * and would never abort the request below.
- *
- * Cancelling the body alone misses a client that leaves before the backend
- * answers: its stream, an SSE feed above all, then stayed open for good.
- *
- * A backend redirect is the browser's to follow: Media sends a file's link to
- * the storage's signed URL, on the public origin the server itself may not
- * reach, which turned every download into a 502.
- */
-async function proxy(request, response, backendProxy, isProxiedPath) {
-  const access = proxyAccess(request, SAFE_METHODS, backendProxy);
-  if (access.isRefused) {
-    refuseCrossOrigin(response);
-    return true;
-  }
-  if (response.closed) return;
-  const abandoned = new AbortController();
-  response.once("close", () => abandoned.abort());
-  const init = {
-    signal: abandoned.signal,
-    method: request.method,
-    headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
-    duplex: "half",
-    redirect: "manual",
-  };
-  const upstream = await sendWithinLimit(
-    request,
-    response,
-    backendProxy.maxBodyBytes,
-    (body) => fetch(backendUrl(request.url), { ...init, body }),
-  );
-  if (!upstream) return true;
-  await relayAnswer(request, response, upstream, {
-    fetched: true,
-    isProxiedPath,
-  });
 }
 
 /**
  * Send the built file `pathname` names, or `false` when the build has none
  * there. `publicBuildFile` decides which file that is; `serveStaticFile` how
  * it goes out.
+ *
+ * @param {string} pathname
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ * @returns {boolean}
  */
 function serveAsset(pathname, request, response) {
   const file = publicBuildFile(CLIENT_ROOT, pathname);
@@ -268,7 +194,12 @@ function serveAsset(pathname, request, response) {
   return true;
 }
 
+/**
+ * @param {ViteDevServer | undefined} devServer
+ * @returns {Promise<typeof import("./ssr-renderer.ts")>}
+ */
 async function ssrRenderer(devServer) {
+  /** @type {typeof import("./ssr-renderer.ts")} */
   const renderer = devServer
     ? await devServer.ssrLoadModule("/ssr-renderer.ts")
     : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_URL.href));
@@ -276,6 +207,10 @@ async function ssrRenderer(devServer) {
   return renderer;
 }
 
+/**
+ * @param {InertiaPage} page
+ * @returns {import("./ssr-renderer.ts").DmsSsrResult}
+ */
 function clientRenderedShell(page) {
   return {
     body: inertiaAppHtml(page),
@@ -285,6 +220,12 @@ function clientRenderedShell(page) {
   };
 }
 
+/**
+ * @param {InertiaPage} page
+ * @param {ServerReads} serverFetch
+ * @param {string | undefined} requestCookies
+ * @param {ViteDevServer | undefined} devServer
+ */
 async function serverRendered(page, serverFetch, requestCookies, devServer) {
   try {
     const renderer = await ssrRenderer(devServer);
@@ -301,6 +242,13 @@ async function serverRendered(page, serverFetch, requestCookies, devServer) {
 /**
  * Renders a page document. With `{ ssr: false }` (a route rule), the client
  * renders the page from the shell instead.
+ *
+ * @param {InertiaPage} page
+ * @param {string | undefined} requestUrl
+ * @param {ServerReads} serverFetch
+ * @param {string | undefined} requestCookies
+ * @param {{ ssr?: false }} [options]
+ * @returns {Promise<{ html: string, status: number, redirect?: string }>}
  */
 export async function renderHtml(
   page,
@@ -330,7 +278,7 @@ export async function renderHtml(
     .replace("<title>Antelope DMS</title>", () =>
       withFaviconPlaceholder(rendered.head.headTags),
     )
-    .replace(/<html([^>]*)>/, (_, attributes) =>
+    .replace(/<html([^>]*)>/, (_, /** @type {string} */ attributes) =>
       htmlTag(attributes, rendered.head.htmlAttrs),
     )
     .replace("<body", `<body ${rendered.head.bodyAttrs}`)
@@ -343,6 +291,12 @@ export async function renderHtml(
   return { html, status: rendered.error?.statusCode ?? 200 };
 }
 
+/**
+ * @param {InertiaPage} page
+ * @param {IncomingMessage} request
+ * @param {Pick<import("./server/route-rules.mjs").RouteRule, "ssr">} [rule]
+ * @param {ServerReads} [reads]
+ */
 function renderRequestHtml(page, request, rule = {}, reads) {
   const fetch = reads ?? serverComponentFetch(request);
   return renderHtml(page, request.url, fetch, request.headers.cookie, {
@@ -353,6 +307,11 @@ function renderRequestHtml(page, request, rule = {}, reads) {
 /**
  * Renders a page document, at the query the page completes as it renders:
  * see `renderInPlace`.
+ *
+ * @param {InertiaPage} page
+ * @param {IncomingMessage} request
+ * @param {import("./server/route-rules.mjs").MergedRouteRule} rule
+ * @param {import("./server/page-props.mjs").PageAuth} auth
  */
 function renderDocument(page, request, rule, auth) {
   const fetch = serverComponentFetch(request);
@@ -365,9 +324,14 @@ function renderDocument(page, request, rule, auth) {
   );
 }
 
+/**
+ * @param {unknown} error
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ */
 async function writeBackendError(error, request, response) {
   const auth = await currentAuth();
-  const status = Number.isInteger(error?.status) ? error.status : 502;
+  const status = requestFailure.failureStatus(error);
   const pathname = new URL(request.url, "http://frontend.local").pathname;
   if (
     error instanceof BackendResponseError &&
@@ -410,6 +374,12 @@ async function writeBackendError(error, request, response) {
   response.end(JSON.stringify(payload));
 }
 
+/**
+ * @param {ViteDevServer} devServer
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ * @returns {Promise<boolean>}
+ */
 async function answeredByVite(devServer, request, response) {
   const result = await runViteMiddlewares(devServer, request, response);
   if (result.status === "failed") writeViteError(response, result.error);
@@ -422,6 +392,10 @@ async function answeredByVite(devServer, request, response) {
  * production server serves. Only a path with an extension names one.
  *
  * The path is decoded as Vite and the asset server read it: `%2E` is a dot.
+ *
+ * @param {ViteDevServer | undefined} devServer
+ * @param {string} requested
+ * @returns {boolean}
  */
 function hasRendererFile(devServer, requested) {
   let pathname;
@@ -445,7 +419,15 @@ function hasRendererFile(devServer, requested) {
   });
 }
 
-/** Vite's files in development, the build's in production; else a 404. */
+/**
+ * Vite's files in development, the build's in production; else a 404.
+ *
+ * @param {ViteDevServer | undefined} devServer
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ * @param {string} pathname
+ * @returns {Promise<void>}
+ */
 async function serveRendererFile(devServer, request, response, pathname) {
   const answered = devServer
     ? await answeredByVite(devServer, request, response)
@@ -455,11 +437,16 @@ async function serveRendererFile(devServer, request, response, pathname) {
   response.end("Not found");
 }
 
+/** @param {ServerResponse} response */
 function writeNotFound(response) {
   response.writeHead(404, { "content-type": JSON_TYPE });
   response.end(JSON.stringify({ message: "Not found" }));
 }
 
+/**
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ */
 export async function handleRequest(request, response) {
   const url = new URL(request.url, "http://frontend.local");
   const pathname = url.pathname;
@@ -467,6 +454,7 @@ export async function handleRequest(request, response) {
   if (localRoute) return localRoute[1](request, response);
   const devServer = await developmentServer();
   const modules = await loadServerModules(devServer);
+  /** @param {string} path */
   const hasFile = (path) => hasRendererFile(devServer, path);
   const owner = requestOwner(request.method, pathname, modules, hasFile);
   if (devServer) response.setHeader("x-dms-route-owner", ownerLabel(owner));
@@ -474,6 +462,7 @@ export async function handleRequest(request, response) {
     return serveRendererFile(devServer, request, response, pathname);
   if (owner.kind === "module")
     return handleModuleRoute(request, response, pathname, modules);
+  /** @param {string} path */
   const isProxiedPath = (path) => reachesBackend(path, modules, hasFile);
   if (owner.kind === "backend")
     return proxy(request, response, owner.proxy, isProxiedPath);
@@ -487,8 +476,9 @@ export async function handleRequest(request, response) {
   if (redirectSignedOutPrivatePage(request, response, props, auth)) return;
   const page = createInertiaPage(request.url, props, undefined, onceProps);
   const rule = routeRuleFor(rules, pathname);
+  /** @param {number} status */
   const headersFor = (status) =>
-    ruleHeaders(rule, request, props.page?.route, status);
+    ruleHeaders(rule, request, pageRoute(props), status);
   if (request.headers[INERTIA_HEADER]) {
     return writeContent(
       request,
@@ -513,6 +503,11 @@ export async function handleRequest(request, response) {
   );
 }
 
+/**
+ * @param {unknown} error
+ * @param {IncomingMessage & { dmsSessionRetry?: boolean }} request
+ * @param {ServerResponse} response
+ */
 async function writeRequestFailure(error, request, response) {
   if (requestFailure.isResponseGone(error, response)) return;
   if (
@@ -531,14 +526,21 @@ async function writeRequestFailure(error, request, response) {
   await writeBackendError(error, request, response);
 }
 
-/** An error page failing too must not reject: that would end the process. */
+/**
+ * An error page failing too must not reject: that would end the process.
+ *
+ * @param {IncomingMessage} request
+ * @param {ServerResponse} response
+ * @returns {Promise<void>}
+ */
 export async function handleRequestSafely(request, response) {
   try {
     if (refuseForeignTarget(request, response)) return;
     await handleRequest(request, response);
   } catch (error) {
-    await writeRequestFailure(error, request, response).catch((failure) =>
-      requestFailure.abandonResponse(failure, response),
+    await writeRequestFailure(error, request, response).catch(
+      /** @param {unknown} failure */ (failure) =>
+        requestFailure.abandonResponse(failure, response),
     );
   }
 }
@@ -553,6 +555,7 @@ if (
   );
   const port = Number(process.env.PORT ?? 3001);
   const host = listenHost();
+  /** @param {NodeJS.ErrnoException} error */
   const onListenError = (error) => void reportListenError(error, host, port);
   frontendHttpServer.once("error", onListenError);
   frontendHttpServer.listen(port, host, () => {
@@ -587,7 +590,10 @@ async function announceReady() {
     await reportStartError(error);
     return;
   }
-  const { address, port } = frontendHttpServer.address();
+  const listening = frontendHttpServer.address();
+  if (listening === null || isString(listening))
+    throw new TypeError("The DMS server is not listening on a port");
+  const { address, port } = listening;
   await reportReady(address, port);
   await reportRouting();
   if (process.env.DMS_DEV === "true") watchEmailBundle();

@@ -159,7 +159,12 @@ export function unfilledPrivateValues(
     [...emptyStrings(options)]
       .filter((path) => path.length > 0 && !isCovered(path))
       .filter((path) => {
-        const value = readPath(given[module], path);
+        const value = readPath(
+          Object.prototype.hasOwnProperty.call(given, module)
+            ? given[module]
+            : undefined,
+          path,
+        );
         return !isText(value) || value === "";
       })
       .map((path) => ({ module, path })),

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToString } from "@vue/server-renderer";
+import type { ofetch } from "ofetch";
 import { createSSRApp, defineComponent, h, nextTick, ref, computed } from "vue";
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
 
@@ -17,15 +18,16 @@ import {
   mountRuntime,
 } from "./fixtures/vue-async-data.mts";
 
+type FetchOptions = NonNullable<Parameters<typeof ofetch>[1]>;
+
 describe("useDmsFetch", () => {
   function fetchingRuntime(isServer: boolean) {
-    const requests: Array<{ url: string; options: Record<string, unknown> }> =
-      [];
+    const requests: Array<{ url: string; options: FetchOptions }> = [];
     const runtime = createDmsFrontendRuntime(
-      (async (url: string, options: Record<string, unknown> = {}) => {
+      async (url: string, options: FetchOptions = {}) => {
         requests.push({ url, options });
         return `data:${url}`;
-      }) as never,
+      },
       undefined,
       isServer,
     );
@@ -98,13 +100,13 @@ describe("useDmsFetch", () => {
     const runtime = createDmsFrontendRuntime();
     const id = ref(1);
     const answers = new Map<string, ReturnType<typeof deferred<string>>>();
-    const signals: AbortSignal[] = [];
-    const fetcher = ((url: string, options: { signal: AbortSignal }) => {
+    const signals: Array<AbortSignal | null | undefined> = [];
+    const fetcher = (url: string, options: FetchOptions = {}) => {
       signals.push(options.signal);
       const answer = deferred<string>();
       answers.set(url, answer);
       return answer.promise;
-    }) as never;
+    };
     let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
     const Consumer = defineComponent({
       setup() {
@@ -153,15 +155,15 @@ describe("useDmsFetch", () => {
     const runtime = createDmsFrontendRuntime();
     const page = ref(1);
     const requests: string[] = [];
-    const fetcher = (async (
+    const fetcher = async (
       url: string,
-      options: { method?: string; query?: unknown; body?: unknown },
+      options: { method?: string; query?: unknown; body?: unknown } = {},
     ) => {
       requests.push(
         `${options.method ?? "GET"} ${url} ${JSON.stringify(options.query ?? options.body)}`,
       );
       return JSON.stringify(options.query ?? options.body);
-    }) as never;
+    };
     const listed: Array<ReturnType<typeof runtimeModule.useDmsFetch<string>>> =
       [];
     const Consumer = defineComponent({
@@ -259,16 +261,19 @@ describe("useDmsFetch", () => {
       string,
       { resolve: (value: string) => void; reject: (reason: unknown) => void }
     >();
-    const fetcher = ((url: string) => {
+    const fetcher = (url: string) => {
       requests.push(url);
       return new Promise<string>((resolve, reject) => {
         answers.set(url, { resolve, reject });
       });
-    }) as never;
+    };
     return { fetcher, requests, answers };
   }
 
-  function followOrders(fetcher: never, id: ReturnType<typeof ref<number>>) {
+  function followOrders(
+    fetcher: runtimeModule.DmsServerFetch,
+    id: ReturnType<typeof ref<number>>,
+  ) {
     const runtime = createDmsFrontendRuntime();
     let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
     const app = mountRuntime(runtime, {
@@ -401,7 +406,7 @@ describe("useDmsFetch", () => {
   it("keys a request by its params as well as its query", async () => {
     const { runtime, requests } = fetchingRuntime(false);
     const { app } = clientApp(runtime);
-    const load = (params: Record<string, unknown>) =>
+    const load = (params: FetchOptions["params"]) =>
       app.runWithContext(() =>
         runtimeModule.useDmsFetch("/api/list", { query: { a: 1 }, params }),
       );

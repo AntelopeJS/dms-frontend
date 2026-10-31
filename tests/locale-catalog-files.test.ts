@@ -19,12 +19,41 @@ import {
 } from "../src/common";
 import { clientCodeSplitting } from "../templates/vue/client-chunking.mjs";
 import { readText } from "./helpers/files";
+import { isFlag, isObjectLike, isText } from "./helpers/guards";
+import { isJsonObject, isJsonValue, jsonAt, readJson } from "./helpers/json";
 
 interface ManifestChunk {
   file: string;
   isEntry?: boolean;
   isDynamicEntry?: boolean;
   imports?: string[];
+}
+
+type LocaleMessages = { [key: string]: string | LocaleMessages };
+
+function isLocaleMessages(value: unknown): value is LocaleMessages {
+  return (
+    isObjectLike(value) &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      (message) => isText(message) || isLocaleMessages(message),
+    )
+  );
+}
+
+function isOptionalFlag(value: unknown): value is boolean | undefined {
+  return value === undefined || isFlag(value);
+}
+
+function isManifestChunk(value: unknown): value is ManifestChunk {
+  if (!isJsonValue(value)) return false;
+  const imports = jsonAt(value, "imports");
+  return (
+    isText(jsonAt(value, "file")) &&
+    isOptionalFlag(jsonAt(value, "isEntry")) &&
+    isOptionalFlag(jsonAt(value, "isDynamicEntry")) &&
+    (imports === undefined || (Array.isArray(imports) && imports.every(isText)))
+  );
 }
 
 function write(path: string, content: string): void {
@@ -77,11 +106,18 @@ describe("generated locale catalogs", () => {
 
   after(() => rmSync(root, { recursive: true, force: true }));
 
-  it("completes each locale's catalog with the English messages it lacks", async () => {
-    const french = await import(
-      pathToFileURL(join(workspace, "locales.generated", "fr.ts")).href
+  async function generatedMessages(locale: string): Promise<LocaleMessages> {
+    const loaded: unknown = await import(
+      pathToFileURL(join(workspace, "locales.generated", `${locale}.ts`)).href
     );
-    assert.deepEqual(french.default, {
+    assert.ok(isObjectLike(loaded) && "default" in loaded);
+    assert.ok(isLocaleMessages(loaded.default), `${locale} holds messages`);
+    return loaded.default;
+  }
+
+  it("completes each locale's catalog with the English messages it lacks", async () => {
+    const french = await generatedMessages("fr");
+    assert.deepEqual(french, {
       greeting: FRENCH.greeting,
       only_english: ENGLISH.only_english,
     });
@@ -92,9 +128,7 @@ describe("generated locale catalogs", () => {
   });
 
   it("keeps the renderer's own French over a module's English-only wording", async () => {
-    const french = await import(
-      pathToFileURL(join(workspace, "locales.generated", "fr.ts")).href
-    );
+    const french = await generatedMessages("fr");
     const { createI18n } = await import("vue-i18n");
     const { showNetworkErrors } =
       await import("../templates/vue/network-error.ts");
@@ -102,7 +136,7 @@ describe("generated locale catalogs", () => {
       legacy: false,
       locale: "fr",
       fallbackLocale: "en",
-      messages: { fr: french.default },
+      messages: { fr: french },
     });
     const document = new EventTarget();
     Reflect.set(globalThis, "window", globalThis);
@@ -148,21 +182,25 @@ describe("generated locale catalogs", () => {
         },
       },
     });
-    const manifest = JSON.parse(
-      readText(join(outDir, ".vite", "manifest.json")),
-    ) as Record<string, ManifestChunk>;
-    const entry = Object.values(manifest).find((chunk) => chunk.isEntry);
+    const built = readJson(join(outDir, ".vite", "manifest.json"));
+    assert.ok(isJsonObject(built), "the build wrote a manifest");
+    const manifest = new Map<string, ManifestChunk>();
+    for (const [key, chunk] of Object.entries(built)) {
+      assert.ok(isManifestChunk(chunk), `${key} is a manifest chunk`);
+      manifest.set(key, chunk);
+    }
+    const entry = [...manifest.values()].find((chunk) => chunk.isEntry);
     assert.ok(entry, "the build has an entry");
     const loadedFirst = [
       entry,
-      ...(entry.imports ?? []).map((key) => manifest[key]!),
+      ...(entry.imports ?? []).map((key) => manifest.get(key)!),
     ]
       .map((chunk) => readText(join(outDir, chunk.file)))
       .join("\n");
     assert.doesNotMatch(loadedFirst, /english-only-marker/);
     assert.doesNotMatch(loadedFirst, /Bonjour-french-marker/);
     for (const locale of ["en", "fr"]) {
-      const chunk = manifest[`locales.generated/${locale}.ts`];
+      const chunk = manifest.get(`locales.generated/${locale}.ts`);
       assert.ok(chunk?.isDynamicEntry, `${locale} is a file of its own`);
     }
   });

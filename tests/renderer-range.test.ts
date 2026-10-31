@@ -8,8 +8,11 @@ import { after, describe, it } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { assertLayersSupportRenderer, type ResolvedLayer } from "../src/common";
+import { CliError } from "@antelopejs/core/cli";
 import { problemText } from "./fixtures/memory-ui";
 import { listNames, readText } from "./helpers/files";
+import { isNumber, isObjectLike, isText } from "./helpers/guards";
+import type { JsonValue } from "./helpers/json";
 import { OWN_PACKAGE } from "./helpers/own-package";
 import { addressOf } from "./helpers/net";
 
@@ -28,19 +31,21 @@ function temporaryDir(prefix: string): string {
   return dir;
 }
 
-function layerWith(name: string, engines?: Record<string, unknown>): string {
+function layerWith(name: string, engines?: Record<string, JsonValue>): string {
   const path = temporaryDir("dms-renderer-range-");
-  const pkg: Record<string, unknown> = { name };
-  if (engines) pkg.engines = engines;
+  const pkg = engines ? { name, engines } : { name };
   writeFileSync(join(path, "package.json"), JSON.stringify(pkg));
   return path;
 }
 
-function layer(name: string, engines?: Record<string, unknown>): ResolvedLayer {
+function layer(
+  name: string,
+  engines?: Record<string, JsonValue>,
+): ResolvedLayer {
   return { path: layerWith(name, engines), packageName: name };
 }
 
-function declaring(name: string, range: unknown): ResolvedLayer {
+function declaring(name: string, range: JsonValue): ResolvedLayer {
   return layer(name, { [RENDERER]: range });
 }
 
@@ -68,6 +73,7 @@ describe("renderer range", () => {
     assert.throws(
       () => check([declaring("@acme/dms-billing", ">=0.2.8 <0.4.0")]),
       (err: Error) => {
+        assert.ok(err instanceof CliError);
         assert.match(
           err.message,
           /do not run on @antelopejs\/dms-frontend 0\.4\.0/,
@@ -87,6 +93,7 @@ describe("renderer range", () => {
     assert.throws(
       () => check([first, second]),
       (err: Error) => {
+        assert.ok(err instanceof CliError);
         assert.equal(
           problemText(err),
           [
@@ -111,6 +118,7 @@ describe("renderer range", () => {
           declaring("too-new", ">=0.5.0"),
         ]),
       (err: Error) => {
+        assert.ok(err instanceof CliError);
         const text = problemText(err);
         assert.match(text, /too-old \(.+\) supports <0\.4\.0/);
         assert.match(text, /too-new \(.+\) supports >=0\.5\.0/);
@@ -124,7 +132,9 @@ describe("renderer range", () => {
     for (const range of ["latest", 3, null]) {
       assert.throws(
         () => check([declaring(`unreadable-${String(range)}`, range)]),
-        (err) => /declares an unreadable range/.test(problemText(err)),
+        (err) =>
+          err instanceof CliError &&
+          /declares an unreadable range/.test(problemText(err)),
       );
     }
   });
@@ -156,6 +166,7 @@ describe("renderer range", () => {
     assert.throws(
       () => check([first, second]),
       (err: Error) =>
+        err instanceof CliError &&
         problemText(err).includes(`playground-frontend-vue (${first.path})`) &&
         problemText(err).includes(`playground-frontend-vue (${second.path})`),
     );
@@ -183,6 +194,7 @@ describe("renderer range", () => {
     assert.throws(
       () => check([archived]),
       (err) =>
+        err instanceof CliError &&
         problemText(err).includes(`archived (${source}) supports <0.4.0`),
     );
   });
@@ -190,7 +202,9 @@ describe("renderer range", () => {
   it("checks a prerelease as the release it leads to", () => {
     assert.throws(
       () => check([declaring("before-0.4", "<0.4.0")], "0.4.0-next.1"),
-      (err) => /before-0\.4 \(.+\) supports <0\.4\.0/.test(problemText(err)),
+      (err) =>
+        err instanceof CliError &&
+        /before-0\.4 \(.+\) supports <0\.4\.0/.test(problemText(err)),
     );
     assert.deepEqual(
       check([declaring("on-0.3", ">=0.3.2 <0.4.0")], "0.3.3-next.0"),
@@ -268,6 +282,22 @@ interface Run {
   output: string;
 }
 
+/** What a command that exited non-zero rejects with. */
+interface CommandFailure {
+  code?: number | null;
+  stdout?: string;
+  stderr?: string;
+}
+
+function isCommandFailure(value: unknown): value is CommandFailure {
+  return (
+    isObjectLike(value) &&
+    (!("code" in value) || value.code === null || isNumber(value.code)) &&
+    (!("stdout" in value) || isText(value.stdout)) &&
+    (!("stderr" in value) || isText(value.stderr))
+  );
+}
+
 interface RunOptions {
   env?: Record<string, string>;
   /** Home to run in, so a second run finds what the first one cached. */
@@ -303,7 +333,8 @@ async function runTypeScript(
       },
     );
     return { status: 0, output: `${stdout}${stderr}` };
-  } catch (err: any) {
+  } catch (err) {
+    if (!isCommandFailure(err)) throw err;
     return {
       status: err.code ?? 1,
       output: `${err.stdout ?? ""}${err.stderr ?? ""}`,

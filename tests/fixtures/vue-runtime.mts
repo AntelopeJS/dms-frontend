@@ -1,7 +1,10 @@
+import assert from "node:assert/strict";
+import type { TestContext } from "node:test";
 import { router } from "@inertiajs/vue3";
-import { createSSRApp, createRenderer } from "vue";
+import { type Component, createSSRApp, createRenderer } from "vue";
 import {
   createDmsFrontendRuntime,
+  type DmsFrontendRuntime,
   provideDmsFrontendRuntime,
   setupFrontendModules,
   type DmsMiddleware,
@@ -18,19 +21,44 @@ export interface RecordedVisit {
   preserveScroll?: unknown;
 }
 
-export function recordVisits(context) {
+/** What the recorded `router.visit` reads of its options. */
+interface VisitOptions {
+  preserveState?: unknown;
+  preserveScroll?: unknown;
+  onFinish?: (finished: Record<string, never>) => void;
+}
+
+/** What the recorded `router.push` and `router.replace` read of theirs. */
+interface HistoryParams {
+  url: string;
+  preserveState?: unknown;
+  preserveScroll?: unknown;
+  onFinish?: (finished: HistoryParams) => void;
+}
+
+/** What the headless renderer builds in place of DOM nodes. */
+interface TestNode {
+  parent: TestNode | null;
+  children: TestNode[];
+}
+
+export function recordVisits(context: TestContext) {
   const visits: RecordedVisit[] = [];
-  context.mock.method(router, "visit", (url, options = {}) => {
-    visits.push({
-      kind: "server",
-      url,
-      preserveState: options.preserveState,
-      preserveScroll: options.preserveScroll,
-    });
-    options.onFinish?.({});
-  });
+  context.mock.method(
+    router,
+    "visit",
+    (url: string, options: VisitOptions = {}) => {
+      visits.push({
+        kind: "server",
+        url,
+        preserveState: options.preserveState,
+        preserveScroll: options.preserveScroll,
+      });
+      options.onFinish?.({});
+    },
+  );
   for (const kind of ["push", "replace"] as const) {
-    context.mock.method(router, kind, (params) => {
+    context.mock.method(router, kind, (params: HistoryParams) => {
       visits.push({
         kind,
         url: params.url,
@@ -61,9 +89,9 @@ export function application(label: string, hydrated = {}, isServer = false) {
   return { app, runtime, requests };
 }
 
-export function mountRuntime(runtime, root) {
-  const node = () => ({ parent: null, children: [] });
-  const renderer = createRenderer({
+export function mountRuntime(runtime: DmsFrontendRuntime, root: Component) {
+  const node = (): TestNode => ({ parent: null, children: [] });
+  const renderer = createRenderer<TestNode, TestNode>({
     createElement: node,
     createText: node,
     createComment: node,
@@ -77,6 +105,7 @@ export function mountRuntime(runtime, root) {
       parent.children.push(child);
     },
     remove(child) {
+      assert.ok(child.parent, "a removed node was inserted first");
       child.parent.children = child.parent.children.filter(
         (other) => other !== child,
       );

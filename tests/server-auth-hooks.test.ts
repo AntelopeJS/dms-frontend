@@ -24,9 +24,14 @@ import {
 } from "../src/common";
 import { serverAuth } from "../templates/vue/server/auth-hooks.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
-import type { DmsServerSetup } from "../templates/vue/server-module";
+import type {
+  DmsServerSetup,
+  DmsSession,
+} from "../templates/vue/server-module";
 import { addressOf } from "./helpers/net";
-import { isNumber } from "./helpers/guards";
+import { isNumber, isText } from "./helpers/guards";
+import { requestOf, responseOf } from "./helpers/http-doubles";
+import { jsonAt, responseJson } from "./helpers/json";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const ACCOUNT_ID = "0b5e7c2a-4d1f-4a8e-9c3b-2f6d8e1a7b40";
@@ -209,22 +214,22 @@ export default defineDmsServer((server) => {
 `;
 
 interface SessionTemplate {
-  writeSession(response: unknown, session: Record<string, unknown>): void;
-  writeSealedCookie(response: unknown, name: string, value: unknown): void;
-  readSession(request: unknown): Record<string, unknown> | undefined;
+  writeSession(response: ServerResponse, session: Partial<DmsSession>): void;
+  writeSealedCookie(
+    response: ServerResponse,
+    name: string,
+    value: Record<string, string>,
+  ): void;
+  readSession(request: IncomingMessage): DmsSession | undefined;
 }
 
-function cookieJar() {
-  const headers = new Map<string, string | string[]>();
-  return {
-    getHeader: (name: string) => headers.get(name),
-    setHeader: (name: string, value: string | string[]) =>
-      headers.set(name, value),
-    cookies: () =>
-      [headers.get("set-cookie") ?? []]
-        .flat()
-        .map((cookie) => cookie.split(";", 1)[0]),
-  };
+function setCookies(response: ServerResponse): string[] {
+  const header = response.getHeader("set-cookie");
+  return (Array.isArray(header) ? header : [header]).filter(isText);
+}
+
+function cookiePairs(response: ServerResponse): string[] {
+  return setCookies(response).map((cookie) => cookie.split(";", 1)[0]);
 }
 
 describe("Auth hooks in the production server", () => {
@@ -298,8 +303,9 @@ describe("Auth hooks in the production server", () => {
   });
 
   const visit = (path: string, cookie?: string) => {
-    const headers: Record<string, string> = { "x-inertia": "true" };
-    if (cookie) headers.cookie = cookie;
+    const headers = cookie
+      ? { "x-inertia": "true", cookie }
+      : { "x-inertia": "true" };
     return fetch(`${frontendUrl}${path}`, { redirect: "manual", headers });
   };
 
@@ -319,7 +325,7 @@ describe("Auth hooks in the production server", () => {
   });
 
   it("renews a refused session through the provider's hook and retries the visit with it", async () => {
-    const jar = cookieJar();
+    const jar = responseOf();
     sessions.writeSession(jar, {
       accessToken: "expired",
       refreshToken: "refresh",
@@ -327,26 +333,29 @@ describe("Auth hooks in the production server", () => {
       activeTenantId: "default",
       user: { name: "Ada", language: "fr" },
     });
-    const response = await visit("/private", jar.cookies()[0]);
+    const response = await visit("/private", cookiePairs(jar)[0]);
     assert.equal(response.status, 200);
-    const page = await response.json();
-    assert.deepEqual(page.props.user, {
+    const page = await responseJson(response);
+    assert.deepEqual(jsonAt(page, "props", "user"), {
       name: "Ada",
       language: "fr",
       viaHook: true,
     });
-    assert.equal(page.props.session.accountId, "account-1");
-    assert.ok(isNumber(page.props.session.updatedAt));
+    assert.equal(jsonAt(page, "props", "session", "accountId"), "account-1");
+    assert.ok(isNumber(jsonAt(page, "props", "session", "updatedAt")));
     const [cookie] = response.headers.getSetCookie();
-    const renewed = sessions.readSession({
-      headers: { cookie: cookie.split(";", 1)[0] },
-    });
+    const renewed = sessions.readSession(
+      requestOf({ headers: { cookie: cookie.split(";", 1)[0] } }),
+    );
     assert.equal(renewed?.accessToken, "renewed-acme__auth-frontend");
-    assert.equal(renewed?.updatedAt, page.props.session.updatedAt);
+    assert.equal(
+      renewed?.updatedAt,
+      jsonAt(page, "props", "session", "updatedAt"),
+    );
   });
 
   it("hands the module owning sign-in the session and its own dms_* cookies", async () => {
-    const jar = cookieJar();
+    const jar = responseOf();
     const session = {
       accessToken: "a",
       refreshToken: "r",
@@ -360,25 +369,26 @@ describe("Auth hooks in the production server", () => {
       { refreshToken: "r", accountId: ACCOUNT_ID },
     );
     const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
-      headers: { cookie: jar.cookies().join("; ") },
+      headers: { cookie: cookiePairs(jar).join("; ") },
     });
-    const body = await response.json();
-    assert.equal(body.read.accessToken, "a");
-    assert.deepEqual(body.view.user, { _id: "u1", name: "Ada", viaHook: true });
-    assert.equal(body.account.refreshToken, "r");
-    assert.equal(body.account.accountId, ACCOUNT_ID);
+    const body = await responseJson(response);
+    assert.equal(jsonAt(body, "read", "accessToken"), "a");
+    assert.deepEqual(jsonAt(body, "view", "user"), {
+      _id: "u1",
+      name: "Ada",
+      viaHook: true,
+    });
+    assert.equal(jsonAt(body, "account", "refreshToken"), "r");
+    assert.equal(jsonAt(body, "account", "accountId"), ACCOUNT_ID);
   });
 
   it("keeps only a session written persistent for 30 days", () => {
-    const written: string[] = [];
-    const response = {
-      getHeader: () => undefined,
-      setHeader: (_name: string, value: string) => written.push(value),
-    };
-    sessions.writeSession(response, { accessToken: "a", persistent: true });
-    sessions.writeSession(response, { accessToken: "b" });
-    assert.match(written[0] ?? "", /; Max-Age=2592000/);
-    assert.doesNotMatch(written[1] ?? "", /Max-Age/);
+    const persistent = responseOf();
+    const session = responseOf();
+    sessions.writeSession(persistent, { accessToken: "a", persistent: true });
+    sessions.writeSession(session, { accessToken: "b" });
+    assert.match(setCookies(persistent)[0] ?? "", /; Max-Age=2592000/);
+    assert.doesNotMatch(setCookies(session)[0] ?? "", /Max-Age/);
   });
 
   it("writes the session cookie, ending with the browser when not persistent", async () => {
@@ -392,9 +402,9 @@ describe("Auth hooks in the production server", () => {
       cookie,
       /^dms_session_[0-9a-f]{12}=[^;]+; Path=\/; HttpOnly; SameSite=Lax$/,
     );
-    const written = sessions.readSession({
-      headers: { cookie: cookie.split(";", 1)[0] },
-    });
+    const written = sessions.readSession(
+      requestOf({ headers: { cookie: cookie.split(";", 1)[0] } }),
+    );
     assert.equal(written?.accessToken, "from-module");
     assert.ok(isNumber(written?.updatedAt));
   });

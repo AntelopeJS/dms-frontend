@@ -6,6 +6,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { temporaryDirectory } from "../fixtures/temporary-directory.mts";
+import { isObjectLike } from "../../src/internal/guards";
+import { isNumber, isText } from "../helpers/guards";
 import { boundAddress } from "../helpers/net";
 export const repository = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -46,6 +48,27 @@ export interface RunCliOptions {
 
 export const TERMINAL_STDERR = import.meta.resolve("./terminal-stderr.mjs");
 
+interface ExecFailure {
+  code?: number | string | null;
+  stdout?: string;
+  stderr?: string;
+}
+
+function isExecFailure(value: unknown): value is ExecFailure {
+  return (
+    isObjectLike(value) &&
+    (!("code" in value) ||
+      value.code === undefined ||
+      value.code === null ||
+      isNumber(value.code) ||
+      isText(value.code)) &&
+    (!("stdout" in value) ||
+      value.stdout === undefined ||
+      isText(value.stdout)) &&
+    (!("stderr" in value) || value.stderr === undefined || isText(value.stderr))
+  );
+}
+
 /**
  * Run the CLI the way a user outside any DMS project would: an empty cwd and
  * an empty home (HOME, and USERPROFILE, which Windows reads it from), so
@@ -60,7 +83,7 @@ export async function runCli(
     mkdirSync(dirname(join(sandbox, name)), { recursive: true });
     writeFileSync(join(sandbox, name), content);
   }
-  const env: Record<string, string | undefined> = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: sandbox,
     USERPROFILE: sandbox,
@@ -87,12 +110,13 @@ export async function runCli(
         ...cliCommand,
         ...args,
       ],
-      { cwd: sandbox, env: env as NodeJS.ProcessEnv },
+      { cwd: sandbox, env },
     );
     return { code: 0, stdout, stderr, sandbox };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    if (!isExecFailure(err)) throw err;
     return {
-      code: err.code ?? 1,
+      code: isNumber(err.code) ? err.code : 1,
       stdout: err.stdout ?? "",
       stderr: err.stderr ?? "",
       sandbox,
@@ -120,7 +144,7 @@ export const PRODUCTION_WORKSPACE = ".dms-frontend";
  * A project without frontend modules, built: its server prints the port it
  * was given, then exits.
  */
-export function builtWorkspace(): Record<string, string> {
+export function builtWorkspace() {
   return {
     "antelope.config.ts": 'export default { name: "sandbox", modules: {} };\n',
     [join(PRODUCTION_WORKSPACE, "server.mjs")]:

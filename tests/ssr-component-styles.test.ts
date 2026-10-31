@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { readText } from "./helpers/files";
+import { isFlag, isObjectLike, isText } from "../src/internal/guards";
 import { addressOf } from "./helpers/net";
 
 interface ManifestEntry {
@@ -23,7 +24,7 @@ const COMPONENTS = "frontend-modules/fixture";
  * child is only rendered from the page's template; the third is registered
  * and never rendered.
  */
-const FILES: Record<string, string> = {
+const FILES = {
   [`${COMPONENTS}/Page.vue`]: `<template><main class="fixture-page"><FixtureChild /></main></template>
 <style>.fixture-page { display: grid; }</style>
 `,
@@ -52,7 +53,31 @@ export const frontendModules = [{ options: { public: {} }, module: { setup(sdk) 
   "app-configs.generated.ts": "export const appConfigs = [];\n",
   "locales.generated.ts":
     'export const localeMessages={en:{}};export const supportedLocales=["en"];export const catalogLocale=(locale)=>locale.slice(0,2);export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
-};
+} satisfies Record<string, string>;
+
+function isManifestEntry(value: unknown): value is ManifestEntry {
+  return (
+    isObjectLike(value) &&
+    (!("css" in value) ||
+      (Array.isArray(value.css) && value.css.every(isText))) &&
+    (!("file" in value) || isText(value.file)) &&
+    (!("isDynamicEntry" in value) || isFlag(value.isDynamicEntry))
+  );
+}
+
+function isManifest(value: unknown): value is Record<string, ManifestEntry> {
+  return (
+    isObjectLike(value) &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isManifestEntry)
+  );
+}
+
+function parseManifest(text: string): Record<string, ManifestEntry> {
+  const parsed: unknown = JSON.parse(text);
+  assert.ok(isManifest(parsed), "the client manifest maps files to entries");
+  return parsed;
+}
 
 function write(root: string, path: string, content: string): void {
   const destination = join(root, path);
@@ -80,7 +105,8 @@ function componentStylesheet(
   manifest: Record<string, ManifestEntry>,
   name: string,
 ): string {
-  const entry = manifest[`${COMPONENTS}/${name}.vue`];
+  const key = `${COMPONENTS}/${name}.vue`;
+  const entry = Object.hasOwn(manifest, key) ? manifest[key] : undefined;
   assert.ok(entry?.isDynamicEntry, `${name}.vue is a lazily loaded chunk`);
   assert.equal(entry.css?.length, 1, `${name}.vue has a stylesheet`);
   return entry.css[0];
@@ -128,9 +154,9 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
       "dist/client/index.html",
       "<html><head><title>Antelope DMS</title></head><body>__DMS_APP__</body></html>",
     );
-    const manifest = JSON.parse(
+    const manifest = parseManifest(
       readText(join(workspace, "dist/client/.vite/manifest.json")),
-    ) as Record<string, ManifestEntry>;
+    );
     const page = componentStylesheet(manifest, "Page");
     const child = componentStylesheet(manifest, "Child");
     const unused = componentStylesheet(manifest, "Unused");

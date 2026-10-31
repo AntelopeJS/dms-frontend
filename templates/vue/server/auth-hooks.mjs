@@ -12,6 +12,8 @@ const HOOK_ROUTE = Object.freeze({ bodyLimit: 0 });
  * sign-in page and everything below it, whole segments only (`/auth` exempts
  * `/auth/callback`, never `/authors`), and the onboarding page. Derived from
  * the sign-in path in use, or a custom one would redirect to itself.
+ *
+ * @param {string} signInPath
  */
 function defaultExempt(signInPath) {
   const signIn = signInPath === "/" ? "/" : `${signInPath}/**`;
@@ -22,6 +24,9 @@ function defaultExempt(signInPath) {
  * The page props `user` and `session` of `session`, from the provider's
  * `publicSession`. The server adds the `updatedAt` stamp it wrote itself,
  * which the browser compares to drop a page restored from its cache.
+ *
+ * @param {NonNullable<import("./module-route-types.mjs").AuthProvider["publicSession"]>} publicSession
+ * @param {import("./module-event.mjs").Session | undefined} session
  */
 function hookView(publicSession, session) {
   if (!session) return {};
@@ -40,9 +45,9 @@ function hookView(publicSession, session) {
  * `dms.server.ts`. Without one, a page carries no session and a refused session
  * is not renewed.
  *
- * @param provider The resolved auth hooks, `undefined` when no module
+ * @param {import("./module-route-types.mjs").AuthProvider | undefined} provider The resolved auth hooks, `undefined` when no module
  *   registers any
- * @param context `(id) => ({ module, app })`, a module's event context
+ * @param {(id: string) => import("./module-server.mjs").ModuleContext} context `(id) => ({ module, app })`, a module's event context
  * @returns `{ provider, signInPath, isSignInExempt, signInLocation, view,
  *   refresh }`
  */
@@ -54,16 +59,21 @@ export function serverAuth(provider, context) {
   return {
     provider: provider?.id,
     signInPath,
-    isSignInExempt: (pathname) =>
+    isSignInExempt: (/** @type {string} */ pathname) =>
       exempt.some((pattern) => pattern.test(pathname)),
-    signInLocation: (requestUrl) =>
+    signInLocation: (/** @type {string} */ requestUrl) =>
       `${signInPath}?redirect=${encodeURIComponent(requestUrl)}`,
     view: publicSession
-      ? (session) => hookView(publicSession, session)
+      ? (
+          /** @type {import("./module-event.mjs").Session | undefined} */ session,
+        ) => hookView(publicSession, session)
       : () => ({}),
     /**
      * Renews the request's session after the backend refused it. Returns the
      * new session, which the rest of the request runs with, or `undefined`.
+     *
+     * @param {import("node:http").IncomingMessage} request
+     * @param {import("node:http").ServerResponse} response
      */
     async refresh(request, response) {
       if (!refreshSession) return undefined;
