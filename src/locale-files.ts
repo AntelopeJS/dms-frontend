@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { baseCompile, type CompileError } from "@intlify/message-compiler";
 import { isObjectLike, isText } from "./internal/guards";
+import { isRecord } from "./internal/locale-catalogs";
 
 /**
  * A locale file that does not parse, or holds a message vue-i18n cannot
@@ -108,6 +109,12 @@ export function readLocaleFile(path: string): Record<string, unknown> {
     const reason = error instanceof Error ? error.message : String(error);
     throw new InvalidLocaleFileError(path, reason);
   }
+  if (!isRecord(value)) {
+    throw new InvalidLocaleFileError(
+      path,
+      "a locale file must hold a JSON object of messages",
+    );
+  }
   const problems = messageProblems(value, "");
   if (problems.length) {
     const reason = [
@@ -116,5 +123,5 @@ export function readLocaleFile(path: string): Record<string, unknown> {
     ].join("\n");
     throw new InvalidLocaleFileError(path, reason);
   }
-  return value as Record<string, unknown>;
+  return value;
 }

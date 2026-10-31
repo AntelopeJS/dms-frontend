@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
+import { readLocaleFile } from "../src/locale-files";
 import {
   InvalidLocaleFileError,
   materializeLayers,
@@ -73,5 +74,38 @@ describe("locale messages vue-i18n cannot compile", () => {
       }),
       undefined,
     );
+  });
+});
+
+/**
+ * A catalog is a JSON object of messages: a file holding any other JSON value
+ * would have its characters or elements spread into the catalog as messages.
+ */
+describe("a locale file that is not a JSON object", () => {
+  const root = mkdtempSync(join(tmpdir(), "dms-locale-file-kind-"));
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  function locale(json: string): string {
+    const path = join(mkdtempSync(join(root, "locale-")), "en-US.json");
+    writeFileSync(path, json);
+    return path;
+  }
+
+  for (const json of ['"abc"', "[1,2]", "5", "null", "true"]) {
+    it(`is refused as an invalid locale file: ${json}`, () => {
+      const path = locale(json);
+      assert.throws(() => readLocaleFile(path), {
+        name: "InvalidLocaleFileError",
+        message: `Invalid locale file ${path}: a locale file must hold a JSON object of messages`,
+      });
+    });
+  }
+
+  it("is read as before when it holds an object", () => {
+    assert.deepEqual(
+      readLocaleFile(locale('{"greeting":"Hello {name}","nested":{"a":"b"}}')),
+      { greeting: "Hello {name}", nested: { a: "b" } },
+    );
+    assert.deepEqual(readLocaleFile(locale("{}")), {});
   });
 });
