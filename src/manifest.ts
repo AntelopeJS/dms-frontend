@@ -62,10 +62,12 @@ export class BackendUnreachableError extends CliError {
   ) {
     const cause =
       (hasProperties(failure) ? failure.cause : undefined) ?? failure;
-    const code = errorCode(cause);
+    const code = hasProperties(cause) ? errorCode(cause) : undefined;
+    const message = () =>
+      cause instanceof Error ? cause.message : String(cause);
     const detail = code
-      ? (UNREACHABLE_REASONS.get(code) ?? errorMessage(cause))
-      : `The request failed: ${errorMessage(cause)}`;
+      ? (UNREACHABLE_REASONS.get(code) ?? message())
+      : `The request failed: ${message()}`;
     const fix =
       code && UNKNOWN_HOST_CODES.includes(code)
         ? `Check the host name '${new URL(url).hostname}' in -b <url> or DMS_API_BASE_URL`
@@ -95,15 +97,12 @@ function hasProperties(value: unknown): value is ErrorProperties {
   );
 }
 
-function errorCode(err: unknown): string | undefined {
-  if (!hasProperties(err)) return undefined;
+function errorCode(err: ErrorProperties): string | undefined {
   const { code, errors } = err;
   if (isText(code)) return code;
-  return Array.isArray(errors) ? errorCode(errors[0]) : undefined;
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (!Array.isArray(errors)) return undefined;
+  const first: unknown = errors[0];
+  return hasProperties(first) ? errorCode(first) : undefined;
 }
 
 /**

@@ -66,10 +66,6 @@ const LAZY_LIBRARIES = [
 ];
 const RUNTIME_MARKERS = ["auth/login", "DefaultLayout", "error.500.title"];
 
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(path, "utf8"));
-}
-
 /** Fails the running check with `title` unless `condition` holds. */
 function ensure(
   condition: boolean,
@@ -82,7 +78,9 @@ function ensure(
 function removeDevelopmentDependencies(root: string): void {
   const packagePath = join(root, "package.json");
   if (!existsSync(packagePath)) return;
-  const packageData = readJson(packagePath) as LayerPackage;
+  const packageData = JSON.parse(
+    readFileSync(packagePath, "utf8"),
+  ) as LayerPackage;
   delete packageData.devDependencies;
   writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
 }
@@ -112,11 +110,16 @@ function materializeWorkspace(
   );
   writeWorkspacePackageJson(workspace, layers);
   const packagePath = join(workspace, "package.json");
-  const workspacePackage = readJson(packagePath) as LayerPackage;
+  const workspacePackage = JSON.parse(
+    readFileSync(packagePath, "utf8"),
+  ) as LayerPackage;
   workspacePackage.pnpm = {
     overrides: {
       ...Object.fromEntries(
-        layers.map((layer) => [layer.packageName, "workspace:*"]),
+        layers.map((layer): [string, string] => [
+          String(layer.packageName),
+          "workspace:*",
+        ]),
       ),
       ...Object.fromEntries(
         Object.entries(localPackages).map(([name, path]) => [
@@ -136,8 +139,8 @@ function materializeWorkspace(
  */
 function checkClientBundle(workspace: string): void {
   const clientRoot = join(workspace, "dist", "client");
-  const manifest = readJson(
-    join(clientRoot, ".vite", "manifest.json"),
+  const manifest = JSON.parse(
+    readFileSync(join(clientRoot, ".vite", "manifest.json"), "utf8"),
   ) as Record<string, { file: string; isEntry?: boolean }>;
   const mainEntry = Object.values(manifest).find((entry) => entry.isEntry);
   ensure(mainEntry !== undefined, "The Vite manifest names no entry chunk");
