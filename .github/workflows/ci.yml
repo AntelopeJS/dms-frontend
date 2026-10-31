@@ -23,6 +23,7 @@ jobs:
       docs-files: |
         README.md
         docs
+      docs-typescript-project: docs/tsconfig.json
       renovate-sync: false
 
   cli:
