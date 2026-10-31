@@ -14,6 +14,8 @@ import {
 import { InvalidLocaleFileError } from "./locale-files";
 
 import {
+  classifyFailure,
+  type Failure,
   failureDetails,
   formatTimedMessage,
   showPath,
@@ -52,7 +54,7 @@ interface WatchReporter {
   warn(text: string, options?: TimedMessageOptions): void;
   succeed(text: string): void;
   /** The lines of an error, with workspace paths shown as their sources. */
-  describe(error: unknown): string[];
+  describe(failure: Failure): string[];
   /** A path into the layer sources, as the user reads it. */
   show(path: string): string;
 }
@@ -154,7 +156,7 @@ function createLayerSync(
       }
       failures.applied(rel);
     } catch (err) {
-      failures.fail(rel, reporter.describe(err));
+      failures.fail(rel, reporter.describe(classifyFailure(err)));
     }
   };
 
@@ -165,7 +167,7 @@ function createLayerSync(
       if (existsSync(destPath)) rmSync(destPath, { recursive, force: true });
       failures.applied(rel);
     } catch (err) {
-      failures.fail(rel, reporter.describe(err));
+      failures.fail(rel, reporter.describe(classifyFailure(err)));
     }
   };
 
@@ -196,7 +198,7 @@ function createLayerSync(
           mkdirSync(join(dest, rel), { recursive: true });
           failures.applied(rel);
         } catch (err) {
-          failures.fail(rel, reporter.describe(err));
+          failures.fail(rel, reporter.describe(classifyFailure(err)));
         }
       }
     },
@@ -312,7 +314,9 @@ function createDerivedOutputRefresher(
       } else {
         fail(output, {
           text: `${capitalize(output.name)} not regenerated`,
-          options: { details: [...reporter.describe(err), kept] },
+          options: {
+            details: [...reporter.describe(classifyFailure(err)), kept],
+          },
           fixed: `${capitalize(output.name)} regenerated`,
         });
       }
@@ -330,7 +334,7 @@ function createDerivedOutputRefresher(
         text: "Derived files not regenerated",
         options: {
           details: [
-            ...reporter.describe(err),
+            ...reporter.describe(classifyFailure(err)),
             "The dev server keeps the previous ones until the module is fixed.",
           ],
         },
@@ -487,7 +491,8 @@ export function startLayerWatchers(
     succeed: (text) => {
       if (!isQuiet) write(formatTimedMessage("success", text, {}, ui));
     },
-    describe: (error) => failureDetails(error, ui).map((line) => mapPath(line)),
+    describe: (failure) =>
+      failureDetails(failure, ui).map((line) => mapPath(line)),
     show: (path) => {
       const mapped = mapPath(path);
       return mapped === path ? showPath(path) : mapped;
