@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readSession } from "./auth/session.mjs";
 import { BackendResponseError } from "./backend-response.mjs";
 import { heldOnceProps, requestedProps } from "./inertia.mjs";
-import { isNonNullObject, isObjectLike } from "./type-guards.mjs";
+import { isObjectLike } from "./type-guards.mjs";
 
 export const SHARED_PROP = "shared";
 /**
@@ -29,11 +29,12 @@ const NOT_FOUND = 404;
  */
 
 /**
- * What a page request reads of the backend: its JSON for a path, and whether
- * the frontend itself serves a path.
+ * What a page request reads of the backend: its JSON for a path (any value;
+ * `loadPage` reads the page answer as an object, as the backend sends it), and
+ * whether the frontend itself serves a path.
  *
  * @typedef {{
- *   fetchJson: (path: string) => Promise<unknown>,
+ *   fetchJson: (path: string) => Promise<any>,
  *   isFrontendPage: (pathname: string) => Promise<boolean>
  * }} PageBackend
  */
@@ -139,18 +140,11 @@ function frontendOnlyPage(pathname, signInPath) {
 }
 
 /**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-function isRecord(value) {
-  return isNonNullObject(value);
-}
-
-/**
  * @param {URL} url
  * @param {boolean} withShared
  * @param {PageBackend} backend
  * @param {string} signInPath
+ * @returns {Promise<{ page: PageProps["page"], shared: unknown }>}
  */
 async function loadPage(
   url,
@@ -160,10 +154,7 @@ async function loadPage(
 ) {
   const { pathname } = url;
   try {
-    const answer = await fetchJson(pagePath(url, withShared));
-    if (!isRecord(answer))
-      throw new TypeError("The backend's page answer is not an object");
-    const { shared, ...page } = answer;
+    const { shared, ...page } = await fetchJson(pagePath(url, withShared));
     return { page, shared };
   } catch (error) {
     if (!(error instanceof BackendResponseError) || error.status !== NOT_FOUND)
