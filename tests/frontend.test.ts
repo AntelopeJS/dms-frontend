@@ -81,7 +81,8 @@ describe("Vite frontend generation", () => {
         path: source,
         packageName: "@dms/mailing",
         priority: 0,
-        publicEndpoints: [webhook, "not-an-object" as never],
+        // @ts-expect-error a public endpoint declared as a string, off-contract input the registry writer must drop from generated-public-endpoints.json
+        publicEndpoints: [webhook, "not-an-object"],
       },
       { path: source, packageName: "@dms/legacy", priority: 1 },
     ]);
@@ -103,7 +104,8 @@ describe("Vite frontend generation", () => {
         priority: 0,
         backendProxies: [
           { path: "/media/**", auth: "none" },
-          "not-an-object" as never,
+          // @ts-expect-error a backend proxy declared as a string, off-contract input the registry writer must drop from generated-public-endpoints.json
+          "not-an-object",
         ],
       },
     ]);
