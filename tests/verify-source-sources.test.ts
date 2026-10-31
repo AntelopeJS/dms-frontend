@@ -10,7 +10,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
-import { readSources, type SourceOptions } from "../src/verify-source-sources";
+import {
+  readSourceOptions,
+  readSources,
+  type SourceOptions,
+} from "../src/verify-source-sources";
 import { isText } from "./helpers/guards";
 
 const CORE_LAYER = "@antelopejs/dms-frontend-vue";
@@ -77,7 +81,7 @@ function sources(projectDir: string, options: Partial<SourceOptions> = {}) {
 }
 
 /** The problem `run` stops with, as a usage error. */
-function usageProblem(run: () => ReturnType<typeof sources>) {
+function usageProblem(run: () => void) {
   try {
     run();
   } catch (error) {
@@ -233,5 +237,67 @@ describe("reading the packages verify-source builds", () => {
     const root = project({ "package.json": { name: "backend" } });
     const problem = usageProblem(() => sources(root));
     assert.equal(problem.title, "No frontend module to verify");
+  });
+});
+
+/** The options verify-source reads with `DMS_MODULE_SOURCES` and `DMS_LOCAL_PACKAGES` set to the given texts. */
+function optionsFromEnvironment(
+  moduleSources: string,
+  localPackages: string,
+): SourceOptions {
+  const saved = [
+    process.env.DMS_MODULE_SOURCES,
+    process.env.DMS_LOCAL_PACKAGES,
+  ];
+  process.env.DMS_MODULE_SOURCES = moduleSources;
+  process.env.DMS_LOCAL_PACKAGES = localPackages;
+  try {
+    return readSourceOptions();
+  } finally {
+    for (const [name, value] of [
+      ["DMS_MODULE_SOURCES", saved[0]],
+      ["DMS_LOCAL_PACKAGES", saved[1]],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+describe("reading the options verify-source is started with", () => {
+  it("reads a list of module paths and a record of local packages", () => {
+    const options = optionsFromEnvironment(
+      '["/a","/b"]',
+      '{"@antelopejs/interface-dms":"/opt/interface-dms"}',
+    );
+    assert.deepEqual(options.moduleSources, ["/a", "/b"]);
+    assert.deepEqual(options.localPackages, {
+      "@antelopejs/interface-dms": "/opt/interface-dms",
+    });
+  });
+
+  it("refuses module sources that are not a list of paths", () => {
+    for (const text of ['{"a":1}', "[1]", '"/a"', "null"]) {
+      const problem = usageProblem(() => optionsFromEnvironment(text, "{}"));
+      assert.match(problem.title, /DMS_MODULE_SOURCES/, text);
+    }
+  });
+
+  it("refuses local packages that are not a record of paths", () => {
+    for (const text of ['{"a":1}', "[]", '["a"]', '"a=/p"', "null"]) {
+      const problem = usageProblem(() => optionsFromEnvironment("[]", text));
+      assert.match(problem.title, /DMS_LOCAL_PACKAGES/, text);
+    }
+  });
+
+  it("ignores a package.json field of the project that is not text", () => {
+    const root = project({
+      ...DEMO_PROJECT,
+      "package.json": '{"name":"demo","packageManager":5}',
+      "package-lock.json": {},
+    });
+    assert.deepEqual(usageProblem(() => sources(root)).fixes, [
+      "Add it as a development dependency: npm install -D @antelopejs/dms",
+    ]);
   });
 });
