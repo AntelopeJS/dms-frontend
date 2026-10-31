@@ -1,4 +1,4 @@
-import { isNonNullObject } from "./type-guards.mjs";
+import { isRecord } from "./type-guards.mjs";
 
 const VARIABLE = "DMS_PUBLIC_OPTIONS";
 export const PUBLIC_OPTIONS_ELEMENT_ID = "dms-public-options";
@@ -12,16 +12,14 @@ export const PUBLIC_OPTIONS_ELEMENT_ID = "dms-public-options";
 
 /**
  * @param {string | undefined} raw
- * @returns {object | undefined}
+ * @returns {Record<string, unknown> | undefined}
  */
 function parse(raw) {
   if (!raw) return undefined;
   try {
     /** @type {unknown} */
     const parsed = JSON.parse(raw);
-    return isNonNullObject(parsed) && !Array.isArray(parsed)
-      ? parsed
-      : undefined;
+    return isRecord(parsed) && !Array.isArray(parsed) ? parsed : undefined;
   } catch {
     console.warn(`${VARIABLE} is not a JSON object of options by module id`);
     return undefined;
