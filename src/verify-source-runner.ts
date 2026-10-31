@@ -116,7 +116,10 @@ function materializeWorkspace(
   workspacePackage.pnpm = {
     overrides: {
       ...Object.fromEntries(
-        layers.map((layer) => [layer.packageName, "workspace:*"]),
+        layers.map((layer): [string, string] => [
+          String(layer.packageName),
+          "workspace:*",
+        ]),
       ),
       ...Object.fromEntries(
         Object.entries(localPackages).map(([name, path]) => [
