@@ -63,7 +63,7 @@ pnpm exec ajs dms start -b https://api.example.com -p 3001
 
 <!-- antelopejs-docs-compat:end -->
 
-Each DMS release declares the renderer releases it runs on in `engines["@antelopejs/dms-frontend"]` of its frontend module's `package.json`, and the `ajs dms` CLI refuses to build a module whose range excludes the installed renderer. The [compatibility table](https://dms.antelopejs.com/docs/frontend/introduction#compatibility) lists the renderer release line of each DMS release it covers. The renderer needs Node.js 20.19 or later and the `@antelopejs/core` range in the table above.
+Each DMS release declares the renderer releases it runs on in `engines["@antelopejs/dms-frontend"]` of its frontend module's `package.json`, and the `ajs dms` CLI refuses to build a module whose range excludes the installed renderer. To find the renderer releases that match a DMS release, read that `engines` range in the installed DMS frontend module; the [Compatibility](https://dms.antelopejs.com/docs/frontend/introduction#compatibility) section of the introduction says so. The renderer needs Node.js 20.19 or later and the `@antelopejs/core` range in the table above.
 
 ## Documentation
 
