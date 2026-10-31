@@ -6,10 +6,15 @@ import { join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 
+/** The props of the fixture's `Welcome.vue`. */
+interface WelcomeProps {
+  footer?: boolean;
+}
+
 interface EmailTemplate {
   renderEmailTemplate: (
     template: string,
-    props: Record<string, unknown>,
+    props: WelcomeProps,
   ) => Promise<string>;
   watchEmailBundle: () => ChildProcess;
 }
@@ -88,7 +93,6 @@ it("builds the email bundle in development and rebuilds it when a template chang
 });
 
 it("lets a render in progress finish before a rebuild replaces the bundle", async () => {
-  const gate = globalThis as { emailRenderGate?: Promise<void> };
   const { workspace, moduleRoot, email } = await emailWorkspace({
     "Welcome.vue": `<script setup lang="ts">
 const props = defineProps<{ footer?: boolean }>();
@@ -108,9 +112,13 @@ if (props.footer) {
     builder = email.watchEmailBundle();
     assert.match(await email.renderEmailTemplate("Welcome", {}), /Welcome/);
 
-    gate.emailRenderGate = new Promise((open) => {
-      openGate = open;
-    });
+    Reflect.set(
+      globalThis,
+      "emailRenderGate",
+      new Promise<void>((open) => {
+        openGate = open;
+      }),
+    );
     const held = email.renderEmailTemplate("Welcome", { footer: true });
     const rebuild = once(builder, "message");
     writeFileSync(
@@ -140,7 +148,7 @@ if (props.footer) {
     );
   } finally {
     openGate();
-    delete gate.emailRenderGate;
+    Reflect.deleteProperty(globalThis, "emailRenderGate");
     builder?.kill();
     rmSync(workspace, { recursive: true, force: true });
   }

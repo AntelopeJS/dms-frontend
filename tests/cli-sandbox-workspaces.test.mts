@@ -19,7 +19,7 @@ function stampedWorkspace(
   backendUrl: string,
   updatedAt: string,
   bytes: number,
-): Record<string, string> {
+) {
   const hash = createHash("sha256").update(workspaceKey).digest("hex");
   const dir = join(".antelopejs", "dms-frontend", hash);
   const meta = JSON.stringify({ backendUrl, workspaceKey, updatedAt });
@@ -199,7 +199,7 @@ describe("update notice", () => {
 
 /** A built workspace whose server prints the output settings it inherited. */
 
-function settingsWorkspace(): Record<string, string> {
+function settingsWorkspace() {
   return {
     ...builtWorkspace(),
     [join(PRODUCTION_WORKSPACE, "server.mjs")]:

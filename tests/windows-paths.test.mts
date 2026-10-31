@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runInNewContext } from "node:vm";
 import AutoImport from "unplugin-auto-import/vite";
-import type { Plugin } from "vite";
 import { normalizePath } from "vite";
 import { dynamicImports } from "../scripts/source-checks/dynamic-imports";
 import { isCallable, isText } from "./helpers/guards";
@@ -23,7 +22,7 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
       dts: false,
       imports: [{ [moduleKey]: ["useDmsUserSession"] }],
     }),
-  ].flat() as Plugin[];
+  ].flat();
   const transform = plugin.transform;
   const handler = isCallable(transform) ? transform : transform?.handler;
   assert.ok(handler, "the auto-importer exposes a transform hook");
@@ -36,7 +35,9 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
   const emitted = isText(code) ? code : String(code ?? "");
   const literal = emitted.match(/from\s+('[^']*'|"[^"]*")/)?.[1];
   assert.ok(literal, `no import was injected into:\n${emitted}`);
-  return runInNewContext(literal) as string;
+  const specifier: unknown = runInNewContext(literal);
+  assert.ok(isText(specifier), "the specifier is a string");
+  return specifier;
 }
 
 describe("Windows paths inlined into generated code", () => {

@@ -10,6 +10,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { it } from "node:test";
 import type { ViteDevServer } from "vite";
+import type { renderDmsPage } from "../templates/vue/ssr-renderer.ts";
 
 interface RenderProbe {
   /** Holds the first request's page after its app has set up. */
@@ -18,7 +19,7 @@ interface RenderProbe {
 }
 
 interface ServerRenderer {
-  renderDmsPage(page: unknown): Promise<{ body: string }>;
+  renderDmsPage: typeof renderDmsPage;
 }
 
 /**
@@ -27,7 +28,7 @@ interface ServerRenderer {
  * `useState`, with the very lines Nuxt UI 4.10 ships, and a component stub
  * for everything else.
  */
-const NUXT_UI_FILES: Record<string, string> = {
+const NUXT_UI_FILES = {
   "package.json": JSON.stringify({
     name: "@nuxt/ui",
     type: "module",
@@ -66,7 +67,7 @@ export const useRoute = () => {
   return { get fullPath() { return page.url; } };
 };
 `,
-};
+} satisfies Record<string, string>;
 
 /** A page that suspends on the probe's gate, then renders a link and the route. */
 const PAGE = `

@@ -18,6 +18,8 @@ import {
   writeFrontendModuleRegistry,
 } from "../src/common";
 import { readText } from "./helpers/files";
+import { isTextList } from "./helpers/guards";
+import { jsonAt, type JsonValue, readJson } from "./helpers/json";
 import { eventually, output, warnings, writeFile } from "./helpers/layer-watch";
 describe("locale catalogs in the dev layer watcher", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-layer-watch-"));
@@ -32,10 +34,13 @@ describe("locale catalogs in the dev layer watcher", () => {
   ];
   let stopWatchers: () => Promise<void> = async () => {};
 
-  const catalog = (locale: string): Record<string, any> =>
-    JSON.parse(readText(join(generated, `${locale}.json`)));
-  const emailLocales = (): string[] =>
-    JSON.parse(readText(join(workspace, "email-locales.generated.json")));
+  const catalog = (locale: string): JsonValue =>
+    readJson(join(generated, `${locale}.json`));
+  const emailLocales = (): string[] => {
+    const locales = readJson(join(workspace, "email-locales.generated.json"));
+    assert.ok(isTextList(locales), "the email locales are a list of names");
+    return locales;
+  };
   const mtime = (path: string): number => statSync(path).mtimeMs;
 
   before(() => {
@@ -80,7 +85,7 @@ describe("locale catalogs in the dev layer watcher", () => {
   });
 
   it("regenerates the merged catalogs when a layer adds a key", async () => {
-    assert.deepEqual(catalog("en").form, {
+    assert.deepEqual(jsonAt(catalog("en"), "form"), {
       title: "Form",
       owner: "app",
     });
@@ -92,9 +97,9 @@ describe("locale catalogs in the dev layer watcher", () => {
             form: { title: "Form", owner: "base", demo_key: "Hello" },
           }),
         ),
-      () => catalog("en").form.demo_key === "Hello",
+      () => jsonAt(catalog("en"), "form", "demo_key") === "Hello",
     );
-    assert.equal(catalog("en").form.owner, "app");
+    assert.equal(jsonAt(catalog("en"), "form", "owner"), "app");
     assert.match(readText(join(generated, "en.ts")), /"demo_key":"Hello"/);
     assert.deepEqual(emailLocales(), ["en", "fr"]);
   });
@@ -122,7 +127,7 @@ describe("locale catalogs in the dev layer watcher", () => {
           JSON.stringify({ form: { title: "Formulaire modifié" } }),
         );
       },
-      () => catalog("fr").form.title === "Formulaire modifié",
+      () => jsonAt(catalog("fr"), "form", "title") === "Formulaire modifié",
     );
     assert.deepEqual(untouched.map(mtime), before);
   });
@@ -145,8 +150,8 @@ describe("locale catalogs in the dev layer watcher", () => {
           );
         },
         () =>
-          catalog("en").form.title === "Form (both)" &&
-          catalog("en").form.both === true,
+          jsonAt(catalog("en"), "form", "title") === "Form (both)" &&
+          jsonAt(catalog("en"), "form", "both") === true,
       );
       const catalogWrites = rename.mock.calls.filter(
         (call) => call.arguments[1] === catalogPath,
@@ -164,7 +169,7 @@ describe("locale catalogs in the dev layer watcher", () => {
         writeFileSync(german, JSON.stringify({ form: { title: "Formular" } })),
       () => existsSync(join(generated, "de.json")),
     );
-    assert.equal(catalog("de").form.title, "Formular");
+    assert.equal(jsonAt(catalog("de"), "form", "title"), "Formular");
     assert.ok(existsSync(join(generated, "de.ts")));
     assert.deepEqual(emailLocales().sort(), ["de", "en", "fr"]);
     assert.match(
@@ -207,7 +212,7 @@ describe("locale catalogs in the dev layer watcher", () => {
       );
       assert.doesNotMatch(failure, /frontend-modules|\.antelopejs/);
       assert.doesNotMatch(failure, /^\s+at /m, "no stack trace");
-      assert.equal(catalog("en").form.demo_key, "Hello");
+      assert.equal(jsonAt(catalog("en"), "form", "demo_key"), "Hello");
 
       await eventually(
         () =>
@@ -215,7 +220,7 @@ describe("locale catalogs in the dev layer watcher", () => {
             file,
             JSON.stringify({ form: { title: "Form", demo_key: "Fixed" } }),
           ),
-        () => catalog("en").form.demo_key === "Fixed",
+        () => jsonAt(catalog("en"), "form", "demo_key") === "Fixed",
       );
       const fixed = warnings().filter((line) => line.includes(" ✔ "));
       assert.deepEqual(

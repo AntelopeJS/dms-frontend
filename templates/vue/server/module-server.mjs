@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { allowedEstablishEndpoints } from "./auth/establish-endpoints.mjs";
 import { serverAuth } from "./auth-hooks.mjs";
 import { answerModuleRoute } from "./module-event.mjs";
+import { isNonNullObject, isString } from "./type-guards.mjs";
 import {
   matchModuleRoute,
   mayHaveModuleRoute,
@@ -53,7 +54,7 @@ function holderOf(target, path) {
   for (const key of path.slice(0, -1)) {
     if (UNSAFE_KEYS.has(key) || !Object.hasOwn(node, key)) return undefined;
     node = node[key];
-    if (typeof node !== "object" || node === null) return undefined;
+    if (!isNonNullObject(node)) return undefined;
   }
   return UNSAFE_KEYS.has(path.at(-1)) ? undefined : node;
 }
@@ -93,8 +94,8 @@ export function privateOptionsWithFallbacks(modules, environment, env) {
 
 /** Each string leaf of `value`, array items included, with its path. */
 function* stringLeaves(value, path = []) {
-  if (typeof value === "string") yield [path, value];
-  else if (typeof value === "object" && value !== null)
+  if (isString(value)) yield [path, value];
+  else if (isNonNullObject(value))
     for (const [key, child] of Object.entries(value))
       yield* stringLeaves(child, [...path, key]);
 }
@@ -119,7 +120,7 @@ export function privateOptionsFromJson(modules, json, warn) {
   } catch {
     given = undefined;
   }
-  if (typeof given !== "object" || given === null || Array.isArray(given)) {
+  if (!isNonNullObject(given) || Array.isArray(given)) {
     warn("DMS_PRIVATE_OPTIONS is not a JSON object of options by module id");
     return modules;
   }

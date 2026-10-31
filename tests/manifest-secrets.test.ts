@@ -15,8 +15,14 @@ import {
   reportManifestSecrets,
   resolveManifestSecrets,
 } from "../src/manifest-secrets";
-import type { FrontendModuleValue, ManifestModule } from "../src/workspace";
+import type {
+  FrontendModuleOptions,
+  FrontendModuleValue,
+  ManifestModule,
+} from "../src/workspace";
 import { memoryUi } from "./fixtures/memory-ui";
+import { isText } from "./helpers/guards";
+import { isJsonObject, isJsonValue, jsonAt } from "./helpers/json";
 import { OWN_PACKAGE } from "./helpers/own-package";
 import { addressOf } from "./helpers/net";
 
@@ -256,6 +262,20 @@ describe("ajs dms start", () => {
     publicOptions?: string;
   }
 
+  function isOptionalText(value: unknown): value is string | undefined {
+    return value === undefined || isText(value);
+  }
+
+  function isStartReport(value: unknown): value is StartReport {
+    return (
+      isJsonValue(value) &&
+      isJsonObject(value) &&
+      isOptionalText(jsonAt(value, "secret")) &&
+      isOptionalText(jsonAt(value, "relay")) &&
+      isOptionalText(jsonAt(value, "publicOptions"))
+    );
+  }
+
   /**
    * A project whose one module computes its frontend's public options from
    * its configuration, which an environment variable overrides.
@@ -324,7 +344,7 @@ describe("ajs dms start", () => {
    */
   async function start(
     env: Record<string, string>,
-    serverOptions?: Record<string, unknown>,
+    serverOptions?: FrontendModuleOptions,
     backendUrl = BACKEND_URL,
   ): Promise<{ report: StartReport; log: string }> {
     const project = mkdtempSync(join(tmpdir(), "dms-manifest-secrets-"));
@@ -385,7 +405,9 @@ describe("ajs dms start", () => {
         ],
         { cwd: project, env: environment },
       );
-      return { report: JSON.parse(stdout), log: stderr };
+      const report: unknown = JSON.parse(stdout);
+      assert.ok(isStartReport(report), "the server reported its secrets");
+      return { report, log: stderr };
     } finally {
       rmSync(project, { recursive: true, force: true });
     }

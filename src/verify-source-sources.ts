@@ -36,12 +36,12 @@ const CORE_LAYER_DIRECTORY = "frontend-vue";
 const FRONTEND_ENTRY = "dms.frontend.ts";
 
 /** How each package manager adds a development dependency. */
-const ADD_DEV_DEPENDENCY: Record<string, string> = {
-  pnpm: "pnpm add -D",
-  npm: "npm install -D",
-  yarn: "yarn add -D",
-  bun: "bun add -d",
-};
+const ADD_DEV_DEPENDENCY = new Map([
+  ["pnpm", "pnpm add -D"],
+  ["npm", "npm install -D"],
+  ["yarn", "yarn add -D"],
+  ["bun", "bun add -d"],
+]);
 const LOCKFILES: [string, string][] = [
   ["pnpm-lock.yaml", "pnpm"],
   ["package-lock.json", "npm"],
@@ -115,7 +115,7 @@ function packageManager(projectDir: string): string {
       const [name] = (readManifest(packagePath).packageManager ?? "").split(
         "@",
       );
-      if (name && ADD_DEV_DEPENDENCY[name]) return name;
+      if (name && ADD_DEV_DEPENDENCY.has(name)) return name;
       const lockfile = LOCKFILES.find(([file]) =>
         existsSync(join(directory, file)),
       );
@@ -126,7 +126,7 @@ function packageManager(projectDir: string): string {
 }
 
 function addDmsCommand(projectDir: string, version = ""): string {
-  return `${ADD_DEV_DEPENDENCY[packageManager(projectDir)]} ${DMS_PACKAGE}${version}`;
+  return `${ADD_DEV_DEPENDENCY.get(packageManager(projectDir))} ${DMS_PACKAGE}${version}`;
 }
 
 function describeDirectory(directory: string): string {

@@ -165,7 +165,7 @@ describe("the proxy streams large file-storage transfers", () => {
         },
         body: gatedBody(TRANSFER_BYTES, firstUploadChunk.promise),
         duplex: "half",
-      } as RequestInit,
+      },
     );
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { received: TRANSFER_BYTES });
@@ -219,7 +219,7 @@ describe("the proxy streams large file-storage transfers", () => {
         method: "PUT",
         body: gatedBody(TOO_LARGE_BYTES, Promise.resolve()),
         duplex: "half",
-      } as RequestInit,
+      },
     );
     assert.equal(response.status, 413);
     await response.arrayBuffer();

@@ -1,8 +1,16 @@
+import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { addressOf } from "../helpers/net";
 import "./dms-backend-proxies.mts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isNumber, isText } from "../helpers/guards";
+import {
+  isJsonObject,
+  isJsonValue,
+  jsonAt,
+  type JsonObject,
+} from "../helpers/json";
 
 export interface ServerTemplate {
   assetVersion: () => string;
@@ -33,6 +41,36 @@ export interface SessionTemplate {
 export const sessions = import(
   join(process.cwd(), "templates", "vue", "server", "auth", "session.mjs")
 ) as Promise<SessionTemplate>;
+
+/** A prop the server sent once, and when the browser may stop holding it. */
+export interface OnceProp {
+  prop: string;
+  expiresAt: number | null;
+}
+
+/** The page an Inertia visit answers with. */
+export interface InertiaPage {
+  props: JsonObject;
+  onceProps?: Record<string, OnceProp>;
+}
+
+function isOnceProp(value: unknown): value is OnceProp {
+  if (!isJsonValue(value)) return false;
+  const expiresAt = jsonAt(value, "expiresAt");
+  return (
+    isText(jsonAt(value, "prop")) && (expiresAt === null || isNumber(expiresAt))
+  );
+}
+
+function isInertiaPage(value: unknown): value is InertiaPage {
+  if (!isJsonValue(value)) return false;
+  const onceProps = jsonAt(value, "onceProps");
+  return (
+    isJsonObject(jsonAt(value, "props")) &&
+    (onceProps === undefined ||
+      (isJsonObject(onceProps) && Object.values(onceProps).every(isOnceProp)))
+  );
+}
 
 export const SSR_DIRECTORY = join(
   process.cwd(),
@@ -140,10 +178,8 @@ export async function frontendWithBackend() {
       headers: { "x-inertia": "true", ...headers },
       redirect: "manual",
     });
-    const page = (await response.json()) as {
-      props: Record<string, unknown>;
-      onceProps?: Record<string, { prop: string; expiresAt: number | null }>;
-    };
+    const page: unknown = await response.json();
+    assert.ok(isInertiaPage(page), "the visit answered with an Inertia page");
     return { page, backendCalls: [...backendCalls] };
   };
   const close = () => {

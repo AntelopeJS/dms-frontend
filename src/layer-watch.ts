@@ -69,11 +69,11 @@ function createSyncFailures(src: string, reporter: WatchReporter) {
   const failed = new Set<string>();
   const show = (rel: string) => reporter.show(join(src, rel));
   return {
-    fail(rel: string, err: unknown): void {
+    fail(rel: string, errorLines: string[]): void {
       failed.add(rel);
       reporter.warn(`${show(rel)} not copied to the workspace`, {
         details: [
-          ...reporter.describe(err),
+          ...errorLines,
           "The dev server keeps its previous version until the next save.",
         ],
       });
@@ -154,7 +154,7 @@ function createLayerSync(
       }
       failures.applied(rel);
     } catch (err) {
-      failures.fail(rel, err);
+      failures.fail(rel, reporter.describe(err));
     }
   };
 
@@ -165,7 +165,7 @@ function createLayerSync(
       if (existsSync(destPath)) rmSync(destPath, { recursive, force: true });
       failures.applied(rel);
     } catch (err) {
-      failures.fail(rel, err);
+      failures.fail(rel, reporter.describe(err));
     }
   };
 
@@ -196,7 +196,7 @@ function createLayerSync(
           mkdirSync(join(dest, rel), { recursive: true });
           failures.applied(rel);
         } catch (err) {
-          failures.fail(rel, err);
+          failures.fail(rel, reporter.describe(err));
         }
       }
     },
@@ -219,29 +219,6 @@ interface OutputFailure {
   text: string;
   options: TimedMessageOptions;
   fixed: string;
-}
-
-function describeOutputFailure(
-  output: DerivedOutput,
-  err: unknown,
-  reporter: WatchReporter,
-): OutputFailure {
-  const kept = `The dev server keeps the previous ${output.name} until the file is fixed.`;
-  if (err instanceof InvalidLocaleFileError) {
-    const file = reporter.show(err.path);
-    return {
-      text: `${file} is not a valid locale file`,
-      options: { details: [...err.reason.split("\n"), kept] },
-      fixed: [`${file} fixed`, `${output.name} regenerated`].join(
-        getProcessUi().symbols.separator,
-      ),
-    };
-  }
-  return {
-    text: `${capitalize(output.name)} not regenerated`,
-    options: { details: [...reporter.describe(err), kept] },
-    fixed: `${capitalize(output.name)} regenerated`,
-  };
 }
 
 /**
@@ -322,7 +299,23 @@ function createDerivedOutputRefresher(
       if (isChanged) noticeRestart(output, paths);
       return isChanged;
     } catch (err) {
-      fail(output, describeOutputFailure(output, err, reporter));
+      const kept = `The dev server keeps the previous ${output.name} until the file is fixed.`;
+      if (err instanceof InvalidLocaleFileError) {
+        const file = reporter.show(err.path);
+        fail(output, {
+          text: `${file} is not a valid locale file`,
+          options: { details: [...err.reason.split("\n"), kept] },
+          fixed: [`${file} fixed`, `${output.name} regenerated`].join(
+            getProcessUi().symbols.separator,
+          ),
+        });
+      } else {
+        fail(output, {
+          text: `${capitalize(output.name)} not regenerated`,
+          options: { details: [...reporter.describe(err), kept] },
+          fixed: `${capitalize(output.name)} regenerated`,
+        });
+      }
       return false;
     }
   };

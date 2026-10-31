@@ -14,6 +14,7 @@ import {
   defineDmsServer,
 } from "../templates/vue/server-module";
 import { writeFixture, listen, close } from "./fixtures/server-modules";
+import { jsonAt, responseJson } from "./helpers/json";
 
 describe("Module server routes in development", () => {
   it("answers with an edited handler on the next request", async () => {
@@ -91,7 +92,7 @@ describe("Module server routes in development", () => {
       });
       const url = `${await listen(frontend)}/api/_fixture/version`;
       const version = async () =>
-        ((await (await fetch(url)).json()) as { version: string }).version;
+        jsonAt(await responseJson(await fetch(url)), "version");
 
       assert.equal(await version(), "v1");
       await new Promise((settle) => setTimeout(settle, 100));
@@ -254,7 +255,7 @@ describe("The module testing helper", () => {
       },
       other: { apiKey: "" },
     });
-    assert.equal(({} as Record<string, unknown>).polluted, undefined);
+    assert.equal(Object.hasOwn(Object.prototype, "polluted"), false);
     assert.deepEqual(warnings, []);
 
     const untouched = { shop: { apiKey: "" } };

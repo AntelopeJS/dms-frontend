@@ -8,12 +8,38 @@ import {
   clientCodeSplitting,
   onBuildLog,
 } from "../templates/vue/client-chunking.mjs";
+import { isFlag, isObjectLike } from "../src/internal/guards";
 import { readText } from "./helpers/files";
+import { isText } from "./helpers/guards";
 
 interface ManifestChunk {
   file: string;
   isEntry?: boolean;
   imports?: string[];
+}
+
+function isManifestChunk(value: unknown): value is ManifestChunk {
+  return (
+    isObjectLike(value) &&
+    "file" in value &&
+    isText(value.file) &&
+    (!("isEntry" in value) ||
+      value.isEntry === undefined ||
+      isFlag(value.isEntry)) &&
+    (!("imports" in value) ||
+      value.imports === undefined ||
+      (Array.isArray(value.imports) && value.imports.every(isText)))
+  );
+}
+
+function isBuildManifest(
+  value: unknown,
+): value is Record<string, ManifestChunk> {
+  return (
+    isObjectLike(value) &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isManifestChunk)
+  );
 }
 
 const roots: string[] = [];
@@ -54,7 +80,7 @@ function fixture(): string {
       `export const ${name} = "${name}".repeat(40) + Math.random();\n`,
     );
   }
-  const components: Record<string, string[]> = {
+  const components = {
     shared: ["a", "b"],
     cell: ["a", "c"],
     one: ["a"],
@@ -80,7 +106,7 @@ function fixture(): string {
     "registry.ts",
     `import cell from "./components/cell";\nexport const registry = new Map([["cell", cell]]);\n`,
   );
-  const pages: Record<string, string> = {
+  const pages = {
     home: "one",
     list: "two",
     edit: "three",
@@ -106,7 +132,7 @@ function fixture(): string {
 /** Files the entry loads before running: the entry and its static imports. */
 async function entryClosure(
   root: string,
-  codeSplitting: unknown,
+  codeSplitting: typeof clientCodeSplitting | undefined,
 ): Promise<{ closure: string[]; files: string[] }> {
   await build({
     root,
@@ -124,21 +150,23 @@ async function entryClosure(
       },
     },
   });
-  const manifest = JSON.parse(
+  const parsed: unknown = JSON.parse(
     readText(join(root, "dist", ".vite", "manifest.json")),
-  ) as Record<string, ManifestChunk>;
-  const entry = Object.keys(manifest).find((key) => manifest[key]?.isEntry);
+  );
+  assert.ok(isBuildManifest(parsed), "the build manifest lists chunks");
+  const manifest = new Map(Object.entries(parsed));
+  const entry = [...manifest.keys()].find((key) => manifest.get(key)?.isEntry);
   assert.ok(entry, "the build has an entry");
   const seen = new Set<string>();
   const visit = (key: string): void => {
     if (seen.has(key)) return;
     seen.add(key);
-    for (const next of manifest[key]?.imports ?? []) visit(next);
+    for (const next of manifest.get(key)?.imports ?? []) visit(next);
   };
   visit(entry);
   return {
-    closure: [...seen].map((key) => manifest[key]?.file ?? key),
-    files: Object.values(manifest).map((chunk) => chunk.file),
+    closure: [...seen].map((key) => manifest.get(key)?.file ?? key),
+    files: [...manifest.values()].map((chunk) => chunk.file),
   };
 }
 

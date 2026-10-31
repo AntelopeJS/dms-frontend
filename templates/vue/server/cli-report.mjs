@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
+import { isNonNullObject, isString } from "./type-guards.mjs";
 
 const WILDCARD_ADDRESSES = ["0.0.0.0", "::"];
 
@@ -55,7 +56,7 @@ const RULE_PREFIX = /^\[[A-Z_]+\]\s*/;
 /** The first problem Rolldown reports when it cannot bundle a config. */
 function bundlerError(error) {
   const first = error?.errors?.[0];
-  return first && typeof first === "object" ? first : undefined;
+  return isNonNullObject(first) ? first : undefined;
 }
 
 /**
@@ -66,7 +67,7 @@ function bundlerError(error) {
 function errorLocation(error) {
   const source = bundlerError(error) ?? error;
   const file = source?.loc?.file ?? source?.id;
-  if (typeof file !== "string") return undefined;
+  if (!isString(file)) return undefined;
   const { line, column } = source.loc ?? {};
   return {
     file: resolve(file),

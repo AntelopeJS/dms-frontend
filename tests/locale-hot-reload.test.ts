@@ -19,7 +19,7 @@ import {
   writeLocaleMessages,
 } from "../src/common";
 
-type Messages = Record<string, unknown>;
+type Messages = Record<string, string>;
 
 interface LocaleCatalogs {
   localeMessages: Record<string, Messages>;

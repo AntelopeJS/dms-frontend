@@ -340,21 +340,6 @@ const LINE_BREAK = /\r?\n/;
 const STACK_TRACE_HINT = "Run with --verbose for the full trace.";
 
 /**
- * A failure as the result carries it: a check's own problem, or the first
- * line of an unexpected error, with its stack trace in a verbose run.
- */
-function describeError(error: unknown, isVerbose: boolean): CliProblem {
-  if (error instanceof CliError) return error.problem;
-  if (!(error instanceof Error)) return { title: String(error) };
-  const [title] = error.message.split(LINE_BREAK);
-  const stack = (error.stack ?? "").split(LINE_BREAK);
-  return {
-    title: title || error.name,
-    details: isVerbose ? stack : [STACK_TRACE_HINT],
-  };
-}
-
-/**
  * The renderer range is asserted before the first task, so its notice does
  * not land inside one.
  */
@@ -430,7 +415,20 @@ async function main(): Promise<void> {
       process.exitCode = error.exitCode;
       return;
     }
-    result = { ok: false, problem: describeError(error, isVerboseRun()) };
+    let problem: CliProblem;
+    if (error instanceof CliError) {
+      problem = error.problem;
+    } else if (error instanceof Error) {
+      const [title] = error.message.split(LINE_BREAK);
+      const stack = (error.stack ?? "").split(LINE_BREAK);
+      problem = {
+        title: title || error.name,
+        details: isVerboseRun() ? stack : [STACK_TRACE_HINT],
+      };
+    } else {
+      problem = { title: String(error) };
+    }
+    result = { ok: false, problem };
   }
   if (process.send) {
     process.exitCode = result.ok ? 0 : 1;

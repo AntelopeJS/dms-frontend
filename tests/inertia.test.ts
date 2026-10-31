@@ -99,7 +99,9 @@ describe("Inertia HTTP protocol", () => {
   it("uses native Inertia v3 semantics for internal, fragment, and external redirects", async () => {
     const runtime = await server;
     const capture = (location: string) => {
-      let result: Record<string, unknown> = {};
+      let result:
+        | { status: number; headers: Record<string, string> }
+        | undefined;
       runtime.redirectFrontendVisit(
         { method: "GET", headers: { "x-inertia": "true" } },
         {

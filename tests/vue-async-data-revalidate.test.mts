@@ -13,6 +13,7 @@ import {
   ref,
 } from "vue";
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
+import { isNumber } from "../src/internal/guards";
 
 const {
   createDmsFrontendRuntime,
@@ -214,7 +215,8 @@ describe("Async data failures and keys", () => {
 
     void entry.refresh();
     assert.equal(entry.status.value, "pending");
-    assert.equal((entry.error.value as Error).message, "down", "still shown");
+    assert.ok(entry.error.value instanceof Error);
+    assert.equal(entry.error.value.message, "down", "still shown");
     answers[2].resolve("rows again");
     await settle();
     assert.equal(entry.error.value, null);
@@ -228,7 +230,8 @@ describe("Async data failures and keys", () => {
       useDmsAsyncData("named", async () => 2, {
         transform: (value, context) => {
           seen.push(context);
-          return (value as number) * 10;
+          assert.ok(isNumber(value));
+          return value * 10;
         },
       }),
     );
@@ -440,7 +443,8 @@ describe("Async data a server cannot transfer", () => {
     let calls = 0;
     const warnings: unknown[] = [];
     const originalWarn = console.warn;
-    console.warn = (message: unknown) => warnings.push(message);
+    console.warn = (...args: Parameters<typeof console.warn>) =>
+      warnings.push(args[0]);
     try {
       const Keyless = defineComponent({
         setup() {
@@ -469,7 +473,8 @@ describe("Async data a server cannot transfer", () => {
   it("warns in development about a backend read outside async data", async () => {
     const warnings: unknown[] = [];
     const originalWarn = console.warn;
-    console.warn = (message: unknown) => warnings.push(message);
+    console.warn = (...args: Parameters<typeof console.warn>) =>
+      warnings.push(args[0]);
     let inHandler = false;
     try {
       const Watcher = defineComponent({

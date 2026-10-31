@@ -1,5 +1,6 @@
 import { GENERIC_ERROR_MESSAGE } from "./auth/backend.mjs";
 import { isFrontendVisit, redirectFrontendVisit } from "./inertia.mjs";
+import { isString } from "./type-guards.mjs";
 
 /**
  * What a JSON caller gets when the backend fails: the generic i18n key of
@@ -35,11 +36,9 @@ async function refusalCode(response) {
   let value = text;
   try {
     const data = JSON.parse(text);
-    value = typeof data === "string" ? data : data?.message;
+    value = isString(data) ? data : data?.message;
   } catch {}
-  return typeof value === "string" && REFUSAL_CODE.test(value)
-    ? value
-    : undefined;
+  return isString(value) && REFUSAL_CODE.test(value) ? value : undefined;
 }
 
 /** The error for a failed backend response, with its typed code if any. */

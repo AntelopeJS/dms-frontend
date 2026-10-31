@@ -23,6 +23,12 @@ import {
   relayedLocation,
 } from "./proxy-redirects.mjs";
 import { backendUrl } from "./request-target.mjs";
+import {
+  isFunction,
+  isNonNullObject,
+  isNumber,
+  isString,
+} from "./type-guards.mjs";
 import { pipeWebBody } from "./web-body.mjs";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -96,7 +102,7 @@ async function readJson(webRequestValue) {
 }
 
 function checkedCookieName(name) {
-  if (typeof name !== "string" || !COOKIE_NAME.test(name))
+  if (!isString(name) || !COOKIE_NAME.test(name))
     throw new Error(`Invalid cookie name: ${String(name)}`);
   if (name === SESSION_COOKIE)
     throw new Error(
@@ -206,10 +212,9 @@ export function createServerEvent(context) {
 function isResponse(value) {
   return (
     value instanceof Response ||
-    (typeof value === "object" &&
-      value !== null &&
-      typeof value.status === "number" &&
-      typeof value.headers?.get === "function" &&
+    (isNonNullObject(value) &&
+      isNumber(value.status) &&
+      isFunction(value.headers?.get) &&
       "body" in value)
   );
 }

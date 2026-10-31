@@ -1,4 +1,5 @@
 import { writeBadRequest } from "./request-failure.mjs";
+import { isString } from "./type-guards.mjs";
 
 const FRONTEND_ORIGIN = "http://frontend.local";
 
@@ -9,7 +10,7 @@ const FRONTEND_ORIGIN = "http://frontend.local";
  * request a browser sends to the frontend.
  */
 export function isOriginForm(target) {
-  if (typeof target !== "string" || !target.startsWith("/")) return false;
+  if (!isString(target) || !target.startsWith("/")) return false;
   try {
     return new URL(target, FRONTEND_ORIGIN).origin === FRONTEND_ORIGIN;
   } catch {
