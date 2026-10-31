@@ -179,7 +179,11 @@ export async function installDeps(
     }
     task.succeed(progress.doneLabel);
   } catch (error) {
-    endInterruptedTask(task, error, "Dependency install stopped");
+    endInterruptedTask(
+      task,
+      error instanceof CancelledError ? error : undefined,
+      "Dependency install stopped",
+    );
     throw error;
   }
 }
