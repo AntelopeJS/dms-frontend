@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { readSession } from "./auth/session.mjs";
+import { GENERIC_ERROR_MESSAGE, UpstreamError } from "./auth/backend.mjs";
 import { BackendResponseError } from "./backend-response.mjs";
 import { heldOnceProps, requestedProps } from "./inertia.mjs";
-import { isObjectLike } from "./type-guards.mjs";
+import { isObjectLike, isRecord } from "./type-guards.mjs";
 
 export const SHARED_PROP = "shared";
 /**
@@ -30,11 +31,11 @@ const NOT_FOUND = 404;
 
 /**
  * What a page request reads of the backend: its JSON for a path (any value;
- * `loadPage` reads the page answer as an object, as the backend sends it), and
- * whether the frontend itself serves a path.
+ * `loadPage` refuses a page answer that is not an object), and whether the
+ * frontend itself serves a path.
  *
  * @typedef {{
- *   fetchJson: (path: string) => Promise<any>,
+ *   fetchJson: (path: string) => Promise<unknown>,
  *   isFrontendPage: (pathname: string) => Promise<boolean>
  * }} PageBackend
  */
@@ -154,7 +155,10 @@ async function loadPage(
 ) {
   const { pathname } = url;
   try {
-    const { shared, ...page } = await fetchJson(pagePath(url, withShared));
+    const answer = await fetchJson(pagePath(url, withShared));
+    if (!isRecord(answer) || Array.isArray(answer))
+      throw new UpstreamError(502, GENERIC_ERROR_MESSAGE);
+    const { shared, ...page } = answer;
     return { page, shared };
   } catch (error) {
     if (!(error instanceof BackendResponseError) || error.status !== NOT_FOUND)
