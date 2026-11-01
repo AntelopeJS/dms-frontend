@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { json } from "./auth/backend.mjs";
 import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./auth/client-ip.mjs";
-import { isNonNullObject, isObjectLike, isString } from "./type-guards.mjs";
+import { PROXY_AUTH_MODES } from "./backend-proxies.mjs";
+import {
+  isNonNullObject,
+  isNumber,
+  isObjectLike,
+  isRecord,
+  isString,
+} from "./type-guards.mjs";
 
 /**
  * A public endpoint, compiled from a declaration that passed every check.
@@ -84,8 +91,53 @@ export function readDeclaredPublicEndpoints(file = DECLARED_ENDPOINTS_FILE) {
 }
 
 /**
+ * Whether `entry` names a path and, when it says so, an auth mode and a body
+ * limit of the right type. The path pattern and the limit's range are judged
+ * when the proxies are resolved.
+ *
+ * @param {unknown} entry
+ * @returns {entry is { path: string, auth?: "session" | "none", maxBodyBytes?: number }}
+ */
+function isProxyDeclaration(entry) {
+  return (
+    isRecord(entry) &&
+    !Array.isArray(entry) &&
+    isString(entry.path) &&
+    (entry.auth === undefined ||
+      PROXY_AUTH_MODES.some((mode) => mode === entry.auth)) &&
+    (entry.maxBodyBytes === undefined || isNumber(entry.maxBodyBytes))
+  );
+}
+
+/**
+ * @param {unknown[]} entries
+ * @param {string} source Where they were declared, for the warning
+ * @param {(entry: unknown) => boolean} isUsable
+ */
+function warnUnusableProxies(entries, source, isUsable) {
+  const unusable = entries.filter((entry) => !isUsable(entry)).length;
+  if (unusable)
+    console.warn(
+      `Ignoring ${unusable} ${unusable === 1 ? "entry" : "entries"} of ${source}: not a backend proxy declaration (a path, an auth of session or none, a body limit in bytes)`,
+    );
+}
+
+/**
+ * @param {unknown} entry
+ * @returns {entry is import("./backend-proxies.mjs").ManifestProxy}
+ */
+function isDeclaredProxy(entry) {
+  return (
+    isRecord(entry) &&
+    isProxyDeclaration(entry) &&
+    (entry.module === undefined || isString(entry.module))
+  );
+}
+
+/**
  * The backend proxies the backend modules declared in the manifest, as
- * `{ module, path, auth?, maxBodyBytes? }`, unchecked.
+ * `{ module, path, auth?, maxBodyBytes? }`. An entry that is not one is
+ * reported and left out.
  *
  * A missing or broken file declares no proxy.
  *
@@ -101,7 +153,16 @@ export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
     /** @type {unknown} */
     const parsed = JSON.parse(readFileSync(file, "utf8"));
     const listed = isObjectLike(parsed) ? parsed.proxies : undefined;
-    if (Array.isArray(listed)) proxies = listed;
+    if (Array.isArray(listed)) {
+      /** @type {unknown[]} */
+      const entries = listed;
+      warnUnusableProxies(
+        entries,
+        "the generated manifest file",
+        isDeclaredProxy,
+      );
+      proxies = entries.filter(isDeclaredProxy);
+    }
   } catch {}
   if (file === DECLARED_ENDPOINTS_FILE) declaredProxies = proxies;
   return proxies;
@@ -110,7 +171,8 @@ export function readDeclaredBackendProxies(file = DECLARED_ENDPOINTS_FILE) {
 /**
  * The backend proxies `DMS_BACKEND_PROXIES` adds: a JSON array of
  * `{ path, auth?, maxBodyBytes? }`, as the manifest's `backendProxies`, for an
- * operator. A value that is not a JSON array is reported and ignored.
+ * operator. A value that is not a JSON array is reported and ignored, and so
+ * is each entry that is not a declaration.
  *
  * @param {string} [declaration] The variable's value
  * @returns {import("./backend-proxies.mjs").ManifestProxy[]}
@@ -122,11 +184,14 @@ export function environmentBackendProxies(
   try {
     /** @type {unknown} */
     const parsed = JSON.parse(declaration);
-    if (Array.isArray(parsed))
-      return parsed.map((entry) => ({
-        ...entry,
-        module: "DMS_BACKEND_PROXIES",
-      }));
+    if (Array.isArray(parsed)) {
+      /** @type {unknown[]} */
+      const entries = parsed;
+      warnUnusableProxies(entries, "DMS_BACKEND_PROXIES", isProxyDeclaration);
+      return entries
+        .filter(isProxyDeclaration)
+        .map((entry) => ({ ...entry, module: "DMS_BACKEND_PROXIES" }));
+    }
   } catch {}
   console.warn("Ignoring DMS_BACKEND_PROXIES: not a JSON array");
   return [];
