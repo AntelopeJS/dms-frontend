@@ -17,6 +17,7 @@ import {
 } from "./public-endpoints.mjs";
 import { reachesBackend } from "./request-routing.mjs";
 
+import { frontendRegistryOf, serverOptionsOf } from "./generated-files.mjs";
 import { publicOptionsOf } from "./public-options.mjs";
 /** @typedef {import("./module-route-types.mjs").ServerModuleDeclaration} ServerModuleDeclaration */
 /**
@@ -67,6 +68,7 @@ const resolved = new WeakMap();
 /**
  * @param {URL} url
  * @param {unknown} fallback
+ * @returns {unknown} The file's JSON, the fallback when it cannot be read
  */
 function readJsonFile(url, fallback) {
   try {
@@ -188,9 +190,8 @@ export function privateOptionsFromJson(modules, json, warn) {
 
 /** @param {NodeJS.ProcessEnv} [env] */
 function readPrivateOptions(env = process.env) {
-  const { modules = {}, environment = {} } = readJsonFile(
-    SERVER_OPTIONS_FILE,
-    {},
+  const { modules, environment } = serverOptionsOf(
+    readJsonFile(SERVER_OPTIONS_FILE, {}),
   );
   return privateOptionsFromJson(
     privateOptionsWithFallbacks(modules, environment, env),
@@ -200,7 +201,9 @@ function readPrivateOptions(env = process.env) {
 }
 
 function readPublicOptions() {
-  return publicOptionsOf(readJsonFile(REGISTRY_FILE, { modules: [] }));
+  return publicOptionsOf(
+    frontendRegistryOf(readJsonFile(REGISTRY_FILE, { modules: [] })),
+  );
 }
 
 /**
