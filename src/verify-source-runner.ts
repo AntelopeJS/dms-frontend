@@ -17,6 +17,8 @@ import {
 } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
 import { isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
+import { parseViteManifest } from "./internal/vite-manifest";
 import {
   assertLayersSupportRenderer,
   CancelledError,
@@ -51,12 +53,6 @@ import {
   ViteWarnings,
 } from "./vite-output";
 
-interface LayerPackage {
-  name?: string;
-  devDependencies?: Record<string, string>;
-  pnpm?: { overrides: Record<string, string> };
-}
-
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;
 const NON_EMAIL_RUNTIME_PATTERN =
   /DisplayRichText|ApexCharts|Tiptap|FlowCanvas|app\/.*table|components\/table/i;
@@ -78,9 +74,8 @@ function ensure(
 function removeDevelopmentDependencies(root: string): void {
   const packagePath = join(root, "package.json");
   if (!existsSync(packagePath)) return;
-  const packageData = JSON.parse(
-    readFileSync(packagePath, "utf8"),
-  ) as LayerPackage;
+  const packageData: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
+  if (!isPlainObject(packageData)) return;
   delete packageData.devDependencies;
   writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
 }
@@ -110,9 +105,13 @@ function materializeWorkspace(
   );
   writeWorkspacePackageJson(workspace, layers);
   const packagePath = join(workspace, "package.json");
-  const workspacePackage = JSON.parse(
+  const workspacePackage: unknown = JSON.parse(
     readFileSync(packagePath, "utf8"),
-  ) as LayerPackage;
+  );
+  ensure(
+    isPlainObject(workspacePackage),
+    "The workspace package.json is not a JSON object",
+  );
   workspacePackage.pnpm = {
     overrides: {
       ...Object.fromEntries(
@@ -139,10 +138,11 @@ function materializeWorkspace(
  */
 function checkClientBundle(workspace: string): void {
   const clientRoot = join(workspace, "dist", "client");
-  const manifest = JSON.parse(
+  const manifest = parseViteManifest(
     readFileSync(join(clientRoot, ".vite", "manifest.json"), "utf8"),
-  ) as Record<string, { file: string; isEntry?: boolean }>;
-  const mainEntry = Object.values(manifest).find((entry) => entry.isEntry);
+    "client build manifest",
+  );
+  const mainEntry = manifest.find((entry) => entry.isEntry);
   ensure(mainEntry !== undefined, "The Vite manifest names no entry chunk");
   const mainJavascript = readFileSync(join(clientRoot, mainEntry.file), "utf8");
   const javascript = readdirSync(join(clientRoot, "assets"))
@@ -286,14 +286,14 @@ async function checkEmailContracts(workspace: string): Promise<string> {
     "The e-mail manifest references browser-only modules",
     BROWSER_ONLY_REASON,
   );
-  const emailManifest = JSON.parse(emailManifestContent) as Record<
-    string,
-    { file: string }
-  >;
+  const emailManifest = parseViteManifest(
+    emailManifestContent,
+    "e-mail build manifest",
+  );
   const emailJavascriptFiles = [
     ...new Set([
       "email-renderer.js",
-      ...Object.values(emailManifest)
+      ...emailManifest
         .map((entry) => entry.file)
         .filter((file) => file.endsWith(".js")),
     ]),
