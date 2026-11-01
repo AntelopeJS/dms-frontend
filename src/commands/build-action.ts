@@ -32,6 +32,7 @@ import {
 } from "../vite-output";
 import { entryWeightThreshold, reportEntryWeight } from "../entry-weight";
 import { setUpWorkspace } from "./workspace-task";
+import { serverNodeOptions } from "../node-options";
 
 export interface BuildOptions {
   /** The AntelopeJS project the modules are read from. */
@@ -245,7 +246,7 @@ async function buildProduction(
     nameFile: createFileNamer(layers),
     env: {
       ...process.env,
-      NODE_OPTIONS: "--max-old-space-size=4096",
+      NODE_OPTIONS: serverNodeOptions(process.env.NODE_OPTIONS),
       NODE_PATH: join(workspaceDir, "node_modules"),
       [VITE_LOG_LEVEL_VARIABLE]: viteLogLevel(isVerbose),
     },
