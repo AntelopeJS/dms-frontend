@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
-import { isObjectLike, isRecord, isString } from "./type-guards.mjs";
+import { isNumber, isObjectLike, isRecord, isString } from "./type-guards.mjs";
 
 const WILDCARD_ADDRESSES = ["0.0.0.0", "::"];
 
@@ -87,14 +87,16 @@ function bundlerError(error) {
  * @param {unknown} error What the startup threw
  */
 function errorLocation(error) {
-  const source = bundlerError(error) ?? error;
-  const file = source?.loc?.file ?? source?.id;
+  const source =
+    bundlerError(error) ?? (isObjectLike(error) ? error : undefined);
+  const loc = isObjectLike(source?.loc) ? source.loc : undefined;
+  const file = loc?.file ?? source?.id;
   if (!isString(file)) return undefined;
-  const { line, column } = source.loc ?? {};
+  const line = isNumber(loc?.line) ? loc.line : undefined;
   return {
     file: resolve(file),
     line,
-    column,
+    column: isNumber(loc?.column) ? loc.column : undefined,
     lineText: line === undefined ? undefined : readLine(file, line),
   };
 }

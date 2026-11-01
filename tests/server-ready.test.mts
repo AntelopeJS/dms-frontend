@@ -256,6 +256,31 @@ describe("Frontend server startup", () => {
   );
 
   it(
+    "reports where a startup error points only by the numbers it carries",
+    { timeout: 30_000 },
+    async (context) => {
+      const root = serverDirectory(context, "dms-vite-start-");
+      const config = join(root, "vite.config.ts");
+      writeFileSync(
+        config,
+        `const error = new Error("config boom");
+Object.assign(error, { loc: { file: ${JSON.stringify(config)}, line: "1", column: { at: 2 } } });
+throw error;
+`,
+      );
+
+      const started = startServer(context, 0, true, { cwd: root, isDev: true });
+      const message = await firstMessage(started);
+      assert.deepEqual(message, {
+        type: "dms:start-error",
+        message: "config boom",
+        location: { file: config },
+      });
+      assert.equal(await started.exited, 1);
+    },
+  );
+
+  it(
     "says why Vite could not start when started on its own",
     { timeout: 30_000 },
     async (context) => {
