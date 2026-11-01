@@ -32,6 +32,7 @@ import { addressOf } from "./helpers/net";
 import { isNumber, isText } from "./helpers/guards";
 import { requestOf, responseOf } from "./helpers/http-doubles";
 import { jsonAt, responseJson } from "./helpers/json";
+import { requestHandlerOf } from "./helpers/workspace-server";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const ACCOUNT_ID = "0b5e7c2a-4d1f-4a8e-9c3b-2f6d8e1a7b40";
@@ -276,20 +277,10 @@ describe("Auth hooks in the production server", () => {
       root: workspace,
       logLevel: "silent",
     });
-    const server = (await import(
-      pathToFileURL(join(workspace, "server.mjs")).href
-    )) as {
-      handleRequestSafely: (
-        request: IncomingMessage,
-        response: ServerResponse,
-      ) => Promise<void>;
-    };
     sessions = (await import(
       pathToFileURL(join(workspace, "server", "auth", "session.mjs")).href
     )) as SessionTemplate;
-    frontend = createServer((request, response) => {
-      void server.handleRequestSafely(request, response);
-    });
+    frontend = createServer(await requestHandlerOf(workspace));
     frontendUrl = await listen(frontend);
   });
 

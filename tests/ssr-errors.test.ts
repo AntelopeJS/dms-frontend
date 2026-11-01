@@ -6,6 +6,7 @@ import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { writeSsrErrorsWorkspace } from "./fixtures/ssr-errors-workspace";
 import { addressOf } from "./helpers/net";
+import { requestHandlerOf } from "./helpers/workspace-server";
 
 it("renders setup errors as HTTP errors without corrupting simultaneous successful SSR", async () => {
   const workspace = mkdtempSync(resolve(".ssr-errors-"));
@@ -48,10 +49,7 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
     );
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    const { handleRequestSafely } = await import(
-      pathToFileURL(join(workspace, "server.mjs")).href
-    );
-    frontend = createServer(handleRequestSafely);
+    frontend = createServer(await requestHandlerOf(workspace));
     await new Promise<void>((resolve) =>
       frontend!.listen(0, "127.0.0.1", resolve),
     );
