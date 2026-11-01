@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { CliProblem } from "@antelopejs/core/cli";
 import { showPath } from "./output";
-import { isObjectLike } from "./internal/guards";
+import { isNumber, isObjectLike, isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
 
 /**
  * Shared contract with the antelopejs core: `ajs project dev` writes
@@ -49,23 +50,37 @@ export function isPidAlive(pid: number): boolean {
   }
 }
 
-function isDevRegistry(
-  value: unknown,
-): value is { pid: number; servers: object } {
+function isEndpoint(value: unknown): value is DevRegistryEndpoint {
   return (
-    isObjectLike(value) &&
-    "pid" in value &&
-    typeof value.pid === "number" &&
-    "servers" in value &&
-    typeof value.servers === "object" &&
-    value.servers !== null
+    isPlainObject(value) &&
+    isText(value.protocol) &&
+    isText(value.host) &&
+    isNumber(value.port)
+  );
+}
+
+function isServer(value: unknown): value is DevRegistry["servers"][string] {
+  return (
+    isPlainObject(value) &&
+    Array.isArray(value.endpoints) &&
+    value.endpoints.every(isEndpoint)
+  );
+}
+
+function isDevRegistry(value: unknown): value is DevRegistry {
+  return (
+    isPlainObject(value) &&
+    isNumber(value.pid) &&
+    (value.startedAt === undefined || isText(value.startedAt)) &&
+    isPlainObject(value.servers) &&
+    Object.values(value.servers).every(isServer)
   );
 }
 
 function parseRegistry(file: string): DevRegistry | undefined {
   try {
     const parsed: unknown = JSON.parse(readFileSync(file, "utf-8"));
-    return isDevRegistry(parsed) ? (parsed as DevRegistry) : undefined;
+    return isDevRegistry(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }
