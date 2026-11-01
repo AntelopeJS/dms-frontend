@@ -65,7 +65,12 @@ jobs:
             pnpm-lock.yaml
             dms/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm pack --pack-destination "$RUNNER_TEMP/tgz"
+      - name: Pack at the version dms requires
+        run: |
+          set -euo pipefail
+          floor=$(node -p 'const range = require("./dms/packages/dms/frontend-vue/package.json").engines["@antelopejs/dms-frontend"]; /\d+\.\d+\.\d+/.exec(range)[0]')
+          npm pkg set version="$floor"
+          pnpm pack --pack-destination "$RUNNER_TEMP/tgz"
       - name: Override @antelopejs/dms-frontend with the packed tarball
         run: |
           set -euo pipefail
