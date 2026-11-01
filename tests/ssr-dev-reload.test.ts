@@ -10,17 +10,13 @@ import {
 import { join, resolve } from "node:path";
 import { it } from "node:test";
 import type { ViteDevServer } from "vite";
-import type { renderDmsPage } from "../templates/vue/ssr-renderer.ts";
+import { loadServerRenderer } from "./helpers/ssr-renderer";
 
 const TIMEOUT_MS = 15_000;
 
 interface ReloadProbe {
   setups: number;
   plugins: string[];
-}
-
-interface ServerRenderer {
-  renderDmsPage: typeof renderDmsPage;
 }
 
 async function eventually(done: () => boolean | Promise<boolean>) {
@@ -106,9 +102,7 @@ it("serves an edited component on the next server render in development", async 
     const devServer = server;
 
     const render = async () => {
-      const renderer = (await devServer.ssrLoadModule(
-        "/ssr-renderer.ts",
-      )) as ServerRenderer;
+      const renderer = await loadServerRenderer(devServer);
       probe.plugins = [];
       const page = {
         component: "DmsDynamicPage",
