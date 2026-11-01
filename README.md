@@ -9,7 +9,7 @@
 
 <a href="https://www.npmjs.com/package/@antelopejs/dms-frontend"><img alt="npm" src="https://img.shields.io/npm/v/@antelopejs/dms-frontend?style=for-the-badge&labelColor=000000&color=000000"></a>
 <a href="./LICENSE"><img alt="License" src="https://img.shields.io/npm/l/@antelopejs/dms-frontend?style=for-the-badge&labelColor=000000&color=000000"></a>
-<a href="https://discord.gg/sjK28QHrA7"><img alt="Discord" src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000"></a>
+<a href="https://discord.gg/g4pFt6eXqu"><img alt="Discord" src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000"></a>
 <a href="https://dms.antelopejs.com/docs/frontend"><img alt="Documentation" src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000"></a>
 
 **The frontend of the AntelopeJS DMS: the `ajs dms` CLI, the Vue renderer and the frontend-module SDK.**
