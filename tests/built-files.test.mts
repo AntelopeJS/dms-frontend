@@ -4,10 +4,10 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import { isObjectLike } from "../src/internal/guards";
 import { addressOf } from "./helpers/net";
+import { requestHandlerOf } from "./helpers/workspace-server";
 
 const builtFiles = import("../templates/vue/server/built-files.mjs");
 
@@ -138,10 +138,7 @@ describe("built files the production server serves", () => {
     try {
       writeProductionWorkspace(workspace);
       process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
-      const { handleRequestSafely } = await import(
-        pathToFileURL(join(workspace, "server.mjs")).href
-      );
-      frontend = createServer(handleRequestSafely);
+      frontend = createServer(await requestHandlerOf(workspace));
       const base = `http://127.0.0.1:${await listen(frontend)}`;
       const get = (path: string, headers: Record<string, string> = {}) =>
         fetch(`${base}${path}`, {

@@ -4,12 +4,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, cpSync } from "node:fs";
 import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import type { App, getCurrentInstance } from "vue";
 import { isCallable } from "./helpers/guards";
 import { addressOf } from "./helpers/net";
+import { requestHandlerOf } from "./helpers/workspace-server";
 
 const RENDERS = 40;
 
@@ -137,10 +137,7 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     Reflect.set(globalThis, "__dmsLeakProbe", probe);
-    const { handleRequestSafely } = await import(
-      pathToFileURL(join(workspace, "server.mjs")).href
-    );
-    frontend = createServer(handleRequestSafely);
+    frontend = createServer(await requestHandlerOf(workspace));
     await new Promise<void>((settle) =>
       frontend!.listen(0, "127.0.0.1", settle),
     );

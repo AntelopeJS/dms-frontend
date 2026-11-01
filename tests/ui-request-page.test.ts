@@ -10,16 +10,15 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { it } from "node:test";
 import type { ViteDevServer } from "vite";
-import type { renderDmsPage } from "../templates/vue/ssr-renderer.ts";
+import {
+  loadServerRenderer,
+  type ServerRenderer,
+} from "./helpers/ssr-renderer";
 
 interface RenderProbe {
   /** Holds the first request's page after its app has set up. */
   gate?: Promise<void>;
   waiting?: () => void;
-}
-
-interface ServerRenderer {
-  renderDmsPage: typeof renderDmsPage;
 }
 
 /**
@@ -197,9 +196,7 @@ async function withServerRenderer(
       optimizeDeps: { noDiscovery: true },
       server: { middlewareMode: true, ws: false, watch: null },
     });
-    await run(
-      (await server.ssrLoadModule("/ssr-renderer.ts")) as ServerRenderer,
-    );
+    await run(await loadServerRenderer(server));
   } finally {
     await server?.close();
     rmSync(workspace, { recursive: true, force: true });
