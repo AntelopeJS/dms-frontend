@@ -14,7 +14,7 @@ import {
   isUnauthorized,
   ManifestModule,
 } from "./workspace";
-import { isNumber, isText } from "./internal/guards";
+import { isText } from "./internal/guards";
 import { isPlainObject } from "./internal/plain-object";
 import { hasManifestVersion, isManifest } from "./internal/manifest-decoder";
 import { ownRelease } from "./internal/own-release";
@@ -175,12 +175,15 @@ const LOADER_UPDATE_COMMAND = "ajs update dms";
 
 /**
  * A manifest of another protocol version: which side is behind, the versions
- * on both, and the side to upgrade.
+ * on both, and the side to upgrade. `undefined` is a document that states no
+ * version.
  */
-export function describeManifestVersion(version: unknown): CliProblem {
+export function describeManifestVersion(
+  version: number | undefined,
+): CliProblem {
   const loader = `${ownRelease.name} ${ownRelease.version}`;
   const supported = `This loader reads version ${FRONTEND_MANIFEST_VERSION}`;
-  if (!isNumber(version)) {
+  if (version === undefined) {
     return {
       title:
         "The backend served a frontend manifest without a protocol version",

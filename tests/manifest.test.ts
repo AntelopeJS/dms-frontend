@@ -17,6 +17,7 @@ import {
 } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
 import { OWN_PACKAGE } from "./helpers/own-package";
+import { typeErrors } from "./helpers/type-check";
 import {
   closeServer,
   frontendManifest,
@@ -136,6 +137,27 @@ describe("fetchManifest", () => {
     assert.match(
       problemText(new ManifestRefusedError(describeManifestVersion(undefined))),
       /^✖ The backend served a frontend manifest without a protocol version\n/,
+    );
+  });
+
+  it("takes the version a manifest states, or none, and nothing else", () => {
+    const call = (argument: string) =>
+      typeErrors(
+        `import { describeManifestVersion } from "../src/common";\ndescribeManifestVersion(${argument});\n`,
+      );
+    assert.deepEqual(call("2"), []);
+    assert.deepEqual(call("undefined"), []);
+    const [text, ...moreText] = call('"2"');
+    assert.deepEqual(moreText, []);
+    assert.match(
+      text ?? "",
+      /^TS2345: Argument of type 'string' is not assignable to parameter of type 'number/,
+    );
+    const [none, ...moreNone] = call("null");
+    assert.deepEqual(moreNone, []);
+    assert.match(
+      none ?? "",
+      /^TS2345: Argument of type 'null' is not assignable to parameter of type 'number/,
     );
   });
 
