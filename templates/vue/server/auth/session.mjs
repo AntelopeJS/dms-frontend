@@ -195,8 +195,8 @@ export function clearSession(response) {
 /**
  * @param {import("node:http").IncomingMessage} request
  * @param {string} name
- * @returns {any} What was sealed, as the JSON it was written from, `undefined`
- *   when there is none or it does not open
+ * @returns {unknown} What was sealed, as the JSON it was written from,
+ *   `undefined` when there is none or it does not open
  */
 export function readSealedCookie(request, name) {
   const value = cookieValue(request, name);

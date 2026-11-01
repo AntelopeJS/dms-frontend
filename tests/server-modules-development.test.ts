@@ -8,8 +8,14 @@ import {
   type DmsServerSetup,
   defineDmsServer,
 } from "../templates/vue/server-module";
+import { isText } from "../src/internal/guards";
+import { isPlainObject } from "../src/internal/plain-object";
 import { writeFixture, listen, close } from "./fixtures/server-modules";
 import { jsonAt, responseJson } from "./helpers/json";
+
+function isFrom(value: unknown): value is { from: string } {
+  return isPlainObject(value) && isText(value.from);
+}
 
 describe("Module server routes in development", () => {
   it("answers with an edited handler on the next request", async () => {
@@ -155,7 +161,7 @@ describe("The module testing helper", () => {
         return null;
       });
       server.registerRoute("GET", `${base}/read/:name`, (event) => ({
-        value: event.cookies.readSealed(event.params.name) ?? null,
+        value: event.cookies.readSealed(event.params.name, isFrom) ?? null,
       }));
     };
     const served = await serveModuleRoutes([

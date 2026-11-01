@@ -199,7 +199,10 @@ function cookieAccess(request, response, moduleId, authOwner) {
   const named = (/** @type {unknown} */ name) =>
     moduleCookieName(name, moduleId, authOwner);
   return {
-    readSealed: (name) => readSealedCookie(request, named(name)),
+    readSealed: (name, accepts) => {
+      const value = readSealedCookie(request, named(name));
+      return value !== undefined && accepts(value) ? value : undefined;
+    },
     writeSealed: (name, value, options = {}) =>
       writeSealedCookie(
         response,

@@ -101,7 +101,16 @@ export interface DmsServerEvent {
    * overwrites another's, and naming a `dms_*` cookie throws.
    */
   cookies: {
-    readSealed<T = unknown>(name: string): T | undefined;
+    /**
+     * The value a sealed cookie holds, when `accepts` takes it. A cookie that
+     * is absent, does not open, or holds a value `accepts` refuses reads as
+     * `undefined`. `accepts` receives the JSON the cookie was written from and
+     * is never called for an absent or unreadable cookie.
+     */
+    readSealed<T>(
+      name: string,
+      accepts: (value: unknown) => value is T,
+    ): T | undefined;
     writeSealed(
       name: string,
       value: unknown,

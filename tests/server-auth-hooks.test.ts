@@ -206,7 +206,10 @@ export default defineDmsServer((server) => {
   server.registerRoute("GET", "/api/_fixture/session", (event) => ({
     read: event.session.read(),
     view: event.session.view(),
-    account: event.cookies.readSealed("dms_account_${ACCOUNT_ID.replaceAll("-", "")}"),
+    account: event.cookies.readSealed(
+      "dms_account_${ACCOUNT_ID.replaceAll("-", "")}",
+      (value): value is object => typeof value === "object" && value !== null,
+    ),
   }));
   server.registerRoute("POST", "/api/_fixture/session", (event) => {
     event.session.write({ accessToken: "from-module", persistent: false, user: { name: "Grace" } });
