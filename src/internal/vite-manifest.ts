@@ -5,7 +5,6 @@ import { isPlainObject } from "./plain-object";
 /** @internal */
 export interface ViteChunk {
   file: string;
-  src?: string;
   isEntry?: boolean;
 }
 
@@ -13,7 +12,6 @@ function isViteChunk(value: unknown): value is ViteChunk {
   return (
     isPlainObject(value) &&
     isText(value.file) &&
-    (value.src === undefined || isText(value.src)) &&
     (value.isEntry === undefined || isFlag(value.isEntry))
   );
 }

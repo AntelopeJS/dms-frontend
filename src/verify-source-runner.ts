@@ -16,7 +16,6 @@ import {
   getProcessUi,
 } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
-import { ensure } from "./internal/ensure";
 import { isText } from "./internal/guards";
 import { isPlainObject } from "./internal/plain-object";
 import { parseViteManifest } from "./internal/vite-manifest";
@@ -38,7 +37,6 @@ import {
   writeHeader,
 } from "./output";
 import { createTemporaryWorkspace } from "./temporary-workspace";
-import { checkClientBundle } from "./verify-source-client-bundle";
 import {
   buildAndTypeCheck,
   prepareTypes,
@@ -58,6 +56,21 @@ import {
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;
 const NON_EMAIL_RUNTIME_PATTERN =
   /DisplayRichText|ApexCharts|Tiptap|FlowCanvas|app\/.*table|components\/table/i;
+const LAZY_LIBRARIES = [
+  { name: "ApexCharts", pattern: /ApexCharts/ },
+  { name: "Tiptap", pattern: /tiptap/i },
+];
+const RUNTIME_MARKERS = ["auth/login", "DefaultLayout", "error.500.title"];
+
+/** Fails the running check with `title` unless `condition` holds. */
+function ensure(
+  condition: boolean,
+  title: string,
+  reason?: string,
+): asserts condition {
+  if (!condition) throw new CliError({ title, reason });
+}
+
 function removeDevelopmentDependencies(root: string): void {
   const packagePath = join(root, "package.json");
   if (!existsSync(packagePath)) return;
@@ -116,6 +129,43 @@ function materializeWorkspace(
     },
   };
   writeFileSync(packagePath, `${JSON.stringify(workspacePackage, null, 2)}\n`);
+}
+
+/**
+ * The client bundle keeps the heavy libraries out of the main chunk, and
+ * still reaches them and the pages every DMS serves: those of the DMS core
+ * layer, which every run includes.
+ */
+function checkClientBundle(workspace: string): void {
+  const clientRoot = join(workspace, "dist", "client");
+  const manifest = parseViteManifest(
+    readFileSync(join(clientRoot, ".vite", "manifest.json"), "utf8"),
+    "client build manifest",
+  );
+  const mainEntry = manifest.find((entry) => entry.isEntry);
+  ensure(mainEntry !== undefined, "The Vite manifest names no entry chunk");
+  const mainJavascript = readFileSync(join(clientRoot, mainEntry.file), "utf8");
+  const javascript = readdirSync(join(clientRoot, "assets"))
+    .filter((file) => file.endsWith(".js"))
+    .map((file) => readFileSync(join(clientRoot, "assets", file), "utf8"))
+    .join("\n");
+  for (const { name, pattern } of LAZY_LIBRARIES) {
+    ensure(
+      !pattern.test(mainJavascript),
+      `The main chunk bundles ${name}`,
+      "It must stay in a lazily loaded chunk.",
+    );
+    ensure(pattern.test(javascript), `No client chunk bundles ${name}`);
+  }
+  ensure(
+    Object.keys(manifest).some((source) => source.endsWith("/kpi/KpiCard.vue")),
+    "DmsKpiCard is not reachable at runtime",
+  );
+  for (const marker of RUNTIME_MARKERS)
+    ensure(
+      javascript.includes(marker),
+      `${marker} is not reachable at runtime`,
+    );
 }
 
 /**

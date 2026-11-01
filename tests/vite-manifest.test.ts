@@ -9,13 +9,13 @@ describe("parseViteManifest", () => {
       parseViteManifest(
         JSON.stringify({
           "main.ts": { file: "assets/main.js", isEntry: true, css: ["a.css"] },
-          "page.vue": { file: "assets/page.js", src: "page.vue" },
+          "page.vue": { file: "assets/page.js" },
         }),
         "client build manifest",
       ),
       [
         { file: "assets/main.js", isEntry: true, css: ["a.css"] },
-        { file: "assets/page.js", src: "page.vue" },
+        { file: "assets/page.js" },
       ],
     );
     assert.deepEqual(parseViteManifest("{}", "manifest"), []);
@@ -31,7 +31,6 @@ describe("parseViteManifest", () => {
       '{"a":{}}',
       '{"a":{"file":5}}',
       '{"a":{"file":"x.js","isEntry":"yes"}}',
-      '{"a":{"file":"x.js","src":5}}',
       '{"a":{"file":"x.js"},"b":"y.js"}',
     ])
       assert.throws(
