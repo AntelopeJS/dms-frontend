@@ -38,7 +38,7 @@ export function checkClientBundle(workspace: string): void {
     ensure(pattern.test(javascript), `No client chunk bundles ${name}`);
   }
   ensure(
-    Object.keys(manifest).some((source) => source.endsWith("/kpi/KpiCard.vue")),
+    manifest.some((chunk) => chunk.src?.endsWith("/kpi/KpiCard.vue")),
     "DmsKpiCard is not reachable at runtime",
   );
   for (const marker of RUNTIME_MARKERS)
