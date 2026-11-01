@@ -2,21 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SERVER_OPTIONS_FILE } from "../config";
 import type { ServedModule } from "../module-set";
-import type { FrontendModuleOptions, FrontendModuleValue } from "../workspace";
-import { isFlag, isNumber, isText } from "./guards";
+import type { FrontendModuleOptions } from "../workspace";
+import { isText } from "./guards";
+import { isModuleOptions } from "./manifest-decoder";
 import { isPlainObject } from "./plain-object";
-
-function isModuleValue(value: unknown): value is FrontendModuleValue {
-  if (value === null || isText(value) || isNumber(value) || isFlag(value))
-    return true;
-  return Array.isArray(value)
-    ? value.every(isModuleValue)
-    : isModuleOptions(value);
-}
-
-function isModuleOptions(value: unknown): value is FrontendModuleOptions {
-  return isPlainObject(value) && Object.values(value).every(isModuleValue);
-}
 
 function isOptionsById(
   value: unknown,
