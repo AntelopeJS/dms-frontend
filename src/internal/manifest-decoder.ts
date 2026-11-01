@@ -24,7 +24,14 @@ function isModuleValue(value: unknown): value is FrontendModuleValue {
   return isList(value) ? value.every(isModuleValue) : isModuleOptions(value);
 }
 
-function isModuleOptions(value: unknown): value is FrontendModuleOptions {
+/**
+ * Whether `value` is an object of module option values, at every depth.
+ *
+ * @internal
+ */
+export function isModuleOptions(
+  value: unknown,
+): value is FrontendModuleOptions {
   return isPlainObject(value) && Object.values(value).every(isModuleValue);
 }
 
