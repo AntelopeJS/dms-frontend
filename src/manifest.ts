@@ -11,11 +11,12 @@ import {
   Manifest,
   bootstrapHeaders,
   FRONTEND_MANIFEST_VERSION,
-  FrontendManifest,
   isUnauthorized,
   ManifestModule,
 } from "./workspace";
 import { isNumber, isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
+import { hasManifestVersion, isManifest } from "./internal/manifest-decoder";
 import { ownRelease } from "./internal/own-release";
 
 export class ManifestUnauthorizedError extends CliError {
@@ -291,11 +292,21 @@ export async function fetchManifest(
     );
   }
 
-  const manifest = (await response.json()) as FrontendManifest;
-  if (manifest.version !== FRONTEND_MANIFEST_VERSION) {
-    throw new ManifestRefusedError(describeManifestVersion(manifest.version));
+  const body: unknown = await response.json();
+  const version = hasManifestVersion(body) ? body.version : undefined;
+  if (version !== FRONTEND_MANIFEST_VERSION) {
+    throw new ManifestRefusedError(describeManifestVersion(version));
   }
-  const incompatible = manifest.modules.filter(
+  if (!isManifest(body)) {
+    throw new ManifestRefusedError({
+      title: "The backend served a frontend manifest this loader cannot read",
+      reason: `It states version ${FRONTEND_MANIFEST_VERSION}, but its modules, settling flag or origin rewrites do not have the shape ${ownRelease.name} ${ownRelease.version} reads.`,
+      fixes: [
+        `Check that -b <url> points at a DMS backend running ${BACKEND_PACKAGE}`,
+      ],
+    });
+  }
+  const incompatible = body.modules.filter(
     (module) =>
       module.renderer?.name !== "vue" || module.renderer?.version !== "3",
   );
@@ -304,10 +315,9 @@ export async function fetchManifest(
       `Frontend manifest contains incompatible renderer modules: ${incompatible.map((module) => module.name).join(", ")}`,
     );
   }
-  const resolved: Manifest = { modules: manifest.modules };
-  if (manifest.settling) resolved.settling = true;
-  if (manifest.originRewrites)
-    resolved.originRewrites = manifest.originRewrites;
+  const resolved: Manifest = { modules: body.modules };
+  if (body.settling) resolved.settling = true;
+  if (body.originRewrites) resolved.originRewrites = body.originRewrites;
   return resolved;
 }
 
@@ -335,9 +345,10 @@ export function readCachedManifest(
   const file = join(workspaceDir, MANIFEST_CACHE_FILE);
   if (!existsSync(file)) return undefined;
   try {
-    const parsed = JSON.parse(readFileSync(file, "utf-8"));
-    if (!parsed?.manifest) return undefined;
-    return parsed;
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf-8"));
+    if (!isPlainObject(parsed) || !isText(parsed.fetchedAt)) return undefined;
+    if (!isManifest(parsed.manifest)) return undefined;
+    return { manifest: parsed.manifest, fetchedAt: parsed.fetchedAt };
   } catch {
     return undefined;
   }
