@@ -145,6 +145,9 @@
     }
   },
   "antelopeJs": {
+    "docs": {
+      "standard": true
+    },
     "skills": [
       "./skills"
     ]
