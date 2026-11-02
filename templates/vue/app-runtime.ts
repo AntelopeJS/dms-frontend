@@ -71,6 +71,7 @@ import {
   recordMessageReads,
 } from "./message-subset";
 import { NETWORK_ERROR_KEYS, showNetworkErrors } from "./network-error";
+import { loadIconBundle } from "./icon-bundle";
 import { createUiAppConfigMerger } from "./ui-app-config";
 
 export interface DmsInertiaSetupProps {
@@ -253,16 +254,16 @@ const DmsPersistentInertiaPage = Object.assign(DmsInertiaPage, {
 });
 
 /**
- * Set when a visit starts from a page that began with a subset of the
- * catalog: the visit then waits for the whole catalog, so the page it shows
- * never lacks a message. Inertia also resolves the first page once the app is
- * set up, which must not wait for it.
+ * What a visit waits for before it shows its page, set when the first one
+ * starts from a page that began without what the pages after it read: a
+ * subset of the catalog, the icon bundle. Inertia also resolves the first page
+ * once the app is set up, which must not wait for it.
  */
-let completeCatalog: (() => Promise<void>) | undefined;
+let completeInitialAssets: (() => Promise<void>) | undefined;
 
 export function resolveDmsInertiaPage(): Component | Promise<Component> {
-  return completeCatalog
-    ? completeCatalog().then(() => DmsPersistentInertiaPage)
+  return completeInitialAssets
+    ? completeInitialAssets().then(() => DmsPersistentInertiaPage)
     : DmsPersistentInertiaPage;
 }
 
@@ -376,11 +377,22 @@ export async function configureDmsApp(
     );
     return loading;
   }
-  if (started && typeof window !== "undefined") {
+  if (anonymous && typeof window !== "undefined") {
+    const complete = async (): Promise<void> => {
+      await Promise.all([
+        started ? loadCompleteCatalog() : undefined,
+        loadIconBundle(),
+      ]);
+    };
     router.on("before", () => {
-      completeCatalog = loadCompleteCatalog;
-      void loadCompleteCatalog();
+      completeInitialAssets = complete;
+      void complete();
     });
+    for (const type of ["pointerdown", "keydown", "focusin", "touchstart"])
+      addEventListener(type, () => void loadIconBundle(), {
+        once: true,
+        capture: true,
+      });
   }
   if (recorder) for (const key of NETWORK_ERROR_KEYS) i18n.global.te(key);
   // A translation changed in a layer during development reaches the page
@@ -405,6 +417,7 @@ export async function configureDmsApp(
   // rendered: the page, its layout, and the components the render reached.
   // Hydration then adopts the server-rendered markup instead of discarding it.
   await Promise.all([
+    anonymous ? undefined : loadIconBundle(),
     preloadDmsPage(options.initialPageProps),
     resolveDmsAsyncComponents(
       readServerRendered<string[]>(SSR_ASYNC_COMPONENTS_ID, []),
