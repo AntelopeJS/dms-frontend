@@ -7,27 +7,19 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import {
   copyStaticTemplates,
   createFrontendModuleRegistry,
   writeFrontendModuleRegistry,
 } from "../src/common";
 import { serverAuth } from "../templates/vue/server/auth-hooks.mjs";
+import * as sessions from "../templates/vue/server/auth/session.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
-import type {
-  DmsServerSetup,
-  DmsSession,
-} from "../templates/vue/server-module";
+import type { DmsServerSetup } from "../templates/vue/server-module";
 import { addressOf } from "./helpers/net";
 import { isNumber, isText } from "./helpers/guards";
 import { requestOf, responseOf } from "./helpers/http-doubles";
@@ -218,16 +210,6 @@ export default defineDmsServer((server) => {
 });
 `;
 
-interface SessionTemplate {
-  writeSession(response: ServerResponse, session: Partial<DmsSession>): void;
-  writeSealedCookie(
-    response: ServerResponse,
-    name: string,
-    value: Record<string, string>,
-  ): void;
-  readSession(request: IncomingMessage): DmsSession | undefined;
-}
-
 function setCookies(response: ServerResponse): string[] {
   const header = response.getHeader("set-cookie");
   return (Array.isArray(header) ? header : [header]).filter(isText);
@@ -243,7 +225,6 @@ describe("Auth hooks in the production server", () => {
   let backend: Server | undefined;
   let frontend: Server | undefined;
   let frontendUrl = "";
-  let sessions: SessionTemplate;
   const environment = {
     DMS_API_BASE_URL: process.env.DMS_API_BASE_URL,
     DMS_SESSION_SECRET: process.env.DMS_SESSION_SECRET,
@@ -280,9 +261,6 @@ describe("Auth hooks in the production server", () => {
       root: workspace,
       logLevel: "silent",
     });
-    sessions = (await import(
-      pathToFileURL(join(workspace, "server", "auth", "session.mjs")).href
-    )) as SessionTemplate;
     frontend = createServer(await requestHandlerOf(workspace));
     frontendUrl = await listen(frontend);
   });
