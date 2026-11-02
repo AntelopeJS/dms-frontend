@@ -65,20 +65,36 @@ jobs:
             pnpm-lock.yaml
             dms/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm pack --pack-destination "$RUNNER_TEMP/tgz"
+      - name: Pack at the version dms requires
+        run: |
+          set -euo pipefail
+          floor=$(node -p 'const range = require("./dms/packages/dms/frontend-vue/package.json").engines["@antelopejs/dms-frontend"]; /\d+\.\d+\.\d+/.exec(range)[0]')
+          npm pkg set version="$floor"
+          pnpm pack --pack-destination "$RUNNER_TEMP/tgz"
       - name: Override @antelopejs/dms-frontend with the packed tarball
         run: |
           set -euo pipefail
           tarball=$(ls "$RUNNER_TEMP"/tgz/antelopejs-dms-frontend-*.tgz)
           spec="file:$tarball"
           cd dms
-          SPEC="$spec" node -e '
-            const fs = require("node:fs");
-            const manifest = JSON.parse(fs.readFileSync("package.json", "utf8"));
-            manifest.pnpm = { ...manifest.pnpm, overrides: { ...manifest.pnpm?.overrides, "@antelopejs/dms-frontend": process.env.SPEC } };
-            fs.writeFileSync("package.json", JSON.stringify(manifest, null, 2) + "\n");
-          '
-          sed -i "/^overrides:/a\\  \"@antelopejs/dms-frontend\": \"$spec\"" pnpm-workspace.yaml
+          SPEC="$spec" node - <<'EOF'
+          const fs = require("node:fs");
+          const key = "@antelopejs/dms-frontend";
+          const manifest = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          manifest.pnpm = { ...manifest.pnpm, overrides: { ...manifest.pnpm?.overrides, [key]: process.env.SPEC } };
+          fs.writeFileSync("package.json", JSON.stringify(manifest, null, 2) + "\n");
+          const lines = fs.readFileSync("pnpm-workspace.yaml", "utf8").split("\n");
+          const head = lines.indexOf("overrides:");
+          if (head !== -1) {
+            let tail = head + 1;
+            while (tail < lines.length && /^\s+\S/.test(lines[tail])) tail += 1;
+            const isKey = (line) => new RegExp(`^\\s+["']?${key}["']?\\s*:`).test(line);
+            const kept = lines.slice(head + 1, tail).filter((line) => !isKey(line));
+            lines.splice(head + 1, tail - head - 1, `  "${key}": "${process.env.SPEC}"`, ...kept);
+            if (lines.filter(isKey).length !== 1) throw new Error(`pnpm-workspace.yaml must hold exactly one ${key} override`);
+            fs.writeFileSync("pnpm-workspace.yaml", lines.join("\n"));
+          }
+          EOF
       - run: pnpm install --no-frozen-lockfile
         working-directory: dms
       - run: pnpm --dir packages/interface-dms build
