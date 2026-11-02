@@ -75,6 +75,7 @@ const branding = useDmsAppConfig().branding as Record<string, any>;
       { cwd: workspace, stdio: "pipe" },
     );
 
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the workspace, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
     const { renderEmail } = await import(
       pathToFileURL(join(workspace, "dist", "server", "email-renderer.js")).href
     );

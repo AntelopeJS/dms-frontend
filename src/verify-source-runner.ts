@@ -268,6 +268,7 @@ async function checkEmailContracts(workspace: string): Promise<string> {
     `The e-mail bundle is ${formatSize(emailBuildSize)} of JavaScript`,
     `The limit is ${limit}.`,
   );
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the build directory, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
   const { renderEmail } = await import(join(emailRoot, "email-renderer.js"));
   for (const emailCase of EMAIL_CASES) {
     const html: unknown = await renderEmail(emailCase.name, emailCase.props);

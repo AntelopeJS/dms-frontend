@@ -163,6 +163,7 @@ function appendCookie(response, name, value, cookieAttributes) {
 export function readSession(request) {
   if (REQUEST_SESSION in request) return request[REQUEST_SESSION];
   const value = cookieValue(request, SESSION_COOKIE);
+  // oxlint-disable-next-line typescript/no-unsafe-return -- `decode` returns the JSON this server sealed under `SESSION_COOKIE`, untyped because `JSON.parse` is; the AES-GCM tag rejects any cookie it did not write.
   return value ? decode(value) : undefined;
 }
 

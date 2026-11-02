@@ -37,6 +37,7 @@ export function productionHtmlTemplate() {
 function productionClientManifest() {
   if (clientManifest) return clientManifest;
   if (!existsSync(CLIENT_MANIFEST_PATH)) return undefined;
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- `JSON.parse` types the file as `any`; it is the manifest Vite wrote at build time, which the JSDoc type names, `import("vite").Manifest`.
   clientManifest = JSON.parse(readFileSync(CLIENT_MANIFEST_PATH, "utf8"));
   return clientManifest;
 }

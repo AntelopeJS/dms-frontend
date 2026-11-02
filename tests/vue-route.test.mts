@@ -84,6 +84,7 @@ describe("Route of the page", () => {
       async setup(props) {
         let pending: unknown;
         let restore: () => void;
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue ships `withAsyncContext` at run time (the SFC compiler emits calls to it) but declares no type for it, so its result has an error type.
         [pending, restore] = withAsyncContext(() => sleep(props.delay));
         await pending;
         restore();

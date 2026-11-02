@@ -10,5 +10,6 @@ export interface ServerRenderer {
 export async function loadServerRenderer(
   server: ViteDevServer,
 ): Promise<ServerRenderer> {
+  // SAFETY: both callers root `server` in a `cpSync` copy of `templates/vue`, so `/ssr-renderer.ts` is the file `renderDmsPage` is typed from; `ssrLoadModule` types every module `Record<string, any>`.
   return (await server.ssrLoadModule("/ssr-renderer.ts")) as ServerRenderer;
 }

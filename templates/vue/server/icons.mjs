@@ -90,6 +90,7 @@ function resolveCollectionFile(root, prefix) {
 async function loadCollection(root, prefix) {
   const file = resolveCollectionFile(root, prefix);
   if (!file) return undefined;
+  // oxlint-disable-next-line typescript/no-unsafe-return -- `JSON.parse` types the file as `any`; it is an icon set the Iconify packages ship, which the JSDoc type names, `IconCollection`.
   return JSON.parse(await readFile(file, "utf8"));
 }
 

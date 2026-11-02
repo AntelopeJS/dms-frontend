@@ -97,8 +97,10 @@ describe("Module build declarations", () => {
     const unimport = createRequire(
       require.resolve("unplugin-auto-import/package.json"),
     ).resolve("unimport");
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- `unimport` is no dependency of this package, so its path is resolved from unplugin-auto-import's install and the import has no declaration.
     const { scanDirExports } = await import(unimport);
 
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- `scanDirExports` comes from that untyped import, and the assertion below reads only the `name` of each entry.
     const exports = await scanDirExports(dirs, { cwd: module });
 
     assert.deepEqual(

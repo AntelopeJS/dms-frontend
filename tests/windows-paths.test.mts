@@ -26,6 +26,7 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
   const transform = plugin.transform;
   const handler = isCallable(transform) ? transform : transform?.handler;
   assert.ok(handler, "the auto-importer exposes a transform hook");
+  // SAFETY: unplugin-auto-import's transform handler never reads `this`, and unplugin's filter wrapper above it only reads `this.meta?.viteVersion`, so the stand-in needs no member of Rollup's plugin context.
   const result = await handler.call(
     { error: () => {}, warn: () => {} } as never,
     "const session = useDmsUserSession();",

@@ -1,8 +1,13 @@
 {
-  "rules": {},
+  "rules": {
+    "anti-slop/no-unknown-parameters": 7,
+    "anti-slop/no-unknown-returns": 1,
+    "typescript/no-unsafe-assignment": 9,
+    "typescript/no-unsafe-return": 5
+  },
   "tsExpectError": 10,
   "tsIgnore": 0,
-  "safety": 5,
+  "safety": 13,
   "config": {
     "eslint/max-lines for tests/**/*.test.mts": 1,
     "eslint/max-lines for tests/**/*.test.ts": 1,

@@ -37,6 +37,7 @@ export function readProjectModulesFresh(
     });
     let reply: ProjectModulesReply | undefined;
     child.once("message", (message) => {
+      // SAFETY: the child is `project-modules-child`, whose only `process.send` sends the `ProjectModulesReply` it builds, once, before it disconnects.
       reply = message as ProjectModulesReply;
     });
     child.once("error", reject);

@@ -212,9 +212,11 @@ function readPublicOptions() {
  */
 async function loadDeclarations(devServer) {
   if (devServer)
+    // oxlint-disable-next-line typescript/no-unsafe-return -- `ssrLoadModule` types every module `Record<string, any>`; the loader is the generated `server-modules.generated.ts`, which exports `serverModules`.
     return (await devServer.ssrLoadModule(SOURCE_LOADER)).serverModules;
   if (!existsSync(fileURLToPath(BUILT_LOADER))) return [];
   builtDeclarations ??= import(BUILT_LOADER.href).then(
+    // oxlint-disable-next-line typescript/no-unsafe-return -- the build of that same generated module is imported by a URL computed at run time, so it is untyped.
     (loaded) => loaded.serverModules,
   );
   return builtDeclarations;
