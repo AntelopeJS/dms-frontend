@@ -103,7 +103,7 @@ it("links the stylesheet of every component the server rendered, and only those"
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ componentName: path?.slice(1) }));
   });
-  let frontend: ReturnType<typeof createServer> | undefined;
+  const frontends: ReturnType<typeof createServer>[] = [];
   try {
     cpSync("templates/vue", workspace, { recursive: true });
     for (const [path, content] of Object.entries(FILES))
@@ -141,11 +141,11 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     const { handleRequestSafely } = await import(
       pathToFileURL(join(workspace, "server.mjs")).href
     );
-    frontend = createServer(handleRequestSafely);
+    frontends.push(createServer(handleRequestSafely));
     await new Promise<void>((settle) =>
-      frontend!.listen(0, "127.0.0.1", settle),
+      frontends[0].listen(0, "127.0.0.1", settle),
     );
-    const address = addressOf(frontend);
+    const address = addressOf(frontends[0]);
     const response = await fetch(`http://127.0.0.1:${address.port}/page`, {
       headers: { accept: "text/html" },
     });
@@ -170,18 +170,21 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.ok(catalog?.isDynamicEntry, "the catalog is a file of its own");
     const head = html.slice(0, html.indexOf("</head>"));
     assert.ok(
-      head.includes(
-        `<link rel="modulepreload" crossorigin href="/${catalog.file}">`,
-      ),
-      "the catalog of the page's locale is preloaded",
+      !head.includes(catalog.file),
+      "a page of a visitor who is not signed in preloads no catalog",
+    );
+    assert.match(
+      html,
+      /<script id="dms-ssr-messages" type="application\/json">\{"locale":"en","messages":\{[^<]*\}\}<\/script>/,
+      "it carries the messages the render read instead",
     );
   } finally {
-    frontend?.closeAllConnections();
+    for (const frontend of frontends) frontend.closeAllConnections();
     await Promise.all(
-      [frontend, backend].map(
+      [...frontends, backend].map(
         (server) =>
           new Promise<void>((settle) =>
-            server?.listening ? server.close(() => settle()) : settle(),
+            server.listening ? server.close(() => settle()) : settle(),
           ),
       ),
     );
