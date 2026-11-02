@@ -13,12 +13,15 @@ import { problemText } from "./fixtures/memory-ui";
 import { listNames, readText } from "./helpers/files";
 import { isNumber, isObjectLike, isText } from "./helpers/guards";
 import type { JsonValue } from "./helpers/json";
+import { useIsolatedHome } from "./helpers/isolated-home";
 import { OWN_PACKAGE } from "./helpers/own-package";
 import { addressOf } from "./helpers/net";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RENDERER = "@antelopejs/dms-frontend";
 const EXCLUDING_EVERY_RELEASE = ">=999.0.0";
+
+useIsolatedHome();
 
 const cleanupDirs: string[] = [];
 after(() => {

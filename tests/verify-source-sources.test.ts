@@ -16,9 +16,12 @@ import {
   type SourceOptions,
 } from "../src/verify-source-sources";
 import { isText } from "./helpers/guards";
+import { useIsolatedHome } from "./helpers/isolated-home";
 
 const CORE_LAYER = "@antelopejs/dms-frontend-vue";
 const INSTALLED_DMS = "node_modules/@antelopejs/dms";
+
+useIsolatedHome();
 
 const roots: string[] = [];
 after(() => {

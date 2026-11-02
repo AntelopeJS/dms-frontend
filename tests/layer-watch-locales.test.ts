@@ -20,7 +20,10 @@ import {
 import { readText } from "./helpers/files";
 import { isTextList } from "./helpers/guards";
 import { jsonAt, type JsonValue, readJson } from "./helpers/json";
+import { useIsolatedHome } from "./helpers/isolated-home";
 import { eventually, output, warnings, writeFile } from "./helpers/layer-watch";
+useIsolatedHome();
+
 describe("locale catalogs in the dev layer watcher", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-layer-watch-"));
   const workspace = join(root, "workspace");
