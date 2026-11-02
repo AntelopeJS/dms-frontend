@@ -30,6 +30,7 @@ import {
   trackDmsServerScopes,
   withPublicOptions,
 } from "./frontend-module";
+import { type DmsMessageSubset, SSR_MESSAGES_ID } from "./message-subset";
 import { parsePublicOptions } from "./public-options";
 import { frontendModules } from "./frontend-modules.generated";
 import {
@@ -129,6 +130,12 @@ function asyncComponentsScript(names: Set<string>): string {
   return `<script id="${SSR_ASYNC_COMPONENTS_ID}" type="application/json">${value}</script>`;
 }
 
+function messagesScript(subset: DmsMessageSubset | undefined): string {
+  if (!subset) return "";
+  const value = JSON.stringify(subset).replaceAll("<", "\\u003c");
+  return `<script id="${SSR_MESSAGES_ID}" type="application/json">${value}</script>`;
+}
+
 function iconsScript(names: Set<string>): string {
   const value = JSON.stringify(serializeDmsIcons(names)).replaceAll(
     "<",
@@ -195,6 +202,7 @@ async function renderDmsPageWithRuntime(
     let iconSymbols = new Map<string, string>();
     let payload: DmsPayload = { data: {}, errors: {}, state: {} };
     let catalogLocale: (() => string | undefined) | undefined;
+    let messageSubset: (() => DmsMessageSubset | undefined) | undefined;
     const inertiaResult = await createInertiaApp({
       page,
       // Read as the HTML is complete: data a run settles afterwards was never
@@ -221,6 +229,7 @@ async function renderDmsPageWithRuntime(
           serverFetch,
         });
         catalogLocale = configured.catalogLocale;
+        messageSubset = configured.messageSubset;
         return app;
       },
     });
@@ -255,7 +264,7 @@ async function renderDmsPageWithRuntime(
     const renderedHead = await renderSSRHead(head);
     return {
       error: page.props.error,
-      body: `${inertiaResult.body}${dmsIconSprite(iconSymbols)}${payloadScript(payload)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}`,
+      body: `${inertiaResult.body}${dmsIconSprite(iconSymbols)}${payloadScript(payload)}${asyncComponentsScript(asyncComponents)}${iconsScript(icons)}${messagesScript(messageSubset?.())}`,
       head: {
         bodyAttrs: renderedHead.bodyAttrs,
         headTags: `${inertiaResult.head.join("")}${renderedHead.headTags}`,

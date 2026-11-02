@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.9.2
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.9.1...v0.9.2)
+
+### 🩹 Fixes
+
+- **frontend-runtime:** Inherit created fetch defaults in raw requests ([#235](https://github.com/AntelopeJS/dms-frontend/pull/235))
+
+### 💅 Refactors
+
+- Remove comments that are not TSDoc or directives ([#203](https://github.com/AntelopeJS/dms-frontend/pull/203))
+- Replace typeof checks and source assertions with guards and inferred types ([#207](https://github.com/AntelopeJS/dms-frontend/pull/207))
+- Split the oversize files along their seams ([#208](https://github.com/AntelopeJS/dms-frontend/pull/208))
+
+### 📦 Build
+
+- Upgrade the guardrail pack to 0.2.11 ([#201](https://github.com/AntelopeJS/dms-frontend/pull/201))
+- **deps:** Bump @antelopejs/tooling-configs to 0.2.17 ([#213](https://github.com/AntelopeJS/dms-frontend/pull/213))
+
+### ✅ Tests
+
+- **skills:** Add eval cases for the dms-frontend skills ([#200](https://github.com/AntelopeJS/dms-frontend/pull/200))
+- Move source-text invariants to a checks script and clear the test-rule ceilings ([#202](https://github.com/AntelopeJS/dms-frontend/pull/202))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.9.1
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.9.0...v0.9.1)

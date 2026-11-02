@@ -4,6 +4,7 @@ import { useToast } from "@nuxt/ui/composables/useToast";
 import { useAppConfig } from "@nuxt/ui/runtime/vue/composables/useAppConfig";
 import { en as uiEn, fr as uiFr } from "@nuxt/ui/locale";
 import ui from "@nuxt/ui/vue-plugin";
+import { router } from "@inertiajs/vue3";
 import { useHead } from "@unhead/vue";
 import type { VueHeadClient } from "@unhead/vue/types";
 import type { IconifyIcon } from "@iconify/vue";
@@ -64,7 +65,13 @@ import {
   supportedLocales,
   syncLocaleMessages,
 } from "./locales.generated";
-import { showNetworkErrors } from "./network-error";
+import {
+  type DmsMessageSubset,
+  SSR_MESSAGES_ID,
+  recordMessageReads,
+} from "./message-subset";
+import { NETWORK_ERROR_KEYS, showNetworkErrors } from "./network-error";
+import { loadIconBundle } from "./icon-bundle";
 import { createUiAppConfigMerger } from "./ui-app-config";
 
 export interface DmsInertiaSetupProps {
@@ -86,8 +93,16 @@ export interface DmsAppOptions {
 }
 
 export interface DmsConfiguredApp {
-  /** The locale of the catalog the app shows its messages from now. */
+  /**
+   * The locale of the catalog the app shows its messages from now, none when
+   * the page is served the messages it read alone.
+   */
   catalogLocale: () => string | undefined;
+  /**
+   * On the server, for a page of a visitor who is not signed in: the messages
+   * the render read, which the page carries instead of the whole catalog.
+   */
+  messageSubset: () => DmsMessageSubset | undefined;
   mounted: () => Promise<void>;
   runtime: ReturnType<typeof createDmsFrontendRuntime>;
 }
@@ -231,8 +246,18 @@ const DmsPersistentInertiaPage = Object.assign(DmsInertiaPage, {
   layout: DmsPersistentLayout,
 });
 
-export function resolveDmsInertiaPage(): Component {
-  return DmsPersistentInertiaPage;
+/**
+ * What a visit waits for before it shows its page, set when the first one
+ * starts from a page that began without what the pages after it read: a
+ * subset of the catalog, the icon bundle. Inertia also resolves the first page
+ * once the app is set up, which must not wait for it.
+ */
+let completeInitialAssets: (() => Promise<void>) | undefined;
+
+export function resolveDmsInertiaPage(): Component | Promise<Component> {
+  return completeInitialAssets
+    ? completeInitialAssets().then(() => DmsPersistentInertiaPage)
+    : DmsPersistentInertiaPage;
 }
 
 function renderDmsPage(
@@ -303,13 +328,66 @@ export async function configureDmsApp(
     userLocale(options.initialPageProps.user) ??
     readDmsLocaleCookie(runtime, supportedLocales) ??
     DEFAULT_LOCALE;
-  const messages = await loadLocaleMessages(locale);
+  const anonymous = !options.initialPageProps.user;
+  const subset = anonymous
+    ? readServerRendered<DmsMessageSubset | undefined>(
+        SSR_MESSAGES_ID,
+        undefined,
+      )
+    : undefined;
+  const started = subset?.locale === locale ? subset : undefined;
+  const messages = started?.messages ?? (await loadLocaleMessages(locale));
+  const recorder =
+    anonymous && typeof window === "undefined"
+      ? recordMessageReads(messages)
+      : undefined;
+  let loading: Promise<void> | undefined;
   const i18n = createI18n({
     legacy: false,
     locale,
     fallbackLocale: DEFAULT_LOCALE,
-    messages: { ...localeMessages, [locale]: messages },
+    messages: started
+      ? { [locale]: messages }
+      : { ...localeMessages, [locale]: recorder?.messages ?? messages },
+    ...(started && {
+      missing: (_locale: string, key: string) => {
+        if (i18n.global.locale.value !== locale) return key;
+        void loadCompleteCatalog();
+        return "";
+      },
+    }),
   });
+  function loadCompleteCatalog(): Promise<void> {
+    if (i18n.global.locale.value !== locale) return Promise.resolve();
+    loading ??= loadLocaleMessages(locale).then(
+      (complete) => {
+        i18n.global.setLocaleMessage(locale, complete);
+        i18n.global.setMissingHandler(null);
+      },
+      () => {
+        loading = undefined;
+      },
+    );
+    return loading;
+  }
+  if (anonymous && typeof window !== "undefined") {
+    const complete = async (): Promise<void> => {
+      await Promise.all([
+        started ? loadCompleteCatalog() : undefined,
+        loadIconBundle(),
+      ]);
+    };
+    router.on("before", () => {
+      completeInitialAssets = complete;
+      void complete();
+    });
+    for (const type of ["pointerdown", "keydown", "focusin", "touchstart"])
+      addEventListener(type, () => void loadIconBundle(), {
+        once: true,
+        capture: true,
+      });
+  }
+  if (recorder) for (const key of NETWORK_ERROR_KEYS) i18n.global.te(key);
   // A translation changed in a layer during development reaches the page
   // without a reload. A server render imports the new catalogs instead.
   if (typeof window !== "undefined") syncLocaleMessages(i18n.global);
@@ -332,6 +410,7 @@ export async function configureDmsApp(
   // rendered: the page, its layout, and the components the render reached.
   // Hydration then adopts the server-rendered markup instead of discarding it.
   await Promise.all([
+    anonymous ? undefined : loadIconBundle(),
     preloadDmsPage(options.initialPageProps),
     resolveDmsAsyncComponents(
       readServerRendered<string[]>(SSR_ASYNC_COMPONENTS_ID, []),
@@ -345,7 +424,9 @@ export async function configureDmsApp(
     supportedLocales,
   );
   return {
-    catalogLocale: () => catalogLocale(i18n.global.locale.value),
+    catalogLocale: () =>
+      recorder ? undefined : catalogLocale(i18n.global.locale.value),
+    messageSubset: () => recorder && { locale, messages: recorder.subset() },
     mounted,
     runtime,
   };
