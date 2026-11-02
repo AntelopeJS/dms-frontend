@@ -20,6 +20,7 @@ import {
 import { readText } from "./helpers/files";
 import { isText } from "./helpers/guards";
 import { isJsonObject, jsonAt, type JsonValue, readJson } from "./helpers/json";
+import { useIsolatedHome } from "./helpers/isolated-home";
 import {
   eventually,
   memory,
@@ -27,6 +28,8 @@ import {
   warnings,
   writeFile,
 } from "./helpers/layer-watch";
+
+useIsolatedHome();
 
 describe("derived outputs in the dev layer watcher", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-derived-watch-"));
