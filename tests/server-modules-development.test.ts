@@ -70,6 +70,7 @@ describe("Module server routes in development", () => {
         },
       });
       const devServer = vite;
+      // SAFETY: `workspace` is the unchanged copy of `templates/vue` made by the `cpSync` above, so `server/module-server.mjs` is the file this type names.
       const { handleModuleRoute, loadServerModules } = (await import(
         pathToFileURL(join(workspace, "server", "module-server.mjs")).href
       )) as Pick<

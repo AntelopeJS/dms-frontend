@@ -59,6 +59,7 @@ export class BackendUnreachableError extends CliError {
 
   constructor(
     readonly url: string,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- the rejection reason of `fetch`, and JavaScript lets any value be thrown; narrowing it to `Error` would change this exported constructor's signature.
     failure: unknown,
   ) {
     const cause =

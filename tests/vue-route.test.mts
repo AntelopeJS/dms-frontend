@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isCallable } from "../src/internal/guards";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { renderToString } from "@vue/server-renderer";
 import {
@@ -82,10 +83,12 @@ describe("Route of the page", () => {
     const RouteAfterAwait = defineComponent({
       props: { delay: { type: Number, required: true } },
       async setup(props) {
-        let pending: unknown;
-        let restore: () => void;
-        [pending, restore] = withAsyncContext(() => sleep(props.delay));
+        const started: unknown = withAsyncContext(() => sleep(props.delay));
+        assert.ok(Array.isArray(started), "withAsyncContext answers a pair");
+        const pair: unknown[] = started;
+        const [pending, restore] = pair;
         await pending;
+        assert.ok(isCallable(restore), "the pair ends with the restore");
         restore();
         const route = useDmsRoute();
         return () => h("p", `route:${route.fullPath}`);

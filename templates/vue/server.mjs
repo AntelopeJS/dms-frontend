@@ -61,6 +61,7 @@ import { htmlTag } from "./server/html-tag.mjs";
 import { isString } from "./server/type-guards.mjs";
 import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
+import { ssrRenderer } from "./server/ssr-module.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
 import { proxy } from "./server/proxy-request.mjs";
 import { refuseForeignTarget } from "./server/request-target.mjs";
@@ -88,14 +89,6 @@ const PROJECT_ROOT = fileURLToPath(new URL(".", import.meta.url));
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const CLIENT_ROOT = join(PROJECT_ROOT, "dist/client");
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
-/**
- * A URL, not a path: on Windows, `import()` reads `C:\...` as a URL whose
- * scheme is `c:` and refuses it.
- */
-const BUILT_SSR_RENDERER_URL = new URL(
-  "dist/ssr/ssr-renderer.js",
-  import.meta.url,
-);
 
 /**
  * The SSR bundle keeps vue-i18n external, so Node loads its esm-bundler build,
@@ -108,8 +101,6 @@ function defineVueCompileFlags() {
 }
 
 defineVueCompileFlags();
-/** @type {Promise<typeof import("./ssr-renderer.ts")> | undefined} */
-let productionSsrRenderer;
 /** @type {ViteDevServer | undefined} */
 let vite;
 /** @type {Promise<ViteDevServer> | undefined} */
@@ -192,19 +183,6 @@ function serveAsset(pathname, request, response) {
     immutable: pathname.startsWith("/assets/"),
   });
   return true;
-}
-
-/**
- * @param {ViteDevServer | undefined} devServer
- * @returns {Promise<typeof import("./ssr-renderer.ts")>}
- */
-async function ssrRenderer(devServer) {
-  /** @type {typeof import("./ssr-renderer.ts")} */
-  const renderer = devServer
-    ? await devServer.ssrLoadModule("/ssr-renderer.ts")
-    : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_URL.href));
-  await icons.provideIconCollections(renderer);
-  return renderer;
 }
 
 /**

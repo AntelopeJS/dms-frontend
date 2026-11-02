@@ -289,7 +289,9 @@ function isResponse(value) {
  * @returns {Response}
  */
 function asResponse(result) {
-  if (isResponse(result)) return result;
+  if (isResponse(result))
+    // oxlint-disable-next-line typescript/no-unsafe-return -- `isResponse` also accepts a `Response` of another realm by its members (`status`, `headers.get`, `body`), so it cannot be a `value is Response` predicate without claiming members it does not check.
+    return result;
   if (result === undefined || result === null)
     return new Response(null, { status: 204 });
   return Response.json(result);

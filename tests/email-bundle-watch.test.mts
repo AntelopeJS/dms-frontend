@@ -6,18 +6,10 @@ import { join, resolve } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 
-/** The props of the fixture's `Welcome.vue`. */
-interface WelcomeProps {
-  footer?: boolean;
-}
-
-interface EmailTemplate {
-  renderEmailTemplate: (
-    template: string,
-    props: WelcomeProps,
-  ) => Promise<string>;
-  watchEmailBundle: () => ChildProcess;
-}
+type EmailTemplate = Pick<
+  typeof import("../templates/vue/server/email.mjs"),
+  "renderEmailTemplate" | "watchEmailBundle"
+>;
 
 function writeTemplate(moduleRoot: string, text: string): void {
   writeFileSync(
@@ -61,6 +53,7 @@ async function emailWorkspace(templates: Record<string, string>): Promise<{
   for (const [name, source] of Object.entries(templates)) {
     writeFileSync(join(moduleRoot, "emails", name), source);
   }
+  // SAFETY: `cpSync` above puts a verbatim copy of `templates/vue` in `workspace`, so `server/email.mjs` is the file `EmailTemplate` picks from.
   const email = (await import(
     pathToFileURL(join(workspace, "server", "email.mjs")).href
   )) as EmailTemplate;

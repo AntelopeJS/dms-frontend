@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getIcons } from "@iconify/utils";
 import { ICON_API_PATH } from "../icon-api.mjs";
 import { writeContent } from "./content.mjs";
+import { iconCollectionOf } from "./generated-files.mjs";
 
 const WORKSPACE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const JSON_TYPE = "application/json";
@@ -29,7 +30,7 @@ const ERROR_CACHE_CONTROL = "no-store";
  * An Iconify icon collection: the JSON file of an `@iconify-json/<prefix>`
  * package.
  *
- * @typedef {Parameters<typeof import("@iconify/utils").getIcons>[0]} IconCollection
+ * @typedef {import("./generated-files.mjs").IconCollection} IconCollection
  */
 
 /**
@@ -90,7 +91,7 @@ function resolveCollectionFile(root, prefix) {
 async function loadCollection(root, prefix) {
   const file = resolveCollectionFile(root, prefix);
   if (!file) return undefined;
-  return JSON.parse(await readFile(file, "utf8"));
+  return iconCollectionOf(JSON.parse(await readFile(file, "utf8")));
 }
 
 /**

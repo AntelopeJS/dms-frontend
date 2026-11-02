@@ -7,6 +7,7 @@ type ServerTemplate = typeof import("../../templates/vue/server.mjs");
 export async function requestHandlerOf(
   workspace: string,
 ): Promise<ServerTemplate["handleRequestSafely"]> {
+  // SAFETY: each caller builds `workspace` from a verbatim copy of `templates/vue` (`cpSync` or `copyStaticTemplates`), so `server.mjs` is the file `ServerTemplate` names.
   const server = (await import(
     pathToFileURL(join(workspace, "server.mjs")).href
   )) as ServerTemplate;

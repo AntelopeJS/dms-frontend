@@ -189,6 +189,7 @@ const { t } = useI18n();
       germanPath,
       "invalid JSON: must not be read by an English or French render",
     );
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the build output, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
     const { renderEmail } = await import(
       pathToFileURL(join(output, "email-renderer.js")).href
     );

@@ -37,6 +37,7 @@ export function readProjectModulesFresh(
     });
     let reply: ProjectModulesReply | undefined;
     child.once("message", (message) => {
+      // SAFETY: the child is `project-modules-child`, whose only `process.send` sends the `ProjectModulesReply` it builds, once; the third-party `configVars` and `frontendModule` code it loads shares the channel and could send first, which their contracts give it no reason to do, so a module that calls `process.send` breaks this claim and no check here catches it.
       reply = message as ProjectModulesReply;
     });
     child.once("error", reject);

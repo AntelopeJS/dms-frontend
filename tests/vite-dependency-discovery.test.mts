@@ -128,6 +128,7 @@ it("optimizes a module's CommonJS dependency discovered after startup", async ()
     const optimizedUrl = transformed.code.match(/from "([^"?]+\.js)/)?.[1];
     assert.ok(optimizedUrl);
     await server.transformRequest(optimizedUrl);
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- the module is a dependency Vite pre-bundled, imported by a URL computed from `optimizedUrl`, so it is untyped; the next line asserts what it exports.
     const optimizedModule = await import(
       pathToFileURL(join(root, optimizedUrl)).href
     );
