@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { viteManifestOf } from "./generated-files.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const BUILT_TEMPLATE_PATH = join(PROJECT_ROOT, "dist/client/index.html");
@@ -37,8 +38,9 @@ export function productionHtmlTemplate() {
 function productionClientManifest() {
   if (clientManifest) return clientManifest;
   if (!existsSync(CLIENT_MANIFEST_PATH)) return undefined;
-  // oxlint-disable-next-line typescript/no-unsafe-assignment -- `JSON.parse` types the file as `any`; it is the manifest Vite wrote at build time, which the JSDoc type names, `import("vite").Manifest`.
-  clientManifest = JSON.parse(readFileSync(CLIENT_MANIFEST_PATH, "utf8"));
+  clientManifest = viteManifestOf(
+    JSON.parse(readFileSync(CLIENT_MANIFEST_PATH, "utf8")),
+  );
   return clientManifest;
 }
 
