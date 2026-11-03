@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { extname, join } from "node:path";
-import { brotliDecompressSync, gunzipSync } from "node:zlib";
-import { isRow, isText, parseJson, rowAt } from "./json.mjs";
+import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
+import { isRow, isText, listAt, numberAt, parseJson, rowAt } from "./json.mjs";
 import { observe } from "./proxy-satellite.mjs";
 
 /** @typedef {import("./control.d.ts").JourneyContext} Ctx */
@@ -137,15 +137,23 @@ function documentChecks(ctx, client, log) {
   const styleAt = html.search(/<link rel="stylesheet"/);
   const scriptAt = html.search(/<script[^>]*type="module"/);
   const entry = /src="\/(assets\/[^"]+)"/.exec(script)?.[1];
-  const entryBr = entry ? statSync(join(client, `${entry}.br`)).size : 0;
-  const entryRaw = entry ? statSync(join(client, entry)).size : 0;
+  const recorded = parseJson(readFileSync(join(client, ".vite", "entry-weight.json"), "utf8"));
+  const recordedFiles = listAt(recorded, "files").filter(isText);
+  const brotliOf = (/** @type {string} */ file) =>
+    existsSync(join(client, `${file}.br`))
+      ? statSync(join(client, `${file}.br`)).size
+      : brotliCompressSync(readFileSync(join(client, file)), { params: { [constants.BROTLI_PARAM_QUALITY]: constants.BROTLI_MAX_QUALITY } }).length;
+  const entryBr = recordedFiles.reduce((total, file) => total + brotliOf(file), 0);
+  const entryRaw = numberAt(recorded, "bytes") ?? 0;
   const summary = /Client entry (\d+) KB Brotli \((\d+) KB\)/.exec(log);
   const preloads = (html.match(/rel="modulepreload"/g) ?? []).length;
   const weighs = summary !== null && Math.abs(Number(summary[1]) - entryBr / 1024) <= 1 && Math.abs(Number(summary[2]) - entryRaw / 1024) <= 1;
+  const entryNamed = entry !== undefined && recordedFiles.includes(entry);
   observe(ctx, "the built document and the entry", { script, styleAt, scriptAt, entry, entryBr, entryRaw, summary: summary?.[0], preloads }, [
     ctx.holds("the stylesheet comes before the entry script", styleAt >= 0 && scriptAt >= 0 && styleAt < scriptAt, `${styleAt} < ${scriptAt}`),
     ctx.holds("the entry script has a low fetch priority", script.includes('fetchpriority="low"'), script),
-    ctx.holds("the build reports the entry's weight: Brotli and raw KB match the files", weighs, `${summary?.[0]} against ${entryBr} and ${entryRaw} bytes`),
+    ctx.holds("the entry script is among the files the build recorded for the entry", entryNamed, `${entry} in ${recordedFiles.join(", ")}`),
+    ctx.holds("the build reports the entry's weight: the Brotli KB of the recorded files and the recorded bytes", weighs, `${summary?.[0]} against ${entryBr} and ${entryRaw} bytes`),
     ctx.holds("the entry is one file: the document preloads a handful of chunks, not dozens", preloads <= 10, preloads),
   ]);
 }

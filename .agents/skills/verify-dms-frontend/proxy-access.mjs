@@ -7,7 +7,10 @@ const CROSS_ORIGIN = { error: "Forbidden", reason: "missing or untrusted Origin 
 const NONE_PROXY = JSON.stringify([{ path: "/hook/**", auth: "none" }]);
 
 const MANIFEST_FILE = JSON.stringify({
-  endpoints: [{ path: "/api/acme/events/*/*", methods: ["POST", "put"], headers: ["X-Acme-Secret"] }],
+  endpoints: [
+    { path: "/api/acme/events/*/*", methods: ["POST", "put"], headers: ["X-Acme-Secret"] },
+    { path: "/api/acme/default/*" },
+  ],
   proxies: [{ module: "acme-backend", path: "/webhooks/acme/**", auth: "none" }],
 });
 
@@ -22,6 +25,9 @@ const OPERATOR_ENTRIES = [
   { path: "/api/acme/dmsheader/*", methods: ["POST"], headers: ["x-dms-extra"] },
   { path: "/api/acme/inertia/*", methods: ["POST"], headers: ["x-inertia-version"] },
   { path: "/api/acme/override/*", methods: ["POST"], headers: ["x-http-method-override"] },
+  { path: "/api/acme/methodoverride/*", methods: ["POST"], headers: ["x-method-override"] },
+  { path: "/api/acme/httpmethod/*", methods: ["POST"], headers: ["x-http-method"] },
+  { path: "/api/acme/cookie/*", methods: ["POST"], headers: ["cookie"] },
   { path: "/api/acme/original/*", methods: ["POST"], headers: ["x-original-url"] },
   { path: "/api/acme/rewrite/*", methods: ["POST"], headers: ["x-rewrite-url"] },
   { path: "/api/acme/realip/*", methods: ["POST"], headers: ["x-real-ip"] },
@@ -42,6 +48,9 @@ const REFUSED_PATHS = [
   "/api/acme/dmsheader/x",
   "/api/acme/inertia/x",
   "/api/acme/override/x",
+  "/api/acme/methodoverride/x",
+  "/api/acme/httpmethod/x",
+  "/api/acme/cookie/x",
   "/api/acme/original/x",
   "/api/acme/rewrite/x",
   "/api/acme/realip/x",
@@ -140,6 +149,21 @@ async function checkManifestEndpoints(ctx, server, login) {
   const encodedDots = await exchange(server.url, { method: "POST", path: "/api/acme/events/%2e%2e/%2e%2e/secret", headers: acme });
   const climbsInto = await exchange(server.url, { method: "POST", path: "/api/zzz/../acme/events/a/b", headers: acme });
   const backslash = await exchange(server.url, { method: "POST", path: "/api/acme/events/a\\..\\other", headers: acme });
+  const defaultPost = await exchange(server.url, { method: "POST", path: "/api/acme/default/a", headers: acme, body: "{}" });
+  const defaultPut = await exchange(server.url, { method: "PUT", path: "/api/acme/default/a", headers: acme, body: "{}" });
+  const defaultPatch = await exchange(server.url, { method: "PATCH", path: "/api/acme/default/a", headers: acme, body: "{}" });
+  const defaultDelete = await exchange(server.url, { method: "DELETE", path: "/api/acme/default/a", headers: acme });
+  observe(ctx, "manifest public endpoint /api/acme/default/* declares no methods: POST only", {
+    post: shortAnswer(defaultPost),
+    put: shortAnswer(defaultPut),
+    backendSaw: server.backend.to("/api/acme/default/a").map((seen) => seen.method),
+  }, [
+    ctx.equal("POST is public by default", defaultPost.status, 200),
+    ctx.equal("PUT is not", shortAnswer(defaultPut), { status: 403, body: CROSS_ORIGIN }),
+    ctx.equal("PATCH is not", shortAnswer(defaultPatch), { status: 403, body: CROSS_ORIGIN }),
+    ctx.equal("DELETE is not", shortAnswer(defaultDelete), { status: 403, body: CROSS_ORIGIN }),
+    ctx.equal("the backend saw only the POST", server.backend.to("/api/acme/default/a").map((seen) => seen.method), ["POST"]),
+  ]);
   observe(ctx, "manifest public endpoint /api/acme/events/*/* (POST, PUT; x-acme-secret)", {
     post: shortAnswer(post),
     backendSaw: { method: seenPost?.method, url: seenPost?.url, headers: seenPost?.headers },

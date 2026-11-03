@@ -63,6 +63,7 @@ export interface Page {
   waitForLoadState(state?: "load" | "domcontentloaded" | "networkidle"): Promise<void>;
   waitForURL(predicate: (url: URL) => boolean, options?: { timeout?: number }): Promise<void>;
   waitForTimeout(ms: number): Promise<void>;
+  keyboard: { press(key: string): Promise<void> };
   getByRole(role: string, options?: { name?: string | RegExp }): Locator;
   evaluate<T extends Json>(action: () => T): Promise<T>;
   context(): { cookies(): Promise<Cookie[]>; addCookies(cookies: { name: string; value: string; url: string }[]): Promise<void> };

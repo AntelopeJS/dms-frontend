@@ -144,4 +144,44 @@ export const journeys = [
       ]);
     },
   },
+  {
+    id: "a-signed-out-page-loads-the-icon-bundle-only-when-the-visitor-acts",
+    title: "the bundle of Nuxt UI icons is not requested by the sign-in page until a key, a click or a touch, and a signed-in page loads it before it shows",
+    entryPoint: "/auth in a browser, then /settings signed in",
+    async run(/** @type {Ctx} */ ctx) {
+      const BUNDLE = /\/assets\/virtual_nuxt-ui-icons-[^/]+\.js$/;
+      /**
+       * @param {import("../control.d.ts").Page} page The page to watch
+       * @returns {string[]} The bundle requests, appended as they happen
+       */
+      const watch = (page) => {
+        /** @type {string[]} */
+        const seen = [];
+        page.on("request", (/** @type {Request} */ request) => {
+          const path = new URL(request.url()).pathname;
+          if (BUNDLE.test(path)) seen.push(path);
+        });
+        return seen;
+      };
+      const visitor = await ctx.tab("visitor");
+      const before = watch(visitor.page);
+      await visitor.goto("/auth");
+      await visitor.page.waitForLoadState("networkidle");
+      await visitor.page.waitForTimeout(SETTLE_MS);
+      const idle = before.length;
+      await visitor.page.keyboard.press("Shift");
+      await visitor.page.waitForTimeout(SETTLE_MS);
+      await ctx.verify("the sign-in page draws its form and does not ask for the bundle until the visitor acts", [
+        visitor.visible({ role: "textbox", name: "Email address" }),
+        ctx.equal("bundle requests while idle", idle, 0),
+        ctx.equal("bundle requests after a key press", before.length, 1),
+      ]);
+      const member = await ctx.tab("admin");
+      await signIn(ctx, member);
+      const signedIn = watch(member.page);
+      await member.goto("/settings");
+      await member.page.waitForLoadState("load");
+      await ctx.verify("a signed-in page has asked for the bundle by the time it has loaded", [ctx.equal("bundle requests", signedIn.length, 1)]);
+    },
+  },
 ];

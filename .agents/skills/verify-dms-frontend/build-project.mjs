@@ -36,7 +36,7 @@ export function buildProjectFolder(ctx, name) {
  * Writes the project: `antelope.config.ts`, the module `fx` and its frontend.
  *
  * @param {string} dir The project folder
- * @param {{ component?: string, environmentOnly?: boolean }} [options] Variations
+ * @param {{ component?: string, environmentOnly?: boolean, locales?: Record<string, string>, entry?: string, files?: Record<string, string> }} [options] Variations
  * @returns {{ project: string, component: string }} The project and the component file
  */
 export function writeBuildProject(dir, options = {}) {
@@ -71,7 +71,8 @@ exports.frontendModule = () => ({
   put(join(dir, "fx", "frontend-vue", "package.json"), JSON.stringify({ name: "fx-frontend-vue", version: "1.0.0", type: "module", engines: { "@antelopejs/dms-frontend": ">=0.10.0 <0.11.0" } }));
   put(
     join(dir, "fx", "frontend-vue", "dms.frontend.ts"),
-    `import type { DmsFrontendModule } from "#dms/frontend-module";
+    options.entry ??
+      `import type { DmsFrontendModule } from "#dms/frontend-module";
 
 const fixture: DmsFrontendModule = {
   setup(sdk) {
@@ -84,6 +85,8 @@ export default fixture;
   );
   const component = join(dir, "fx", "frontend-vue", "app", "components", "Callout.vue");
   put(component, options.component ?? COMPONENT);
+  for (const [name, text] of Object.entries(options.files ?? {})) put(join(dir, "fx", "frontend-vue", name), text);
+  for (const [name, text] of Object.entries(options.locales ?? {})) put(join(dir, "fx", "frontend-vue", "i18n", "locales", name), text);
   return { project: dir, component };
 }
 

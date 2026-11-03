@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, plain, runCli, runCliOnTerminal, sameText, scratch } from "./cli-run.mjs";
+import { parseJson } from "./json.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -286,6 +287,7 @@ export const journeys = [
         "CI": await on(["workspaces"], { CI: "1" }),
         "TERM=dumb": await on(["workspaces"], { TERM: "dumb" }),
         "-q": await on(["-q", "workspaces"]),
+        "--json": await on(["workspaces", "--json"]),
         "--version": await on(["--version"]),
         "--help": await on(["--help"]),
         "help workspaces": await on(["help", "workspaces"]),
@@ -299,6 +301,7 @@ export const journeys = [
         ctx.equal("it is set apart by one blank line", shown.stdout.split("\n").slice(0, 3).map((line) => line.trim() === ""), [false, true, false]),
         ctx.holds("shown after clean too", cleaned.stdout.includes(notice("99.0.0")), JSON.stringify(cleaned.stdout)),
         ...Object.entries(silent).map(([name, result]) => ctx.holds(`no notice: ${name}`, !result.stdout.includes("is available"), JSON.stringify(result.stdout))),
+        ctx.holds("--json prints the JSON and nothing else", Array.isArray(parseJson(silent["--json"].stdout.trim())), JSON.stringify(silent["--json"].stdout)),
         ctx.holds("no notice when the release is the latest", !sameRelease.stdout.includes("is available"), JSON.stringify(sameRelease.stdout)),
         ctx.holds("no notice when the release is newer than the latest", !older.stdout.includes("is available"), JSON.stringify(older.stdout)),
         ctx.holds("no notice when piped", !piped.stderr.includes("is available") && !piped.stdout.includes("is available"), JSON.stringify(piped)),

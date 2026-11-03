@@ -320,4 +320,25 @@ export const journeys = [
       await ctx.verify("the browser then prints its own keyboard's hint", [tab.visible({ role: "button", name: /Search…\s*Ctrl K/i })]);
     },
   },
+  {
+    id: "the-payload-is-escaped-so-data-cannot-close-its-script",
+    title: "a stored value holding a closing script tag reaches the page only with its slashes and angle brackets escaped",
+    entryPoint: "POST /api/user/new, then GET /table-view/table-view-users",
+    async run(/** @type {Ctx} */ ctx) {
+      const { cookie } = await signedIn(ctx);
+      const name = "a</script><b>x/y";
+      const created = await ctx.api("create a user whose name closes a script tag", { method: "POST", path: "/api/user/new", body: { name, email: ctx.email("payload") } });
+      await ctx.verify("the user is stored", [ctx.equal("status", created.status, 200)]);
+      const answer = await get(ctx, "/table-view/table-view-users", { cookie, headers: HTML });
+      const payload = payloadText(answer.text) ?? "";
+      await ctx.verify("the payload holds the name with the slash as \\/ and the bracket escaped", [
+        ctx.holds("the escaped name is in the payload", payload.includes("a\\u003C\\/script>\\u003Cb>x\\/y"), payload.slice(0, 120)),
+        ctx.equal("the payload holds no raw angle bracket", payload.includes("<"), false),
+        ctx.equal("every slash of the payload is escaped", /(?<!\\)\//.test(payload), false),
+      ]);
+      await ctx.verify("the document has no script closed early by the name", [
+        ctx.equal("no literal closing tag followed by the injected element", answer.text.includes("</script><b>x"), false),
+      ]);
+    },
+  },
 ];

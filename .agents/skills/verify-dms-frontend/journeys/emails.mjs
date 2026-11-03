@@ -1,6 +1,8 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { parseJson } from "../json.mjs";
+import { parseJson, textAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
+import { withSatellite } from "../proxy-satellite.mjs";
 import { get, header } from "../web.mjs";
 
 /** @typedef {import("../control.d.ts").JourneyContext} Ctx */
@@ -9,6 +11,38 @@ const OPEN_ATTEMPTS = 6;
 const OPEN_WAIT_MS = 2500;
 const HYDRATION_COMMENTS = /<!--\[-->|<!--\]-->|<!---->/g;
 const RENDER_ROUTE = "/api/html/render";
+const TOKEN_LIFETIME_SECONDS = 60;
+const JTI_BYTES = 12;
+
+/**
+ * A single-use service token as the backend signs it for a render request.
+ *
+ * @param {string} secret The e-mail render secret
+ * @returns {string} The token
+ */
+function serviceToken(secret) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const claims = { namespace: "html-render-service", purpose: "html-render", aud: "dms-frontend", jti: randomBytes(JTI_BYTES).toString("hex"), iat: now, exp: now + TOKEN_LIFETIME_SECONDS };
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = createHmac("sha256", secret).update(`${header}.${payload}`).digest("base64url");
+  return `${header}.${payload}.${signature}`;
+}
+
+/**
+ * @param {Ctx} ctx The journey context
+ * @param {string} url The frontend server to ask
+ * @param {{ token?: string, templateName?: string, props?: object, locale?: string }} [options] What differs from a valid request
+ * @returns {Promise<{ status: number, body: unknown, html: string }>} The answer
+ */
+async function render(ctx, url, options = {}) {
+  const props = options.props ?? { email: "x@verify.local", signupLink: `${url}/auth/signup?token=t`, expiresInDays: 7 };
+  const headers = new Headers({ "content-type": "application/json", "x-dms-service-token": options.token ?? serviceToken(ctx.state.secrets.DMS_HTML_RENDER_SECRET) });
+  if (options.locale) headers.set("x-content-language", options.locale);
+  const response = await fetch(`${url}${RENDER_ROUTE}`, { method: "POST", headers, body: JSON.stringify({ templateName: options.templateName ?? "EmailAdminInvite", props }) });
+  const body = parseJson(await response.text());
+  return { status: response.status, body, html: textAt(body, "html") ?? "" };
+}
 
 /**
  * @param {string} file A raw message the sink captured
@@ -79,6 +113,39 @@ export const journeys = [
         ctx.equal("message", parseJson(unsigned.text), { message: "Invalid service token" }),
         ctx.equal("content-type", header(unsigned, "content-type"), "application/json"),
       ]);
+    },
+  },
+  {
+    id: "the-render-route-takes-one-signed-single-use-token-per-render",
+    title: "a render with a valid service token answers the template's HTML; a replayed, forged, mis-addressed or expired token, an unknown template and a bad body are refused",
+    entryPoint: "POST /api/html/render on a second frontend server",
+    async run(/** @type {Ctx} */ ctx) {
+      await withSatellite(ctx, {}, async (server) => {
+        const secret = ctx.state.secrets.DMS_HTML_RENDER_SECRET;
+        const token = serviceToken(secret);
+        const first = await render(ctx, server.url, { token });
+        const replay = await render(ctx, server.url, { token });
+        const wrongSecret = await render(ctx, server.url, { token: serviceToken("not-the-secret") });
+        const unknown = await render(ctx, server.url, { templateName: "EmailDoesNotExist" });
+        const noName = await render(ctx, server.url, { templateName: "" });
+        const french = await render(ctx, server.url, { locale: "fr" });
+        const english = await render(ctx, server.url, { locale: "en" });
+        const unsupported = await render(ctx, server.url, { locale: "xx" });
+        await ctx.verify("a valid token renders the template once", [
+          ctx.equal("status", first.status, 200),
+          ctx.holds("the HTML is a document with the signup link given", first.html.startsWith("<!doctype html><html") && first.html.includes(`${server.url}/auth/signup?token=t`), first.html.slice(0, 160)),
+          ctx.equal("the same token again", [replay.status, replay.body], [401, { message: "Invalid service token" }]),
+          ctx.equal("a token signed with another secret", [wrongSecret.status, wrongSecret.body], [401, { message: "Invalid service token" }]),
+        ]);
+        await ctx.verify("a template that does not exist and a body with no name are refused", [
+          ctx.equal("unknown template", [unknown.status, unknown.body], [404, { message: 'Template "EmailDoesNotExist" not found or render failed' }]),
+          ctx.equal("empty name", [noName.status, noName.body], [400, { message: "Invalid request body" }]),
+        ]);
+        await ctx.verify("the language header picks the catalog and an unknown language falls back to English", [
+          ctx.holds("French differs from English", french.html !== english.html, french.html.length),
+          ctx.equal("an unknown language renders the English text", unsupported.html.replace(/lang="[^"]*"/g, ""), english.html.replace(/lang="[^"]*"/g, "")),
+        ]);
+      });
     },
   },
 ];

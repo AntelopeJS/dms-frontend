@@ -182,4 +182,36 @@ export const journeys = [
       ]);
     },
   },
+  {
+    id: "verify-source-email-limit",
+    title: "verify-source keeps the e-mail bundle under 256 KiB of JavaScript: a module that stays under passes and one that goes over fails naming the size and the limit",
+    entryPoint: "ajs dms verify-source -m <module> with a dms.email.ts that carries about 90 KB and about 140 KB of JavaScript",
+    async run(/** @type {Context} */ ctx) {
+      /**
+       * @param {string} name The project folder
+       * @param {number} kilobytes About how much JavaScript the e-mail template adds
+       */
+      const withEmail = (name, kilobytes) =>
+        writeProject(projectFolder(ctx, name), {
+          files: {
+            "dms.email.ts": 'export const serverEmailTemplates = { Heavy: () => import("./emails/Heavy.vue") };\n',
+            "emails/Heavy.vue": '<script setup lang="ts">\nimport { text } from "./heavy";\n</script>\n\n<template>\n  <EBody>{{ text }}</EBody>\n</template>\n',
+            "emails/heavy.ts": `export const text = ${JSON.stringify("x".repeat(kilobytes * 1024))};\n`,
+          },
+        });
+      const under = await verify(ctx, withEmail("email-under", 90).project, []);
+      const over = await verify(ctx, withEmail("email-over", 140).project, []);
+      const size = /E-mail contracts hold · \d+ templates · (\d+) KB JS \(limit 256 KB\)/.exec(under.stderr);
+      const overSize = /✖ The e-mail bundle is (\d+) KB of JavaScript\n {2}The limit is 256 KB\./.exec(over.stderr);
+      await ctx.verify("a bundle under the limit passes and reports its size", [
+        ctx.equal("exit 0", under.code, 0),
+        ctx.holds("the size is between 200 KB and 256 KB", size !== null && Number(size[1]) > 200 && Number(size[1]) < 256, size?.[0] ?? under.stderr.slice(-300)),
+      ]);
+      await ctx.verify("a bundle over the limit fails with its size and the limit", [
+        ctx.equal("exit 1", over.code, 1),
+        ctx.holds("the failure names a size above 256 KB and the limit", overSize !== null && Number(overSize[1]) > 256, over.stderr.slice(-400)),
+        ctx.equal("no success summary", over.stderr.includes("Verified"), false),
+      ]);
+    },
+  },
 ];

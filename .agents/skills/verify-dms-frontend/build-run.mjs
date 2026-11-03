@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
@@ -232,6 +233,79 @@ export const journeys = [
         ctx.holds("it says how to see everything", failed.stderr.includes("  Run with --verbose for the full Vite output.\n"), failed.stderr),
         ctx.equal("the steps after the failure did not run", lines.filter((line) => line.startsWith("✔ Built the SSR")).length, 0),
         ctx.holds("--verbose streams the step output, names the steps, and omits the hint", verbose.code === 1 && verbose.stderr.length > failed.stderr.length && !verbose.stderr.includes("Run with --verbose for the full Vite output."), verbose.stderr.slice(0, 800)),
+      ]);
+    },
+  },
+  {
+    id: "build-entry-weight-default",
+    title: "with no threshold set, a module that adds more than 50 KB of Brotli to the client entry is warned about and one that adds less is not",
+    entryPoint: "ajs dms build --project <project> without DMS_ENTRY_WEIGHT_WARNING, for a module that adds about 70 KB and one that adds about 25 KB",
+    async run(/** @type {Context} */ ctx) {
+      /**
+       * @param {string} name The project folder
+       * @param {number} kilobytes About how much Brotli the module adds to the entry (hex text compresses to half)
+       */
+      const weigh = async (name, kilobytes) => {
+        const entry = `import type { DmsFrontendModule } from "#dms/frontend-module";
+import { blob } from "./blob";
+
+const fixture: DmsFrontendModule = {
+  setup() {
+    Reflect.set(globalThis, "fxBlob", blob);
+  },
+};
+
+export default fixture;
+`;
+        const files = { "blob.ts": `export const blob = "${randomBytes(kilobytes * 1024).toString("hex")}";\n` };
+        const project = writeBuildProject(buildProjectFolder(ctx, name), { entry, files });
+        const workspace = join(scratch(ctx, `ws-${name}`), "workspace");
+        const run = await runCli(ctx, ["build", "--project", project.project, "--workspace", workspace], { cwd: scratch(ctx, `cwd-${name}`), home: ctx.state.home, env: { DMS_ENTRY_WEIGHT_WARNING: "" }, timeoutMs: BUILD_TIMEOUT_MS });
+        return { run, lines: untimed(run.stderr) };
+      };
+      const heavy = await weigh("weight-heavy", 200);
+      const light = await weigh("weight-light", 35);
+      const warned = (/** @type {string[]} */ lines) => lines.filter((line) => line.startsWith("▲ fx-frontend adds "));
+      observe(ctx, "default threshold", { heavy: heavy.run, light: light.run }, [
+        ctx.equal("both builds succeed", [heavy.run.code, light.run.code], [0, 0]),
+        ctx.holds("the 70 KB module is warned about, with its size", warned(heavy.lines).length === 1 && /^▲ fx-frontend adds ([5-9]\d) KB Brotli to the client entry$/.test(warned(heavy.lines)[0]), warned(heavy.lines).join("\n")),
+        ctx.holds("and the threshold is named as 50 KB", heavy.lines.includes("  The threshold is 50 KB (DMS_ENTRY_WEIGHT_WARNING, in KB; 0 turns the warning off)"), heavy.run.stderr.slice(-600)),
+        ctx.equal("the 25 KB module is not", warned(light.lines), []),
+      ]);
+    },
+  },
+  {
+    id: "build-locale-error",
+    title: "a locale message vue-i18n cannot compile stops the build with exit 1, names the file and the count, and --verbose adds the key and the message to write instead",
+    entryPoint: "ajs dms build --project <project> with a module whose en-GB catalog holds an unescaped @",
+    async run(/** @type {Context} */ ctx) {
+      const locales = { "billing-en-GB.json": JSON.stringify({ auth: { email: { placeholder: "first.last@example.com" } }, fine: "plain text" }) };
+      const bad = writeBuildProject(buildProjectFolder(ctx, "locale"), { locales });
+      const workspace = join(scratch(ctx, "ws"), "workspace");
+      const failed = await runCli(ctx, ["build", "--project", bad.project, "--workspace", workspace], { cwd: scratch(ctx, "cwd"), home: ctx.state.home, timeoutMs: BUILD_TIMEOUT_MS });
+      const verbose = await runCli(ctx, ["build", "--project", bad.project, "--workspace", workspace, "--verbose"], { cwd: scratch(ctx, "cwd"), home: ctx.state.home, timeoutMs: BUILD_TIMEOUT_MS });
+      const lines = untimed(failed.stderr);
+      const file = join(bad.project, "fx", "frontend-vue", "i18n", "locales", "billing-en-GB.json");
+      observe(ctx, "an uncompilable message", { failed, verbose }, [
+        ctx.equal("exit 1, nothing on stdout", [failed.code, failed.stdout], [1, ""]),
+        ctx.equal("the failure names the file, the count and the compiler", lines.filter((line) => line.startsWith("✖ ")), [`✖ Invalid locale file ${file}: 1 message(s) vue-i18n cannot compile:`]),
+        ctx.equal("the build did not reach the bundles", lines.filter((line) => line.startsWith("✔ Built the")).length, 0),
+        ctx.holds("--verbose names the key and the message to write instead", verbose.stderr.includes("  auth.email.placeholder: Invalid linked format in \"first.last@example.com\". Write a literal @ as {'@'}: \"first.last{'@'}example.com\"."), verbose.stderr),
+        ctx.equal("the message that compiles is not named", verbose.stderr.includes("fine:"), false),
+      ]);
+    },
+  },
+  {
+    id: "build-locale-error-names-the-key",
+    title: "the default output of a failed locale build names the key and the message to write instead, as the page shows",
+    entryPoint: "ajs dms build --project <project> with a module whose en-GB catalog holds an unescaped @",
+    async run(/** @type {Context} */ ctx) {
+      const locales = { "billing-en-GB.json": JSON.stringify({ auth: { email: { placeholder: "first.last@example.com" } } }) };
+      const bad = writeBuildProject(buildProjectFolder(ctx, "locale-key"), { locales });
+      const workspace = join(scratch(ctx, "ws"), "workspace");
+      const failed = await runCli(ctx, ["build", "--project", bad.project, "--workspace", workspace], { cwd: scratch(ctx, "cwd"), home: ctx.state.home, timeoutMs: BUILD_TIMEOUT_MS });
+      observe(ctx, "the default output", { failed }, [
+        ctx.holds("the key and the message to write are in the output", failed.stderr.includes("auth.email.placeholder: Invalid linked format in \"first.last@example.com\". Write a literal @ as {'@'}: \"first.last{'@'}example.com\"."), failed.stderr),
       ]);
     },
   },
