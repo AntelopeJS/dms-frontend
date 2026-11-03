@@ -25,6 +25,7 @@ docs:
 - `verify-source-pass`: a module that builds and type-checks: the header counts two modules, the core layer's version, every step once (materialize, install, type declarations, server modules, e-mail bundle, client bundle, SSR bundle, type check), then the client bundle check, the e-mail contracts (8 templates, JS under 256 KB), the server module check, and `Verified 2 modules`; exit 0, the temporary workspace removed.
 - `verify-source-failures`: a type error exits 1 and names `./frontend-vue/app/components/Callout.vue:2:7  TS2322` with the code frame and the fix, not the workspace copy; `--verbose` streams more; a template that does not compile fails the client and SSR bundles and names the component; a `dms.server.ts` that imports `dms.frontend.ts` fails; the temporary workspace is removed after each failure.
 - `verify-source-local-package`: `-m` twice verifies three modules; a dependency the registry does not know fails the run unless `--local-package name=path` binds a local build.
+- `verify-source-email-limit`: a module whose e-mail template adds about 90 KB keeps the bundle near 215 KB and passes; one adding about 140 KB fails naming a size above 256 KB and the limit.
 
 ## How to get to it (user POV)
 

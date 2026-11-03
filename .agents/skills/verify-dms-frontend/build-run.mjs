@@ -8,6 +8,9 @@ import { startCliBackend } from "./cli-backend.mjs";
 import { observe, runCli, scratch, startCli } from "./cli-run.mjs";
 import { BROKEN_COMPONENT, buildProjectFolder, writeBuildProject } from "./build-project.mjs";
 import { serve, snapshot, whileServing } from "./build-server.mjs";
+import { startFakeBackend } from "./proxy-satellite.mjs";
+import { exchange } from "./proxy-http.mjs";
+import { fakeAuthBackend, signIn } from "./proxy-signin.mjs";
 import { humanSize } from "./workspace-fixtures.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
@@ -307,6 +310,72 @@ export default fixture;
       observe(ctx, "the default output", { failed }, [
         ctx.holds("the key and the message to write are in the output", failed.stderr.includes("auth.email.placeholder: Invalid linked format in \"first.last@example.com\". Write a literal @ as {'@'}: \"first.last{'@'}example.com\"."), failed.stderr),
       ]);
+    },
+  },
+  {
+    id: "build-access-redirect",
+    title: "a page visit the backend refuses with a typed 403 goes to the path a module registered for its code, document or Inertia, and a refused destination shows the error page",
+    entryPoint: "registerAccessRedirect in a built module, then GET pages the backend refuses with 403",
+    async run(/** @type {Context} */ ctx) {
+      const entry = `import type { DmsFrontendModule } from "#dms/frontend-module";
+
+const fixture: DmsFrontendModule = {
+  setup(sdk) {
+    sdk.registerAccessRedirect("fx.errors.blocked", "/elsewhere");
+    sdk.registerAccessRedirect("fx.errors.blocked", "/never-used");
+    sdk.registerAccessRedirect("fx.errors.away", "https://other.example.test/x");
+  },
+};
+
+export default fixture;
+`;
+      const project = writeBuildProject(buildProjectFolder(ctx, "access"), { entry });
+      const workspace = join(scratch(ctx, "ws"), "workspace");
+      const built = await runCli(ctx, ["build", "--project", project.project, "--workspace", workspace], { cwd: scratch(ctx, "cwd"), home: ctx.state.home, timeoutMs: BUILD_TIMEOUT_MS });
+      /** @type {Record<string, string>} */
+      const codes = { "/gated": "fx.errors.blocked", "/elsewhere": "fx.errors.blocked", "/json": JSON.stringify({ message: "fx.errors.blocked" }), "/away": "fx.errors.away", "/unregistered": "fx.errors.unknown" };
+      const { handler } = fakeAuthBackend((request, response) => {
+        const url = new URL(request.url ?? "/", "http://backend.local");
+        const refused = url.pathname === "/dms/page" ? codes[url.searchParams.get("path") ?? ""] : undefined;
+        if (refused === undefined) {
+          response.writeHead(404, { "content-type": "application/json" });
+          response.end("{}");
+          return;
+        }
+        response.writeHead(403, { "content-type": refused.startsWith("{") ? "application/json" : "text/plain" });
+        response.end(refused);
+      });
+      const backend = await startFakeBackend(handler);
+      try {
+        const server = await serve(ctx, backend.url, { project: false, cwd: project.project, args: ["--workspace", workspace] });
+        await whileServing(server, async () => {
+          const base = server.url.replace(/\/$/, "");
+          const login = await signIn({ url: base });
+          const visit = (/** @type {string} */ path, /** @type {Record<string, string>} */ headers) => exchange(base, { path, headers: { ...headers, cookie: login.cookie } });
+          const document = await visit("/gated", { accept: "text/html" });
+          const json = await visit("/json", { accept: "text/html" });
+          const inertia = await visit("/gated", { "x-inertia": "true" });
+          const looped = await visit("/elsewhere", { accept: "text/html" });
+          const away = await visit("/away", { accept: "text/html" });
+          const awayInertia = await visit("/away", { "x-inertia": "true" });
+          const unregistered = await visit("/unregistered", { accept: "text/html" });
+          const api = await visit("/gated", { accept: "application/json" });
+          observe(ctx, "typed refusals", { built: built.code, document: document.status, json: json.status, inertia: inertia.status, looped: looped.status, away: away.status, awayInertia: awayInertia.status, unregistered: unregistered.status }, [
+            ctx.equal("the module builds", built.code, 0),
+            ctx.equal("a document visit refused with a registered code is redirected before anything renders", [document.status, document.headers.location, document.text], [302, "/elsewhere", ""]),
+            ctx.equal("the first registration of a code wins", document.headers.location, "/elsewhere"),
+            ctx.equal("the code may come as JSON, as { message }", [json.status, json.headers.location], [302, "/elsewhere"]),
+            ctx.equal("an Inertia visit gets the same redirect", [inertia.status, inertia.headers.location], [302, "/elsewhere"]),
+            ctx.holds("a destination that is itself refused shows the error page, not a loop", looped.status !== 302 && looped.headers.location === undefined, `${looped.status} ${String(looped.headers.location)}`),
+            ctx.equal("a destination on another origin is not followed by the server", [away.status, away.headers.location], [403, undefined]),
+            ctx.equal("an Inertia visit to another origin would be a full visit, which is not offered either", awayInertia.headers["x-inertia-location"], undefined),
+            ctx.equal("a code nobody registered shows the error page", [unregistered.status, unregistered.headers.location], [403, undefined]),
+            ctx.equal("a request that is no page visit is not redirected", [api.status, api.headers.location], [403, undefined]),
+          ]);
+        });
+      } finally {
+        await backend.close();
+      }
     },
   },
   {

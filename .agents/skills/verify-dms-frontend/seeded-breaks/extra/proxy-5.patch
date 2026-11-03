@@ -1,0 +1,13 @@
+diff --git a/templates/vue/server/public-endpoints.mjs b/templates/vue/server/public-endpoints.mjs
+index 2ad972d..a154f31 100644
+--- a/templates/vue/server/public-endpoints.mjs
++++ b/templates/vue/server/public-endpoints.mjs
+@@ -66,7 +66,7 @@ const DEFAULT_METHODS = ["POST"];
+  */
+ const HEADER_NAME = /^x-[a-z0-9-]+$/;
+ const RESERVED_HEADER =
+-  /^x-(?:forwarded-|real-ip$|dms-|inertia|http-method|method-override|original-|rewrite-)/;
++  /^x-(?:forwarded-|real-ip$|dms-|inertia|http-method|original-|rewrite-)/;
+ 
+ /** @type {unknown[] | undefined} */
+ let declaredEndpoints;

@@ -22,6 +22,7 @@ The session is a sealed, `HttpOnly`, `SameSite=Lax` cookie, scoped to the backen
 - `sessions-establish`: the declared endpoint, 11 ways around the allow-list, manifest and environment endpoints, 2FA and tenant outcomes, the payload, and a backend refusal.
 - `sessions-language`: `dms_locale` read from the request in four forms, one `lang` attribute, and the footer's language switcher setting the cookie for a year.
 - `sessions-security`: no secret in any answer or built file, the bootstrap credential only in the ready report, a session needs the same `DMS_SESSION_SECRET`, and survives a restart that keeps it.
+- `sessions-language-order`: a signed-in user's saved language decides the page whatever the `dms_locale` cookie says, for French and for English.
 
 ## How to get to it (user POV)
 
@@ -60,7 +61,7 @@ dms-control journey "$RUN" sessions
 | The CLI merges the locale files into one catalog per language | A build step of the `build` feature. |
 | A deployment scaled out to several processes needs sticky routing | An infrastructure rule; the server gives no cross-process guarantee to observe. |
 | A discovered development credential goes only to the backend that published it; `--bootstrap-secret` is visible to other processes | Needs `.antelope/dev.json` written by `ajs project dev`; the run starts its backend with `project start`. |
-| The e-mail render and OAuth relay secrets come from the manifest in `dev` | The manifest is the real backend's and the playground configures no relay secret. |
+| The OAuth relay secret, and a conflict between two modules that publish different values | The playground configures no relay secret and has one publishing module. The render secret and the precedence against the variable are driven (`build/dev-secret-precedence`, issue draft `dms-frontend-secret-precedence-docs-contradict`). |
 | `DMS_CLIENT_IP_HEADER` on AntelopeJS Cloud | A platform property; the variable itself is driven in `proxy-relay`. |
 
 ## Gotchas

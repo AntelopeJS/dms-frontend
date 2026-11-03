@@ -50,6 +50,8 @@ How the frontend server answers a page: a document request is rendered on the se
 - `the-data-a-page-read-is-drawn-by-the-server-and-handed-over`: the Users table's first row is in the HTML, the payload is a devalue document of `data`, `errors` and `state`, and the browser reads no list on hydration.
 - `an-unknown-page-renders-the-error-page-with-its-status`: 404 with HTML and a payload; a page that declares no icon gets one empty icon link, one that declares its own keeps only that.
 - `key-hints-are-drawn-for-the-keyboard-the-server-was-told`: the `dms-keyboard-platform` cookie draws `⌘K` or `Ctrl K` in the server render.
+- `the-payload-is-escaped-so-data-cannot-close-its-script`: a user named `a</script><b>x/y` reaches the payload as `a\u003C\/script>\u003Cb>x\/y`, with no raw angle bracket and no unescaped slash.
+- `choosing-a-tab-changes-only-the-query-in-the-browser`: choosing a tab of the Filter tabs page changes the URL's query, keeps the document and sends the frontend server no request for the page.
 
 ## How to get to it (user POV)
 
@@ -79,3 +81,4 @@ Journeys read the session cookie from the signed-in tab and request the frontend
 - Prefetching on hover (6.2): `DmsLink` prefetch headers are not exposed by any playground link the journeys can tell from a click.
 - `router.reload({ only: ["shared"] })` and the menu-changed reload (6.2): the headers behind it are driven (`partial-reloads-send-only-the-props-they-name`); the DMS's own trigger is the dms skill's.
 - Hot reload (6.1): development only; the run serves a production build.
+- `router.reload({ only })`, `data`, `headers` and `onStart` forcing a request on a query-only visit, and leaving an error page always going through the server (6.2 Navigations that stay in the browser): no playground page calls the router with those options. The query-only side is driven (`choosing-a-tab-changes-only-the-query-in-the-browser`); the banner links of the playground pages do send an Inertia request, so they are not used as the example.

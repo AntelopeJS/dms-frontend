@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { at } from "./json.mjs";
 import { listedWorkspaces } from "./cli-json.mjs";
 import { startCliBackend } from "./cli-backend.mjs";
+import { serviceToken } from "./web.mjs";
+import { writeModule } from "./workspace-fixtures.mjs";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { freePort, holdPort, observe, runCli, scratch, startCli } from "./cli-run.mjs";
 import { lanAddresses, accepts } from "./build-network.mjs";
@@ -329,6 +331,36 @@ export const journeys = [
           ctx.holds("any free port is not a busy port: no warning", !anyBlock.includes("is busy"), anyBlock),
           ctx.equal("the server runs on a real port", any.port > 0, true),
         ]);
+      } finally {
+        await backend.close();
+      }
+    },
+  },
+  {
+    id: "dev-secret-precedence",
+    title: "a variable that sets the e-mail render secret wins over the one the manifest publishes (the docs disagree: see the issue draft dms-frontend-secret-precedence-docs-contradict)",
+    entryPoint: "ajs dms dev -b <backend> with DMS_HTML_RENDER_SECRET set and a manifest that publishes htmlRender.serviceSecret",
+    async run(/** @type {Context} */ ctx) {
+      const home = scratch(ctx, "home");
+      const module = writeModule(join(scratch(ctx, "module"), "mod"), { name: "@fixture/secret", privateOptions: undefined });
+      const published = { ...module, privateOptions: { htmlRender: { serviceSecret: "manifest-render-secret-0123456789" } } };
+      const backend = await startCliBackend({ modules: [published] });
+      try {
+        const server = await dev(ctx, backend.url, { home, env: { DMS_HTML_RENDER_SECRET: "variable-render-secret-0123456789" } });
+        try {
+          const block = server.output();
+          const post = (/** @type {string} */ secret) =>
+            fetch(`${server.local}api/html/render`, { method: "POST", headers: { "content-type": "application/json", "x-dms-service-token": serviceToken(secret) }, body: JSON.stringify({ templateName: "EmailAdminInvite", props: { email: "a@b.c", signupLink: "http://x/y", expiresInDays: 1 } }) }).then((answer) => answer.status);
+          const withManifest = await post("manifest-render-secret-0123456789");
+          const withVariable = await post("variable-render-secret-0123456789");
+          observe(ctx, "both set", { block, withManifest, withVariable }, [
+            ctx.equal("the ready block says the secret came from the environment", /^ {5}Secrets: {3}(.*)$/m.exec(block)?.[1], "DMS_HTML_RENDER_SECRET from the environment"),
+            ctx.equal("a token signed with the variable's value renders", withVariable, 200),
+            ctx.equal("a token signed with the manifest's value is refused", withManifest, 401),
+          ]);
+        } finally {
+          await server.stop("SIGINT");
+        }
       } finally {
         await backend.close();
       }

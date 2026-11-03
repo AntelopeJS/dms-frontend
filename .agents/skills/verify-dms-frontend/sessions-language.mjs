@@ -1,5 +1,7 @@
 import { exchange } from "./proxy-http.mjs";
 import { observe } from "./proxy-satellite.mjs";
+import { signIn } from "./signin.mjs";
+import { cookieOf } from "./web.mjs";
 
 const TITLES = { en: "Connect to your account", fr: "Connectez-vous" };
 
@@ -60,6 +62,33 @@ export const journeys = [
         ctx.equal("the cookie is dms_locale, for the whole site, SameSite=Lax", [entry?.name, entry?.path, entry?.sameSite], ["dms_locale", "/", "Lax"]),
         ctx.holds("it lasts one year (365 days, within a minute)", Math.abs(lifetime - 31536000) <= 60, lifetime),
         ctx.equal("the visitor's choice survives a reload", afterReload, "fr"),
+      ]);
+    },
+  },
+  {
+    id: "sessions-language-order",
+    title: "a signed-in user's language decides the page, whatever the dms_locale cookie says",
+    entryPoint: "POST /dms/pages/settings/user/region/preferences, then GET /settings with a dms_locale cookie",
+    async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
+      const saved = await ctx.api("choose French", { method: "POST", path: "/dms/pages/settings/user/region/preferences", body: { language: "fr" } });
+      const tab = await ctx.tab("admin");
+      await signIn(ctx, tab);
+      const cookie = await cookieOf(tab);
+      const web = ctx.state.webUrl;
+      const page = (/** @type {string} */ extra) => exchange(web, { path: "/settings", headers: { accept: "text/html", cookie: `${cookie}; ${extra}` } });
+      const withEnglishCookie = describe(await page("dms_locale=en"));
+      const withoutCookie = describe(await page("dms_locale=xx"));
+      const reset = await ctx.api("choose English", { method: "POST", path: "/dms/pages/settings/user/region/preferences", body: { language: "en" } });
+      await tab.goto("/auth");
+      await tab.page.context().clearCookies();
+      await signIn(ctx, tab);
+      const english = describe(await exchange(web, { path: "/settings", headers: { accept: "text/html", cookie: `${await cookieOf(tab)}; dms_locale=fr` } }));
+      await ctx.verify("the user's language wins over the cookie", [
+        ctx.equal("French is saved", saved.status, 200),
+        ctx.equal("a French user with an English cookie gets French", withEnglishCookie.lang, "fr"),
+        ctx.equal("an unknown cookie changes nothing", withoutCookie.lang, "fr"),
+        ctx.equal("English is saved", reset.status, 200),
+        ctx.equal("an English user with a French cookie gets English", english.lang, "en"),
       ]);
     },
   },

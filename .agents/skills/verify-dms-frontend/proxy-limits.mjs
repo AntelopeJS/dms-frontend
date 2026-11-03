@@ -6,8 +6,8 @@ import { observe, sleep, withSatellite } from "./proxy-satellite.mjs";
 
 const LIMIT = 1000;
 const TOO_LARGE = { message: "Payload Too Large" };
-const LINGER_MIN_MS = 4_500;
-const LINGER_MAX_MS = 7_500;
+const LINGER_MIN_MS = 4_800;
+const LINGER_MAX_MS = 5_800;
 const UPLOAD_LIMIT = 500 * 1024 * 1024;
 const PROXIES = JSON.stringify([
   { path: "/cap/**", auth: "none", maxBodyBytes: LIMIT },

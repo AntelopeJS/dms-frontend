@@ -70,7 +70,7 @@ Most journeys start a second `ajs dms start` (`proxy-satellite.mjs`) on a free p
 
 | Behaviour | Why not |
 | --- | --- |
-| A request may take an hour, and the backend's answer may pause 5 minutes between two parts | Both limits are wall-clock timers of 3600 s and 300 s, set in Node's server options and undici; `tests/` covers the option values. |
+| A request may take an hour, and the backend's answer may pause 5 minutes between two parts | Both limits are wall-clock timers of 3600 s and 300 s, set in Node's server options and undici. A run cannot wait an hour, and no assertion of `tests/` reads those option values either, so the figures are unverified. |
 | An event stream that sends nothing ends after 5 quiet minutes, and `EventSource` reconnects after its `retry` delay | Same 300 s timer, and the reconnect belongs to the browser. |
 | A client that left while its request was being routed opens no backend request | The window is the time between the socket closing and the first `await`, which a client cannot hit on purpose. |
 | `dev` and `prepare` read the manifest's `backendProxies` only for a request with the bootstrap credential | The playground declares no `backendProxies`, so the manifest carries nothing to read; the file `start` reads is driven. |

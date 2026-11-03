@@ -20,6 +20,7 @@ The browser never asks a third party for an icon. The frontend server serves col
 - `the-icon-route-answers-iconify-json-from-the-installed-collections`: Iconify JSON for `lucide` and `ph`, `not_found` for a missing name, the documented `Cache-Control`, `HEAD` allowed, a write refused with 405.
 - `the-icon-route-refuses-unknown-collections-and-bad-names`: 404 for an unknown collection, 400 for names outside Iconify's rule, both `no-store`.
 - `one-sprite-draws-each-icon-once-and-no-third-party-is-asked`: one `svg#dms-icon-sprite`, every `<use>` points at a symbol, symbols are unique and fewer than the uses, and the hydrated page requests only the frontend and the backend.
+- `a-signed-out-page-loads-the-icon-bundle-only-when-the-visitor-acts`: the sign-in page requests no `virtual_nuxt-ui-icons` chunk while idle and one after a key press; a signed-in page has requested it by `load`.
 
 ## How to get to it (user POV)
 
@@ -37,7 +38,7 @@ dms-control journey "$RUN" icons
 
 ## Not driven
 
-- The bundle of Nuxt UI icons that a signed-out page loads on first interaction (6.4): which bytes the bundle holds is not exposed; the run's requests are checked for origins instead.
+- Which icons the Nuxt UI bundle holds (6.4): its content is not read; its timing is driven (`a-signed-out-page-loads-the-icon-bundle-only-when-the-visitor-acts`) and the origins of the run's requests are checked.
 - Collections other than `lucide` and `ph` through `@iconify/json` (6.4): the workspace ships only these two, so the playground has no other.
 - The browser fetching an icon no installed collection holds (6.4 Server rendering): no playground page declares one.
 - Flip and rotation symbols (6.4 sprite): no page the journeys reach flips or rotates an icon.

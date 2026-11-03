@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { at } from "./json.mjs";
 import { bodyJson, exchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
 
@@ -322,6 +323,35 @@ export const journeys = [
         await backendChecks(ctx, server, send);
         await cookieChecks(ctx, server, send);
       });
+    },
+  },
+  {
+    id: "routing-client-ip",
+    title: "event.clientIp() is the socket's address, the entry DMS_TRUSTED_PROXY_HOPS counts from the right of X-Forwarded-For, or the header DMS_CLIENT_IP_HEADER names",
+    entryPoint: "GET /api/_acme/who with X-Forwarded-For on three servers started with different settings",
+    onboard: false,
+    async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
+      /**
+       * @param {Record<string, string | undefined>} env The server's settings
+       * @param {Record<string, string>} headers The request's headers
+       * @returns {Promise<unknown>} The address the module route saw
+       */
+      const seen = (env, headers) =>
+        withSatellite(ctx, { backend, modules: { source: SOURCE, keepOriginal: true }, files: { "generated-public-endpoints.json": MANIFEST }, env }, async (server) => {
+          const answer = await exchange(server.url, { method: "GET", path: "/api/_acme/who", headers: { origin: server.url, ...headers } });
+          return at(bodyJson(answer), "ip");
+        });
+      const chain = { "x-forwarded-for": "1.1.1.1, 2.2.2.2" };
+      const untrusted = await seen({}, chain);
+      const oneHop = await seen({ DMS_TRUSTED_PROXY_HOPS: "1" }, chain);
+      const twoHops = await seen({ DMS_TRUSTED_PROXY_HOPS: "2" }, chain);
+      const header = await seen({ DMS_CLIENT_IP_HEADER: "X-Client-IP" }, { ...chain, "x-client-ip": "203.0.113.9" });
+      await ctx.verify("the client address follows the settings", [
+        ctx.equal("no trusted hop: the socket's address, whatever X-Forwarded-For says", untrusted, "127.0.0.1"),
+        ctx.equal("one trusted hop: the last entry before the socket's", oneHop, "2.2.2.2"),
+        ctx.equal("two trusted hops: the one before", twoHops, "1.1.1.1"),
+        ctx.equal("a named header wins over the chain", header, "203.0.113.9"),
+      ]);
     },
   },
 ];

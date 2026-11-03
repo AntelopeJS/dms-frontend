@@ -18,6 +18,7 @@ The frontend server renders the DMS's e-mail templates when the backend asks: co
 ## Sub-features
 
 - `a-rendered-email-carries-no-hydration-markers-and-links-to-the-dashboard`: the password-reset and invitation messages the sink captures are HTML documents without `<!--[-->`, `<!--]-->` or `<!---->`; the invitation's sign-up link starts with `DMS_CLIENT_BASE_URL`; `POST /api/html/render` without a valid service token answers 401.
+- `the-render-route-takes-one-signed-single-use-token-per-render`: a signed token renders the template once; a replayed token, one signed with another secret, an unknown template and an empty name are refused with the documented bodies; the language header picks the catalog and an unknown language renders English.
 
 ## How to get to it (user POV)
 

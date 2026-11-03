@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { parseJson, rowAt } from "./json.mjs";
 
 /**
@@ -81,4 +82,22 @@ export function varies(answer, name) {
  */
 export function visibleText(html) {
   return html.slice(html.indexOf("<body")).replace(/<script[\s\S]*?<\/script>/g, "");
+}
+
+const TOKEN_LIFETIME_SECONDS = 60;
+const JTI_BYTES = 12;
+
+/**
+ * A single-use service token as the backend signs it for a render request.
+ *
+ * @param {string} secret The e-mail render secret
+ * @returns {string} The token
+ */
+export function serviceToken(secret) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const claims = { namespace: "html-render-service", purpose: "html-render", aud: "dms-frontend", jti: randomBytes(JTI_BYTES).toString("hex"), iat: now, exp: now + TOKEN_LIFETIME_SECONDS };
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = createHmac("sha256", secret).update(`${header}.${payload}`).digest("base64url");
+  return `${header}.${payload}.${signature}`;
 }

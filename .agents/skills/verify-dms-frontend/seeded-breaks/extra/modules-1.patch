@@ -1,0 +1,13 @@
+diff --git a/src/renderer-range.ts b/src/renderer-range.ts
+index b8ffb6b..bfe43fe 100644
+--- a/src/renderer-range.ts
++++ b/src/renderer-range.ts
+@@ -108,7 +108,7 @@ function describeProblem(
+ ): string | undefined {
+   const { shown, range } = declaration;
+   if (!isText(range) || semver.validRange(range) === null)
+-    return `${shown} declares an unreadable range: ${JSON.stringify(range)}`;
++    return `${shown} declares an invalid range: ${JSON.stringify(range)}`;
+   if (semver.satisfies(releaseLine(version), range)) return undefined;
+   return `${shown} supports ${range}`;
+ }

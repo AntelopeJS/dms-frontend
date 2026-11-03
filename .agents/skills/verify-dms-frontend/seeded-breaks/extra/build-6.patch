@@ -1,0 +1,14 @@
+diff --git a/templates/vue/frontend-runtime/sdk.ts b/templates/vue/frontend-runtime/sdk.ts
+index e71ddb0..717ed36 100644
+--- a/templates/vue/frontend-runtime/sdk.ts
++++ b/templates/vue/frontend-runtime/sdk.ts
+@@ -124,8 +124,7 @@ function createSdk(
+       if (options.parallel) target.parallelMiddleware.add(handler);
+     },
+     registerAccessRedirect: (code, path) => {
+-      if (!target.accessRedirects.has(code))
+-        target.accessRedirects.set(code, path);
++      target.accessRedirects.set(code, path);
+     },
+     provide: (key, value) => {
+       if (!target.injections.has(key)) target.injections.set(key, value);

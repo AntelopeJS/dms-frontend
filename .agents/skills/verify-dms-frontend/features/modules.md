@@ -56,7 +56,7 @@ dms-control journey "$RUN" modules
 
 ## Not driven
 
-- A module whose `engines` range excludes the running release, `declares an unreadable range`, a prerelease check and the warning for a module with no range (8.supported-releases): they need a second project with a module of that range; the CLI is driven by `cli`, `build` and `verify-source`, which use no such module.
+- A prerelease checked as the release it leads to (8.supported-releases): the running release is the renderer checkout's own version, so the run cannot make it a prerelease. A range that excludes the release, an unreadable range and a module with no range are driven (`workspace/prepare-supported-range`, `verify-source/verify-source-usage`).
 - The merge order of app configs (5.2): modules merge by manifest priority and layers by name, but no value of the merge is printed in a page the journeys reach.
 - Dev-time app config updates in place (5.2): development only.
 - Component and plugin registration, `{ clientOnly: true }` plugins, auto-import resolution and the `#dms/*` aliases (5.1, 5.3, 5.4): the DMS's own frontend module uses them, which the whole run exercises, but no check can tell one registration from another through the dashboard.

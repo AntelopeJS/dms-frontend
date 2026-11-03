@@ -341,4 +341,39 @@ export const journeys = [
       ]);
     },
   },
+  {
+    id: "choosing-a-tab-changes-only-the-query-in-the-browser",
+    title: "choosing a tab of the page on screen changes the URL's query and sends the frontend server no page request, keeping the page mounted",
+    entryPoint: "the tabs of /table-view/table-view-tabs",
+    async run(/** @type {Ctx} */ ctx) {
+      const PAGE = "/table-view/table-view-tabs";
+      const tab = await ctx.tab("admin");
+      await signIn(ctx, tab);
+      await tab.goto(PAGE);
+      await tab.page.waitForTimeout(HYDRATION_WAIT_MS);
+      await tab.page.evaluate(() => {
+        document.documentElement.dataset.verifyMounted = "kept";
+        return true;
+      });
+      /** @type {string[]} */
+      const pageRequests = [];
+      tab.page.on("request", (/** @type {Request} */ request) => {
+        if (new URL(request.url()).pathname === PAGE) pageRequests.push(request.resourceType());
+      });
+      const target = "Pending";
+      let clicks = 0;
+      while (!new URL(tab.page.url()).search && clicks < CLICKS) {
+        clicks += 1;
+        await tab.page.getByRole("button", { name: new RegExp(`^${target} \\d+$`) }).first().click();
+        await tab.page.waitForTimeout(CLICK_WAIT_MS);
+      }
+      await tab.page.waitForTimeout(HYDRATION_WAIT_MS);
+      await ctx.verify("the query changed, the page stayed and no page request was made", [
+        ctx.holds("the URL has a query now", new URL(tab.page.url()).search !== "", tab.page.url()),
+        ctx.equal("the path is the same", new URL(tab.page.url()).pathname, PAGE),
+        ctx.equal("the document was not reloaded", await tab.page.evaluate(() => document.documentElement.dataset.verifyMounted ?? ""), "kept"),
+        ctx.equal("requests for the page path", pageRequests, []),
+      ]);
+    },
+  },
 ];

@@ -32,6 +32,7 @@ One owner answers each path: the renderer's files, then the modules' `dms.server
 - `routing-page-props`: the once-prop layout, partial reloads, and a build without the server-modules bundle.
 - `routing-listen`: every interface by default, `HOST`, a taken port.
 - `routing-owner`: `x-dms-route-owner` in `ajs dms dev` for all five owners, and none in `start`.
+- `routing-client-ip`: `event.clientIp()` is the socket's address, the entry `DMS_TRUSTED_PROXY_HOPS` counts from the right of `X-Forwarded-For` (1 hop: `2.2.2.2`, 2 hops: `1.1.1.1`), or the header `DMS_CLIENT_IP_HEADER` names.
 
 ## How to get to it (user POV)
 

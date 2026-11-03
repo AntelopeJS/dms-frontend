@@ -1,9 +1,8 @@
-import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { parseJson, textAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { withSatellite } from "../proxy-satellite.mjs";
-import { get, header } from "../web.mjs";
+import { get, header, serviceToken } from "../web.mjs";
 
 /** @typedef {import("../control.d.ts").JourneyContext} Ctx */
 
@@ -11,23 +10,6 @@ const OPEN_ATTEMPTS = 6;
 const OPEN_WAIT_MS = 2500;
 const HYDRATION_COMMENTS = /<!--\[-->|<!--\]-->|<!---->/g;
 const RENDER_ROUTE = "/api/html/render";
-const TOKEN_LIFETIME_SECONDS = 60;
-const JTI_BYTES = 12;
-
-/**
- * A single-use service token as the backend signs it for a render request.
- *
- * @param {string} secret The e-mail render secret
- * @returns {string} The token
- */
-function serviceToken(secret) {
-  const now = Math.floor(Date.now() / 1000);
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-  const claims = { namespace: "html-render-service", purpose: "html-render", aud: "dms-frontend", jti: randomBytes(JTI_BYTES).toString("hex"), iat: now, exp: now + TOKEN_LIFETIME_SECONDS };
-  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
-  const signature = createHmac("sha256", secret).update(`${header}.${payload}`).digest("base64url");
-  return `${header}.${payload}.${signature}`;
-}
 
 /**
  * @param {Ctx} ctx The journey context
