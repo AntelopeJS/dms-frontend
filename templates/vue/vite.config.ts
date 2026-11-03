@@ -14,6 +14,7 @@ import { recordEntryWeight } from "./entry-weight.mjs";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { uiInertiaPage } from "./ui-inertia-page.mjs";
 import { uiKbd } from "./ui-kbd.mjs";
+import { uiLazyIcons } from "./ui-lazy-icons.mjs";
 import { uiRequestState } from "./ui-request-state.mjs";
 import { autoImportDirectories, vitePlugins } from "./frontend-build-loader.ts";
 import { frontendBuilds } from "./frontend-builds.generated.ts";
@@ -184,6 +185,7 @@ export default defineConfig({
       },
     },
     uiKbd(isNuxtUiFile),
+    uiLazyIcons(isNuxtUiFile),
     uiInertiaPage(isNuxtUiFile),
     uiRequestState(isNuxtUiFile),
     vue({ script: { globalTypeFiles: [sfcGlobalTypesFile] } }),

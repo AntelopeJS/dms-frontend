@@ -15,6 +15,10 @@ export interface DmsNetworkErrorTranslator {
 
 const NETWORK_ERROR_TOAST_ID = "dms-network-error";
 const NETWORK_ERROR_KEY = "error.network";
+/** The messages a module overrides the built-in texts with. */
+export const NETWORK_ERROR_KEYS = ["title", "description"].map(
+  (name) => `${NETWORK_ERROR_KEY}.${name}`,
+);
 const DEFAULT_LOCALE = "en";
 // Shipped with the renderer, since no module is guaranteed to translate the
 // case; a module overrides them with `error.network.title` and
