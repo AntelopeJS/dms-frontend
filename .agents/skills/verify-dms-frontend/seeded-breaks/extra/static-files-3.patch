@@ -1,0 +1,10 @@
+--- a/templates/vue/server/client-error.mjs
++++ b/templates/vue/server/client-error.mjs
+@@ -1,6 +1,6 @@
+ const HEADER_OVERFLOW = "HPE_HEADER_OVERFLOW";
+ const HEADER_OVERFLOW_RESPONSE =
+-  "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\n\r\n";
++  "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n";
+ const BAD_REQUEST_RESPONSE =
+   "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n";
+ /**

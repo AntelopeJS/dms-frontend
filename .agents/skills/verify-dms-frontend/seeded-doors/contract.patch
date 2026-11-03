@@ -1,0 +1,13 @@
+diff --git a/src/config.ts b/src/config.ts
+index a887227..84d5e51 100644
+--- a/src/config.ts
++++ b/src/config.ts
+@@ -318,7 +318,7 @@ export const Options = {
+     );
+   },
+ 
+-  port: new Option("-p, --port <port>", "Port to serve on")
++  port: new Option("-p, --listen <port>", "Port to serve on")
+     .default("3001")
+     .env("PORT"),
+ 

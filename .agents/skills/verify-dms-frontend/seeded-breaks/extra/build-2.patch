@@ -1,0 +1,13 @@
+diff --git a/src/server-process.ts b/src/server-process.ts
+index 935848d..0747078 100644
+--- a/src/server-process.ts
++++ b/src/server-process.ts
+@@ -22,7 +22,7 @@ const DEV_COMMAND = "ajs dms dev";
+ /** What Node says when an import names a package the workspace lacks. */
+ const MODULE_NOT_FOUND_CODES = ["ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND"];
+ const WILDCARD_ADDRESSES = new Set(["0.0.0.0", "::"]);
+-const LOCAL_HOST = "localhost";
++const LOCAL_HOST = "127.0.0.1";
+ /** Interfaces of containers and virtual machines, by the names their tools give them. */
+ const VIRTUAL_INTERFACE_NAME =
+   /^(docker\d|br-|veth|virbr|cni|flannel|cali|cilium|weave|vxlan|kube-|podman|lxcbr|lxdbr|vboxnet|vmnet)/;

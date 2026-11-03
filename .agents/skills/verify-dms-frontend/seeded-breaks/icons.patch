@@ -1,0 +1,13 @@
+diff --git a/templates/vue/server/icons.mjs b/templates/vue/server/icons.mjs
+index 53801fb..872a579 100644
+--- a/templates/vue/server/icons.mjs
++++ b/templates/vue/server/icons.mjs
+@@ -23,7 +23,7 @@ const COLLECTION_PACKAGES = join("node_modules", "@iconify-json");
+  * deployment replaces; a week bounds how long an upgraded icon can lag.
+  */
+ const ICON_CACHE_CONTROL =
+-  "public, max-age=604800, stale-while-revalidate=86400";
++  "public, max-age=86400, stale-while-revalidate=86400";
+ const ERROR_CACHE_CONTROL = "no-store";
+ 
+ /**

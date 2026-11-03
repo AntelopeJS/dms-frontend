@@ -1,0 +1,11 @@
+--- a/templates/vue/server/auth/session.mjs
++++ b/templates/vue/server/auth/session.mjs
+@@ -126,7 +126,7 @@
+ function attributes(maxAge, path = "/") {
+   const secure = process.env.DMS_COOKIE_SECURE !== "false" ? "; Secure" : "";
+   const lifetime = maxAge === undefined ? "" : `; Max-Age=${maxAge}`;
+-  return `Path=${path}; HttpOnly; SameSite=Lax${lifetime}${secure}`;
++  return `Path=${path}; SameSite=Lax${lifetime}${secure}`;
+ }
+ 
+ /**

@@ -1,0 +1,15 @@
+--- a/templates/vue/server/static-files.mjs
++++ b/templates/vue/server/static-files.mjs
+@@ -59,10 +59,10 @@
+  */
+ function acceptedVariant(file, request) {
+   const accepted = request.headers["accept-encoding"] ?? "";
++  if (accepted.includes("gzip") && isFile(`${file}.gz`))
++    return { file: `${file}.gz`, encoding: "gzip" };
+   if (accepted.includes("br") && isFile(`${file}.br`))
+     return { file: `${file}.br`, encoding: "br" };
+-  if (accepted.includes("gzip") && isFile(`${file}.gz`))
+-    return { file: `${file}.gz`, encoding: "gzip" };
+   return { file, encoding: undefined };
+ }
+ 

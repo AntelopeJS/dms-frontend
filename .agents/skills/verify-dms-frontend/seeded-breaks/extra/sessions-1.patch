@@ -1,0 +1,11 @@
+--- a/templates/vue/server/auth/session.mjs
++++ b/templates/vue/server/auth/session.mjs
+@@ -7,7 +7,7 @@
+ 
+ export const SESSION_COOKIE = "dms_session";
+ const REQUEST_SESSION = Symbol("dms-request-session");
+-const MAX_AGE = 60 * 60 * 24 * 30;
++const MAX_AGE = 60 * 60 * 24 * 29;
+ 
+ /**
+  * The session a module writes: the `DmsSession` of `#dms/server`.

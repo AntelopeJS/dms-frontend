@@ -1,0 +1,11 @@
+--- a/templates/vue/server/proxy-compression.mjs
++++ b/templates/vue/server/proxy-compression.mjs
+@@ -17,7 +17,7 @@
+  * plain.
+  */
+ const COMPRESSIBLE_TYPE =
+-  /^(?:text\/(?!event-stream)[\w.+-]+|application\/(?:[\w.-]+\+)?(?:json|xml|javascript|ecmascript)|image\/svg\+xml)\s*(?:;|$)/i;
++  /^(?:text\/(?!event-stream)[\w.+-]+|application\/(?:[\w.-]+\+)?(?:json|xml|javascript|ecmascript))\s*(?:;|$)/i;
+ const BODILESS_STATUSES = new Set([204, 205, 304]);
+ 
+ /**

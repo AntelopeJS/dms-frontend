@@ -1,0 +1,12 @@
+--- a/templates/vue/server/auth/session.mjs
++++ b/templates/vue/server/auth/session.mjs
+@@ -39,8 +39,7 @@
+   let canonical = backendUrl;
+   try {
+     const url = new URL(backendUrl);
+-    if (url.hostname === "localhost" || url.hostname === "[::1]")
+-      url.hostname = "127.0.0.1";
++    
+     canonical = url.toString().replace(/\/$/, "");
+   } catch {}
+   return createHash("sha256").update(canonical).digest("hex").slice(0, 12);

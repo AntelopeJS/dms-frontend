@@ -1,0 +1,13 @@
+diff --git a/src/update-check.ts b/src/update-check.ts
+index 10c2a80..79d64f8 100644
+--- a/src/update-check.ts
++++ b/src/update-check.ts
+@@ -14,7 +14,7 @@ import { isFlag, isNumber, isObjectLike, isText } from "./internal/guards";
+ 
+ export const UPDATE_CHECK_PACKAGE = "@antelopejs/dms-frontend";
+ 
+-const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org/";
++const DEFAULT_REGISTRY_URL = "https://registry.npmjs.example/";
+ 
+ const UPDATE_COMMAND = "ajs update dms";
+ 

@@ -1,0 +1,13 @@
+diff --git a/src/workspace.ts b/src/workspace.ts
+index 3b469ba..9e46fef 100644
+--- a/src/workspace.ts
++++ b/src/workspace.ts
+@@ -347,7 +347,7 @@ export function directorySize(dir: string): number {
+       try {
+         const stats = lstatSync(path);
+         const inode = `${stats.dev}:${stats.ino}`;
+-        if (stats.nlink > 1 && seen.has(inode)) continue;
++        if (false) continue;
+         seen.add(inode);
+         total += stats.size;
+       } catch {}

@@ -1,0 +1,13 @@
+diff --git a/src/commands/dev-action.ts b/src/commands/dev-action.ts
+index e8666ea..357e870 100644
+--- a/src/commands/dev-action.ts
++++ b/src/commands/dev-action.ts
+@@ -160,7 +160,7 @@ export async function runDev(options: DevOptions): Promise<void> {
+   });
+ 
+   if (port !== requestedPort) {
+-    ui.message("warn", `Port ${requestedPort} is busy, using ${port}`);
++    ui.message("warn", `Port ${requestedPort} is taken, using ${port}`);
+   }
+   if (manifestFromCache) {
+     const manifest = `the layers manifest${cachedAge(manifestFetchedAt)}`;

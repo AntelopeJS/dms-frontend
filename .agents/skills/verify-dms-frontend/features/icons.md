@@ -11,6 +11,33 @@ docs:
   - docs/6.rendering/4.icons.md
 ---
 
-# icons
+# Icons
 
-To be written by the feature's owner.
+The browser never asks a third party for an icon. The frontend server serves collections at `/api/_dms/icons/<prefix>.json`, draws icons on the server and sends each once per page in a hidden sprite.
+
+## Sub-features
+
+- `the-icon-route-answers-iconify-json-from-the-installed-collections`: Iconify JSON for `lucide` and `ph`, `not_found` for a missing name, the documented `Cache-Control`, `HEAD` allowed, a write refused with 405.
+- `the-icon-route-refuses-unknown-collections-and-bad-names`: 404 for an unknown collection, 400 for names outside Iconify's rule, both `no-store`.
+- `one-sprite-draws-each-icon-once-and-no-third-party-is-asked`: one `svg#dms-icon-sprite`, every `<use>` points at a symbol, symbols are unique and fewer than the uses, and the hydrated page requests only the frontend and the backend.
+
+## How to get to it (user POV)
+
+- Every dashboard page shows icons; `curl -sI "$WEB/api/_dms/icons/lucide.json?icons=house"`.
+
+## Driving it with dms-control
+
+```bash
+dms-control journey "$RUN" icons
+```
+
+## Gotchas
+
+- An empty entry in the list (`house,,star`) is accepted and skipped; the docs do not name it.
+
+## Not driven
+
+- The bundle of Nuxt UI icons that a signed-out page loads on first interaction (6.4): which bytes the bundle holds is not exposed; the run's requests are checked for origins instead.
+- Collections other than `lucide` and `ph` through `@iconify/json` (6.4): the workspace ships only these two, so the playground has no other.
+- The browser fetching an icon no installed collection holds (6.4 Server rendering): no playground page declares one.
+- Flip and rotation symbols (6.4 sprite): no page the journeys reach flips or rotates an icon.

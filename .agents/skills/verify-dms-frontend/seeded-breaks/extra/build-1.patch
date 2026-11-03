@@ -1,0 +1,13 @@
+diff --git a/src/entry-weight.ts b/src/entry-weight.ts
+index 68e4021..6cbf2cc 100644
+--- a/src/entry-weight.ts
++++ b/src/entry-weight.ts
+@@ -123,7 +123,7 @@ export function heavyEntryModules(
+   weight: EntryWeight,
+   threshold: number,
+ ): EntryShare[] {
+-  if (threshold <= 0) return [];
++  if (threshold < 0) return [];
+   return weight.shares.filter(
+     (share) => !NON_MODULE_OWNERS.has(share.owner) && share.brotli > threshold,
+   );
