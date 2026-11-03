@@ -1,9 +1,0 @@
---- a/templates/vue/server/module-routes.mjs
-+++ b/templates/vue/server/module-routes.mjs
-@@ -619,6 +619,5 @@
-   const methods = new Set();
-   for (const route of routes)
-     if (route.matcher.test(pathname)) methods.add(route.method);
--  if (methods.has("GET")) methods.add("HEAD");
-   return [...methods];
- }

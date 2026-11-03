@@ -72,7 +72,7 @@ dms-control journey "$RUN" static-files
 
 ## Gotchas
 
-- `static-files-encoding-quality` fails on purpose: `Accept-Encoding: br;q=0, gzip` is answered with Brotli and `gzip;q=0` with gzip. Draft: `~/.cache/campaign/issues/dms-frontend-static-encoding-ignores-quality.md`.
+- `static-files-encoding-quality` fails on purpose: `Accept-Encoding: br;q=0, gzip` is answered with Brotli and `gzip;q=0` with gzip. Issue: AntelopeJS/dms-frontend#277.
 - `SIGINT` ends the server with code 130 and `SIGTERM` with 143 (the signal's conventional code); only `SIGTERM` is named in the message.
 - A workspace given with `--workspace` is created readable by others (a build that ships with its project holds no secret); only the loader-home workspace of `dev` is owner-only, which is what `static-files-dev` asserts.
 - `static-files-build` and `static-files-dev` need the pnpm store of the run (`npm_config_store_dir`) and take one to two minutes.

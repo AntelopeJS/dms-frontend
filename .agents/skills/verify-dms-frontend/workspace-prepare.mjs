@@ -68,7 +68,7 @@ export const journeys = [
           ctx.equal("workspaces lists it, keyed on the url", listing.map((entry) => [entry.backendUrl, entry.key, entry.dir]), [[url, { type: "url" }, dir]]),
           ctx.equal("a second run installs nothing", [again.code, again.stderr.includes("Installed"), again.stderr.split("\n")[1]], [0, false, "✔ Workspace ready"]),
           ctx.equal("one workspace after three runs", listingAfter.length, 1),
-          ctx.equal("--force runs the install again, which finds nothing to change", [forced.code, forced.stderr.split("\n")[2]], [0, "✔ Dependencies up to date"]),
+          ctx.equal("--force runs the install again, which finds nothing to change", [forced.code, forced.stderr.split("\n")[2].replace(/ [\d.]+m?s$/, "")], [0, "✔ Dependencies up to date"]),
           ctx.equal("one manifest request per run: 3 runs", backend.to("/dms/frontend").length, 3),
         ]);
 

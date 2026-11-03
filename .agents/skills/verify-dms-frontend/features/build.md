@@ -74,7 +74,7 @@ The journeys build into a workspace of their own and start `start` and `dev` aga
 
 ## Gotchas
 
-- Known findings, kept as failing journeys: `start-quiet` (issue draft `dms-frontend-start-quiet-routing`: the Routing block survives `-q`) and `dev-port-zero` (issue draft `dms-frontend-dev-port-zero-busy-warning`: `-p 0` prints `Port 0 is busy`). The drafts are local and not filed.
+- Known findings, kept as failing journeys: `start-quiet` (AntelopeJS/dms-frontend#278: the Routing block survives `-q`) and `dev-port-zero` (AntelopeJS/dms-frontend#279: `-p 0` prints `Port 0 is busy`). 
 - The build installs from the registry: a package published minutes ago can make the install fail with a 404 until the registry catches up.
 - A build step's Vite warnings are listed in full when piped; the page's `Run with --verbose` hint is the terminal form.
 - Files copied from `public/` keep the mode of their source in the workspace; the check on readable files leaves them out.

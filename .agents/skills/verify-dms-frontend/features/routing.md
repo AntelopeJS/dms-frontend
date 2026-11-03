@@ -74,6 +74,6 @@ A second `ajs dms start` runs from a hard-linked copy of the run's workspace in 
 
 - Warnings of the server modules are asserted against the log of the satellite, line by line.
 - `routing-rules` runs on an onboarded database: it compares a server-rendered `/auth` with the `/dms-preview` shell.
-- A route rule pattern with a wildcard in the middle is accepted without a warning (finding `proxy-pattern-forms`, same `compilePathPattern`).
+- A route rule pattern with a wildcard in the middle is accepted without a warning (AntelopeJS/dms-frontend#275, `proxy-pattern-forms`, same `compilePathPattern`).
 - `routing-listen` needs a non-loopback IPv4 address on the machine.
 - `routing-owner` takes about a minute: `ajs dms dev` generates and installs its workspace in the run's home.

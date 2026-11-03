@@ -57,7 +57,7 @@ dms-control journey "$RUN" workspace
 
 ## Gotchas
 
-- Known finding, kept as a failing journey: `prepare-trailing-slash` (issue draft `dms-frontend-backend-url-trailing-slash`): `-b http://host:port/` sends `//dms/frontend`, which a DMS backend answers with 404, and `prepare` hides it behind the cached manifest. The draft is local and not filed.
+- Known finding, kept as a failing journey: `prepare-trailing-slash` (AntelopeJS/dms-frontend#280): `-b http://host:port/` sends `//dms/frontend`, which a DMS backend answers with 404, and `prepare` hides it behind the cached manifest. 
 - `prepare --offline` without a cache still creates the workspace directory with its metadata file (no `node_modules`, no cache), and `workspaces` then lists it.
 - Journeys write workspaces by hand (a directory named after the SHA-256 of its key with a `.ajs-dms-meta.json`) and serve manifests from a backend of their own; `prepare` installs from the registry, so a package published minutes ago can make the install fail with a 404 until the registry catches up.
 - Under `-q` every success and information line is left out, including the `Skipped` lines of `clean --all`.
