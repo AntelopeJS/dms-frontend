@@ -10,7 +10,9 @@ import {
   writeFrontendModuleRegistry,
   writeLocaleMessages,
 } from "../src/common";
+import { isObjectLike } from "../src/internal/guards";
 import { readText } from "./helpers/files";
+import { isText } from "./helpers/guards";
 import { copyEmailRendererFiles } from "./helpers/templates";
 
 const TIMEOUT_MS = 60_000;
@@ -33,7 +35,12 @@ it("rebuilds the email catalogs when they are regenerated during a watch-mode bu
   const emitted = join(workspace, "dist", "server", "locales", "en.json");
   const subject = (): string | undefined => {
     try {
-      return JSON.parse(readText(emitted)).subject;
+      const catalog: unknown = JSON.parse(readText(emitted));
+      return isObjectLike(catalog) &&
+        "subject" in catalog &&
+        isText(catalog.subject)
+        ? catalog.subject
+        : undefined;
     } catch {
       return undefined;
     }

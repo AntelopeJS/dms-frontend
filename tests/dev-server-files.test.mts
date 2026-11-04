@@ -1,26 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import {
-  createServer,
-  type Server,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { addressOf } from "./helpers/net";
 
 const UNREAD_COUNT_PATH = "/settings/user/notifications/unread-count";
 const MEDIA_PATH = "/media/asset-1/photo.webp";
-
-interface ServerTemplate {
-  handleRequestSafely: (
-    request: IncomingMessage,
-    response: ServerResponse,
-  ) => Promise<void>;
-}
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -62,9 +49,7 @@ describe("files the development server serves", () => {
     writeFileSync(join(root, "probe.ts"), "export const probe = 1;\n");
     process.env.DMS_DEV = "true";
     process.chdir(root);
-    const runtime = (await import(
-      pathToFileURL(join(previousCwd, "templates", "vue", "server.mjs")).href
-    )) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     base = await listen(frontend);
   });

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const CLIENT_MANIFEST_PATH = fileURLToPath(
   new URL("../dist/client/.vite/manifest.json", import.meta.url),
 );
+/** @type {string | undefined} */
 let productionAssetVersion;
 
 /**
@@ -27,6 +28,10 @@ export function assetVersion() {
   return productionAssetVersion;
 }
 
+/**
+ * @param {InertiaPage} page
+ * @returns {string}
+ */
 export function inertiaAppHtml(page) {
   const serialized = JSON.stringify(page).replaceAll("/", "\\/");
   return `<script data-page="app" type="application/json">${serialized}</script><div id="app"></div>`;
@@ -35,6 +40,32 @@ export function inertiaAppHtml(page) {
 /** The one Inertia component every DMS page renders through. */
 export const DMS_PAGE_COMPONENT = "DmsDynamicPage";
 
+/**
+ * The once props a page declares, by key: the prop each stands for, and when
+ * the browser's copy expires (`null`: never).
+ *
+ * @typedef {Record<string, { prop: string, expiresAt: number | null }>} OnceProps
+ */
+
+/**
+ * The Inertia page object of a visit.
+ *
+ * @typedef {{
+ *   component: string,
+ *   props: Record<string, unknown>,
+ *   url: string | undefined,
+ *   version: string,
+ *   onceProps?: OnceProps
+ * }} InertiaPage
+ */
+
+/**
+ * @param {string | undefined} url
+ * @param {Record<string, unknown> | undefined} props
+ * @param {string} [version]
+ * @param {OnceProps} [onceProps]
+ * @returns {InertiaPage}
+ */
 export function createInertiaPage(
   url,
   props,
@@ -51,6 +82,11 @@ export function createInertiaPage(
   return page;
 }
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {string} name
+ * @returns {string[]}
+ */
 function headerList(request, name) {
   return String(request.headers[name] ?? "")
     .split(",")
@@ -63,6 +99,9 @@ function headerList(request, name) {
  * A partial reload (`router.reload({ only, except })`) of the page on screen
  * names them: a nested path selects its top-level prop, which is sent whole,
  * and only a top-level name excludes one.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @returns {{ partial: boolean, wants: (prop: string) => boolean }}
  */
 export function requestedProps(request) {
   const partial =
@@ -81,11 +120,16 @@ export function requestedProps(request) {
   };
 }
 
-/** The once props the browser already holds, unexpired, by key. */
+/**
+ * The once props the browser already holds, unexpired, by key.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ */
 export function heldOnceProps(request) {
   return new Set(headerList(request, "x-inertia-except-once-props"));
 }
 
+/** @param {string} [version] */
 export function inertiaHeaders(version = assetVersion()) {
   return {
     "cache-control": PRIVATE_CACHE_CONTROL,
@@ -105,6 +149,11 @@ export function htmlHeaders() {
   };
 }
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
+ * @returns {boolean}
+ */
 export function handleAssetVersionMismatch(request, response) {
   if (
     !request.headers["x-inertia"] ||
@@ -121,7 +170,12 @@ export function handleAssetVersionMismatch(request, response) {
   return true;
 }
 
-/** A page visit: a document or Inertia request, as opposed to an API call. */
+/**
+ * A page visit: a document or Inertia request, as opposed to an API call.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @returns {boolean}
+ */
 export function isFrontendVisit(request) {
   if (request.method !== "GET") return false;
   return (
@@ -130,6 +184,11 @@ export function isFrontendVisit(request) {
   );
 }
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
+ * @param {string} location
+ */
 export function redirectFrontendVisit(request, response, location) {
   const vary = { vary: "X-Inertia" };
   if (!request.headers["x-inertia"]) {

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { CliError, formatDuration, getProcessUi } from "@antelopejs/core/cli";
 import {
@@ -28,32 +28,20 @@ import {
   type ProjectFrontendModule,
   readProjectFrontendModules,
 } from "../project-modules";
-import { SERVER_OPTIONS_FILE } from "../config";
+import {
+  readBuiltModules,
+  readBuiltPrivateOptions,
+} from "../internal/built-workspace";
 import { MANIFEST_SECRET_ENV } from "../manifest-secrets";
 import {
   PRIVATE_OPTIONS_VARIABLE,
   parsePrivateOptions,
   unfilledPrivateValues,
 } from "../private-values";
-import type { FrontendModuleRegistryEntry } from "../derived-outputs";
 import type { FrontendModuleOptions } from "../workspace";
 import { productionWorkspace } from "./build-action";
 
 const PUBLIC_OPTIONS_VARIABLE = "DMS_PUBLIC_OPTIONS";
-
-/** The private options by module id the build wrote, none when unreadable. */
-function builtPrivateOptions(
-  workspaceDir: string,
-): Record<string, FrontendModuleOptions> {
-  try {
-    const { modules } = JSON.parse(
-      readFileSync(join(workspaceDir, SERVER_OPTIONS_FILE), "utf8"),
-    ) as { modules?: Record<string, FrontendModuleOptions> };
-    return modules ?? {};
-  } catch {
-    return {};
-  }
-}
 
 /**
  * Warns about each private value of a module the server would receive empty
@@ -63,7 +51,7 @@ function builtPrivateOptions(
  */
 function reportUnfilledPrivateValues(workspaceDir: string): void {
   const unfilled = unfilledPrivateValues(
-    builtPrivateOptions(workspaceDir),
+    readBuiltPrivateOptions(workspaceDir),
     parsePrivateOptions(process.env[PRIVATE_OPTIONS_VARIABLE]),
     Object.values(MANIFEST_SECRET_ENV),
   );
@@ -139,28 +127,6 @@ function publicOptionsById(
       ];
     }),
   );
-}
-
-/**
- * The modules the build serves, from the registry its server reads: the
- * report names these, whatever the current variables would build. None when
- * the registry is unreadable.
- */
-function builtModules(workspaceDir: string): ServedModule[] {
-  try {
-    const { modules } = JSON.parse(
-      readFileSync(
-        join(workspaceDir, "generated-frontend-modules.json"),
-        "utf8",
-      ),
-    ) as { modules?: FrontendModuleRegistryEntry[] };
-    return (modules ?? []).map((module) => ({
-      name: module.name ?? module.id,
-      version: module.version,
-    }));
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -281,7 +247,7 @@ export async function runStart(options: StartOptions): Promise<void> {
     projectDir: options.project,
     environment: options.env,
   });
-  const built = builtModules(workspaceDir);
+  const built = readBuiltModules(workspaceDir);
   reportModuleSetDrift(built, modules);
   const secrets = resolveManifestSecrets({ published: {}, conflicts: [] });
   reportManifestSecrets(

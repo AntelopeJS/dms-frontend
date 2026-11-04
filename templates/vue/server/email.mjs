@@ -17,8 +17,11 @@ const EMAIL_BUILD_WAIT_MS = 60_000;
  * Settled whenever no email build is running. The version changes with each
  * finished build: Node caches an imported module by URL, so the renderer is
  * imported under a new one to pick up rebuilt templates.
+ *
+ * @type {Promise<void>}
  */
 let emailBuild = Promise.resolve();
+/** @type {(() => void) | undefined} */
 let settleEmailBuild;
 let emailBundleVersion = 0;
 /**
@@ -28,6 +31,7 @@ let emailBundleVersion = 0;
  * finished.
  */
 let rendersInProgress = 0;
+/** @type {(() => void) | undefined} */
 let startPendingBuild;
 
 function emailBuildStarted() {
@@ -44,6 +48,7 @@ function emailBuildSettled() {
   settleEmailBuild = undefined;
 }
 
+/** @param {() => void} start */
 function startBuildOnceRendersFinish(start) {
   if (rendersInProgress) startPendingBuild = start;
   else start();
@@ -107,6 +112,7 @@ async function waitForEmailBuild() {
   }
 }
 
+/** @returns {Promise<typeof import("../email-renderer.ts")>} */
 function loadEmailRenderer() {
   const url = new URL(EMAIL_RENDERER_URL);
   if (emailBundleVersion) url.searchParams.set("v", emailBundleVersion);
@@ -121,9 +127,9 @@ function loadEmailRenderer() {
  * for now waits for this render, which imports templates and reads catalogs
  * from the bundle until it ends.
  *
- * @param template The template's name
- * @param props The template's props
- * @param options `locale`, the language to render in
+ * @param {string} template The template's name
+ * @param {Record<string, unknown>} props The template's props
+ * @param {{ locale?: string }} [options] `locale`, the language to render in
  */
 export async function renderEmailTemplate(template, props, options = {}) {
   await waitForEmailBuild();

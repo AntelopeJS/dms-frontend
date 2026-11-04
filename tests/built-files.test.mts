@@ -4,19 +4,12 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { brotliCompressSync, gzipSync } from "node:zlib";
+import { isObjectLike } from "../src/internal/guards";
 import { addressOf } from "./helpers/net";
+import { requestHandlerOf } from "./helpers/workspace-server";
 
-interface BuiltFiles {
-  isPublicBuildPath: (relativePath: string) => boolean;
-}
-
-const builtFiles = import(
-  pathToFileURL(
-    join(process.cwd(), "templates", "vue", "server", "built-files.mjs"),
-  ).href
-) as Promise<BuiltFiles>;
+const builtFiles = import("../templates/vue/server/built-files.mjs");
 
 const PAGE_COMPONENT = "ArticleList";
 const PAGE_MODULE = "frontend-modules/fixture/components/ArticleList.vue";
@@ -145,10 +138,7 @@ describe("built files the production server serves", () => {
     try {
       writeProductionWorkspace(workspace);
       process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
-      const { handleRequestSafely } = await import(
-        pathToFileURL(join(workspace, "server.mjs")).href
-      );
-      frontend = createServer(handleRequestSafely);
+      frontend = createServer(await requestHandlerOf(workspace));
       const base = `http://127.0.0.1:${await listen(frontend)}`;
       const get = (path: string, headers: Record<string, string> = {}) =>
         fetch(`${base}${path}`, {
@@ -221,8 +211,13 @@ describe("built files the production server serves", () => {
       );
       const visit = await get("/articles", { "x-inertia": "true" });
       assert.equal(visit.status, 200);
+      const visited: unknown = await visit.json();
+      assert.ok(
+        isObjectLike(visited) && "version" in visited,
+        "the visit answers with a version",
+      );
       assert.equal(
-        ((await visit.json()) as { version: string }).version,
+        visited.version,
         createHash("sha256").update(CLIENT_MANIFEST).digest("hex"),
       );
     } finally {

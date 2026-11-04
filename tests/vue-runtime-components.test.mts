@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { renderToString } from "@vue/server-renderer";
 import {
+  type App,
   createSSRApp,
   defineAsyncComponent,
   defineComponent,
@@ -12,12 +13,14 @@ import {
   ref,
   Suspense,
   useId,
+  type VNode,
 } from "vue";
 import {
   createDmsFrontendRuntime,
   createDmsError,
   defineDmsPageMeta,
   dmsPageSuspenseProps,
+  type DmsSession,
   hydrateDmsPageProps,
   provideDmsFrontendRuntime,
   registerDmsComponent,
@@ -42,7 +45,7 @@ describe("Cookie refs", () => {
     const cookieJar = { cookie: "dms-shared-pref=%22small%22" };
     Object.assign(globalThis, { document: cookieJar });
     context.after(() => {
-      delete (globalThis as { document?: unknown }).document;
+      Reflect.deleteProperty(globalThis, "document");
     });
     const pageRef = useDmsCookie<string>("dms-shared-pref");
     const pluginRef = useDmsCookie<string>("dms-shared-pref");
@@ -115,18 +118,20 @@ describe("Async component hydration", () => {
   });
 
   it("resolves the recorded async components before hydration", async () => {
-    const block = asyncBlock("ahead") as { __asyncResolved?: unknown };
-    registerDmsComponent("ResolvedAheadBlock", block as never);
-    assert.equal(block.__asyncResolved, undefined);
+    const block = asyncBlock("ahead");
+    registerDmsComponent("ResolvedAheadBlock", block);
+    const isResolved = () =>
+      "__asyncResolved" in block && block.__asyncResolved !== undefined;
+    assert.equal(isResolved(), false);
     await resolveDmsAsyncComponents(["ResolvedAheadBlock", "UnknownBlock"]);
-    assert.ok(block.__asyncResolved);
+    assert.equal(isResolved(), true);
   });
 });
 
 describe("Server render scopes", () => {
   it("stops the scope of every component a server render created", async () => {
     const disposed: string[] = [];
-    const disposable = (label: string, child?: () => unknown) =>
+    const disposable = (label: string, child?: () => VNode) =>
       defineComponent({
         setup() {
           onScopeDispose(() => disposed.push(label));
@@ -308,7 +313,7 @@ describe("Page loading state", () => {
   function mountPage(page: ReturnType<typeof defineComponent>) {
     const runtime = createDmsFrontendRuntime();
     const shown = ref(true);
-    let loading: { readonly value: boolean } = { value: false };
+    let loading: ReturnType<typeof useDmsPageLoading> = ref(false);
     mountRuntime(
       runtime,
       defineComponent({
@@ -349,7 +354,7 @@ describe("Page loading state", () => {
 });
 
 describe("Session hydration", () => {
-  function hydrate(app, language: string, session: Record<string, unknown>) {
+  function hydrate(app: App, language: string, session: Partial<DmsSession>) {
     app.runWithContext(() =>
       hydrateDmsPageProps({
         path: "/page",
@@ -360,7 +365,7 @@ describe("Session hydration", () => {
     );
   }
 
-  function currentLanguage(app): unknown {
+  function currentLanguage(app: App) {
     return app.runWithContext(() => useDmsUserSession().user.value?.language);
   }
 

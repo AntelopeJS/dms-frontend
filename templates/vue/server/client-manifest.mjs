@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { viteManifestOf } from "./generated-files.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const BUILT_TEMPLATE_PATH = join(PROJECT_ROOT, "dist/client/index.html");
@@ -14,7 +15,9 @@ const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
  * Read once and kept: both files are build output and cannot change while
  * the server is up.
  */
+/** @type {import("vite").Manifest | undefined} */
 let clientManifest;
+/** @type {string | undefined} */
 let productionTemplate;
 
 /**
@@ -31,13 +34,22 @@ export function productionHtmlTemplate() {
   return productionTemplate;
 }
 
+/** @returns {import("vite").Manifest | undefined} */
 function productionClientManifest() {
   if (clientManifest) return clientManifest;
   if (!existsSync(CLIENT_MANIFEST_PATH)) return undefined;
-  clientManifest = JSON.parse(readFileSync(CLIENT_MANIFEST_PATH, "utf8"));
+  clientManifest = viteManifestOf(
+    JSON.parse(readFileSync(CLIENT_MANIFEST_PATH, "utf8")),
+  );
   return clientManifest;
 }
 
+/**
+ * @param {import("vite").Manifest} manifest
+ * @param {string} key
+ * @param {Set<string>} styles
+ * @param {Set<string>} visited
+ */
 function collectManifestStyles(manifest, key, styles, visited) {
   if (visited.has(key)) return;
   visited.add(key);
@@ -56,11 +68,16 @@ function collectManifestStyles(manifest, key, styles, visited) {
  * component, so the lookup needs no guessing from names. A component bundled
  * into another chunk is no key of its own: its stylesheet comes with that
  * chunk's, reached through the `imports` of the component that loaded it.
+ *
+ * @param {Iterable<string>} [modules]
+ * @returns {Set<string>}
  */
 function renderedModuleStyles(modules = []) {
   const manifest = productionClientManifest();
+  /** @type {Set<string>} */
   const styles = new Set();
   if (!manifest) return styles;
+  /** @type {Set<string>} */
   const visited = new Set();
   for (const id of modules)
     collectManifestStyles(manifest, id, styles, visited);
@@ -72,6 +89,9 @@ function renderedModuleStyles(modules = []) {
  * template does not link already, so that none of them waits for its chunk's
  * JavaScript to arrive: the HTML would otherwise paint unstyled and shift once
  * it does. A component the render did not reach gets no link.
+ *
+ * @param {Iterable<string> | undefined} modules
+ * @param {string} template
  */
 export function renderedModuleStyleTags(modules, template) {
   return [...renderedModuleStyles(modules)]
@@ -85,6 +105,8 @@ export function renderedModuleStyleTags(modules, template) {
  * rendered with: the browser fetches it next to the entry rather than once the
  * entry runs and asks for it, which would put a round trip before hydration.
  * Nothing without a production build (Vite serves the sources in development).
+ *
+ * @param {string | undefined} locale
  */
 export function localeCatalogPreloadTag(locale) {
   const manifest = productionClientManifest();

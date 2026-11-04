@@ -364,10 +364,10 @@ describe("A reactive key a render sets", () => {
   function backend(isServer: boolean) {
     const requests: string[] = [];
     const runtime = createDmsFrontendRuntime(
-      (async (url: string) => {
+      async (url: string) => {
         requests.push(url);
         return `data:${url}`;
-      }) as never,
+      },
       undefined,
       isServer,
     );

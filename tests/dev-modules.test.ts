@@ -77,7 +77,7 @@ describe("dev reads the project's modules", () => {
         ...options,
         projectDir: join(project, "nope"),
       }),
-      (error: unknown) =>
+      (error: Error) =>
         error instanceof CliError &&
         error.problem.title.startsWith(
           "Could not evaluate the project's configuration",

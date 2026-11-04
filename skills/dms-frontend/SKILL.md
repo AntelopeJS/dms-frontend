@@ -40,7 +40,7 @@ tags: [frontend, cli, renderer, vue, inertia, ssr, deployment, dms-module]
 
 | Task | Page |
 | --- | --- |
-| Compatibility with DMS releases | `/docs/frontend/introduction#compatibility` |
+| Where to read the renderer releases a DMS release runs on | `/docs/frontend/introduction#compatibility` |
 | One command in depth | `/docs/frontend/cli/<command>` |
 | Variables and secrets | `/docs/frontend/configuration` |
 | Module files and SDK | `/docs/frontend/frontend-modules/anatomy`, then `server-routes`, `sessions-and-sign-in`, `route-rules`, `emails` |

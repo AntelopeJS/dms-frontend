@@ -2,6 +2,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { brotliCompressSync, constants } from "node:zlib";
 import { CliError } from "@antelopejs/core/cli";
+import { isNumber, isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
 import { formatSize } from "./output";
 
 /** Read by `ajs dms build`: the threshold, in KB of Brotli, 0 turns it off. */
@@ -28,6 +30,17 @@ interface RecordedEntryWeight {
   files: string[];
   bytes: number;
   owners: Record<string, number>;
+}
+
+function isRecordedEntryWeight(value: unknown): value is RecordedEntryWeight {
+  return (
+    isPlainObject(value) &&
+    Array.isArray(value.files) &&
+    value.files.every(isText) &&
+    isNumber(value.bytes) &&
+    isPlainObject(value.owners) &&
+    Object.values(value.owners).every(isNumber)
+  );
 }
 
 export interface EntryShare {
@@ -65,9 +78,12 @@ function brotliSize(file: string): number {
 export function readEntryWeight(workspaceDir: string): EntryWeight | undefined {
   const path = join(workspaceDir, ENTRY_WEIGHT_FILE);
   if (!existsSync(path)) return undefined;
-  const recorded = JSON.parse(
-    readFileSync(path, "utf8"),
-  ) as RecordedEntryWeight;
+  const recorded: unknown = JSON.parse(readFileSync(path, "utf8"));
+  if (!isRecordedEntryWeight(recorded))
+    throw new CliError({
+      title: "The client build recorded an entry weight this CLI cannot read",
+      fixes: ["Build again"],
+    });
   const brotli = recorded.files.reduce(
     (sum, file) => sum + brotliSize(join(workspaceDir, "dist", "client", file)),
     0,

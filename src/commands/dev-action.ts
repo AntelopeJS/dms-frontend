@@ -38,6 +38,7 @@ import {
 } from "../module-set";
 import { readShippingVersion } from "../project-modules";
 import { setUpWorkspace } from "./workspace-task";
+import { serverNodeOptions } from "../node-options";
 
 export interface DevOptions {
   backendUrl?: string;
@@ -330,7 +331,7 @@ function runDevServer(
       DMS_BOOTSTRAP_SECRET: session.bootstrapSecret,
       DMS_SESSION_SECRET: session.sessionSecret,
       ...secrets.env,
-      NODE_OPTIONS: "--max-old-space-size=4096",
+      NODE_OPTIONS: serverNodeOptions(process.env.NODE_OPTIONS),
       NODE_PATH: nodeModulesDir,
     },
     onReady: (address) => {

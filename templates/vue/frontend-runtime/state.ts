@@ -1,4 +1,3 @@
-import { ofetch } from "ofetch";
 import {
   type App,
   effectScope,
@@ -19,6 +18,7 @@ import {
 import {
   type DmsAppContext,
   type DmsRoute,
+  type DmsServerFetch,
   type DmsRuntimeConfig,
 } from "./types";
 
@@ -65,7 +65,7 @@ export function forgetBrowserRuntime(runtime: DmsFrontendRuntime): void {
 
 /** Creates mutable runtime state owned by one Vue application. */
 export function createDmsFrontendRuntime(
-  serverFetch?: typeof ofetch,
+  serverFetch?: DmsServerFetch,
   hydratedAsyncData?: Record<string, unknown>,
   isServer = false,
   requestCookies?: string,

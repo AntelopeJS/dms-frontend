@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { router } from "@inertiajs/vue3";
 import {
+  type DmsPageProps,
   hydrateDmsPageProps,
   keepSharedOverHistory,
   navigateDms,
@@ -17,6 +18,12 @@ import {
   application,
   registerGlobalMiddleware,
 } from "./fixtures/vue-runtime.mts";
+
+type PopstateListener = (event: Pick<PopStateEvent, "state">) => void;
+
+type NavigateListener = (event: {
+  detail: { page: { props: Pick<DmsPageProps, "path" | "shared"> } };
+}) => void;
 
 describe("Vue request runtime", () => {
   it("copies a site layout into the state once, whatever the pages that carry it", () => {
@@ -46,18 +53,22 @@ describe("Vue request runtime", () => {
 
   it("keeps the newest site layout when Back puts an older page back", (context) => {
     const { app, runtime } = application("first");
-    const listeners = new Map<string, (event: unknown) => void>();
+    const listeners = new Map<string, PopstateListener>();
     const hadWindow = "window" in globalThis;
     Reflect.set(globalThis, "window", {
-      addEventListener: (type: string, listener: (event: unknown) => void) =>
+      addEventListener: (type: string, listener: PopstateListener) =>
         listeners.set(type, listener),
       removeEventListener: (type: string) => listeners.delete(type),
     });
-    let onNavigate: ((event: unknown) => void) | undefined;
-    context.mock.method(router, "on", (type: string, callback) => {
-      if (type === "navigate") onNavigate = callback;
-      return () => {};
-    });
+    let onNavigate: NavigateListener | undefined;
+    context.mock.method(
+      router,
+      "on",
+      (type: string, callback: NavigateListener) => {
+        if (type === "navigate") onNavigate = callback;
+        return () => {};
+      },
+    );
     const replaced: unknown[] = [];
     context.mock.method(router, "replaceProp", (name: string, value) =>
       replaced.push([name, value]),

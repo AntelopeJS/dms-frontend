@@ -11,6 +11,9 @@ import { pipeline } from "node:stream/promises";
  *
  * Writes a Web-standard body, a backend answer above all, to a Node response.
  * It lives apart from the proxy and the module routes, which both send one.
+ *
+ * @param {import("node:stream/web").ReadableStream} body
+ * @param {...import("node:stream").Writable} streams
  */
 export async function pipeWebBody(body, ...streams) {
   const response = streams.at(-1);

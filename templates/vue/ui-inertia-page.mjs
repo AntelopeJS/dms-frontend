@@ -7,6 +7,20 @@ const ANY_INERTIA_PAGE_IMPORT =
   /import\s*\{[^}]*\busePage\b[^}]*\}\s*from\s*["']@inertiajs\/vue3["']|import\s*\*\s*as\s+\w+\s+from\s*["']@inertiajs\/vue3["']/;
 
 /**
+ * A Vite plugin that rewrites the source of Nuxt UI files.
+ *
+ * @typedef {{
+ *   name: string,
+ *   enforce: "pre",
+ *   transform: (
+ *     this: import("vite").Rollup.TransformPluginContext,
+ *     code: string,
+ *     id: string,
+ *   ) => { code: string, map: null } | null,
+ * }} NuxtUiRewrite
+ */
+
+/**
  * The rewrite, as a Vite plugin.
  *
  * Nuxt UI reads Inertia's page (`usePage()`) for its links and route stub.
@@ -16,7 +30,8 @@ const ANY_INERTIA_PAGE_IMPORT =
  * a form this rewrite does not know, rather than letting the leak come back
  * unnoticed with a Nuxt UI release.
  *
- * @param isNuxtUiFile `(id) => boolean`, whether a module is Nuxt UI's
+ * @param {(id: string) => boolean} isNuxtUiFile whether a module is Nuxt UI's
+ * @returns {NuxtUiRewrite}
  */
 export function uiInertiaPage(isNuxtUiFile) {
   return {

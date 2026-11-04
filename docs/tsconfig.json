@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "noEmit": true,
+    "types": ["node", "vite/client"],
+    "paths": {
+      "@antelopejs/dms-frontend/templates/*": ["../templates/*"],
+      "#dms/frontend-module": ["../templates/vue/frontend-module.ts"],
+      "#dms/frontend-build": ["../templates/vue/frontend-build.ts"],
+      "#dms/server": ["../templates/vue/server-module.ts"]
+    },
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["./**/*.ts"]
+}

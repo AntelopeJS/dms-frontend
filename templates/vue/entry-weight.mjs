@@ -10,11 +10,20 @@ export const TRANSLATIONS_OWNER = "translations";
 
 const LOCALE_CATALOG = /[\\/]locales\.generated[\\/]/;
 
+/**
+ * @param {string} id
+ * @returns {string}
+ */
 function stripQuery(id) {
   const query = id.indexOf("?");
   return query === -1 ? id : id.slice(0, query);
 }
 
+/**
+ * @param {string} root
+ * @param {string} file
+ * @returns {boolean}
+ */
 function isInside(root, file) {
   const path = relative(root, file);
   return Boolean(path) && !path.startsWith("..") && !path.startsWith(sep);
@@ -26,7 +35,9 @@ function isInside(root, file) {
  * what every page shares (the renderer's runtime, the UI and icon libraries,
  * an installed package).
  *
+ * @param {string} id
  * @param {{ root: string, name?: string, packageName?: string, id: string }[]} modules
+ * @returns {string}
  */
 export function entryOwner(id, modules) {
   if (id.startsWith("\0")) return SHARED_OWNER;
@@ -42,13 +53,18 @@ export function entryOwner(id, modules) {
 /**
  * The files a page loads before its first line runs: the entry chunks and
  * their static imports, transitively, by file name.
+ *
+ * @param {import("vite").Rollup.OutputBundle} bundle
+ * @returns {(import("vite").Rollup.OutputChunk | undefined)[]}
  */
 function entryClosure(bundle) {
   const chunks = Object.values(bundle).filter(
     (output) => output.type === "chunk",
   );
   const byName = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
+  /** @type {Set<string>} */
   const seen = new Set();
+  /** @param {import("vite").Rollup.OutputChunk | undefined} chunk */
   const visit = (chunk) => {
     if (!chunk || seen.has(chunk.fileName)) return;
     seen.add(chunk.fileName);
@@ -64,10 +80,13 @@ function entryClosure(bundle) {
  * rendered for each (`renderedLength`, before minification): an estimate that
  * needs nothing the bundle does not already hold.
  *
+ * @param {import("vite").Rollup.OutputBundle} bundle
+ * @param {{ root: string, name?: string, packageName?: string, id: string }[]} modules
  * @returns {{ files: string[], bytes: number, owners: Record<string, number> }}
  */
 export function attributeEntry(bundle, modules) {
   const files = entryClosure(bundle);
+  /** @type {Record<string, number>} */
   const owners = {};
   let bytes = 0;
   for (const chunk of files) {
@@ -109,6 +128,9 @@ export function attributeEntry(bundle, modules) {
  *
  * The weight is recorded once the bundle is written: plugins that generate the
  * bundle after this one still rewrite the chunks' code.
+ *
+ * @param {{ root: string, name?: string, packageName?: string, id: string }[]} modules
+ * @returns {import("vite").Plugin}
  */
 export function recordEntryWeight(modules) {
   let ssrBuild = false;

@@ -9,6 +9,7 @@ import { describe, it, type TestContext } from "node:test";
 import { listenHost } from "../templates/vue/server/listen-host.mjs";
 import { addressOf } from "./helpers/net";
 import { isNumber } from "./helpers/guards";
+import { isJsonObject, isJsonValue, type JsonObject } from "./helpers/json";
 
 const SERVER = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -99,11 +100,12 @@ function startServer(
 }
 
 /** The first message the server sends over IPC. */
-function firstMessage(started: Started): Promise<Record<string, unknown>> {
+function firstMessage(started: Started): Promise<JsonObject> {
   return new Promise((settle, fail) => {
-    started.server.once("message", (message) =>
-      settle(message as Record<string, unknown>),
-    );
+    started.server.once("message", (message) => {
+      if (isJsonValue(message) && isJsonObject(message)) settle(message);
+      else fail(new Error("the server sent a message that is not an object"));
+    });
     void started.exited.then((code) =>
       fail(new Error(`server exited (${code}): ${started.output()}`)),
     );
@@ -171,7 +173,7 @@ describe("Frontend server startup", () => {
       assert.equal(message.type, "dms:ready");
       assert.equal(message.address, "127.0.0.1");
       assert.ok(isNumber(message.port));
-      await canConnect(message.port as number);
+      await canConnect(message.port);
       assert.doesNotMatch(started.output(), READY);
     },
   );
@@ -250,6 +252,31 @@ describe("Frontend server startup", () => {
       });
       assert.equal(await started.exited, 1);
       assert.doesNotMatch(started.output(), /\n\s+at /);
+    },
+  );
+
+  it(
+    "reports where a startup error points only by the numbers it carries",
+    { timeout: 30_000 },
+    async (context) => {
+      const root = serverDirectory(context, "dms-vite-start-");
+      const config = join(root, "vite.config.ts");
+      writeFileSync(
+        config,
+        `const error = new Error("config boom");
+Object.assign(error, { loc: { file: ${JSON.stringify(config)}, line: "1", column: { at: 2 } } });
+throw error;
+`,
+      );
+
+      const started = startServer(context, 0, true, { cwd: root, isDev: true });
+      const message = await firstMessage(started);
+      assert.deepEqual(message, {
+        type: "dms:start-error",
+        message: "config boom",
+        location: { file: config },
+      });
+      assert.equal(await started.exited, 1);
     },
   );
 

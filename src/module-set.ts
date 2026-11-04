@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { backendEndpoint, fetchManifest } from "./manifest";
+import { ownRelease } from "./internal/own-release";
 import { bootstrapHeaders, type ManifestModule } from "./workspace";
 
 /** How often `dev` reads the manifest to notice a module set change. */
@@ -8,7 +9,7 @@ const READY_ENDPOINT = "/dms/frontend/ready";
 const READY_TIMEOUT_MS = 5000;
 const JSON_CONTENT_TYPE = "application/json";
 /** The dms-frontend release reporting, as the ready report names it. */
-export const OWN_RELEASE: { version: string } = require("../package.json");
+export const OWN_RELEASE: { version: string } = ownRelease;
 
 /** What a module set is compared on. */
 export type ModuleSetMember = Pick<

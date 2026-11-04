@@ -2,11 +2,20 @@ import { relative, sep } from "node:path";
 
 const SERVER_ENTRY = /(?:^|[\\/])dms\.server\.[cm]?[jt]sx?$/;
 
+/**
+ * @param {string} id
+ * @returns {string}
+ */
 function stripQuery(id) {
   const query = id.indexOf("?");
   return query === -1 ? id : id.slice(0, query);
 }
 
+/**
+ * @param {string} file
+ * @param {readonly string[]} moduleRoots
+ * @returns {boolean}
+ */
 function insideModuleServerDirectory(file, moduleRoots) {
   return moduleRoots.some((root) => {
     const path = relative(root, file);
@@ -20,6 +29,10 @@ function insideModuleServerDirectory(file, moduleRoots) {
  * Whether `id`, a resolved module id, is server code: a module's server entry
  * (`dms.server.*`) or a file under a `server/` directory of a module. Installed
  * packages never are: `node_modules` has its own `server` directories.
+ *
+ * @param {string} id
+ * @param {readonly string[]} moduleRoots
+ * @returns {boolean}
  */
 export function isServerSource(id, moduleRoots) {
   if (id.startsWith("\0")) return false;
@@ -44,6 +57,9 @@ export function isServerSource(id, moduleRoots) {
  * import; the guard sits in the module graph instead, where every resolved file
  * passes. Kept beside vite.config.ts rather than inside it so the plugin can be
  * exercised on its own, the way head-order.mjs is.
+ *
+ * @param {readonly string[]} moduleRoots
+ * @returns {import("vite").Plugin}
  */
 export function rejectServerSourcesInClient(moduleRoots) {
   let ssrBuild = false;

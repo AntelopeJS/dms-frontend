@@ -375,10 +375,18 @@ describe("Vue request runtime", () => {
     Object.assign(runtime.route, { path: "/data", fullPath: "/data" });
     recordVisits(context);
     const seen: string[] = [];
-    context.mock.method(router, "push", (params) => {
-      params.onSuccess?.({ url: params.url });
-      params.onFinish?.(params);
-    });
+    context.mock.method(
+      router,
+      "push",
+      (params: {
+        url: string;
+        onSuccess?: (page: { url: string }) => void;
+        onFinish?: (visit: { url: string }) => void;
+      }) => {
+        params.onSuccess?.({ url: params.url });
+        params.onFinish?.(params);
+      },
+    );
     await app.runWithContext(() =>
       navigateDms(
         { query: { tab: "b" } },

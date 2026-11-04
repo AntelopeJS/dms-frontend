@@ -2,13 +2,22 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createUiAppConfigMerger } from "../templates/vue/ui-app-config";
 
-function nuxtUiConfig() {
+type NuxtUiConfig = {
+  ui: {
+    colors: Record<string, string>;
+    button: { compoundVariants: Array<{ color: string; class: string }> };
+    icons?: Record<string, string>;
+  };
+  brand?: string;
+};
+
+function nuxtUiConfig(): NuxtUiConfig {
   return {
     ui: {
       colors: { primary: "green", neutral: "slate" },
       button: { compoundVariants: [{ color: "neutral", class: "base" }] },
     },
-  } as Record<string, unknown>;
+  };
 }
 
 describe("merging the DMS app config into Nuxt UI's", () => {
@@ -23,14 +32,10 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     merge(ui, dms);
     merge(ui, dms);
     merge(ui, dms);
-    assert.deepEqual(
-      (ui.ui as { button: { compoundVariants: unknown[] } }).button
-        .compoundVariants,
-      [
-        { color: "primary", class: "dms" },
-        { color: "neutral", class: "base" },
-      ],
-    );
+    assert.deepEqual(ui.ui.button.compoundVariants, [
+      { color: "primary", class: "dms" },
+      { color: "neutral", class: "base" },
+    ]);
   });
 
   it("applies a changed value from a new DMS config, in the same object", () => {
@@ -40,7 +45,7 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     merge(ui, { ui: { colors: { primary: "v1" } } });
     merge(ui, { ui: { colors: { primary: "v2" } } });
     assert.equal(ui, sameObject);
-    assert.deepEqual((ui.ui as { colors: unknown }).colors, {
+    assert.deepEqual(ui.ui.colors, {
       primary: "v2",
       neutral: "slate",
     });
@@ -51,9 +56,9 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     const ui = nuxtUiConfig();
     merge(ui, { ui: { icons: { check: "i-ph-check-light" } }, brand: "old" });
     merge(ui, { ui: {} });
-    assert.equal((ui.ui as { icons?: unknown }).icons, undefined);
+    assert.equal(ui.ui.icons, undefined);
     assert.equal(ui.brand, undefined);
-    assert.deepEqual((ui.ui as { colors: unknown }).colors, {
+    assert.deepEqual(ui.ui.colors, {
       primary: "green",
       neutral: "slate",
     });
@@ -71,16 +76,11 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     merge(ui, dms);
     dms.ui.colors.primary = "v2";
     merge(ui, dms);
-    const uiOf = () =>
-      ui.ui as {
-        colors: unknown;
-        button: { compoundVariants: unknown[] };
-      };
-    assert.deepEqual(uiOf().colors, { primary: "v1", neutral: "slate" });
+    assert.deepEqual(ui.ui.colors, { primary: "v1", neutral: "slate" });
 
     merge(ui, dms, { isChanged: true });
-    assert.deepEqual(uiOf().colors, { primary: "v2", neutral: "slate" });
-    assert.deepEqual(uiOf().button.compoundVariants, [
+    assert.deepEqual(ui.ui.colors, { primary: "v2", neutral: "slate" });
+    assert.deepEqual(ui.ui.button.compoundVariants, [
       { color: "primary", class: "dms" },
       { color: "neutral", class: "base" },
     ]);

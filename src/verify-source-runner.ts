@@ -16,6 +16,10 @@ import {
   getProcessUi,
 } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
+import { ensure } from "./internal/ensure";
+import { isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
+import { parseViteManifest } from "./internal/vite-manifest";
 import {
   assertLayersSupportRenderer,
   CancelledError,
@@ -34,6 +38,7 @@ import {
   writeHeader,
 } from "./output";
 import { createTemporaryWorkspace } from "./temporary-workspace";
+import { checkClientBundle } from "./verify-source-client-bundle";
 import {
   buildAndTypeCheck,
   prepareTypes,
@@ -50,38 +55,14 @@ import {
   ViteWarnings,
 } from "./vite-output";
 
-interface LayerPackage {
-  name?: string;
-  devDependencies?: Record<string, string>;
-  pnpm?: { overrides: Record<string, string> };
-}
-
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;
 const NON_EMAIL_RUNTIME_PATTERN =
   /DisplayRichText|ApexCharts|Tiptap|FlowCanvas|app\/.*table|components\/table/i;
-const LAZY_LIBRARIES = [
-  { name: "ApexCharts", pattern: /ApexCharts/ },
-  { name: "Tiptap", pattern: /tiptap/i },
-];
-const RUNTIME_MARKERS = ["auth/login", "DefaultLayout", "error.500.title"];
-
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(path, "utf8"));
-}
-
-/** Fails the running check with `title` unless `condition` holds. */
-function ensure(
-  condition: boolean,
-  title: string,
-  reason?: string,
-): asserts condition {
-  if (!condition) throw new CliError({ title, reason });
-}
-
 function removeDevelopmentDependencies(root: string): void {
   const packagePath = join(root, "package.json");
   if (!existsSync(packagePath)) return;
-  const packageData = readJson(packagePath) as LayerPackage;
+  const packageData: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
+  if (!isPlainObject(packageData)) return;
   delete packageData.devDependencies;
   writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
 }
@@ -111,11 +92,20 @@ function materializeWorkspace(
   );
   writeWorkspacePackageJson(workspace, layers);
   const packagePath = join(workspace, "package.json");
-  const workspacePackage = readJson(packagePath) as LayerPackage;
+  const workspacePackage: unknown = JSON.parse(
+    readFileSync(packagePath, "utf8"),
+  );
+  ensure(
+    isPlainObject(workspacePackage),
+    "The workspace package.json is not a JSON object",
+  );
   workspacePackage.pnpm = {
     overrides: {
       ...Object.fromEntries(
-        layers.map((layer) => [layer.packageName, "workspace:*"]),
+        layers.map((layer): [string, string] => [
+          String(layer.packageName),
+          "workspace:*",
+        ]),
       ),
       ...Object.fromEntries(
         Object.entries(localPackages).map(([name, path]) => [
@@ -126,42 +116,6 @@ function materializeWorkspace(
     },
   };
   writeFileSync(packagePath, `${JSON.stringify(workspacePackage, null, 2)}\n`);
-}
-
-/**
- * The client bundle keeps the heavy libraries out of the main chunk, and
- * still reaches them and the pages every DMS serves: those of the DMS core
- * layer, which every run includes.
- */
-function checkClientBundle(workspace: string): void {
-  const clientRoot = join(workspace, "dist", "client");
-  const manifest = readJson(
-    join(clientRoot, ".vite", "manifest.json"),
-  ) as Record<string, { file: string; isEntry?: boolean }>;
-  const mainEntry = Object.values(manifest).find((entry) => entry.isEntry);
-  ensure(mainEntry !== undefined, "The Vite manifest names no entry chunk");
-  const mainJavascript = readFileSync(join(clientRoot, mainEntry.file), "utf8");
-  const javascript = readdirSync(join(clientRoot, "assets"))
-    .filter((file) => file.endsWith(".js"))
-    .map((file) => readFileSync(join(clientRoot, "assets", file), "utf8"))
-    .join("\n");
-  for (const { name, pattern } of LAZY_LIBRARIES) {
-    ensure(
-      !pattern.test(mainJavascript),
-      `The main chunk bundles ${name}`,
-      "It must stay in a lazily loaded chunk.",
-    );
-    ensure(pattern.test(javascript), `No client chunk bundles ${name}`);
-  }
-  ensure(
-    Object.keys(manifest).some((source) => source.endsWith("/kpi/KpiCard.vue")),
-    "DmsKpiCard is not reachable at runtime",
-  );
-  for (const marker of RUNTIME_MARKERS)
-    ensure(
-      javascript.includes(marker),
-      `${marker} is not reachable at runtime`,
-    );
 }
 
 /**
@@ -179,9 +133,9 @@ async function checkServerModulesBundle(workspace: string): Promise<string> {
     "The server modules bundle loads application code",
     "A dms.server.ts imports server code only, never .vue files or dms.frontend.ts.",
   );
-  const { serverModules }: { serverModules: unknown } = await import(
-    join(root, "server-modules.generated.js")
-  );
+  const serverModules: unknown = (
+    await import(join(root, "server-modules.generated.js"))
+  ).serverModules;
   ensure(
     Array.isArray(serverModules),
     "The server modules bundle exports none",
@@ -282,14 +236,14 @@ async function checkEmailContracts(workspace: string): Promise<string> {
     "The e-mail manifest references browser-only modules",
     BROWSER_ONLY_REASON,
   );
-  const emailManifest = JSON.parse(emailManifestContent) as Record<
-    string,
-    { file: string }
-  >;
+  const emailManifest = parseViteManifest(
+    emailManifestContent,
+    "e-mail build manifest",
+  );
   const emailJavascriptFiles = [
     ...new Set([
       "email-renderer.js",
-      ...Object.values(emailManifest)
+      ...emailManifest
         .map((entry) => entry.file)
         .filter((file) => file.endsWith(".js")),
     ]),
@@ -314,11 +268,12 @@ async function checkEmailContracts(workspace: string): Promise<string> {
     `The e-mail bundle is ${formatSize(emailBuildSize)} of JavaScript`,
     `The limit is ${limit}.`,
   );
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the build directory, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
   const { renderEmail } = await import(join(emailRoot, "email-renderer.js"));
   for (const emailCase of EMAIL_CASES) {
-    const html: string = await renderEmail(emailCase.name, emailCase.props);
+    const html: unknown = await renderEmail(emailCase.name, emailCase.props);
     ensure(
-      html.startsWith("<!doctype html>"),
+      isText(html) && html.startsWith("<!doctype html>"),
       `${emailCase.name} does not render a full HTML document`,
     );
     if (emailCase.name === "EmailLayout") checkLayoutEmail(html);
@@ -338,21 +293,6 @@ async function checkEmailContracts(workspace: string): Promise<string> {
 
 const LINE_BREAK = /\r?\n/;
 const STACK_TRACE_HINT = "Run with --verbose for the full trace.";
-
-/**
- * A failure as the result carries it: a check's own problem, or the first
- * line of an unexpected error, with its stack trace in a verbose run.
- */
-function describeError(error: unknown, isVerbose: boolean): CliProblem {
-  if (error instanceof CliError) return error.problem;
-  if (!(error instanceof Error)) return { title: String(error) };
-  const [title] = error.message.split(LINE_BREAK);
-  const stack = (error.stack ?? "").split(LINE_BREAK);
-  return {
-    title: title || error.name,
-    details: isVerbose ? stack : [STACK_TRACE_HINT],
-  };
-}
 
 /**
  * The renderer range is asserted before the first task, so its notice does
@@ -430,7 +370,20 @@ async function main(): Promise<void> {
       process.exitCode = error.exitCode;
       return;
     }
-    result = { ok: false, problem: describeError(error, isVerboseRun()) };
+    let problem: CliProblem;
+    if (error instanceof CliError) {
+      problem = error.problem;
+    } else if (error instanceof Error) {
+      const [title] = error.message.split(LINE_BREAK);
+      const stack = (error.stack ?? "").split(LINE_BREAK);
+      problem = {
+        title: title || error.name,
+        details: isVerboseRun() ? stack : [STACK_TRACE_HINT],
+      };
+    } else {
+      problem = { title: String(error) };
+    }
+    result = { ok: false, problem };
   }
   if (process.send) {
     process.exitCode = result.ok ? 0 : 1;

@@ -225,7 +225,7 @@ describe("validating options before any work", () => {
   });
 
   /** A built workspace whose server prints the NODE_ENV it was given. */
-  function nodeEnvWorkspace(): Record<string, string> {
+  function nodeEnvWorkspace() {
     return {
       ...builtWorkspace(),
       [join(PRODUCTION_WORKSPACE, "server.mjs")]:

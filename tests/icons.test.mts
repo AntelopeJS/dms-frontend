@@ -6,16 +6,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import {
-  createServer,
-  type Server,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { _api, addAPIProvider, loadIcon } from "@iconify/vue";
 import {
   ICON_API_PATH,
@@ -27,6 +21,7 @@ import {
   installedCollections,
   isIconRequest,
 } from "../templates/vue/server/icons.mjs";
+import { jsonAt, parseJson } from "./helpers/json";
 import { addressOf } from "./helpers/net";
 
 const ORIGIN = "http://frontend.local";
@@ -38,13 +33,6 @@ const COLLECTION = {
   icons: { check: CHECK_ICON, gear: { body: '<path d="M2 2h4"/>' } },
   aliases: { tick: { parent: "check" } },
 };
-
-interface ServerTemplate {
-  handleRequestSafely: (
-    request: IncomingMessage,
-    response: ServerResponse,
-  ) => Promise<void>;
-}
 
 function writeFixture(root: string, path: string, content: string): void {
   const destination = join(root, path);
@@ -90,12 +78,12 @@ describe("the same-origin Iconify API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.headers["content-type"], "application/json");
     assert.match(response.headers["cache-control"], /public, max-age=\d+/);
-    const data = JSON.parse(response.body);
-    assert.equal(data.prefix, "demo");
-    assert.deepEqual(data.icons, { check: CHECK_ICON });
-    assert.deepEqual(data.aliases, { tick: { parent: "check" } });
-    assert.deepEqual(data.not_found, ["missing"]);
-    assert.equal(data.width, 256);
+    const data = parseJson(response.body);
+    assert.equal(jsonAt(data, "prefix"), "demo");
+    assert.deepEqual(jsonAt(data, "icons"), { check: CHECK_ICON });
+    assert.deepEqual(jsonAt(data, "aliases"), { tick: { parent: "check" } });
+    assert.deepEqual(jsonAt(data, "not_found"), ["missing"]);
+    assert.equal(jsonAt(data, "width"), 256);
   });
 
   it("answers 404 for a collection that is not installed", async () => {
@@ -158,9 +146,7 @@ describe("the generated server's icon route", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
-    const runtime = (await import(
-      pathToFileURL(join("templates", "vue", "server.mjs")).href
-    )) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     base = await listen(frontend);
   });

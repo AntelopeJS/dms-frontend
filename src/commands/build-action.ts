@@ -32,6 +32,7 @@ import {
 } from "../vite-output";
 import { entryWeightThreshold, reportEntryWeight } from "../entry-weight";
 import { setUpWorkspace } from "./workspace-task";
+import { serverNodeOptions } from "../node-options";
 
 export interface BuildOptions {
   /** The AntelopeJS project the modules are read from. */
@@ -174,7 +175,11 @@ async function runBuildStep(
       onLine: (line) => context.warnings.read(line),
     });
   } catch (error) {
-    endInterruptedTask(task, error, step.stopped);
+    endInterruptedTask(
+      task,
+      error instanceof CancelledError ? error : undefined,
+      step.stopped,
+    );
     throw error;
   }
   if (result.code !== 0) {
@@ -241,7 +246,7 @@ async function buildProduction(
     nameFile: createFileNamer(layers),
     env: {
       ...process.env,
-      NODE_OPTIONS: "--max-old-space-size=4096",
+      NODE_OPTIONS: serverNodeOptions(process.env.NODE_OPTIONS),
       NODE_PATH: join(workspaceDir, "node_modules"),
       [VITE_LOG_LEVEL_VARIABLE]: viteLogLevel(isVerbose),
     },

@@ -1,11 +1,6 @@
 import * as assert from "node:assert/strict";
 import { cpSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
@@ -13,7 +8,14 @@ import {
   type DmsServerSetup,
   defineDmsServer,
 } from "../templates/vue/server-module";
+import { isText } from "../src/internal/guards";
+import { isPlainObject } from "../src/internal/plain-object";
 import { writeFixture, listen, close } from "./fixtures/server-modules";
+import { jsonAt, responseJson } from "./helpers/json";
+
+function isFrom(value: unknown): value is { from: string } {
+  return isPlainObject(value) && isText(value.from);
+}
 
 describe("Module server routes in development", () => {
   it("answers with an edited handler on the next request", async () => {
@@ -68,17 +70,13 @@ describe("Module server routes in development", () => {
         },
       });
       const devServer = vite;
+      // SAFETY: `workspace` is the unchanged copy of `templates/vue` made by the `cpSync` above, so `server/module-server.mjs` is the file this type names.
       const { handleModuleRoute, loadServerModules } = (await import(
         pathToFileURL(join(workspace, "server", "module-server.mjs")).href
-      )) as {
-        handleModuleRoute: (
-          request: IncomingMessage,
-          response: ServerResponse,
-          pathname: string,
-          modules: unknown,
-        ) => Promise<boolean>;
-        loadServerModules: (devServer: unknown) => Promise<unknown>;
-      };
+      )) as Pick<
+        typeof import("../templates/vue/server/module-server.mjs"),
+        "handleModuleRoute" | "loadServerModules"
+      >;
       frontend = createServer(async (request, response) => {
         void handleModuleRoute(
           request,
@@ -91,7 +89,7 @@ describe("Module server routes in development", () => {
       });
       const url = `${await listen(frontend)}/api/_fixture/version`;
       const version = async () =>
-        ((await (await fetch(url)).json()) as { version: string }).version;
+        jsonAt(await responseJson(await fetch(url)), "version");
 
       assert.equal(await version(), "v1");
       await new Promise((settle) => setTimeout(settle, 100));
@@ -164,7 +162,7 @@ describe("The module testing helper", () => {
         return null;
       });
       server.registerRoute("GET", `${base}/read/:name`, (event) => ({
-        value: event.cookies.readSealed(event.params.name) ?? null,
+        value: event.cookies.readSealed(event.params.name, isFrom) ?? null,
       }));
     };
     const served = await serveModuleRoutes([
@@ -188,7 +186,8 @@ describe("The module testing helper", () => {
       return {
         status: response.status,
         cookie: response.headers.getSetCookie()[0]?.split(";", 1)[0] ?? "",
-        body: response.status === 200 ? await response.json() : undefined,
+        body:
+          response.status === 200 ? await responseJson(response) : undefined,
       };
     };
     try {
@@ -254,7 +253,7 @@ describe("The module testing helper", () => {
       },
       other: { apiKey: "" },
     });
-    assert.equal(({} as Record<string, unknown>).polluted, undefined);
+    assert.equal(Object.hasOwn(Object.prototype, "polluted"), false);
     assert.deepEqual(warnings, []);
 
     const untouched = { shop: { apiKey: "" } };

@@ -21,6 +21,7 @@ import { cmdStart } from "./commands/start";
 import { cmdVerifySource } from "./commands/verify-source";
 import { cmdWorkspaces } from "./commands/workspaces";
 import { loadProjectEnv } from "./env-file";
+import { ownRelease } from "./internal/own-release";
 import { applyDmsHelp, ENVIRONMENT_TOPIC, formatEnvironmentHelp } from "./help";
 import { exitOnBrokenPipe, reportStopped } from "./output";
 import {
@@ -29,7 +30,7 @@ import {
   stripUpdateCheckFlag,
 } from "./update-check";
 
-const { version } = require("../package.json");
+const { version } = ownRelease;
 
 const QUIET_FLAGS = ["-q", "--quiet"];
 /**

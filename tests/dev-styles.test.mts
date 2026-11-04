@@ -66,7 +66,7 @@ describe("development stylesheets in the served document", () => {
       },
       transformRequest: async () => ({ code: ".widget { display: none; }" }),
     };
-    const tags = await developmentStyleTags(devServer as never);
+    const tags = await developmentStyleTags(devServer);
     assert.match(
       tags,
       /<style data-dms-dev-style="\/workspace\/Widget\.vue[^"]*">\.widget \{ display: none; \}<\/style>/,
@@ -161,7 +161,7 @@ describe("development stylesheets in the served document", () => {
         code: '.a::after { content: "</style>"; }',
       }),
     };
-    const tags = await developmentStyleTags(devServer as never);
+    const tags = await developmentStyleTags(devServer);
     assert.doesNotMatch(tags, /<style/);
   });
 });

@@ -17,9 +17,13 @@ class FakeClassList {
   }
 }
 
+interface FakeText {
+  text: string;
+}
+
 class FakeElement {
   readonly classList = new FakeClassList();
-  readonly children: unknown[] = [];
+  readonly children: Array<FakeElement | FakeText> = [];
   private readonly attributes = new Map<string, string>();
   attributeWrites = 0;
   getAttribute(name: string) {
@@ -29,17 +33,21 @@ class FakeElement {
     this.attributeWrites++;
     this.attributes.set(name, value);
   }
-  appendChild(child: unknown) {
+  appendChild(child: FakeElement | FakeText) {
     this.children.push(child);
     return child;
   }
-  removeChild(child: unknown) {
+  removeChild(child: FakeElement | FakeText) {
     this.children.splice(this.children.indexOf(child), 1);
     return child;
   }
 }
 
-type Listener = (event: unknown) => void;
+type Listener = (event: {
+  key: string;
+  newValue: string;
+  storageArea: FakeStorage;
+}) => void;
 
 interface StorageEventFields {
   key: string | null;
@@ -160,9 +168,9 @@ after(() => {
 const scopes: Array<{ stop(): void }> = [];
 
 function reset({
-  htmlClasses = [] as string[],
-  stored = null as string | null,
-} = {}) {
+  htmlClasses = [],
+  stored = null,
+}: { htmlClasses?: string[]; stored?: string | null } = {}) {
   for (const name of dom.html.classList.value.split(" ").filter(Boolean)) {
     dom.html.classList.remove(name);
   }

@@ -1,5 +1,6 @@
 import { GENERIC_ERROR_MESSAGE } from "./auth/backend.mjs";
 import { isFrontendVisit, redirectFrontendVisit } from "./inertia.mjs";
+import { isString } from "./type-guards.mjs";
 
 /**
  * What a JSON caller gets when the backend fails: the generic i18n key of
@@ -18,6 +19,10 @@ const FORBIDDEN = 403;
 const FRONTEND_ORIGIN = "http://frontend.local";
 
 export class BackendResponseError extends Error {
+  /**
+   * @param {number} status
+   * @param {string | undefined} code The typed refusal code of the answer
+   */
   constructor(status, code) {
     super(`DMS backend returned ${status}`);
     this.status = status;
@@ -28,21 +33,28 @@ export class BackendResponseError extends Error {
 /**
  * The refusal code in a backend answer: the string or the `message` of its
  * JSON body, or the body itself when it is not JSON (a bare code).
+ *
+ * @param {Response} response
+ * @returns {Promise<string | undefined>}
  */
 async function refusalCode(response) {
   const text = (await response.text().catch(() => "")).trim();
   if (text.length > REFUSAL_CODE_MAX_LENGTH) return undefined;
+  /** @type {unknown} */
   let value = text;
   try {
+    /** @type {unknown} */
     const data = JSON.parse(text);
-    value = typeof data === "string" ? data : data?.message;
+    value = isString(data) ? data : data?.message;
   } catch {}
-  return typeof value === "string" && REFUSAL_CODE.test(value)
-    ? value
-    : undefined;
+  return isString(value) && REFUSAL_CODE.test(value) ? value : undefined;
 }
 
-/** The error for a failed backend response, with its typed code if any. */
+/**
+ * The error for a failed backend response, with its typed code if any.
+ *
+ * @param {Response} response
+ */
 export async function backendResponseError(response) {
   return new BackendResponseError(response.status, await refusalCode(response));
 }
@@ -54,7 +66,11 @@ export async function backendResponseError(response) {
  * `loadRenderer` resolves. Only a same-origin path other than the refused one
  * qualifies: a refused destination sent to itself again would loop.
  *
- * @returns Whether the visit was redirected
+ * @param {unknown} error What the request failed with
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
+ * @param {() => Promise<typeof import("../ssr-renderer.ts")>} loadRenderer
+ * @returns {Promise<boolean>} Whether the visit was redirected
  */
 export async function redirectAccessRefusal(
   error,
@@ -69,6 +85,7 @@ export async function redirectAccessRefusal(
     !error.code
   )
     return false;
+  /** @type {string | undefined} */
   let location;
   try {
     location = (await loadRenderer()).accessRedirect?.(error.code);

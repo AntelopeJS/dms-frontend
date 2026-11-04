@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
@@ -9,31 +10,33 @@ describe("Inertia HTTP protocol", () => {
   it("does not write a second response after a client disconnect", async () => {
     const runtime = await server;
     let writeCount = 0;
-    const response = {
-      destroyed: false,
-      headersSent: false,
-      writableEnded: false,
-      writeHead: () => {
-        writeCount += 1;
-      },
-    };
+    let headersSent = false;
+    const response = Object.defineProperty(
+      Object.assign(responseOf(), {
+        writeHead: () => {
+          writeCount += 1;
+        },
+      }),
+      "headersSent",
+      { get: () => headersSent },
+    );
     const disconnect = Object.assign(new Error("client disconnected"), {
       code: "ERR_STREAM_PREMATURE_CLOSE",
     });
-    const request = {
-      get url() {
+    const request = Object.defineProperty(requestOf(), "url", {
+      get() {
         throw disconnect;
       },
-    };
+    });
     await runtime.handleRequestSafely(request, response);
     assert.equal(writeCount, 0);
 
-    response.headersSent = true;
-    const invalidRequest = {
-      get url() {
+    headersSent = true;
+    const invalidRequest = Object.defineProperty(requestOf(), "url", {
+      get() {
         throw new Error("response already started");
       },
-    };
+    });
     await runtime.handleRequestSafely(invalidRequest, response);
     assert.equal(writeCount, 0);
   });

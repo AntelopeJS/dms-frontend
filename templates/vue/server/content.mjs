@@ -17,9 +17,13 @@ const DYNAMIC_BROTLI_QUALITY = 4;
  * client gets each part when it is written, not when a block fills.
  *
  * Implicit identity is a fallback, not a preference over compression.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {{ streaming?: boolean }} [options]
  */
 export function acceptedEncoder(request, { streaming = false } = {}) {
   const accepted = request.headers["accept-encoding"] ?? "";
+  /** @type {Map<string, number>} */
   const qualities = new Map();
   for (const entry of accepted.split(",")) {
     const [token, ...parameters] = entry.trim().toLowerCase().split(";");
@@ -37,6 +41,7 @@ export function acceptedEncoder(request, { streaming = false } = {}) {
       Math.min(qualities.get(token.trim()) ?? 1, quality),
     );
   }
+  /** @param {string} token */
   const quality = (token) => qualities.get(token) ?? qualities.get("*") ?? 0;
   const br = quality("br");
   const gzip = quality("gzip");
@@ -61,12 +66,24 @@ export function acceptedEncoder(request, { streaming = false } = {}) {
     };
 }
 
+/**
+ * @param {import("node:http").IncomingMessage} request
+ * @param {string | Buffer} content
+ */
 function responseEncoder(request, content) {
   if (Buffer.byteLength(content) < MINIMUM_COMPRESSION_BYTES) return undefined;
   return acceptedEncoder(request);
 }
 
-/** Send a generated body, compressed when the client accepts it. */
+/**
+ * Send a generated body, compressed when the client accepts it.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
+ * @param {number} status
+ * @param {import("node:http").OutgoingHttpHeaders} headers
+ * @param {string | Buffer} content
+ */
 export async function writeContent(
   request,
   response,

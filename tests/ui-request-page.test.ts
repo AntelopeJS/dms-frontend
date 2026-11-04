@@ -10,15 +10,15 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { it } from "node:test";
 import type { ViteDevServer } from "vite";
+import {
+  loadServerRenderer,
+  type ServerRenderer,
+} from "./helpers/ssr-renderer";
 
 interface RenderProbe {
   /** Holds the first request's page after its app has set up. */
   gate?: Promise<void>;
   waiting?: () => void;
-}
-
-interface ServerRenderer {
-  renderDmsPage(page: unknown): Promise<{ body: string }>;
 }
 
 /**
@@ -27,7 +27,7 @@ interface ServerRenderer {
  * `useState`, with the very lines Nuxt UI 4.10 ships, and a component stub
  * for everything else.
  */
-const NUXT_UI_FILES: Record<string, string> = {
+const NUXT_UI_FILES = {
   "package.json": JSON.stringify({
     name: "@nuxt/ui",
     type: "module",
@@ -66,7 +66,7 @@ export const useRoute = () => {
   return { get fullPath() { return page.url; } };
 };
 `,
-};
+} satisfies Record<string, string>;
 
 /** A page that suspends on the probe's gate, then renders a link and the route. */
 const PAGE = `
@@ -196,9 +196,7 @@ async function withServerRenderer(
       optimizeDeps: { noDiscovery: true },
       server: { middlewareMode: true, ws: false, watch: null },
     });
-    await run(
-      (await server.ssrLoadModule("/ssr-renderer.ts")) as ServerRenderer,
-    );
+    await run(await loadServerRenderer(server));
   } finally {
     await server?.close();
     rmSync(workspace, { recursive: true, force: true });

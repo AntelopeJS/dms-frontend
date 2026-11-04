@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import {
-  createServer,
-  type Server,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { createServer as createViteServer } from "vite";
 import {
   DEV_FS_DENY,
@@ -18,13 +12,6 @@ import {
 import { addressOf } from "./helpers/net";
 
 const SECRET = "dev-server-private-secret";
-
-interface ServerTemplate {
-  handleRequestSafely: (
-    request: IncomingMessage,
-    response: ServerResponse,
-  ) => Promise<void>;
-}
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -89,9 +76,7 @@ describe("private files the development server refuses", () => {
     );
     process.env.DMS_DEV = "true";
     process.chdir(root);
-    const runtime = (await import(
-      pathToFileURL(join(previousCwd, "templates", "vue", "server.mjs")).href
-    )) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     base = await listen(frontend);
   });

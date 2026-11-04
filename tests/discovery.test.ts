@@ -13,10 +13,7 @@ import { isText } from "./helpers/guards";
 const alive = () => true;
 const dead = () => false;
 
-function makeProject(registry?: DevRegistry | string): {
-  root: string;
-  nested: string;
-} {
+function makeProject(registry?: DevRegistry | string) {
   const root = mkdtempSync(join(tmpdir(), "dms-discovery-"));
   cleanupDirs.push(root);
   const nested = join(root, "apps", "frontend");
@@ -94,6 +91,56 @@ describe("discoverBackend", () => {
     assert.equal(result.status, "malformed");
     if (result.status === "malformed") {
       assert.equal(result.projectDir, root);
+    }
+  });
+
+  it("reports a dev.json that breaks the contract as malformed", () => {
+    const endpoint = { protocol: "http", host: "localhost", port: 5011 };
+    const pid = process.pid;
+    for (const broken of [
+      null,
+      5,
+      [],
+      "abc",
+      { pid: "1", servers: {} },
+      { pid, servers: [] },
+      { pid, servers: { api: 5 } },
+      { pid, servers: { api: {} } },
+      { pid, servers: { api: { endpoints: "abc" } } },
+      { pid, servers: { api: { endpoints: ["abc"] } } },
+      { pid, servers: { api: { endpoints: [{ ...endpoint, port: "5011" }] } } },
+      { pid, servers: { api: { endpoints: [{ protocol: "http", port: 1 }] } } },
+      { pid, servers: { api: { endpoints: [endpoint, 5] } } },
+      { pid, startedAt: 5, servers: { api: { endpoints: [endpoint] } } },
+      { pid, servers: { api: { endpoints: [endpoint] }, web: 5 } },
+    ]) {
+      const { nested } = makeProject(JSON.stringify(broken));
+      const result = discoverBackend(nested, { isPidAlive: alive });
+      assert.equal(result.status, "malformed", JSON.stringify(broken));
+    }
+  });
+
+  it("finds the api endpoint among other servers", () => {
+    const { nested } = makeProject({
+      pid: process.pid,
+      servers: {
+        web: { endpoints: [] },
+        api: {
+          endpoints: [
+            { protocol: "https", host: "::1", port: 5011 },
+            { protocol: "http", host: "localhost", port: 5012 },
+          ],
+        },
+      },
+    });
+    const result = discoverBackend(nested, { isPidAlive: alive });
+    assert.equal(result.status, "found");
+    if (result.status === "found") {
+      assert.equal(result.backend.backendUrl, "https://[::1]:5011");
+      assert.deepEqual(Object.keys(result.backend.registry.servers), [
+        "web",
+        "api",
+      ]);
     }
   });
 

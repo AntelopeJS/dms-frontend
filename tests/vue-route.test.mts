@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isCallable } from "../src/internal/guards";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { renderToString } from "@vue/server-renderer";
 import {
@@ -30,18 +31,19 @@ function pageProps(url: string) {
 async function render(
   url: string,
   page: Component,
-  props: Record<string, unknown> = {},
+  props: { delay?: number } = {},
   setUpPlugins: (app: App) => void = () => {},
 ): Promise<string> {
   const runtime = createDmsFrontendRuntime(undefined, {}, true);
-  const result = await createInertiaApp({
+  let body: string | undefined;
+  await createInertiaApp({
     page: {
       component: "Page",
       props: { ...pageProps(url), ...props },
       url,
       version: "",
     },
-    render: renderToString,
+    render: async (app: App) => (body = await renderToString(app)),
     resolve: () => page,
     setup({ App, props: inertiaProps }) {
       const app = createSSRApp({ render: () => h(App, inertiaProps) });
@@ -51,8 +53,8 @@ async function render(
       return app;
     },
   });
-  assert.ok(result);
-  return result.body;
+  assert.ok(body !== undefined, "Inertia rendered the page");
+  return body;
 }
 
 describe("Route of the page", () => {
@@ -81,10 +83,12 @@ describe("Route of the page", () => {
     const RouteAfterAwait = defineComponent({
       props: { delay: { type: Number, required: true } },
       async setup(props) {
-        let pending: unknown;
-        let restore: () => void;
-        [pending, restore] = withAsyncContext(() => sleep(props.delay));
+        const started: unknown = withAsyncContext(() => sleep(props.delay));
+        assert.ok(Array.isArray(started), "withAsyncContext answers a pair");
+        const pair: unknown[] = started;
+        const [pending, restore] = pair;
         await pending;
+        assert.ok(isCallable(restore), "the pair ends with the restore");
         restore();
         const route = useDmsRoute();
         return () => h("p", `route:${route.fullPath}`);

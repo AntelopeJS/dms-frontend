@@ -15,7 +15,11 @@ const HOP_BY_HOP_HEADERS = [
   "upgrade",
 ];
 
-/** `Accept-Encoding` added to the backend's own `Vary`, once. */
+/**
+ * `Accept-Encoding` added to the backend's own `Vary`, once.
+ *
+ * @param {string | undefined} vary
+ */
 function varyWithEncoding(vary) {
   const names = (vary ?? "")
     .split(",")
@@ -32,6 +36,12 @@ function varyWithEncoding(vary) {
  * known, and a strong validator no longer names these bytes. A `Location` on
  * the backend's origin becomes the same path on the frontend's when
  * `isProxiedPath` says the frontend proxies it (see `relayedLocation`).
+ *
+ * @param {import("node:http").ServerResponse} response
+ * @param {Pick<Response, "status" | "headers" | "url">} upstream
+ * @param {string | undefined} encoding
+ * @param {boolean} [varies]
+ * @param {(pathname: string) => boolean} [isProxiedPath]
  */
 export function writeProxyHeaders(
   response,

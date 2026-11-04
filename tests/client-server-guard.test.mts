@@ -19,7 +19,7 @@ function writeFixture(root: string, path: string, content: string): void {
 }
 
 /** A workspace whose single module has a server/ directory and a dms.server.ts. */
-function createWorkspace(): { root: string; moduleRoot: string } {
+function createWorkspace() {
   const root = mkdtempSync(join(tmpdir(), "dms-client-server-guard-"));
   const moduleRoot = join(root, "frontend-modules", "shop");
   writeFixture(

@@ -60,11 +60,11 @@ function filled(
  * left out, as it would be in production.
  */
 export function filledOptions(
-  shape: FrontendModuleOptions,
+  declared: FrontendModuleOptions,
   values: FrontendModuleOptions | undefined,
 ): FrontendModuleOptions {
   return Object.fromEntries(
-    Object.entries(shape).map(([key, value]) => [
+    Object.entries(declared).map(([key, value]) => [
       key,
       filled(value, values?.[key]),
     ]),
@@ -159,7 +159,12 @@ export function unfilledPrivateValues(
     [...emptyStrings(options)]
       .filter((path) => path.length > 0 && !isCovered(path))
       .filter((path) => {
-        const value = readPath(given[module], path);
+        const value = readPath(
+          Object.prototype.hasOwnProperty.call(given, module)
+            ? given[module]
+            : undefined,
+          path,
+        );
         return !isText(value) || value === "";
       })
       .map((path) => ({ module, path })),

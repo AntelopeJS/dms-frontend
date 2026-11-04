@@ -1,5 +1,4 @@
 import { usePage } from "@inertiajs/vue3";
-import { ofetch } from "ofetch";
 import {
   type Component,
   type EffectScope,
@@ -19,6 +18,7 @@ import {
   type DmsPluginRegistrationOptions,
   type DmsPluginSetup,
   type DmsRoute,
+  type DmsServerFetch,
   type DmsSharedPagePayload,
   type RouteLocationRaw,
 } from "./types";
@@ -212,7 +212,7 @@ export interface DmsFrontendRuntime {
   /** Whether to warn about what a development render does wrong. */
   devWarnings?: boolean;
   runtimeHooks: Map<string, DmsRuntimeHook[]>;
-  serverFetch?: typeof ofetch;
+  serverFetch?: DmsServerFetch;
   currentError: Ref<Error | null>;
   route: DmsRoute;
   currentRoutePattern?: string;

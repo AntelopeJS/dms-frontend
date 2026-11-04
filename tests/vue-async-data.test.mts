@@ -21,6 +21,22 @@ import {
   clientApp,
   mountRuntime,
 } from "./fixtures/vue-async-data.mts";
+import { isFlag, isNumber, isText } from "../src/internal/guards";
+
+type DmsFailure = Error & runtimeModule.DmsErrorData;
+
+function isDmsFailure(value: unknown): value is DmsFailure {
+  return (
+    value instanceof Error &&
+    (!("statusCode" in value) ||
+      value.statusCode === undefined ||
+      isNumber(value.statusCode)) &&
+    (!("statusMessage" in value) ||
+      value.statusMessage === undefined ||
+      isText(value.statusMessage)) &&
+    (!("fatal" in value) || value.fatal === undefined || isFlag(value.fatal))
+  );
+}
 
 describe("Async data in a server render", () => {
   it("awaits lazy data before rendering it, so the HTML shows what the payload carries (E2)", async () => {
@@ -218,7 +234,7 @@ describe("Server payload", () => {
       return () =>
         h(
           "p",
-          `${status.value}:${(error.value as { statusCode?: number })?.statusCode}`,
+          `${status.value}:${isDmsFailure(error.value) ? error.value.statusCode : undefined}`,
         );
     });
     assert.equal(html, "<p>error:404</p>");
@@ -242,13 +258,10 @@ describe("Server payload", () => {
     assert.equal(calls, 0);
     assert.equal(entry.status.value, "error");
     assert.equal(entry.data.value, 0, "the default the server rendered");
-    assert.equal(
-      (entry.error.value as { statusCode?: number }).statusCode,
-      404,
-    );
-    assert.deepEqual((entry.error.value as { data?: unknown }).data, {
-      message: "orders.not_found",
-    });
+    const failure = entry.error.value;
+    assert.ok(isDmsFailure(failure));
+    assert.equal(failure.statusCode, 404);
+    assert.deepEqual(failure.data, { message: "orders.not_found" });
   });
 
   it("keeps the backend's address out of a fetch error it transfers", async () => {
@@ -277,7 +290,7 @@ describe("Server payload", () => {
   });
 
   it("keeps the body of a backend's 5xx out of the payload, and a 4xx's in", async () => {
-    const backendFailure = (statusCode: number, data: unknown) =>
+    const backendFailure = (statusCode: number, data: Record<string, string>) =>
       Object.assign(new Error(`[GET] "/api/x": ${statusCode}`), {
         name: "FetchError",
         statusCode,

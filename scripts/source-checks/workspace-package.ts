@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { BUILD_STEPS } from "../../src/commands/build-action";
 import {
   expectMatch,
+  isJsonObject,
+  isStringList,
   type Problem,
   ROOT,
   type SourceCheck,
@@ -15,8 +17,35 @@ interface WorkspaceManifest {
   dependencies: Record<string, string>;
 }
 
+function isStringMap(value: unknown): value is Record<string, string> {
+  return isJsonObject(value) && isStringList(Object.values(value));
+}
+
+function isWorkspaceManifest(value: unknown): value is WorkspaceManifest {
+  return (
+    isJsonObject(value) &&
+    "scripts" in value &&
+    isStringMap(value.scripts) &&
+    "dependencies" in value &&
+    isStringMap(value.dependencies)
+  );
+}
+
 function workspaceManifest(): WorkspaceManifest {
-  return JSON.parse(templateText("package.json"));
+  const manifest: unknown = JSON.parse(templateText("package.json"));
+  if (!isWorkspaceManifest(manifest))
+    throw new Error(
+      "templates/vue/package.json holds no scripts or dependencies",
+    );
+  return manifest;
+}
+
+function hasVersion(value: unknown): value is { version: string } {
+  return (
+    isJsonObject(value) &&
+    "version" in value &&
+    typeof value.version === "string"
+  );
 }
 
 const DECLARED_PATCH = /^\s+"[^"]+":\s*(patches\/\S+)$/gm;
@@ -65,12 +94,14 @@ function everyPatchedDependencyIsPinned(): Problem[] {
 }
 
 function vueuseMatchesTheInstalledPatchTarget(): Problem[] {
-  const installed: { version: string } = JSON.parse(
+  const installed: unknown = JSON.parse(
     readFileSync(
       join(ROOT, "node_modules", "@vueuse", "core", "package.json"),
       "utf8",
     ),
   );
+  if (!hasVersion(installed))
+    throw new Error("The installed @vueuse/core has no version");
   const pinned = workspaceManifest().dependencies["@vueuse/core"];
   return [
     ...(pinned === installed.version

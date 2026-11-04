@@ -5,6 +5,8 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
+import { responseOf } from "./helpers/http-doubles";
+import { jsonAt } from "./helpers/json";
 import { addressOf } from "./helpers/net";
 import {
   ACCESS_BLOCKED_CODE,
@@ -97,7 +99,15 @@ describe("Inertia HTTP protocol", () => {
       const page = runtime.createInertiaPage("/articles", {
         path: "/articles",
       });
-      const { html } = await runtime.renderHtml(page, "/articles");
+      const reads = Object.assign(async () => undefined, {
+        reuseCompletedReads: () => undefined,
+      });
+      const { html } = await runtime.renderHtml(
+        page,
+        "/articles",
+        reads,
+        undefined,
+      );
       assert.deepEqual(html.match(/<link rel="icon"[^>]*>/g), [
         '<link rel="icon" href="data:," />',
       ]);
@@ -195,19 +205,13 @@ describe("Inertia HTTP protocol", () => {
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${address.port}`;
     const runtime = await server;
     const sessionRuntime = await sessions;
-    const cookieHeaders = new Map<string, string | string[]>();
-    sessionRuntime.writeSession(
-      {
-        getHeader: (name: string) => cookieHeaders.get(name),
-        setHeader: (name: string, value: string | string[]) =>
-          cookieHeaders.set(name, value),
-      },
-      {
-        accessToken: "access",
-        user: { id: "user-1", email: "a@example.com" },
-      },
-    );
-    const cookie = [cookieHeaders.get("set-cookie") ?? []]
+    const cookieResponse = responseOf();
+    sessionRuntime.writeSession(cookieResponse, {
+      accessToken: "access",
+      persistent: false,
+      user: { id: "user-1", email: "a@example.com" },
+    });
+    const cookie = [cookieResponse.getHeaders()["set-cookie"] ?? []]
       .flat()
       .map((value) => value.split(";")[0])
       .join("; ");
@@ -264,11 +268,7 @@ describe("Site layout as an Inertia once prop", () => {
       const holding = await visit("/auth/custom", {
         "x-inertia-except-once-props": held,
       });
-      assert.equal(
-        (holding.page.props.page as { isFrontendOnly?: boolean })
-          .isFrontendOnly,
-        true,
-      );
+      assert.equal(jsonAt(holding.page.props.page, "isFrontendOnly"), true);
       assert.deepEqual(holding.page.onceProps, {
         [held]: { prop: "shared", expiresAt: null },
       });

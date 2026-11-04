@@ -1,4 +1,5 @@
 import { writeBadRequest } from "./request-failure.mjs";
+import { isString } from "./type-guards.mjs";
 
 const FRONTEND_ORIGIN = "http://frontend.local";
 
@@ -7,9 +8,11 @@ const FRONTEND_ORIGIN = "http://frontend.local";
  * query, that stays on this server once resolved. Anything else (an absolute
  * or authority form, `*`, a path a URL parser reads as another host) is not a
  * request a browser sends to the frontend.
+ *
+ * @param {string | undefined} target
  */
 export function isOriginForm(target) {
-  if (typeof target !== "string" || !target.startsWith("/")) return false;
+  if (!isString(target) || !target.startsWith("/")) return false;
   try {
     return new URL(target, FRONTEND_ORIGIN).origin === FRONTEND_ORIGIN;
   } catch {
@@ -22,8 +25,8 @@ export function isOriginForm(target) {
  * and query on the backend's origin. The path is set, not resolved, so a path
  * normalizing to `//host` (`/x/..//host`) stays a path on the backend.
  *
- * @param target The request target, origin-form
- * @param backendBaseUrl The backend's base URL
+ * @param {string} target The request target, origin-form
+ * @param {string} [backendBaseUrl] The backend's base URL
  */
 export function backendUrl(
   target,
@@ -45,6 +48,9 @@ export function backendUrl(
  * form `http://host/x` all name another host once resolved, which turned the
  * proxy into an open one. Every routing decision and the URL sent to the
  * backend read the same normalized path from here.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
  */
 export function refuseForeignTarget(request, response) {
   if (isOriginForm(request.url)) return false;

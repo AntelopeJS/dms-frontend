@@ -11,7 +11,6 @@ import {
 import { stripVTControlCharacters } from "node:util";
 import {
   CliError,
-  type CliProblem,
   type ColorName,
   detectCapabilities,
   displayPath,
@@ -218,30 +217,52 @@ export function cachedAge(fetchedAt: string | undefined): string {
   return fetchedAt ? ` cached ${formatAge(fetchedAt)}` : "";
 }
 
+/** A thrown value, sorted by how the CLI words it. */
+export type Failure =
+  | { kind: "cli"; error: CliError }
+  | { kind: "error"; error: Error }
+  | { kind: "thrown"; text: string };
+
 /**
- * The first line of what went wrong, for a failure reported as a warning
- * rather than through the error boundary.
+ * Sorts a thrown value. A value that is no Error is worded by its `String()`
+ * form, read here, at the catch that reports it.
  */
-function describeProblem(error: unknown): CliProblem {
-  if (error instanceof CliError) return error.problem;
-  const message = error instanceof Error ? error.message : String(error);
-  return { title: message.split(LINE_BREAK)[0] };
+export function classifyFailure(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- every caller passes a catch binding, and JavaScript lets any value be thrown; this sorts it into a `Failure`.
+  thrown: unknown,
+): Failure {
+  if (thrown instanceof CliError) return { kind: "cli", error: thrown };
+  if (thrown instanceof Error) return { kind: "error", error: thrown };
+  return { kind: "thrown", text: String(thrown) };
 }
 
 /**
  * The detail lines of a failure that does not stop the command, in the order
  * the core reports a problem: its reason, details and stack trace in a
- * verbose run, then its fixes.
+ * verbose run, then its fixes. A failure reported as a warning rather than
+ * through the error boundary gives the first line of its message as the title.
  */
 export function failureDetails(
-  error: unknown,
+  failure: Failure,
   ui: Ui = getProcessUi(),
 ): string[] {
-  const { title, reason, fixes = [], details = [] } = describeProblem(error);
+  const {
+    title,
+    reason,
+    fixes = [],
+    details = [],
+  } = failure.kind === "cli"
+    ? failure.error.problem
+    : {
+        title: (failure.kind === "error"
+          ? failure.error.message
+          : failure.text
+        ).split(LINE_BREAK)[0],
+      };
   const hint = ui.symbols.levels.hint;
   const stack =
-    isVerboseRun() && error instanceof Error && !(error instanceof CliError)
-      ? (error.stack ?? "").split(LINE_BREAK).slice(1)
+    isVerboseRun() && failure.kind === "error"
+      ? (failure.error.stack ?? "").split(LINE_BREAK).slice(1)
       : [];
   return [
     title,
@@ -266,10 +287,10 @@ function lineStartAfter(signal: NodeJS.Signals): string {
  */
 export function endInterruptedTask(
   task: TaskHandle,
-  error: unknown,
+  error: CancelledError | undefined,
   stopped: string,
 ): void {
-  if (!(error instanceof CancelledError)) return task.dismiss();
+  if (!error) return task.dismiss();
   const lineStart = lineStartAfter(error.signal);
   if (lineStart) getProcessTasks().write(process.stderr, lineStart);
   task.skip(stopped);
@@ -374,14 +395,20 @@ export function writeReadyBlock(
   writeInfo("");
 }
 
-/** The levels a running server's notices use, with the color of their symbol. */
-const TIMED_LEVEL_COLORS = {
-  success: "green",
-  info: "blue",
-  warn: "yellow",
-} as const satisfies Record<string, ColorName>;
+/** The levels a running server's notices use. */
+type TimedLevel = "success" | "info" | "warn";
 
-type TimedLevel = keyof typeof TIMED_LEVEL_COLORS;
+/** The color of the symbol of a level. */
+function timedLevelColor(level: TimedLevel): ColorName {
+  switch (level) {
+    case "success":
+      return "green";
+    case "info":
+      return "blue";
+    case "warn":
+      return "yellow";
+  }
+}
 
 /** `14:03:22`, in local time. */
 function clockTime(date: Date): string {
@@ -410,7 +437,7 @@ export function formatTimedMessage(
 ): string {
   const { details = [], fixes = [], columns = feedbackColumns() } = options;
   const palette = ui.palette();
-  const paint = palette[TIMED_LEVEL_COLORS[level]];
+  const paint = palette[timedLevelColor(level)];
   const hint = palette.cyan(ui.symbols.levels.hint);
   const indent = " ".repeat(TIME_LENGTH + 1) + BLOCK_INDENT;
   return [

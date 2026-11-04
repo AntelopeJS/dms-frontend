@@ -21,7 +21,8 @@ const ROUTED_EXPORT =
  * changes the form rewritten here, rather than letting the mismatch come back
  * unnoticed.
  *
- * @param isNuxtUiFile `(id) => boolean`, whether a module is Nuxt UI's
+ * @param {(id: string) => boolean} isNuxtUiFile whether a module is Nuxt UI's
+ * @returns {import("./ui-inertia-page.mjs").NuxtUiRewrite}
  */
 export function uiKbd(isNuxtUiFile) {
   return {

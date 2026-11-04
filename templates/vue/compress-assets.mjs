@@ -16,10 +16,14 @@ const MINIMUM_SIZE_BYTES = 1_024;
 const compressBrotli = promisify(brotliCompress);
 const compressGzip = promisify(gzip);
 
+/**
+ * @param {string} directory
+ * @returns {Promise<string[]>}
+ */
 async function assetFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = await Promise.all(
-    entries.map((entry) => {
+    entries.map(async (entry) => {
       const path = join(directory, entry.name);
       return entry.isDirectory() ? assetFiles(path) : [path];
     }),
@@ -27,6 +31,10 @@ async function assetFiles(directory) {
   return files.flat();
 }
 
+/**
+ * @param {string} path
+ * @returns {Promise<void>}
+ */
 async function compressAsset(path) {
   if (!COMPRESSIBLE_EXTENSIONS.has(extname(path))) return;
   const content = await readFile(path);

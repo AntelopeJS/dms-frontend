@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
 import {
   mkdirSync,
   mkdtempSync,
@@ -12,6 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import ts from "typescript";
+import { createLogger, createServer } from "vite";
 import {
   compileScript,
   invalidateTypeCache,
@@ -177,9 +177,14 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
   it("follows a type file added to a dev server's workspace", async () => {
     const { root, module, dirs, file } = workspace();
     await writeSfcGlobalTypes(dirs, root, file);
-    const watcher = new EventEmitter();
-    const plugin = sfcGlobalTypesWatcher(dirs, root, file);
-    (plugin.configureServer as (server: unknown) => void)({ watcher });
+    const server = await createServer({
+      root,
+      configFile: false,
+      logLevel: "silent",
+      appType: "custom",
+      server: { middlewareMode: true, watch: null, ws: false },
+      plugins: [sfcGlobalTypesWatcher(dirs, root, file)],
+    });
 
     const added = join(module, "app/types/later.ts");
     writeFixture(
@@ -187,28 +192,42 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
       "app/types/later.ts",
       "export type LaterRule = { a: 1 };\n",
     );
-    watcher.emit("add", added);
-    await delay(400);
+    try {
+      server.watcher.emit("add", added);
+      await delay(400);
 
-    assert.match(readText(file), /declare type LaterRule = /);
-    invalidateTypeCache(file);
+      assert.match(readText(file), /declare type LaterRule = /);
+    } finally {
+      await server.close();
+      invalidateTypeCache(file);
+    }
   });
 
   it("warns, rather than ending the dev server, when it cannot rewrite them", async () => {
     const { root, module, dirs } = workspace();
     const file = join(root, "missing", "sfc-global-types.generated.d.ts");
     const warnings: string[] = [];
-    const watcher = new EventEmitter();
-    const plugin = sfcGlobalTypesWatcher(dirs, root, file);
-    (plugin.configureServer as (server: unknown) => void)({
-      watcher,
-      config: { logger: { warn: (message: string) => warnings.push(message) } },
+    const server = await createServer({
+      root,
+      configFile: false,
+      logLevel: "silent",
+      appType: "custom",
+      server: { middlewareMode: true, watch: null, ws: false },
+      customLogger: {
+        ...createLogger("silent"),
+        warn: (message) => warnings.push(message),
+      },
+      plugins: [sfcGlobalTypesWatcher(dirs, root, file)],
     });
 
-    watcher.emit("change", join(module, "app/types/action.ts"));
-    await delay(400);
+    try {
+      server.watcher.emit("change", join(module, "app/types/action.ts"));
+      await delay(400);
 
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0] ?? "", /Could not update .*sfc-global-types/);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0] ?? "", /Could not update .*sfc-global-types/);
+    } finally {
+      await server.close();
+    }
   });
 });

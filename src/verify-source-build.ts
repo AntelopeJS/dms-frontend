@@ -9,6 +9,8 @@ import {
 import { describeChildFailure, type PathMapper } from "./child-output";
 import { BUILD_STEPS, buildStepFailure } from "./commands/build-action";
 import { runFramedCommand } from "./common";
+import { isTextList } from "./internal/text-list";
+import { isPlainObject } from "./internal/plain-object";
 import {
   describeTypeCheckErrors,
   parseTypeCheckOutput,
@@ -84,15 +86,19 @@ function snapshotTypeDeclarations(workspace: string): void {
     join(workspace, AUTO_IMPORTS_DECLARATIONS),
     join(workspace, AUTO_IMPORTS_SNAPSHOT),
   );
-  const config = JSON.parse(
+  const config: unknown = JSON.parse(
     readFileSync(join(workspace, "tsconfig.json"), "utf8"),
-  ) as {
-    files?: string[];
-  };
-  config.files = (config.files ?? []).map((file) =>
+  );
+  const listed = isPlainObject(config) ? (config.files ?? []) : undefined;
+  if (!isPlainObject(config) || !isTextList(listed))
+    throw new CliError({
+      title: "The workspace tsconfig.json does not list its files as paths",
+    });
+  const files = listed.map((file) =>
     file === AUTO_IMPORTS_DECLARATIONS ? AUTO_IMPORTS_SNAPSHOT : file,
   );
-  if (!config.files.includes(AUTO_IMPORTS_SNAPSHOT))
+  config.files = files;
+  if (!files.includes(AUTO_IMPORTS_SNAPSHOT))
     throw new CliError({
       title: `The workspace tsconfig.json does not list ${AUTO_IMPORTS_DECLARATIONS}`,
     });

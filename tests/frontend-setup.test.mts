@@ -12,6 +12,7 @@ import {
 } from "vue";
 import { createI18n } from "vue-i18n";
 import {
+  type DmsAppConfig,
   type DmsFrontendModuleRegistration,
   type DmsLayerAppConfig,
   createDmsFrontendRuntime,
@@ -31,6 +32,8 @@ import {
   useDmsInjection,
   useDmsRuntimeConfig,
 } from "../templates/vue/frontend-module.ts";
+import { isObjectLike } from "../src/internal/guards";
+import { isText } from "./helpers/guards";
 
 interface Calls {
   plugins: string[];
@@ -229,9 +232,61 @@ describe("Frontend module setup", () => {
   });
 });
 
+type ThemedConfig = DmsAppConfig & {
+  branding: { name: string; logo: { light: string; dark?: string } };
+  ui: { colors: { primary: string; neutral: string } };
+};
+
+function isLogo(value: unknown): value is ThemedConfig["branding"]["logo"] {
+  return (
+    isObjectLike(value) &&
+    "light" in value &&
+    isText(value.light) &&
+    (!("dark" in value) || value.dark === undefined || isText(value.dark))
+  );
+}
+
+function isBranding(value: unknown): value is ThemedConfig["branding"] {
+  return (
+    isObjectLike(value) &&
+    "name" in value &&
+    isText(value.name) &&
+    "logo" in value &&
+    isLogo(value.logo)
+  );
+}
+
+function isColors(value: unknown): value is ThemedConfig["ui"]["colors"] {
+  return (
+    isObjectLike(value) &&
+    "primary" in value &&
+    isText(value.primary) &&
+    "neutral" in value &&
+    isText(value.neutral)
+  );
+}
+
+function isThemedConfig(value: DmsAppConfig): value is ThemedConfig {
+  return (
+    isObjectLike(value) &&
+    "branding" in value &&
+    isBranding(value.branding) &&
+    "ui" in value &&
+    isObjectLike(value.ui) &&
+    "colors" in value.ui &&
+    isColors(value.ui.colors)
+  );
+}
+
+/** The app config, with the branding and colors the layers of these tests give it. */
+function themed(appConfig: DmsAppConfig) {
+  assert.ok(isThemedConfig(appConfig), "the layers' branding and colors");
+  return appConfig;
+}
+
 /** A module whose setup only does `setup`, with `useDmsAppConfig()` at hand. */
 function configuring(
-  setup: (appConfig: Record<string, any>) => void,
+  setup: (appConfig: DmsAppConfig) => void,
 ): DmsFrontendModuleRegistration {
   return {
     options: { public: {} },
@@ -240,7 +295,9 @@ function configuring(
 }
 
 /** The layer configs of a project above the DMS, highest precedence first. */
-function layerConfigs(project: Record<string, unknown>): DmsLayerAppConfig[] {
+function layerConfigs(
+  project: DmsLayerAppConfig["config"],
+): DmsLayerAppConfig[] {
   return [
     { module: "project", config: project },
     {
@@ -281,13 +338,13 @@ describe("Layer app configs", () => {
     await setupFrontendModules(
       [
         configuring((appConfig) => {
-          appConfig.branding.name = "Renamed by a setup";
+          themed(appConfig).branding.name = "Renamed by a setup";
           appConfig.extra = { addedBy: "setup" };
         }),
       ],
       layers,
     );
-    assert.equal(useDmsAppConfig().branding.name, "Renamed by a setup");
+    assert.equal(themed(useDmsAppConfig()).branding.name, "Renamed by a setup");
     assert.deepEqual(toRaw(useDmsAppConfig().extra), { addedBy: "setup" });
     assert.deepEqual(layers, pristine);
   });
@@ -297,7 +354,7 @@ describe("Layer app configs", () => {
       [configuring((appConfig) => (appConfig.extra = "by setup"))],
       layerConfigs({ branding: { logo: { light: "/v1.svg" } } }),
     );
-    const appConfig = useDmsAppConfig() as Record<string, any>;
+    const appConfig = themed(useDmsAppConfig());
     const branding = appConfig.branding;
     const logo = computed(() => appConfig.branding.logo.light);
     assert.equal(logo.value, "/v1.svg");
@@ -337,9 +394,17 @@ describe("Layer app configs", () => {
       ],
       [{ module: "dms", config: dms }],
     );
-    const variants = () =>
-      toRaw((useDmsAppConfig() as Record<string, any>).ui.button)
-        .compoundVariants;
+    const variants = () => {
+      const { ui } = useDmsAppConfig();
+      assert.ok(
+        isObjectLike(ui) &&
+          "button" in ui &&
+          isObjectLike(ui.button) &&
+          "compoundVariants" in ui.button,
+        "the button config",
+      );
+      return toRaw(ui.button).compoundVariants;
+    };
     assert.deepEqual(variants(), [{ class: "dms" }, { class: "dms" }]);
     updateDmsAppConfig([{ module: "dms", config: dms }]);
     assert.deepEqual(variants(), [{ class: "dms" }, { class: "dms" }]);

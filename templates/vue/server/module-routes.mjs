@@ -2,6 +2,21 @@ import { resolveBackendProxies } from "./backend-proxies.mjs";
 import { compilePathPattern } from "./path-patterns.mjs";
 import { matchPublicEndpoint } from "./public-endpoints.mjs";
 import { ruleRejection } from "./route-rules.mjs";
+import {
+  isBoolean,
+  isFunction,
+  isNonNullObject,
+  isString,
+} from "./type-guards.mjs";
+
+/** @typedef {(message: string) => void} Warn */
+/**
+ * @import {
+ *   AuthProvider, DeclaredModule, ModuleDeclared, RouteRegistration,
+ *   ServerDeclarations, ServerModuleDeclaration, ServerRoute
+ * } from "./module-route-types.mjs"
+ * @import { PublicEndpoint } from "./public-endpoints.mjs"
+ */
 
 const METHODS = new Set([
   "GET",
@@ -29,6 +44,8 @@ const MODULE_API_PREFIX = /^\/api\/_[A-Za-z0-9-]+(?:\/|$)/;
  * Whether `pathname` names one of the files the renderer serves: Vite's URLs,
  * the built assets and the dependencies. No server route is ever there, and a
  * development page requests hundreds of them.
+ *
+ * @param {string} pathname
  */
 export function isRendererFilePath(pathname) {
   return ["/@", "/assets/", "/node_modules/"].some((prefix) =>
@@ -36,20 +53,25 @@ export function isRendererFilePath(pathname) {
   );
 }
 
-/** Whether a module route may serve `pathname`: never the renderer's own. */
+/**
+ * Whether a module route may serve `pathname`: never the renderer's own.
+ *
+ * @param {string} pathname
+ */
 export function mayHaveModuleRoute(pathname) {
   return !RESERVED_PREFIXES.some(
     (prefix) => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix),
   );
 }
 
+/** @param {string} path */
 function normalizedPath(path) {
   return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 }
 
+/** @param {string} path */
 function pathRejection(path) {
-  if (typeof path !== "string" || !path.startsWith("/"))
-    return "a path starts with /";
+  if (!isString(path) || !path.startsWith("/")) return "a path starts with /";
   const normalized = normalizedPath(path);
   if (!mayHaveModuleRoute(normalized))
     return `${RESERVED_PREFIXES.join(", ")} are the renderer's own paths`;
@@ -71,14 +93,11 @@ function pathRejection(path) {
   return undefined;
 }
 
+/** @param {RouteRegistration["options"]} options */
 function optionsRejection(options) {
   if (options === undefined) return undefined;
-  if (typeof options !== "object" || options === null)
-    return "its options are not an object";
-  if (
-    options.sameOrigin !== undefined &&
-    typeof options.sameOrigin !== "boolean"
-  )
+  if (!isNonNullObject(options)) return "its options are not an object";
+  if (options.sameOrigin !== undefined && !isBoolean(options.sameOrigin))
     return "sameOrigin is not a boolean";
   if (
     options.bodyLimit !== undefined &&
@@ -90,11 +109,14 @@ function optionsRejection(options) {
 
 /**
  * Two declarations of one path whatever their parameters are named share a
- * shape.
+ * path identity.
+ *
+ * @param {string} path
  */
 function compilePath(path) {
   const normalized = normalizedPath(path);
   const segments = normalized === "/" ? [] : normalized.slice(1).split("/");
+  /** @type {string[]} */
   const params = [];
   const pattern = segments
     .map((segment) => {
@@ -106,7 +128,7 @@ function compilePath(path) {
     .join("");
   return {
     path: normalized,
-    shape: segments
+    pathIdentity: segments
       .map((segment) => (PARAM_SEGMENT.test(segment) ? ":" : segment))
       .join("/"),
     params,
@@ -114,8 +136,14 @@ function compilePath(path) {
   };
 }
 
-/** What a module's setup declares, by kind, in declaration order. */
+/**
+ * What a module's setup declares, by kind, in declaration order.
+ *
+ * @param {ServerModuleDeclaration["setup"]} setup
+ * @returns {ModuleDeclared}
+ */
 function collectDeclarations(setup) {
+  /** @type {ModuleDeclared} */
   const declared = { routes: [], auth: [], rules: [], proxies: [] };
   setup({
     registerRoute: (method, path, handler, options) =>
@@ -128,27 +156,37 @@ function collectDeclarations(setup) {
   return declared;
 }
 
+/** @param {unknown} method */
 function methodsOf(method) {
+  /** @type {readonly unknown[]} */
   const methods = Array.isArray(method) ? method : [method];
   return methods.length && methods.every((name) => METHODS.has(name))
     ? methods
     : undefined;
 }
 
+/** @param {RouteRegistration} registration */
 function registrationRejection(registration) {
   if (!methodsOf(registration.method))
     return `the method is not one of ${[...METHODS].join(", ")}`;
-  if (typeof registration.handler !== "function")
-    return "its handler is not a function";
+  if (!isFunction(registration.handler)) return "its handler is not a function";
   return (
     pathRejection(registration.path) ?? optionsRejection(registration.options)
   );
 }
 
+/**
+ * @param {RouteRegistration["method"]} method
+ * @param {string} path
+ */
 function describeRoute(method, path) {
   return `"${[method].flat().join(", ")} ${path}"`;
 }
 
+/**
+ * @param {string} id
+ * @param {ServerRoute} route
+ */
 function backendShadowWarning(id, route) {
   if (
     !BACKEND_PREFIX.test(route.path) ||
@@ -163,6 +201,11 @@ function backendShadowWarning(id, route) {
   );
 }
 
+/**
+ * @param {string} id
+ * @param {ServerRoute} route
+ * @param {PublicEndpoint[]} publicEndpoints
+ */
 function publicEndpointWarning(id, route, publicEndpoints) {
   const sample = route.path.replaceAll(/\/:[^/]+/g, "/x");
   if (!matchPublicEndpoint(route.method, sample, publicEndpoints))
@@ -173,7 +216,12 @@ function publicEndpointWarning(id, route, publicEndpoints) {
   );
 }
 
-/** Runs a module's setup; a setup that throws declares nothing. */
+/**
+ * Runs a module's setup; a setup that throws declares nothing.
+ *
+ * @param {ServerModuleDeclaration} declaration
+ * @param {Warn} warn
+ */
 function declarationsOfModule(declaration, warn) {
   try {
     return collectDeclarations(declaration.setup);
@@ -185,6 +233,11 @@ function declarationsOfModule(declaration, warn) {
   }
 }
 
+/**
+ * @param {DeclaredModule} module
+ * @param {Warn} warn
+ * @returns {ServerRoute[]}
+ */
 function routesOfModule(module, warn) {
   const { id, priority = 0 } = module;
   return module.declared.routes.flatMap((registration, order) => {
@@ -210,6 +263,10 @@ function routesOfModule(module, warn) {
   });
 }
 
+/**
+ * @param {{ id: string, priority?: number }} left
+ * @param {{ id: string, priority?: number }} right
+ */
 function byPriority(left, right) {
   return (
     (right.priority ?? 0) - (left.priority ?? 0) ||
@@ -217,6 +274,10 @@ function byPriority(left, right) {
   );
 }
 
+/**
+ * @param {ServerRoute} kept
+ * @param {ServerRoute} shadowed
+ */
 function shadowWarning(kept, shadowed) {
   const settled =
     kept.priority === shadowed.priority
@@ -228,6 +289,7 @@ function shadowWarning(kept, shadowed) {
   );
 }
 
+/** @param {ServerRoute} route */
 function parameterCount(route) {
   return route.params.length;
 }
@@ -235,10 +297,15 @@ function parameterCount(route) {
 /**
  * Whether one request path can match both routes: as many segments, and at
  * each position the same literal or a parameter on either side.
+ *
+ * @param {ServerRoute} left
+ * @param {ServerRoute} right
  */
 function routesOverlap(left, right) {
-  const leftSegments = left.shape === "" ? [] : left.shape.split("/");
-  const rightSegments = right.shape === "" ? [] : right.shape.split("/");
+  const leftSegments =
+    left.pathIdentity === "" ? [] : left.pathIdentity.split("/");
+  const rightSegments =
+    right.pathIdentity === "" ? [] : right.pathIdentity.split("/");
   return (
     leftSegments.length === rightSegments.length &&
     leftSegments.every(
@@ -250,7 +317,12 @@ function routesOverlap(left, right) {
   );
 }
 
-/** `first` is tried before `second`: it answers what both can match. */
+/**
+ * `first` is tried before `second`: it answers what both can match.
+ *
+ * @param {ServerRoute} first
+ * @param {ServerRoute} second
+ */
 function overlapWarning(first, second) {
   const settled =
     parameterCount(first) < parameterCount(second)
@@ -265,6 +337,7 @@ function overlapWarning(first, second) {
   );
 }
 
+/** @param {ServerRoute} route */
 function rootParameterWarning(route) {
   return (
     `Frontend module ${route.id} serves ${describeRoute(route.method, route.path)}, whose first ` +
@@ -276,10 +349,13 @@ function rootParameterWarning(route) {
 /**
  * Reports what the order of `routes` settles silently: two modules' routes
  * that can match one request, and a route that catches every first segment.
+ *
+ * @param {ServerRoute[]} routes
+ * @param {Warn} warn
  */
 function warnOverlaps(routes, warn) {
   for (const [index, route] of routes.entries()) {
-    if (route.shape.startsWith(":")) warn(rootParameterWarning(route));
+    if (route.pathIdentity.startsWith(":")) warn(rootParameterWarning(route));
     for (const later of routes.slice(index + 1))
       if (
         later.method === route.method &&
@@ -290,11 +366,17 @@ function warnOverlaps(routes, warn) {
   }
 }
 
+/**
+ * @param {DeclaredModule[]} modules
+ * @param {Warn} warn
+ * @param {PublicEndpoint[]} publicEndpoints
+ */
 function resolveRoutes(modules, warn, publicEndpoints) {
+  /** @type {Map<string, ServerRoute>} */
   const kept = new Map();
   for (const module of modules) {
     for (const route of routesOfModule(module, warn)) {
-      const key = `${route.method} ${route.shape}`;
+      const key = `${route.method} ${route.pathIdentity}`;
       const current = kept.get(key);
       if (current) {
         warn(shadowWarning(current, route));
@@ -319,14 +401,15 @@ function resolveRoutes(modules, warn, publicEndpoints) {
 
 const AUTH_HOOKS = ["refreshSession", "publicSession"];
 
+/** @param {unknown} auth */
 function authRejection(auth) {
-  if (typeof auth !== "object" || auth === null) return "it is not an object";
+  if (!isNonNullObject(auth)) return "it is not an object";
   for (const hook of AUTH_HOOKS)
-    if (auth[hook] !== undefined && typeof auth[hook] !== "function")
+    if (auth[hook] !== undefined && !isFunction(auth[hook]))
       return `${hook} is not a function`;
   if (
     auth.signInPath !== undefined &&
-    (typeof auth.signInPath !== "string" ||
+    (!isString(auth.signInPath) ||
       !compilePathPattern(auth.signInPath) ||
       auth.signInPath.includes("*"))
   )
@@ -345,8 +428,12 @@ function authRejection(auth) {
 /**
  * The auth hooks: those of the highest-priority module that registers them.
  * A module registering them twice, or after another one, is reported.
+ *
+ * @param {DeclaredModule[]} modules
+ * @param {Warn} warn
  */
 function resolveAuth(modules, warn) {
+  /** @type {AuthProvider | undefined} */
   let provider;
   for (const module of modules) {
     for (const auth of module.declared.auth) {
@@ -379,12 +466,16 @@ function resolveAuth(modules, warn) {
 /**
  * The route rules: of two declarations of the same pattern, the module of
  * higher priority keeps it, with a warning.
+ *
+ * @param {DeclaredModule[]} modules
+ * @param {Warn} warn
  */
 function resolveRules(modules, warn) {
+  /** @type {Map<string, import("./route-rules.mjs").ResolvedRouteRule>} */
   const kept = new Map();
   for (const module of modules) {
     for (const rules of module.declared.rules) {
-      if (typeof rules !== "object" || rules === null) {
+      if (!isNonNullObject(rules)) {
         warn(
           `Frontend module ${module.id} declares route rules that are ignored: they are not an object.`,
         );
@@ -435,12 +526,13 @@ function resolveRules(modules, warn) {
  * request reaches. Pure: the server hands it the declarations it loaded, and
  * `module-event.mjs` runs the handler a request reaches.
  *
- * @param declarations `{ id, priority, setup }` per module with a dms.server.ts
- * @param warn Reports a declaration problem
- * @param publicEndpoints The deployment's public endpoints (#108), to report a
+ * @param {readonly ServerModuleDeclaration[]} declarations `{ id, priority, setup }` per module with a dms.server.ts
+ * @param {Warn} warn Reports a declaration problem
+ * @param {PublicEndpoint[]} [publicEndpoints] The deployment's public endpoints (#108), to report a
  *   module route answering one
- * @param manifestProxies `{ module, path, auth? }`, the backend proxies the
+ * @param {readonly import("./backend-proxies.mjs").ManifestProxy[]} [manifestProxies] `{ module, path, auth? }`, the backend proxies the
  *   backend modules declare in the manifest
+ * @returns {ServerDeclarations}
  */
 export function resolveServerDeclarations(
   declarations,
@@ -466,7 +558,12 @@ export function resolveServerDeclarations(
   };
 }
 
+/**
+ * @param {ServerRoute} route
+ * @param {RegExpExecArray} match
+ */
 function decodedParams(route, match) {
+  /** @type {Record<string, string>} */
   const params = {};
   for (const [index, name] of route.params.entries()) {
     try {
@@ -483,9 +580,9 @@ function decodedParams(route, match) {
  *
  * A `HEAD` no route declares is the `GET`'s, without its body.
  *
- * @param routes What `resolveServerDeclarations` returned
- * @param method The request's method
- * @param pathname The request's normalized path, without its query string
+ * @param {ServerRoute[]} routes What `resolveServerDeclarations` returned
+ * @param {string} method The request's method
+ * @param {string} pathname The request's normalized path, without its query string
  */
 export function matchModuleRoute(routes, method, pathname) {
   const reached = matchMethod(routes, method, pathname);
@@ -493,6 +590,12 @@ export function matchModuleRoute(routes, method, pathname) {
   return matchMethod(routes, "GET", pathname);
 }
 
+/**
+ * @param {ServerRoute[]} routes
+ * @param {string} method
+ * @param {string} pathname
+ * @returns {{ route: ServerRoute, params: Record<string, string> } | undefined}
+ */
 function matchMethod(routes, method, pathname) {
   for (const route of routes) {
     if (route.method !== method) continue;
@@ -507,8 +610,12 @@ function matchMethod(routes, method, pathname) {
 /**
  * The methods the module routes answer on `pathname`: a path a module route
  * serves is that module's for every method, the others answered `405`.
+ *
+ * @param {ServerRoute[]} routes
+ * @param {string} pathname
  */
 export function moduleRouteMethods(routes, pathname) {
+  /** @type {Set<string>} */
   const methods = new Set();
   for (const route of routes)
     if (route.matcher.test(pathname)) methods.add(route.method);

@@ -5,10 +5,15 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
+import { isText } from "./helpers/guards";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(REPOSITORY, "dist/index.js");
 const LOADED_MODULES = import.meta.resolve("./fixtures/loaded-modules.mjs");
+
+function isTextList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isText);
+}
 
 /** Every module a run of the built CLI loaded. */
 function loadedModules(args: string[]): string[] {
@@ -30,7 +35,9 @@ function loadedModules(args: string[]): string[] {
     },
   );
   assert.equal(result.status, 0, result.stderr);
-  return JSON.parse(readText(record));
+  const loaded: unknown = JSON.parse(readText(record));
+  assert.ok(isTextList(loaded), "the record lists module paths");
+  return loaded;
 }
 
 /** AntelopeJS's config loader, which only build and start read a project with. */

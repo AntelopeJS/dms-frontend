@@ -87,11 +87,12 @@ function startCli({
     cli.on("exit", (code, signal) => settle({ code, signal })),
   );
   const tree = waitFor(
-    () => {
+    (): [number, number] | undefined => {
       const pids = readText(pidFile).trim().split(" ").map(Number);
+      const [child, grandchild] = pids;
       if (pids.length !== 2 || !pids.every((pid) => pid > 0)) return undefined;
       seen.push(...pids);
-      return pids as [number, number];
+      return [child, grandchild];
     },
     () => output,
   );

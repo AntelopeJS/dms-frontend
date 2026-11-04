@@ -19,10 +19,11 @@ function failVisit(): CustomEvent {
 }
 
 function translator(locale: string, messages: Record<string, string> = {}) {
+  const known = new Map(Object.entries(messages));
   return {
     locale: { value: locale },
-    t: (key: string) => messages[key] ?? key,
-    te: (key: string) => key in messages,
+    t: (key: string) => known.get(key) ?? key,
+    te: (key: string) => known.has(key),
   };
 }
 

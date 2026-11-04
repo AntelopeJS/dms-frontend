@@ -22,6 +22,7 @@ import {
   projectWorkspaceKey,
   readCachedManifest,
 } from "../src/common";
+import { CliError } from "@antelopejs/core/cli";
 import { problemText } from "./fixtures/memory-ui";
 
 describe("dependency fingerprint", () => {
@@ -115,13 +116,10 @@ const cachedManifest: Manifest = {
   ],
 };
 
-function makeWorkspace(entry: unknown): string {
+function makeWorkspace(cacheFile: string): string {
   const dir = mkdtempSync(join(tmpdir(), "dms-workspace-"));
   cleanupDirs.push(dir);
-  writeFileSync(
-    join(dir, ".manifest-cache.json"),
-    JSON.stringify(entry, null, 2),
-  );
+  writeFileSync(join(dir, ".manifest-cache.json"), cacheFile);
   return dir;
 }
 
@@ -145,15 +143,21 @@ describe("workspace size", () => {
 
 describe("manifest cache", () => {
   it("survives the credential rotating between runs", () => {
-    const dir = makeWorkspace({
-      manifest: cachedManifest,
-      fetchedAt: "2026-08-06T10:00:00Z",
-    });
+    const dir = makeWorkspace(
+      JSON.stringify(
+        { manifest: cachedManifest, fetchedAt: "2026-08-06T10:00:00Z" },
+        null,
+        2,
+      ),
+    );
     assert.deepEqual(readCachedManifest(dir)?.manifest, cachedManifest);
   });
 
   it("ignores a file that is not a cache entry", () => {
-    assert.equal(readCachedManifest(makeWorkspace({ nope: 1 })), undefined);
+    assert.equal(
+      readCachedManifest(makeWorkspace(JSON.stringify({ nope: 1 }, null, 2))),
+      undefined,
+    );
   });
 });
 
@@ -171,6 +175,7 @@ describe("layer paths withheld by the backend", () => {
     try {
       assertLayerPathsServed(pathless, backendUrl, { bootstrapSecret, cache });
     } catch (err) {
+      assert.ok(err instanceof CliError);
       return problemText(err);
     }
     assert.fail("expected the pathless manifest to be refused");

@@ -2,15 +2,15 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/AntelopeJS/dms/main/packages/dms/frontend-vue/layers/dms-layout/public/images/antelope-logo/dark.svg">
-  <img alt="AntelopeJS DMS" src="https://raw.githubusercontent.com/AntelopeJS/dms/main/packages/dms/frontend-vue/layers/dms-layout/public/images/antelope-logo/light.svg" height="72">
+  <img alt="AntelopeJS DMS" src="https://raw.githubusercontent.com/AntelopeJS/dms/main/packages/dms/frontend-vue/layers/dms-layout/public/images/antelope-logo/light.svg" data-illustration height="72">
 </picture>
 
-# @antelopejs/dms-frontend
+# `@antelopejs/dms-frontend`
 
-<a href="https://www.npmjs.com/package/@antelopejs/dms-frontend"><img alt="npm" src="https://img.shields.io/npm/v/@antelopejs/dms-frontend?style=for-the-badge&labelColor=000000&color=000000"></a>
-<a href="./LICENSE"><img alt="License" src="https://img.shields.io/npm/l/@antelopejs/dms-frontend?style=for-the-badge&labelColor=000000&color=000000"></a>
-<a href="https://discord.gg/g4pFt6eXqu"><img alt="Discord" src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000"></a>
-<a href="https://dms.antelopejs.com/docs/frontend"><img alt="Documentation" src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000"></a>
+<a href="https://www.npmjs.com/package/@antelopejs/dms-frontend"><img alt="npm" src="https://img.shields.io/npm/v/@antelopejs/dms-frontend?style=for-the-badge&labelColor=000000&color=000000" data-illustration></a>
+<a href="./LICENSE"><img alt="License" src="https://img.shields.io/npm/l/@antelopejs/dms-frontend?style=for-the-badge&labelColor=000000&color=000000" data-illustration></a>
+<a href="https://discord.gg/g4pFt6eXqu"><img alt="Discord" src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000" data-illustration></a>
+<a href="https://dms.antelopejs.com/docs/frontend"><img alt="Documentation" src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000" data-illustration></a>
 
 **The frontend of the AntelopeJS DMS: the `ajs dms` CLI, the Vue renderer and the frontend-module SDK.**
 
@@ -18,19 +18,19 @@
 
 </div>
 
-![The browser talks to the frontend server, which renders pages, answers module routes and proxies declared backend prefixes to the DMS backend; at build time ajs dms fetches the manifest and writes a workspace](./docs/images/architecture.svg)
+![The browser talks to the frontend server, which renders pages, answers module routes and proxies declared backend prefixes to the DMS backend, while the development and prepare commands fetch the manifest and write a workspace](./docs/images/architecture.svg "illustration")
 
 ## What it does
 
-- Asks a DMS backend which frontend modules it loads, materializes them into a generated workspace, builds it, and runs the frontend server.
-- Renders the dashboard with Vue 3, Vite, Inertia and server-side rendering.
-- Keeps the backend token on the server: the browser only holds a sealed, `HttpOnly` session cookie, and declared backend prefixes are proxied with the session's token.
+- Reads the frontend modules of an AntelopeJS project, materializes them into a generated workspace, builds it, and runs the frontend server.
+- Renders the dashboard with Vue, Vite, Inertia and server-side rendering.
+- Keeps the backend token on the server. The browser only holds a sealed, `HttpOnly` session cookie, and the server adds the session's token to each request it proxies to a declared backend prefix.
 - Lets a module extend the dashboard with pages, components and plugins (`dms.frontend.ts`), server routes (`dms.server.ts`) and build-time declarations (`dms.frontend.build.ts`).
 - Serves development with hot reload, and production with pre-compressed assets.
 
 ## Install
 
-Add the package next to `@antelopejs/core`; the core `ajs` command runs it as `ajs dms`:
+Add the package next to `@antelopejs/core`. The core `ajs` command runs it as `ajs dms`.
 
 ```bash
 pnpm add -D @antelopejs/core @antelopejs/dms-frontend
@@ -38,20 +38,20 @@ pnpm add -D @antelopejs/core @antelopejs/dms-frontend
 
 ## Quick start
 
-In a DMS project started with `ajs project run -w`, serve the dashboard with hot reload:
+In a DMS project started with `ajs project dev -w`, serve the dashboard with hot reload:
 
 ```bash
 pnpm exec ajs dms dev
 ```
 
-For production, build from the project root, without the backend, then start the frontend server with `DMS_SESSION_SECRET` and the backend's secrets set:
+For production, build from the project root, without the backend. Then start the frontend server with `DMS_SESSION_SECRET` and the backend's secrets set:
 
 ```bash
 pnpm exec ajs dms build
 pnpm exec ajs dms start -b https://api.example.com -p 3001
 ```
 
-`ajs dms --help` lists every command, and `ajs dms help environment` every environment variable.
+`ajs dms --help` lists every command, and `ajs dms help environment` lists every environment variable.
 
 ## Compatibility
 
@@ -59,17 +59,11 @@ pnpm exec ajs dms start -b https://api.example.com -p 3001
 
 | Package            | Supported     | Tested with |
 | ------------------ | ------------- | ----------- |
-| `@antelopejs/core` | `>=1.16.0 <2` | `1.16.0`    |
+| `@antelopejs/core` | `>=1.16.0 <2` | `1.20.0`    |
 
 <!-- antelopejs-docs-compat:end -->
 
-| `@antelopejs/dms` | `@antelopejs/dms-frontend` |
-| --- | --- |
-| 0.9.1 and later | `>=0.6.1 <0.7.0` |
-| 0.9.0 | `>=0.6.0 <0.7.0` |
-| 0.6.0 – 0.8.3 | 0.5 (exact floor per release in the full table) |
-
-The 0.6 line needs Node.js 20.19 or later and `@antelopejs/core` `>=1.13.2 <2`. The [compatibility table](https://dms.antelopejs.com/docs/frontend/introduction#compatibility) lists every release.
+Each DMS release declares the renderer releases it runs on in `engines["@antelopejs/dms-frontend"]` of its frontend module's `package.json`. The `ajs dms` CLI refuses to build a module whose range excludes the installed renderer. To find the renderer releases that match a DMS release, read that `engines` range in the installed DMS frontend module, as the [Compatibility](https://dms.antelopejs.com/docs/frontend/introduction#compatibility) section of the introduction explains. The renderer needs the `@antelopejs/core` range in the table above, and the `engines` field of its `package.json` sets the Node.js versions it runs on.
 
 ## Documentation
 
@@ -90,12 +84,12 @@ Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request.
 ```bash
 pnpm install
 pnpm build
-pnpm lint          # oxlint, oxfmt, interface ranges and the docs reference check
+pnpm lint          # oxlint, interface ranges, the docs reference check and the source checks
 pnpm typecheck
 pnpm test
 ```
 
-`pnpm docs:reference` regenerates the environment-variable table of `docs/4.configuration.md` from the list `ajs dms help environment` prints; `pnpm lint` fails when the table is stale.
+`pnpm docs:reference` regenerates the environment-variable table of `docs/4.configuration.md` from the list `ajs dms help environment` prints. `pnpm lint` fails when the table is stale.
 
 ## License
 

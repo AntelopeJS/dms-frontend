@@ -30,10 +30,7 @@ const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
 function makeProject(
   handshake?: DevHandshake | string,
   options: { port?: number; devRegistry?: boolean } = {},
-): {
-  root: string;
-  nested: string;
-} {
+) {
   const root = mkdtempSync(join(tmpdir(), "dms-bootstrap-"));
   cleanupDirs.push(root);
   const nested = join(root, "apps", "frontend");
@@ -144,7 +141,7 @@ describe("normalizeBootstrapSecret", () => {
     for (const [value, culprit] of cases) {
       assert.throws(
         () => normalizeBootstrapSecret(value),
-        (err: unknown) => {
+        (err: Error) => {
           assert.ok(err instanceof UsageError);
           assert.match(err.message, /cannot travel in an HTTP header/);
           assert.equal(err.exitCode, 2);
@@ -162,7 +159,7 @@ describe("normalizeBootstrapSecret", () => {
     assert.throws(
       () =>
         normalizeBootstrapSecret("bad\rvalue", "/proj/.antelope/dms-dev.json"),
-      (err: unknown) => {
+      (err: Error) => {
         assert.ok(err instanceof UsageError);
         assert.match(
           err.problem.reason ?? "",

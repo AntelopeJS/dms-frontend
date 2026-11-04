@@ -34,6 +34,7 @@ export type {
   DmsFetchTransformContext,
   UseAsyncDataOptions,
   UseFetchOptions,
+  DmsServerFetch,
   DmsErrorData,
   DmsPayload,
   DmsStateOptions,

@@ -7,16 +7,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import {
   copyStaticTemplates,
   createFrontendModuleRegistry,
@@ -29,6 +23,7 @@ import {
 } from "../templates/vue/server/route-rules.mjs";
 import type { DmsServerSetup } from "../templates/vue/server-module";
 import { addressOf } from "./helpers/net";
+import { requestHandlerOf } from "./helpers/workspace-server";
 
 const PUBLIC_CACHE = {
   public: true as const,
@@ -116,11 +111,13 @@ describe("Route rule declarations", () => {
         setup: (server) =>
           server.registerRouteRules({
             "legal/**": { ssr: false },
-            "/a": { ssr: true as never },
+            // @ts-expect-error ssr is true, an off-contract rule value (only false is allowed) that must be ignored with a warning
+            "/a": { ssr: true },
             "/b": { headers: { "cache-control": "public" } },
             "/c": { headers: { "bad header": "x" } },
             "/d": { cache: { public: true, maxAge: -1 } },
-            "/e": { cache: { maxAge: 10 } as never },
+            // @ts-expect-error cache has maxAge without public, an off-contract rule that must be ignored with a warning
+            "/e": { cache: { maxAge: 10 } },
           }),
       },
     ]);
@@ -260,17 +257,7 @@ describe("Route rules in the production server", () => {
       root: workspace,
       logLevel: "silent",
     });
-    const server = (await import(
-      pathToFileURL(join(workspace, "server.mjs")).href
-    )) as {
-      handleRequestSafely: (
-        request: IncomingMessage,
-        response: ServerResponse,
-      ) => Promise<void>;
-    };
-    frontend = createServer((request, response) => {
-      void server.handleRequestSafely(request, response);
-    });
+    frontend = createServer(await requestHandlerOf(workspace));
     await new Promise<void>((settle) =>
       frontend!.listen(0, "127.0.0.1", settle),
     );

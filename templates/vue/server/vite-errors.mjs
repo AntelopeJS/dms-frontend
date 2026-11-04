@@ -3,11 +3,25 @@ const ERROR_CONTENT_TYPE = "text/plain; charset=utf-8";
 const VITE_ERROR = Symbol("dms.viteError");
 
 /**
+ * A request that carries the error Vite's middlewares failed with.
+ *
+ * @typedef {import("node:http").IncomingMessage & { [VITE_ERROR]?: unknown }} ViteRequest
+ */
+
+/**
+ * What Vite's middlewares did with a request.
+ *
+ * @typedef {{ status: "handled" } | { status: "unhandled" } | { status: "failed", error: unknown }} ViteMiddlewareResult
+ */
+
+/**
  * In middleware mode, Vite's own error middleware logs an error, sends it to
  * the client overlay, then passes the request on with no error: a module that
  * fails to transform would fall through to page handling and answer 404. This
  * plugin runs just before it, keeps the error on the request and hands it on,
  * so Vite still logs it and shows the overlay.
+ *
+ * @returns {import("vite").Plugin}
  */
 export function captureViteErrors() {
   return {
@@ -15,10 +29,18 @@ export function captureViteErrors() {
     apply: "serve",
     configureServer(server) {
       return () =>
-        server.middlewares.use((error, request, _response, next) => {
-          request[VITE_ERROR] = error;
-          next(error);
-        });
+        server.middlewares.use(
+          /**
+           * @param {unknown} error
+           * @param {ViteRequest} request
+           * @param {import("node:http").ServerResponse} _response
+           * @param {(error?: unknown) => void} next
+           */
+          (error, request, _response, next) => {
+            request[VITE_ERROR] = error;
+            next(error);
+          },
+        );
     },
   };
 }
@@ -27,10 +49,15 @@ export function captureViteErrors() {
  * Hands a request to Vite's middlewares. Resolves `handled` once Vite answered
  * it, `unhandled` when Vite passed it on, and `failed` with the error when a
  * Vite middleware failed on it.
+ *
+ * @param {import("vite").ViteDevServer} devServer
+ * @param {ViteRequest} request
+ * @param {import("node:http").ServerResponse} response
+ * @returns {Promise<ViteMiddlewareResult>}
  */
 export function runViteMiddlewares(devServer, request, response) {
   return new Promise((resolve) => {
-    devServer.middlewares(request, response, (error) => {
+    devServer.middlewares(request, response, (/** @type {unknown} */ error) => {
       const failure = error ?? request[VITE_ERROR];
       resolve(
         failure

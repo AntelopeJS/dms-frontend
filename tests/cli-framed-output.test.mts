@@ -14,7 +14,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
+import { isObjectLike } from "../src/internal/guards";
 import { readText } from "./helpers/files";
+import { isText } from "./helpers/guards";
 import { addressOf } from "./helpers/net";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,6 +44,29 @@ let bin: string;
 interface PnpmCall {
   args: string[];
   env: { updateNotifier?: string; viteLogLevel?: string };
+}
+
+function isPnpmCall(value: unknown): value is PnpmCall {
+  return (
+    isObjectLike(value) &&
+    "args" in value &&
+    Array.isArray(value.args) &&
+    value.args.every(isText) &&
+    "env" in value &&
+    isObjectLike(value.env) &&
+    (!("updateNotifier" in value.env) ||
+      value.env.updateNotifier === undefined ||
+      isText(value.env.updateNotifier)) &&
+    (!("viteLogLevel" in value.env) ||
+      value.env.viteLogLevel === undefined ||
+      isText(value.env.viteLogLevel))
+  );
+}
+
+function parsePnpmCall(line: string): PnpmCall {
+  const call: unknown = JSON.parse(line);
+  assert.ok(isPnpmCall(call), `a pnpm call, got ${line}`);
+  return call;
 }
 
 interface Run {
@@ -90,10 +115,7 @@ function runCli(args: string[], options: RunOptions = {}): Promise<Run> {
   return new Promise((settle) =>
     cli.on("close", (code) => {
       const calls = existsSync(log)
-        ? readText(log)
-            .trim()
-            .split("\n")
-            .map((line) => JSON.parse(line) as PnpmCall)
+        ? readText(log).trim().split("\n").map(parsePnpmCall)
         : [];
       settle({ code, stdout, stderr, calls });
     }),

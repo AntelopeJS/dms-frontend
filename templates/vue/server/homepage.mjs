@@ -1,20 +1,29 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { frontendRegistryOf } from "./generated-files.mjs";
 import { publicOptionsOf } from "./public-options.mjs";
+import { isRecord, isString } from "./type-guards.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const REGISTRY_PATH = join(PROJECT_ROOT, "generated-frontend-modules.json");
-const REGISTRY = existsSync(REGISTRY_PATH)
-  ? JSON.parse(readFileSync(REGISTRY_PATH, "utf8"))
-  : { modules: [] };
+const REGISTRY = frontendRegistryOf(
+  existsSync(REGISTRY_PATH)
+    ? JSON.parse(readFileSync(REGISTRY_PATH, "utf8"))
+    : { modules: [] },
+);
 
+/**
+ * @param {Readonly<Record<string, unknown>>} options
+ * @returns {string | undefined}
+ */
 function findHomepage(options) {
-  if (!options || typeof options !== "object") return undefined;
-  if (typeof options.homepage === "string") return options.homepage;
-  return Object.values(options)
-    .map(findHomepage)
-    .find((homepage) => homepage !== undefined);
+  if (isString(options.homepage)) return options.homepage;
+  for (const child of Object.values(options)) {
+    const homepage = isRecord(child) ? findHomepage(child) : undefined;
+    if (homepage !== undefined) return homepage;
+  }
+  return undefined;
 }
 
 const OPTIONS = publicOptionsOf(REGISTRY);
@@ -29,5 +38,8 @@ const OPTIONS = publicOptionsOf(REGISTRY);
  */
 export const HOMEPAGE =
   REGISTRY.modules
-    .map((module) => findHomepage(OPTIONS[module.id]))
+    .map((module) => {
+      const options = OPTIONS[module.id];
+      return isRecord(options) ? findHomepage(options) : undefined;
+    })
     .find(Boolean) ?? "/";

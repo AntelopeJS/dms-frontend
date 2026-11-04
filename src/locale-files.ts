@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import { baseCompile, type CompileError } from "@intlify/message-compiler";
 import { isObjectLike, isText } from "./internal/guards";
+import {
+  isLocaleValue,
+  isMessageGroup,
+  type LocaleMessages,
+  type LocaleValue,
+} from "./internal/locale-catalogs";
 
 /**
  * A locale file that does not parse, or holds a message vue-i18n cannot
@@ -81,7 +87,7 @@ function firstCompileError(message: string): CompileError | undefined {
 }
 
 /** Every message under `value` that does not compile, by its dotted key. */
-function messageProblems(value: unknown, key: string): MessageProblem[] {
+function messageProblems(value: LocaleValue, key: string): MessageProblem[] {
   if (isText(value)) {
     const error = firstCompileError(value);
     return error ? [{ key, message: value, error }] : [];
@@ -100,13 +106,19 @@ function messageProblems(value: unknown, key: string): MessageProblem[] {
  * compiler, so a message the application could not show stops the build and
  * dev instead of reaching a page.
  */
-export function readLocaleFile(path: string): Record<string, unknown> {
+export function readLocaleFile(path: string): LocaleMessages {
   let value: unknown;
   try {
     value = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new InvalidLocaleFileError(path, reason);
+  }
+  if (!isLocaleValue(value) || !isMessageGroup(value)) {
+    throw new InvalidLocaleFileError(
+      path,
+      "a locale file must hold a JSON object of messages",
+    );
   }
   const problems = messageProblems(value, "");
   if (problems.length) {
@@ -116,5 +128,5 @@ export function readLocaleFile(path: string): Record<string, unknown> {
     ].join("\n");
     throw new InvalidLocaleFileError(path, reason);
   }
-  return value as Record<string, unknown>;
+  return value;
 }

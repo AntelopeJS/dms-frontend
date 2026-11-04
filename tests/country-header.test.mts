@@ -1,25 +1,10 @@
 import assert from "node:assert/strict";
-import {
-  createServer,
-  type IncomingHttpHeaders,
-  type Server,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
-import { join } from "node:path";
+import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { after, afterEach, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import { backend } from "../templates/vue/server/auth/backend.mjs";
 import { clientCountryHeader } from "../templates/vue/server/auth/client-ip.mjs";
 import "./fixtures/dms-backend-proxies.mts";
 import { addressOf } from "./helpers/net";
-
-interface ServerTemplate {
-  handleRequestSafely: (
-    request: IncomingMessage,
-    response: ServerResponse,
-  ) => Promise<void>;
-}
 
 const ENVIRONMENT = [
   "DMS_API_BASE_URL",
@@ -52,9 +37,7 @@ describe("client country header", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(api);
-    const runtime = (await import(
-      pathToFileURL(join(process.cwd(), "templates", "vue", "server.mjs")).href
-    )) as ServerTemplate;
+    const runtime = await import("../templates/vue/server.mjs");
     frontend = createServer(runtime.handleRequestSafely);
     base = await listen(frontend);
   });

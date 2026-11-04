@@ -42,6 +42,7 @@ export interface FrontendModuleContext {
 }
 
 type FrontendModuleFunction = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- the configuration is the module's own, a shape only its `frontendModule` knows, so the type of that export takes it as `unknown`.
   config: unknown,
   context: FrontendModuleContext,
 ) => FrontendRegistration | undefined;
@@ -103,6 +104,7 @@ const NODE_FILE_SYSTEM: FileSystem = {
 /** What a provider publishes, as AntelopeJS types it. */
 type ConfigVars = Record<string, string | number | boolean>;
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- the configuration is the provider module's own, a shape only its `configVars` knows, so the type of that export takes it as `unknown`.
 type ConfigVarsFunction = (config: unknown) => ConfigVars;
 
 /** The `antelopeJs` fields of a provider the config variables come from. */
@@ -150,6 +152,7 @@ function configVarsProvider(
     warnUndeclaredConfigVars(id);
     return undefined;
   }
+  // SAFETY: a function's parameters and result are not observable at run time, so `isCallable` below checks all that can be checked; `configVars` is the export that the `antelopeJs.configVarsFile` contract names, `configVars(config): ConfigVars`, which the module's own `provide` publishes from.
   const { configVars } = require(join(folder, file)) as {
     configVars?: ConfigVarsFunction;
   };
@@ -169,6 +172,7 @@ function configVarsProvider(
 function computeConfigVars(
   id: string,
   provider: ConfigVarsProvider,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- core types a module's configuration as `unknown` (`ExpandedModuleConfig.config`) and this passes it, unread, to the provider's `configVars`; a named type would only relabel it.
   config: unknown,
 ): ConfigVars {
   let computed: ConfigVars;
@@ -184,9 +188,11 @@ function computeConfigVars(
     );
   }
   return Object.fromEntries(
-    provider.declared
-      .filter((name) => name in computed)
-      .map((name) => [name, computed[name]]),
+    provider.declared.flatMap((name) =>
+      Object.prototype.hasOwnProperty.call(computed, name)
+        ? [[name, computed[name]]]
+        : [],
+    ),
   );
 }
 
@@ -203,9 +209,11 @@ function configVarLookup(
   const lookup: ConfigVarLookup = (id, name) => {
     if (!published.has(id)) {
       published.set(id, undefined);
-      const module = modules[id];
+      const module = Object.prototype.hasOwnProperty.call(modules, id)
+        ? modules[id]
+        : undefined;
       const provider = module?.folder && configVarsProvider(id, module.folder);
-      if (provider)
+      if (module && provider)
         published.set(
           id,
           computeConfigVars(
@@ -215,7 +223,10 @@ function configVarLookup(
           ),
         );
     }
-    return published.get(id)?.[name];
+    const variables = published.get(id);
+    return variables && Object.prototype.hasOwnProperty.call(variables, name)
+      ? variables[name]
+      : undefined;
   };
   return lookup;
 }
@@ -225,20 +236,25 @@ function configVarLookup(
  * that is only an unknown reference becomes undefined, so defaults apply.
  */
 function substituteConfigVars(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- walks a module's configuration, which core types as `unknown` (`ExpandedModuleConfig.config`) and which has no fixed shape, so a named type would only relabel it.
   value: unknown,
   lookup: ConfigVarLookup,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- it returns the same open shape with the references replaced, and the value goes on to the module's own `frontendModule`.
 ): unknown {
-  if (typeof value === "string") {
+  if (isText(value)) {
     const pure = value.match(PURE_CONFIG_VAR);
     if (pure) return lookup(pure[1], pure[2]);
-    return value.replace(CONFIG_VAR_PATTERN, (token, module, name) => {
-      const resolved = lookup(module, name);
-      return resolved === undefined ? token : String(resolved);
-    });
+    return value.replace(
+      CONFIG_VAR_PATTERN,
+      (token: string, module: string, name: string) => {
+        const resolved = lookup(module, name);
+        return resolved === undefined ? token : String(resolved);
+      },
+    );
   }
   if (Array.isArray(value))
     return value.map((item) => substituteConfigVars(item, lookup));
-  if (value && typeof value === "object") {
+  if (isObjectLike(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
@@ -374,6 +390,7 @@ function warnUndeclaredFrontend(id: string, folder: string): void {
 function registrationOf(
   id: string,
   folder: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- the configuration is the module's own, handed unread to its `frontendModule`, which alone knows its shape.
   config: unknown,
   context: FrontendModuleContext,
 ): FrontendRegistration | undefined {
@@ -382,6 +399,7 @@ function registrationOf(
     warnUndeclaredFrontend(id, folder);
     return undefined;
   }
+  // SAFETY: a function's parameters and result are not observable at run time, so `isCallable` below checks all that can be checked; `frontendModule` is the export that the `dmsFrontend` field names, `frontendModule(config, context)`, the function the module's backend passes to `AddFrontendModule`.
   const { frontendModule } = require(join(folder, declaration)) as {
     frontendModule?: FrontendModuleFunction;
   };

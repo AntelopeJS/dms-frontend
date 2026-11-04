@@ -1,6 +1,10 @@
 import * as assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import {
+  type NetworkInterfaceInfoIPv4,
+  type NetworkInterfaceInfoIPv6,
+  tmpdir,
+} from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { resolveSessionSecret, UsageError } from "../src/config";
@@ -8,6 +12,32 @@ import { formatReadyBlock } from "../src/output";
 import { isGuestBridge, readyLines } from "../src/server-process";
 import { memoryUi } from "./fixtures/memory-ui";
 const ESC = "\x1b";
+
+function interfaceIpv4(
+  address: string,
+  internal = false,
+): NetworkInterfaceInfoIPv4 {
+  return {
+    address,
+    netmask: "255.255.255.0",
+    family: "IPv4",
+    mac: "00:00:00:00:00:00",
+    internal,
+    cidr: `${address}/24`,
+  };
+}
+
+function interfaceIpv6(address: string): NetworkInterfaceInfoIPv6 {
+  return {
+    address,
+    netmask: "ffff:ffff:ffff:ffff::",
+    family: "IPv6",
+    mac: "00:00:00:00:00:00",
+    internal: false,
+    cidr: `${address}/64`,
+    scopeid: 0,
+  };
+}
 
 const SECRET_NOT_SET = [
   "DMS_SESSION_SECRET is not set",
@@ -72,21 +102,8 @@ describe("CLI output", () => {
             },
           ],
           {
-            lo: [
-              {
-                address: "127.0.0.1",
-                family: "IPv4",
-                internal: true,
-              } as never,
-            ],
-            eth0: [
-              {
-                address: "192.168.1.20",
-                family: "IPv4",
-                internal: false,
-              } as never,
-              { address: "fe80::1", family: "IPv6", internal: false } as never,
-            ],
+            lo: [interfaceIpv4("127.0.0.1", true)],
+            eth0: [interfaceIpv4("192.168.1.20"), interfaceIpv6("fe80::1")],
           },
         ),
         footer: "Watching 12 layer sources · Ctrl+C to stop",
@@ -172,13 +189,7 @@ describe("CLI output", () => {
         { address: "0.0.0.0", port: 3321 },
         [{ label: "Workspace", value: "~/.antelopejs/dms-frontend/76672b08…" }],
         {
-          eth0: [
-            {
-              address: "192.168.1.20",
-              family: "IPv4",
-              internal: false,
-            } as never,
-          ],
+          eth0: [interfaceIpv4("192.168.1.20")],
         },
       ),
       footer: "Ctrl+C to stop",
@@ -200,13 +211,12 @@ describe("CLI output", () => {
   });
 
   it("lists LAN addresses only, a few at most", () => {
-    const ipv4 = (address: string) =>
-      [{ address, family: "IPv4", internal: false }] as never;
+    const ipv4 = (address: string) => [interfaceIpv4(address)];
     const network = readyLines(
       { address: "0.0.0.0", port: 3002 },
       [],
       {
-        lo: [{ address: "127.0.0.1", family: "IPv4", internal: true } as never],
+        lo: [interfaceIpv4("127.0.0.1", true)],
         eth0: ipv4("192.168.1.20"),
         docker0: ipv4("172.17.0.1"),
         "br-1cd78ad94b16": ipv4("172.18.0.1"),
@@ -273,9 +283,7 @@ describe("CLI output", () => {
 
   it("shows no network URL for a server bound to one address", () => {
     const lines = readyLines({ address: "127.0.0.1", port: 3321 }, [], {
-      eth0: [
-        { address: "192.168.1.20", family: "IPv4", internal: false } as never,
-      ],
+      eth0: [interfaceIpv4("192.168.1.20")],
     });
     assert.deepEqual(lines, [
       {

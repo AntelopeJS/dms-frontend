@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { after, before, beforeEach, describe, it } from "node:test";
 import "./fixtures/dms-backend-proxies.mts";
+import { responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 
 async function listen(server: Server): Promise<number> {
@@ -11,20 +12,15 @@ async function listen(server: Server): Promise<number> {
 }
 
 async function sessionCookie(
-  session: Record<string, unknown>,
+  session: Parameters<
+    typeof import("../templates/vue/server/auth/session.mjs").writeSession
+  >[1],
 ): Promise<string> {
   const { writeSession } =
     await import("../templates/vue/server/auth/session.mjs");
-  const headers = new Map<string, string | string[]>();
-  writeSession(
-    {
-      getHeader: (name: string) => headers.get(name),
-      setHeader: (name: string, value: string | string[]) =>
-        headers.set(name, value),
-    },
-    session,
-  );
-  return [headers.get("set-cookie") ?? []]
+  const response = responseOf();
+  writeSession(response, session);
+  return [response.getHeaders()["set-cookie"] ?? []]
     .flat()
     .map((value) => value.split(";")[0])
     .join("; ");
@@ -92,6 +88,7 @@ describe("the proxy forwards who is asking", () => {
     const cookie = await sessionCookie({
       accessToken: "access",
       accountId: "account-a",
+      persistent: false,
       user: { id: "account-a" },
     });
     const response = await fetch(`${frontendUrl}/api/tracker/beacon`, {

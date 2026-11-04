@@ -21,10 +21,21 @@ const COMPRESSIBLE_TYPE =
 const BODILESS_STATUSES = new Set([204, 205, 304]);
 
 /**
+ * What the proxy relays of a backend answer: a fetched `Response`, or the
+ * same fields without its content coding.
+ *
+ * @typedef {Pick<Response, "status" | "headers" | "body" | "url">} ProxiedAnswer
+ */
+
+/**
  * Whether the backend answer is one to compress on its way to the client.
  *
  * A response already encoded, or a range of the bytes, is not compressed:
  * compressing would change what the encoding or the range describes.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {ProxiedAnswer} upstream
+ * @returns {boolean}
  */
 function isCompressible(request, upstream) {
   if (request.method === "HEAD" || !upstream.body) return false;
@@ -48,6 +59,9 @@ function isCompressible(request, upstream) {
  *
  * Streaming: an answer of unknown length (chunked JSON, streamed text) reaches
  * the client part by part, as the backend writes it.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {ProxiedAnswer} upstream
  */
 function proxyEncoder(request, upstream) {
   return isCompressible(request, upstream)
@@ -64,6 +78,14 @@ function proxyEncoder(request, upstream) {
  *
  * A decoded partial representation cannot retain the encoded byte offsets, and
  * a complete 200 response is not manufactured from a partial 206 either.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
+ * @param {ProxiedAnswer} upstream
+ * @param {{
+ *   fetched?: boolean,
+ *   isProxiedPath?: (pathname: string) => boolean
+ * }} [options]
  */
 export async function relayAnswer(
   request,

@@ -1,6 +1,5 @@
 import * as assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
-import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -18,57 +17,14 @@ import {
 } from "../src/common";
 import { problemText } from "./fixtures/memory-ui";
 import { OWN_PACKAGE } from "./helpers/own-package";
-import { addressOf } from "./helpers/net";
+import { typeErrors } from "./helpers/type-check";
+import {
+  closeServer,
+  frontendManifest,
+  startBackend,
+} from "./helpers/manifest-backend";
 
 const manifest: Manifest = { modules: [] };
-
-interface FrontendManifest {
-  version: number;
-  modules: Manifest["modules"];
-}
-
-const frontendManifest: FrontendManifest = {
-  version: 2,
-  modules: manifest.modules,
-};
-
-interface Backend {
-  server: Server;
-  baseUrl: string;
-  requests: string[];
-  headers: IncomingHttpHeaders[];
-}
-
-function startBackend(status = 200): Promise<Backend> {
-  return new Promise((resolve) => {
-    const requests: string[] = [];
-    const headers: IncomingHttpHeaders[] = [];
-    const server = createServer((req, res) => {
-      requests.push(req.url ?? "");
-      headers.push(req.headers);
-      res.statusCode = status;
-      res.setHeader("content-type", "application/json");
-      res.end(
-        JSON.stringify(status === 200 ? frontendManifest : { error: "nope" }),
-      );
-    });
-    server.listen({ port: 0, host: "127.0.0.1" }, () => {
-      const address = addressOf(server);
-      resolve({
-        server,
-        baseUrl: `http://127.0.0.1:${address.port}`,
-        requests,
-        headers,
-      });
-    });
-  });
-}
-
-function closeServer(server: Server): Promise<void> {
-  return new Promise((resolve) => {
-    server.close(() => resolve());
-  });
-}
 
 async function closedBackendUrl(): Promise<string> {
   const { server, baseUrl } = await startBackend();
@@ -181,6 +137,27 @@ describe("fetchManifest", () => {
     assert.match(
       problemText(new ManifestRefusedError(describeManifestVersion(undefined))),
       /^✖ The backend served a frontend manifest without a protocol version\n/,
+    );
+  });
+
+  it("takes the version a manifest states, or none, and nothing else", () => {
+    const call = (argument: string) =>
+      typeErrors(
+        `import { describeManifestVersion } from "../src/common";\ndescribeManifestVersion(${argument});\n`,
+      );
+    assert.deepEqual(call("2"), []);
+    assert.deepEqual(call("undefined"), []);
+    const [text, ...moreText] = call('"2"');
+    assert.deepEqual(moreText, []);
+    assert.match(
+      text ?? "",
+      /^TS2345: Argument of type 'string' is not assignable to parameter of type 'number/,
+    );
+    const [none, ...moreNone] = call("null");
+    assert.deepEqual(moreNone, []);
+    assert.match(
+      none ?? "",
+      /^TS2345: Argument of type 'null' is not assignable to parameter of type 'number/,
     );
   });
 
@@ -297,6 +274,7 @@ describe("fetchManifest", () => {
         await assert.rejects(
           () => fetchManifest(baseUrl, "http://localhost:3001"),
           (err: Error) => {
+            assert.ok(err instanceof CliError);
             assert.ok(problemText(err).includes(`${baseUrl}/dms/frontend`));
             assert.doesNotMatch(problemText(err), /\?|renderer=|clientUrl/);
             return true;

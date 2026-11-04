@@ -42,6 +42,7 @@ import {
   toPosixPath,
 } from "./fs-sync";
 import { isObjectLike, isText } from "./internal/guards";
+import { isPlainObject } from "./internal/plain-object";
 
 export function getPackageRoot(): string {
   return resolve(__dirname, "..");
@@ -102,12 +103,15 @@ export function writeWorkspacePackageJson(
   layers: ResolvedLayer[],
 ): void {
   const templatePath = join(getTemplateDir(), "package.json");
-  const pkg = JSON.parse(readFileSync(templatePath, "utf-8"));
+  const pkg: unknown = JSON.parse(readFileSync(templatePath, "utf-8"));
+  if (!isPlainObject(pkg))
+    throw new Error(`${templatePath} is not a JSON object`);
 
-  pkg.dependencies ??= {};
+  const dependencies = isPlainObject(pkg.dependencies) ? pkg.dependencies : {};
+  pkg.dependencies = dependencies;
   for (const layer of layers) {
     if (!layer.packageName) continue;
-    pkg.dependencies[layer.packageName] = "workspace:*";
+    dependencies[layer.packageName] = "workspace:*";
   }
 
   writeFileSync(
