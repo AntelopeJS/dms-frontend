@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.9.3...v0.10.0)
+
+### 📖 Documentation
+
+- **readme:** Name the product AntelopeJS DMS in the logo alt text ([58dc700](https://github.com/AntelopeJS/dms-frontend/commit/58dc700))
+
+### 🏡 Chore
+
+- Land the cleanup campaign on main ([#289](https://github.com/AntelopeJS/dms-frontend/pull/289))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.9.3
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.9.2...v0.9.3)
