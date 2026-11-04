@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9.3
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.9.2...v0.9.3)
+
+### 🔥 Performance
+
+- **i18n:** Send a visitor who is not signed in the messages the page reads, not the whole catalog ([#265](https://github.com/AntelopeJS/dms-frontend/pull/265))
+- **frontend:** Load the client icon bundle when a visitor acts, not in the entry ([#267](https://github.com/AntelopeJS/dms-frontend/pull/267))
+
+### 📖 Documentation
+
+- **readme:** Use one Discord invite ([#240](https://github.com/AntelopeJS/dms-frontend/pull/240))
+- **github:** Send questions and ideas to Discord ([#268](https://github.com/AntelopeJS/dms-frontend/pull/268))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.9.2
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.9.1...v0.9.2)
