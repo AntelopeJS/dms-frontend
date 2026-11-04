@@ -376,4 +376,33 @@ export const journeys = [
       ]);
     },
   },
+  {
+    id: "a-query-only-banner-link-stays-in-the-browser",
+    title: "following a banner link that changes only the query of the page on screen sends the frontend server no page request, as the page says (finding: AntelopeJS/dms-frontend: issue draft dms-frontend-banner-link-asks-the-server-for-a-query-only-visit)",
+    entryPoint: "the Pending link of /table-view/table-view-query-filters",
+    async run(/** @type {Ctx} */ ctx) {
+      const PAGE = "/table-view/table-view-query-filters";
+      const tab = await ctx.tab("admin");
+      await signIn(ctx, tab);
+      await tab.goto(PAGE);
+      await ctx.verify("the page is on screen", [tab.visible({ role: "link", name: "Pending" })]);
+      await tab.page.waitForTimeout(HYDRATION_WAIT_MS);
+      /** @type {string[]} */
+      const pageRequests = [];
+      tab.page.on("request", (/** @type {Request} */ request) => {
+        if (new URL(request.url()).pathname === PAGE) pageRequests.push(request.resourceType());
+      });
+      let clicks = 0;
+      while (!tab.page.url().endsWith("?status=pending") && clicks < CLICKS) {
+        clicks += 1;
+        await tab.page.getByRole("link", { name: "Pending" }).first().click();
+        await tab.page.waitForTimeout(CLICK_WAIT_MS);
+      }
+      await tab.page.waitForTimeout(HYDRATION_WAIT_MS);
+      await ctx.verify("the URL changed and the server was not asked for the page", [
+        ctx.equal("URL", new URL(tab.page.url()).search, "?status=pending"),
+        ctx.equal("requests for the page path", pageRequests, []),
+      ]);
+    },
+  },
 ];

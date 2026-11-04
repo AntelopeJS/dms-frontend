@@ -61,7 +61,7 @@ dms-control journey "$RUN" sessions
 | The CLI merges the locale files into one catalog per language | A build step of the `build` feature. |
 | A deployment scaled out to several processes needs sticky routing | An infrastructure rule; the server gives no cross-process guarantee to observe. |
 | A discovered development credential goes only to the backend that published it; `--bootstrap-secret` is visible to other processes | Needs `.antelope/dev.json` written by `ajs project dev`; the run starts its backend with `project start`. |
-| The OAuth relay secret, and a conflict between two modules that publish different values | The playground configures no relay secret and has one publishing module. The render secret and the precedence against the variable are driven (`build/dev-secret-precedence`, issue draft `dms-frontend-secret-precedence-docs-contradict`). |
+| The OAuth relay secret, and a conflict between two modules that publish different values | The playground configures no relay secret and has one publishing module. The render secret and the precedence against the variable are driven (`build/dev-secret-precedence`, AntelopeJS/dms-frontend#282). |
 | `DMS_CLIENT_IP_HEADER` on AntelopeJS Cloud | A platform property; the variable itself is driven in `proxy-relay`. |
 
 ## Gotchas

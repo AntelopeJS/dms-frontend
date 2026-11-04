@@ -48,9 +48,9 @@ The production path of the CLI: `build` into a workspace, `start` serving it aga
 - `dev-public-files`: a file added to a module's `public/` is served at once, and not any more once removed.
 - `build-entry-weight-default`: with no threshold set, a module adding about 70 KB of Brotli to the client entry is warned about with its size and the 50 KB threshold, and one adding about 25 KB is not.
 - `build-locale-error`: a message vue-i18n cannot compile stops the build with exit 1 and names the file and the count; `--verbose` adds the key and the message to write instead.
-- `build-locale-error-names-the-key`: finding the draft `dms-frontend-locale-error-hides-key-without-verbose`: the default output lacks the key line the page shows. Fails today.
+- `build-locale-error-names-the-key`: finding AntelopeJS/dms-frontend#281: the default output lacks the key line the page shows. Fails today.
 - `build-access-redirect`: a page visit the backend refuses with a typed 403 goes to the path a module registered for its code (document, Inertia, plain-text and JSON bodies, first registration wins); a refused destination, another origin, an unregistered code and a request that is no page visit show the error page.
-- `dev-secret-precedence`: with `DMS_HTML_RENDER_SECRET` set and the manifest publishing another value, `dev` takes the variable (the docs disagree: draft `dms-frontend-secret-precedence-docs-contradict`).
+- `dev-secret-precedence`: with `DMS_HTML_RENDER_SECRET` set and the manifest publishing another value, `dev` takes the variable (the docs disagree: AntelopeJS/dms-frontend#282).
 
 ## How to get to it (user POV)
 
@@ -72,6 +72,8 @@ The journeys build into a workspace of their own and start `start` and `dev` aga
 | `dev` restarting when the backend's module set changes | The backend would have to change its modules under a running dev server; the fake backend cannot make `settling` and a module-store change visible the way the real one does. |
 | The `x-dms-route-owner` value `module:<id>` | Needs a module that declares server routes in the project; the fixture module has none. The feature `routing` drives module routes. |
 | The terminal form of the Vite warnings (`→ Run with --verbose to list them`) and of the progress lines | The journeys capture pipes. The terminal rendering is covered by `script` only for `workspaces`, not for a build. |
+| `ANTELOPEJS_LAUNCH_ENV` as `-e` (4.configuration) | The fixture project has one environment, so a run cannot tell the variable from the option; `-e` itself is driven in `build-arguments`. |
+| `DMS_API_PUBLIC_BASE_URL` in `envOverrides` (7.deployment/1.production, 3.cli/4.start) | It is a variable of the DMS demo template's `envOverrides`, not of this package; the mechanism, `start` evaluating the project again with its own environment, is driven in `start-secrets-and-environment`. |
 | `DMS_COOKIE_SECURE` default of `dev` | The development server runs over HTTP and sets no `Secure` cookie, which `dev-server` observes in its ready block only. The `start` default and the variable are driven in `sessions/sessions-cookie`. |
 | A module's private options warnings (`<module>: private option x is not set`), `DMS_PRIVATE_OPTIONS`, the module-set drift warning | Needs a module that publishes private options in a build; the playground has none. |
 | `ajs project build -e production` then `ajs dms build` in a container image, read-only file systems, the TLS reverse proxy, scaling and caching headers of `docs/7.deployment/1.production.md` | Deployment practice, not CLI behaviour; the headers are the static-files and proxy features'. `start` writing nothing is driven. |

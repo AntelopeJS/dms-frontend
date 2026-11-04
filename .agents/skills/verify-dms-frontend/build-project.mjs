@@ -36,7 +36,7 @@ export function buildProjectFolder(ctx, name) {
  * Writes the project: `antelope.config.ts`, the module `fx` and its frontend.
  *
  * @param {string} dir The project folder
- * @param {{ component?: string, environmentOnly?: boolean, locales?: Record<string, string>, entry?: string, files?: Record<string, string> }} [options] Variations
+ * @param {{ component?: string, environmentOnly?: boolean, locales?: Record<string, string>, entry?: string, files?: Record<string, string>, dmsConfig?: string }} [options] Variations
  * @returns {{ project: string, component: string }} The project and the component file
  */
 export function writeBuildProject(dir, options = {}) {
@@ -45,7 +45,7 @@ export function writeBuildProject(dir, options = {}) {
     `export default {
   name: "fx",
   modules: {
-    dms: { source: { type: "local", path: "../.." } },
+    dms: { source: { type: "local", path: "../.." }${options.dmsConfig ? `, config: ${options.dmsConfig}` : ""} },
     fx: { source: { type: "local", path: "./fx" } },
   },
   environments: {

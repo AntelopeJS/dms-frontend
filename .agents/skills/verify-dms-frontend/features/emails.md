@@ -19,6 +19,7 @@ The frontend server renders the DMS's e-mail templates when the backend asks: co
 
 - `a-rendered-email-carries-no-hydration-markers-and-links-to-the-dashboard`: the password-reset and invitation messages the sink captures are HTML documents without `<!--[-->`, `<!--]-->` or `<!---->`; the invitation's sign-up link starts with `DMS_CLIENT_BASE_URL`; `POST /api/html/render` without a valid service token answers 401.
 - `the-render-route-takes-one-signed-single-use-token-per-render`: a signed token renders the template once; a replayed token, one signed with another secret, an unknown template and an empty name are refused with the documented bodies; the language header picks the catalog and an unknown language renders English.
+- `an-email-logo-is-on-the-public-dashboard-url-the-variable-names`: a built module sets an e-mail logo and the project configures another `clientBaseUrl`; the rendered invitation's logo starts with `DMS_CLIENT_BASE_URL` when it is set and with the project's value when it is not. Both reach the render as the one public option `dms.clientBaseUrl`, with the variable first (`email-renderer.ts`, `defu(variable, publicConfig)`).
 
 ## How to get to it (user POV)
 

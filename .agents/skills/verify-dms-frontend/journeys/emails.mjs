@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { journeys as logo } from "../emails-logo.mjs";
 import { parseJson, textAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { withSatellite } from "../proxy-satellite.mjs";
@@ -130,4 +131,5 @@ export const journeys = [
       });
     },
   },
+  ...logo,
 ];

@@ -52,6 +52,7 @@ How the frontend server answers a page: a document request is rendered on the se
 - `key-hints-are-drawn-for-the-keyboard-the-server-was-told`: the `dms-keyboard-platform` cookie draws `⌘K` or `Ctrl K` in the server render.
 - `the-payload-is-escaped-so-data-cannot-close-its-script`: a user named `a</script><b>x/y` reaches the payload as `a\u003C\/script>\u003Cb>x\/y`, with no raw angle bracket and no unescaped slash.
 - `choosing-a-tab-changes-only-the-query-in-the-browser`: choosing a tab of the Filter tabs page changes the URL's query, keeps the document and sends the frontend server no request for the page.
+- `a-query-only-banner-link-stays-in-the-browser`: finding (draft `dms-frontend-banner-link-asks-the-server-for-a-query-only-visit`): the Pending banner link of the query-filters page asks the frontend server for the page, although the page says a query-only visit sends no request. Fails today.
 
 ## How to get to it (user POV)
 
