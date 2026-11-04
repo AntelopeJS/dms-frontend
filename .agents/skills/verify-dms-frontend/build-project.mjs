@@ -36,7 +36,7 @@ export function buildProjectFolder(ctx, name) {
  * Writes the project: `antelope.config.ts`, the module `fx` and its frontend.
  *
  * @param {string} dir The project folder
- * @param {{ component?: string, environmentOnly?: boolean, locales?: Record<string, string>, entry?: string, files?: Record<string, string>, dmsConfig?: string }} [options] Variations
+ * @param {{ component?: string, environmentOnly?: boolean, locales?: Record<string, string>, entry?: string, files?: Record<string, string>, dmsConfig?: string, higher?: { appConfig: string } }} [options] Variations
  * @returns {{ project: string, component: string }} The project and the component file
  */
 export function writeBuildProject(dir, options = {}) {
@@ -46,7 +46,7 @@ export function writeBuildProject(dir, options = {}) {
   name: "fx",
   modules: {
     dms: { source: { type: "local", path: "../.." }${options.dmsConfig ? `, config: ${options.dmsConfig}` : ""} },
-    fx: { source: { type: "local", path: "./fx" } },
+    fx: { source: { type: "local", path: "./fx" } },${options.higher ? `\n    gx: { source: { type: "local", path: "./gx" } },` : ""}
   },
   environments: {
     docs: { modules: {} },
@@ -83,6 +83,24 @@ const fixture: DmsFrontendModule = {
 export default fixture;
 `,
   );
+  if (options.higher) {
+    put(join(dir, "gx", "package.json"), JSON.stringify({ name: "gx", version: "1.0.0", dmsFrontend: "frontend-module.cjs" }));
+    put(
+      join(dir, "gx", "frontend-module.cjs"),
+      `const path = require("node:path");
+exports.frontendModule = () => ({
+  name: "gx-frontend",
+  sourcePath: path.join(__dirname, "frontend-vue"),
+  renderer: { name: "vue", version: "3" },
+  priority: 200,
+  options: {},
+});
+`,
+    );
+    put(join(dir, "gx", "frontend-vue", "package.json"), JSON.stringify({ name: "gx-frontend-vue", version: "1.0.0", type: "module", engines: { "@antelopejs/dms-frontend": ">=0.10.0 <0.11.0" } }));
+    put(join(dir, "gx", "frontend-vue", "dms.frontend.ts"), "export default {};\n");
+    put(join(dir, "gx", "frontend-vue", "app", "app.config.ts"), options.higher.appConfig);
+  }
   const component = join(dir, "fx", "frontend-vue", "app", "components", "Callout.vue");
   put(component, options.component ?? COMPONENT);
   for (const [name, text] of Object.entries(options.files ?? {})) put(join(dir, "fx", "frontend-vue", name), text);

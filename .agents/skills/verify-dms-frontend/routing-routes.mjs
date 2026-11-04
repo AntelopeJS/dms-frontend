@@ -9,7 +9,7 @@ const SOURCE = readFileSync(new URL("./routing-fixture-routes.mjs", import.meta.
 const MANIFEST = JSON.stringify({ endpoints: [{ path: "/api/acme/events/*/*", methods: ["POST"] }], proxies: [] });
 const GENERIC = { message: "error.500.description" };
 const CROSS_ORIGIN = { error: "Forbidden", reason: "missing or untrusted Origin header" };
-const MODULE_ROUTES = 41;
+const MODULE_ROUTES = 42;
 const OWN_ROUTES = 35;
 
 /**
@@ -286,6 +286,7 @@ async function cookieChecks(ctx, server, send) {
   const renamed = await send("GET", "/api/_acme/cookie", { cookie: `prefs_${scope}=${value}` });
   const foreign = await send("GET", "/api/_zeta/cookie", { cookie: `${name}=${value}` });
   const zeta = await send("POST", "/api/_zeta/cookie");
+  const myShop = await send("POST", "/api/_myshop/cookie");
   const cleared = await send("DELETE", "/api/_acme/cookie");
   const reserved1 = await send("GET", "/api/_acme/dms-cookie");
   const reserved2 = await send("GET", "/api/_acme/session-cookie");
@@ -297,6 +298,7 @@ async function cookieChecks(ctx, server, send) {
     ctx.equal("the module reads it back through its guard", bodyJson(readBack), { prefs: { theme: "dark" }, rejected: null }),
     ctx.equal("a cookie stored under the bare name is not read", bodyJson(renamed), { prefs: null, rejected: null }),
     ctx.equal("another module cannot read it", bodyJson(foreign), { prefs: null }),
+    ctx.equal("each character of the module id outside A-Za-z0-9_- becomes a hyphen, the underscore and hyphen stay", [myShop.headers["set-cookie"]].flat()[0].replace(/=[^;]+;/, "=VALUE;"), `-acme-my_shop-x-y.prefs_${scope}=VALUE; Path=/; HttpOnly; SameSite=Lax; Secure`),
     ctx.equal("another module writes its own name", [zeta.headers["set-cookie"]].flat()[0].replace(/=[^;]+;/, "=VALUE;"), `zeta-other.prefs_${scope}=VALUE; Path=/; HttpOnly; SameSite=Lax; Secure`),
     ctx.equal("clear expires it", [cleared.headers["set-cookie"]].flat()[0], `${name}=; Path=/x; HttpOnly; SameSite=Lax; Max-Age=0; Secure`),
     ctx.equal("a dms_* name from a module that does not own sign-in, the session cookie's name and an invalid name each fail the route", [reserved1.status, reserved2.status, invalidName.status], [502, 502, 502]),

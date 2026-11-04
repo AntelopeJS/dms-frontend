@@ -1,0 +1,13 @@
+diff --git a/templates/vue/server/module-event.mjs b/templates/vue/server/module-event.mjs
+index 00a4f79..c76e984 100644
+--- a/templates/vue/server/module-event.mjs
++++ b/templates/vue/server/module-event.mjs
+@@ -185,7 +185,7 @@ function moduleCookieName(name, moduleId, authOwner) {
+       `The ${RESERVED_COOKIE_PREFIX}* cookies belong to the module that owns sign-in` +
+         `${authOwner ? ` (${authOwner})` : ""}: choose another name than ${checked}`,
+     );
+-  return `${String(moduleId).replaceAll(/[^A-Za-z0-9_-]/g, "-")}.${checked}`;
++  return `${String(moduleId).replaceAll(/[^A-Za-z0-9-]/g, "-")}.${checked}`;
+ }
+ 
+ /**

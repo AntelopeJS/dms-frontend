@@ -120,6 +120,16 @@ export const modules = [
     },
   },
   {
+    id: "@acme/my_shop-x.y",
+    priority: 3,
+    setup(/** @type {Server} */ server) {
+      server.registerRoute("POST", "/api/_myshop/cookie", (/** @type {Event} */ event) => {
+        event.cookies.writeSealed("prefs", { theme: "light" });
+        return {};
+      });
+    },
+  },
+  {
     id: "beta/same",
     priority: 10,
     setup(/** @type {Server} */ server) {

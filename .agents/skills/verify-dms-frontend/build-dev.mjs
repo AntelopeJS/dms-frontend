@@ -5,6 +5,8 @@ import { at } from "./json.mjs";
 import { listedWorkspaces } from "./cli-json.mjs";
 import { startCliBackend } from "./cli-backend.mjs";
 import { serviceToken } from "./web.mjs";
+import { startFakeBackend } from "./proxy-satellite.mjs";
+import { fakeAuthBackend, signIn } from "./proxy-signin.mjs";
 import { writeModule } from "./workspace-fixtures.mjs";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { freePort, holdPort, observe, runCli, scratch, startCli } from "./cli-run.mjs";
@@ -361,6 +363,40 @@ export const journeys = [
         } finally {
           await server.stop("SIGINT");
         }
+      } finally {
+        await backend.close();
+      }
+    },
+  },
+  {
+    id: "dev-cookie-secure",
+    title: "the dev server's session cookie is not Secure unless DMS_COOKIE_SECURE says so",
+    entryPoint: "POST /auth/login on ajs dms dev, with DMS_COOKIE_SECURE unset, false and true",
+    async run(/** @type {Context} */ ctx) {
+      const { handler } = fakeAuthBackend((request, response) => {
+        const path = (request.url ?? "").split("?")[0];
+        response.writeHead(path === "/dms/frontend" ? 200 : path === "/dms/frontend/ready" ? 204 : 404, { "content-type": "application/json" });
+        response.end(path === "/dms/frontend" ? JSON.stringify({ version: 2, modules: [] }) : "{}");
+      });
+      const backend = await startFakeBackend(handler);
+      try {
+        /** @type {Record<string, string | undefined>} */
+        const lines = {};
+        for (const [label, value] of [["unset", undefined], ["false", "false"], ["true", "true"]]) {
+          const server = await dev(ctx, backend.url, { home: scratch(ctx, `home-${label}`), env: { DMS_COOKIE_SECURE: value } });
+          try {
+            const login = await signIn({ url: server.local.replace(/\/$/, "") });
+            lines[label] = login.cookies.find((cookie) => cookie.startsWith("dms_session_"));
+          } finally {
+            await server.stop("SIGINT");
+          }
+        }
+        const flags = (/** @type {string | undefined} */ line) => (line ?? "").split("; ").slice(1);
+        observe(ctx, "the session cookie", lines, [
+          ctx.equal("unset: HttpOnly and SameSite=Lax, no Secure", flags(lines.unset), ["Path=/", "HttpOnly", "SameSite=Lax"]),
+          ctx.equal("false: no Secure", flags(lines.false), ["Path=/", "HttpOnly", "SameSite=Lax"]),
+          ctx.equal("true: Secure", flags(lines.true), ["Path=/", "HttpOnly", "SameSite=Lax", "Secure"]),
+        ]);
       } finally {
         await backend.close();
       }

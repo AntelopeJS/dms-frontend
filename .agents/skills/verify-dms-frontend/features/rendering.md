@@ -52,7 +52,6 @@ How the frontend server answers a page: a document request is rendered on the se
 - `key-hints-are-drawn-for-the-keyboard-the-server-was-told`: the `dms-keyboard-platform` cookie draws `⌘K` or `Ctrl K` in the server render.
 - `the-payload-is-escaped-so-data-cannot-close-its-script`: a user named `a</script><b>x/y` reaches the payload as `a\u003C\/script>\u003Cb>x\/y`, with no raw angle bracket and no unescaped slash.
 - `choosing-a-tab-changes-only-the-query-in-the-browser`: choosing a tab of the Filter tabs page changes the URL's query, keeps the document and sends the frontend server no request for the page.
-- `a-query-only-banner-link-stays-in-the-browser`: finding (draft `dms-frontend-banner-link-asks-the-server-for-a-query-only-visit`): the Pending banner link of the query-filters page asks the frontend server for the page, although the page says a query-only visit sends no request. Fails today.
 
 ## How to get to it (user POV)
 
@@ -83,3 +82,5 @@ Journeys read the session cookie from the signed-in tab and request the frontend
 - `router.reload({ only: ["shared"] })` and the menu-changed reload (6.2): the headers behind it are driven (`partial-reloads-send-only-the-props-they-name`); the DMS's own trigger is the dms skill's.
 - Hot reload (6.1): development only; the run serves a production build.
 - `router.reload({ only })`, `data`, `headers` and `onStart` forcing a request on a query-only visit, and leaving an error page always going through the server (6.2 Navigations that stay in the browser): no playground page calls the router with those options. The query-only side is driven (`choosing-a-tab-changes-only-the-query-in-the-browser`); the banner links of the playground pages do send an Inertia request, so they are not used as the example.
+- A query-only link that is none of `useDmsRouter().push({ query })`, `navigateDms` or `DmsLink` (6.2): the playground's banner actions (`BannerBlock` through Nuxt UI's Inertia `Link`) ask the server for the page, which the page does not promise for them. This is a question for AntelopeJS/dms, who owns the banner: draft `dms-banner-links-are-inertia-visits-that-ask-the-server`. The documented side is driven by `choosing-a-tab-changes-only-the-query-in-the-browser`.
+

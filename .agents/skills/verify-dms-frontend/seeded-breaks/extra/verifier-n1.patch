@@ -1,0 +1,15 @@
+diff --git a/templates/vue/ssr-renderer.ts b/templates/vue/ssr-renderer.ts
+index d279b61..46b43df 100644
+--- a/templates/vue/ssr-renderer.ts
++++ b/templates/vue/ssr-renderer.ts
+@@ -119,9 +119,7 @@ function stringifyPayload(payload: DmsPayload): string {
+ 
+ function payloadScript(payload: DmsPayload): string {
+   // Escaped like Inertia's page object, so that no value can end the script.
+-  const value = stringifyPayload(payload)
+-    .replaceAll("/", "\\/")
+-    .replaceAll("<", "\\u003c");
++  const value = stringifyPayload(payload);
+   return `<script id="${DMS_PAYLOAD_ID}" type="application/json">${value}</script>`;
+ }
+ 
