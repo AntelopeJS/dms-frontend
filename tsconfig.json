@@ -21,5 +21,10 @@
     "incremental": true,
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "include": ["./src/**/*.ts"]
+  "include": ["./src/**/*.ts"],
+  "references": [
+    {
+      "path": "./tsconfig.templates.json"
+    }
+  ]
 }
