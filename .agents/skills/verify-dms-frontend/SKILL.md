@@ -1,6 +1,6 @@
 ---
 name: verify-dms-frontend
-description: "Drive the AntelopeJS DMS frontend renderer (@antelopejs/dms-frontend: the `ajs dms` CLI, the Vue renderer with Vite, Inertia and server-side rendering, the frontend server with its sessions, backend proxy, icons and e-mails) the way an operator and a visitor do, by serving this checkout as the dashboard of the dms playground on free ports with its own MongoDB database and a mail sink, and post a verdict with evidence. Use to prove a change to AntelopeJS/dms-frontend works before merge, to verify a PR, or to check that a seeded break or a seeded one-way door is caught."
+description: "Drive the AntelopeJS DMS frontend renderer (@antelopejs/dms-frontend: the `ajs dms` CLI, the Vue renderer with Vite, Inertia and server-side rendering, the frontend server with its sessions, backend proxy, icons and e-mails) the way an operator and a visitor do, by serving this checkout as the dashboard of the dms playground on free ports with its own MongoDB database and a mail sink, and post a verdict with evidence. Use to prove a change to AntelopeJS/dms-frontend works before merge, or to verify a PR."
 ---
 
 # Verify dms-frontend
@@ -12,7 +12,7 @@ This repository is the renderer, not a module: it has no backend or playground. 
 `dms-control` is the bin of `@antelopejs/dms` (`packages/dms/bin/dms-control.mjs`), from a dms checkout with Node 24. `verify.config.ts` names the playground in `DMS_PLAYGROUND` (default `~/code/dms/packages/dms/playground`) and `renderer: "."`.
 
 ```bash
-C="node $DMS/packages/dms/bin/dms-control.mjs"   # dms-control from AntelopeJS/dms#743 or later
+C="node $DMS/packages/dms/bin/dms-control.mjs"   # dms-control from @antelopejs/dms 0.17.0 or later
 $C                       # lists every command
 ```
 
@@ -77,30 +77,20 @@ A journey that starts its own frontend server stops it itself; `down` stops ever
    - when the covered behaviour changed, or the diff changed the check's own files, `formal` also runs the check on the base. A rule the base broke counts as fixed only when HEAD reports it passing; a rule the base broke that HEAD does not report at all fails the verdict.
 
    `--all` runs the checks that do not cover the diff too, without gating. The check needs no running playground: `node .agents/skills/formal-backend-exposure/check.mjs --full` gives the same rules on HEAD, without the base comparison.
-6. **One-way doors.** The section comes right after the result line and is mandatory. `$C doors` prints the `One-way-door:` line for the diff. No journey contains a Format door (the next release must read the workspace this one builds), so a Format row says so.
+6. **One-way doors.** The section comes right after the result line and is mandatory. `$C doors` prints the `One-way-door:` line for the diff.
 7. **Result.** FAIL if any of rules 1 to 6 fail. PASS+NOTES when something is not verified or needs the owner's attention. PASS otherwise.
 
 Write `$RUN/evidence/judgement.json` (`doors`, `docs`, `notVerified`, `attention`, `verifier`), then `$C verdict "$RUN" --pr <n>` and, from a thread that did not write the change, `$C publish "$RUN" --pr <n>`.
 
 ## Trust
 
-The skill is not Trusted yet. It becomes Trusted when it catches every seeded break and flags every seeded door, passes a shadow run of 10 consecutive agent PRs, and its last maintain pass is newer than the last change to the repository or its `@antelopejs` dependencies and at most 30 days old.
-
-## Seeded breaks and doors
-
-```bash
-$C seeded smoke rendering icons
-$C doors "$PWD/.agents/skills/verify-dms-frontend/seeded-doors/exposure.patch"
-```
-
-`seeded-breaks/<feature>.patch` is one minimal product bug per feature; `seeded` builds a control and a patched worktree of this checkout, builds the renderer in each, runs the feature's journeys in each, and prints `CAUGHT` with the journeys that caught it, or `MISSED`. A break counts only when a journey that passes in the control fails one of its checks with the patch. `seeded-doors/<kind>.patch` holds one change per door kind.
+The skill is not Trusted yet. It becomes Trusted when it passes a shadow run of 10 consecutive agent PRs, and its last maintain pass is newer than the last change to the repository or its `@antelopejs` dependencies and at most 30 days old.
 
 ## Gotchas
 
 - The dashboard renders on the server and hydrates after `load`; a click that lands first does nothing. `signin.mjs` waits and tries again.
 - The dashboard's realtime stream never lets the network go idle on a signed-in page; wait for an element, not `networkidle`.
 - The run serves a production build, so development behaviour (hot reload, the `x-dms-route-owner` header, the e-mail bundle watcher) is not driven.
-- A step whose check fails because the backend or the dashboard stopped answering must not count as a catch: a `seeded` MISSED or a journey with no failing check is a harness error.
 
 ## Feature map
 

@@ -15,5 +15,6 @@
     "eslint/max-lines-per-function for tests/**/*.test.ts": 1,
     "typescript/no-floating-promises for tests/**/*.test.mts": 1,
     "typescript/no-floating-promises for tests/**/*.test.ts": 1
-  }
+  },
+  "agentFiles": true
 }
