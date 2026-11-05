@@ -43,6 +43,7 @@ The production path of the CLI: `build` into a workspace, `start` serving it aga
 - `dev-server`: ready block, loopback only, `x-dms-route-owner` for backend proxies, renderer assets and pages, the `clientUrl` the backend is given, the workspace keyed on the url, the ready report, the warning for a project module the backend does not register, SIGINT exits 130.
 - `dev-ports-and-host`: a busy port moves to the next free one and the warning names both, `HOST=0.0.0.0` opens the LAN.
 - `dev-port-zero`: `-p 0` is not reported as a busy port. Fails today: finding below.
+- `dev-cookie-secure`: the session cookie `POST /auth/login` sets on `ajs dms dev` has no `Secure` with `DMS_COOKIE_SECURE` unset or `false`, and has it with `true`.
 - `dev-backend-down`: the cached manifest stands in with a warning, `--offline` and `DMS_OFFLINE` use it without asking, a 401 and a url that never served a manifest fail.
 - `dev-discovery`: `.antelope/dev.json` of the enclosing project (found from a subfolder), the workspace keyed on the project and kept when the backend changes port, `DMS_API_BASE_URL` in `./.env` ends discovery, a stale, malformed or api-less registry fails with its message, the first file found decides.
 - `dev-public-files`: a file added to a module's `public/` is served at once, and not any more once removed.
@@ -74,7 +75,6 @@ The journeys build into a workspace of their own and start `start` and `dev` aga
 | The terminal form of the Vite warnings (`→ Run with --verbose to list them`) and of the progress lines | The journeys capture pipes. The terminal rendering is covered by `script` only for `workspaces`, not for a build. |
 | `ANTELOPEJS_LAUNCH_ENV` as `-e` (4.configuration) | The fixture project has one environment, so a run cannot tell the variable from the option; `-e` itself is driven in `build-arguments`. |
 | `DMS_API_PUBLIC_BASE_URL` in `envOverrides` (7.deployment/1.production, 3.cli/4.start) | It is a variable of the DMS demo template's `envOverrides`, not of this package; the mechanism, `start` evaluating the project again with its own environment, is driven in `start-secrets-and-environment`. |
-| `DMS_COOKIE_SECURE` default of `dev` | The development server runs over HTTP and sets no `Secure` cookie, which `dev-server` observes in its ready block only. The `start` default and the variable are driven in `sessions/sessions-cookie`. |
 | A module's private options warnings (`<module>: private option x is not set`), `DMS_PRIVATE_OPTIONS`, the module-set drift warning | Needs a module that publishes private options in a build; the playground has none. |
 | `ajs project build -e production` then `ajs dms build` in a container image, read-only file systems, the TLS reverse proxy, scaling and caching headers of `docs/7.deployment/1.production.md` | Deployment practice, not CLI behaviour; the headers are the static-files and proxy features'. `start` writing nothing is driven. |
 | Another user reading the build | Needs a second operating system user; the permission bits are asserted instead. |

@@ -10,6 +10,7 @@ covers:
   - src/fs-sync.ts
   - src/internal/built-workspace.ts
   - src/materialize.ts
+  - src/renderer-range.ts
   - src/temporary-workspace.ts
   - src/workspace-setup.ts
   - src/workspace.ts
