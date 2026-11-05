@@ -13,9 +13,9 @@ const BUILD_TIMEOUT_MS = 900_000;
 const MANIFEST_ORIGIN = "https://dashboard.example.test";
 const OVERRIDE_ORIGIN = "https://mail.example.test";
 const EMAIL_ENTRY = `export const serverEmailTemplates = { "./emails/Probe.vue": () => import("./emails/Probe.vue") };
-export const appConfig = { branding: { logo: { email: { light: "/branding/mail-logo.png" } } }, dmsMail: { tone: "email" } };
+export const appConfig = { branding: { logo: { email: { light: "/branding/mail-logo.png" } } }, dmsMail: { tone: "email", own: "email" } };
 `;
-const LAYER_CONFIG = `export default defineDmsAppConfig({ dmsMail: { tone: "layer", only: "layer" } });
+const LAYER_CONFIG = `export default defineDmsAppConfig({ dmsMail: { tone: "layer", only: "layer", own: "layer" } });
 `;
 const HIGHER_CONFIG = `export default defineDmsAppConfig({ dmsMail: { tone: "high" } });
 `;
@@ -26,7 +26,7 @@ const comments = "<!--[if mso]><table><tr><td><![endif]--><!-- keep me --><!--[i
 
 <template>
   <EBody>
-    <p>tone={{ config.dmsMail.tone }} only={{ config.dmsMail.only }}</p>
+    <p>tone={{ config.dmsMail.tone }} only={{ config.dmsMail.only }} own={{ config.dmsMail.own }}</p>
     <div v-html="comments" />
   </EBody>
 </template>
@@ -84,7 +84,7 @@ export const journeys = [
         observe(ctx, "a module's e-mail template", { probe }, [
           ctx.holds("Outlook's conditional comments and a plain comment are kept byte for byte", probe.includes(OUTLOOK), probe),
           ctx.equal("no Vue hydration comment is left", /<!--\[-->|<!--\]-->|<!---->/.test(probe), false),
-          ctx.holds("a higher-priority module's layer config overrides a lower module's e-mail appConfig and layers, and the lower module's other keys stay", probe.includes("<p>tone=high only=layer</p>"), probe.slice(probe.indexOf("<p>"), probe.indexOf("<p>") + 80)),
+          ctx.holds("a higher-priority module's layer config overrides a lower module's e-mail appConfig and layers, the lower module's other keys stay, and its e-mail appConfig wins over its own layer config", probe.includes("<p>tone=high only=layer own=email</p>"), probe.slice(probe.indexOf("<p>"), probe.indexOf("<p>") + 80)),
         ]);
         observe(ctx, "the logo's origin", { built: built.code, overridden, configured }, [
           ctx.equal("the module builds", built.code, 0),
