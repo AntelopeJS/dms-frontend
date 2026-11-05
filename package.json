@@ -1,6 +1,6 @@
 {
   "name": "@antelopejs/dms-frontend",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "description": "Frontend-agnostic loader for AntelopeJS DMS, shipping the Vue 3 renderer (Vite, Inertia, SSR)",
   "keywords": [
     "antelope",
@@ -90,8 +90,7 @@
     "semver": "^7.7.4"
   },
   "devDependencies": {
-    "@antelopejs/core": "file:.campaign/tgz/antelopejs-core-477c3b5.tgz",
-    "@antelopejs/interface-core": "file:.campaign/tgz/antelopejs-interface-core-f7df541.tgz",
+    "@antelopejs/core": "^1.20.0",
     "@antelopejs/interface-dms": "^0.10.0",
     "@antelopejs/tooling-configs": "^0.2.17",
     "@iconify/utils": "^3.1.0",
@@ -138,10 +137,6 @@
   "pnpm": {
     "patchedDependencies": {
       "@vueuse/core@14.4.0": "templates/vue/patches/@vueuse__core@14.4.0.patch"
-    },
-    "overrides": {
-      "@antelopejs/interface-core": "file:.campaign/tgz/antelopejs-interface-core-f7df541.tgz",
-      "@antelopejs/core": "file:.campaign/tgz/antelopejs-core-477c3b5.tgz"
     }
   },
   "antelopeJs": {

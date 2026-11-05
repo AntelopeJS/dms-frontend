@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/AntelopeJS/dms/main/packages/dms/frontend-vue/layers/dms-layout/public/images/antelope-logo/dark.svg">
-  <img alt="Antelope DMS" src="https://raw.githubusercontent.com/AntelopeJS/dms/main/packages/dms/frontend-vue/layers/dms-layout/public/images/antelope-logo/light.svg" data-illustration height="72">
+  <img alt="AntelopeJS DMS" src="https://raw.githubusercontent.com/AntelopeJS/dms/main/packages/dms/frontend-vue/layers/dms-layout/public/images/antelope-logo/light.svg" data-illustration height="72">
 </picture>
 
 # `@antelopejs/dms-frontend`
@@ -57,9 +57,9 @@ pnpm exec ajs dms start -b https://api.example.com -p 3001
 
 <!-- antelopejs-docs-compat:start -->
 
-| Package            | Supported     | Tested with                                      |
-| ------------------ | ------------- | ------------------------------------------------ |
-| `@antelopejs/core` | `>=1.16.0 <2` | `file:.campaign/tgz/antelopejs-core-477c3b5.tgz` |
+| Package            | Supported     | Tested with |
+| ------------------ | ------------- | ----------- |
+| `@antelopejs/core` | `>=1.16.0 <2` | `1.20.0`    |
 
 <!-- antelopejs-docs-compat:end -->
 

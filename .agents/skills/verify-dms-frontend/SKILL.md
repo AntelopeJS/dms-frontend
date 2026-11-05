@@ -19,7 +19,7 @@ $C                       # lists every command
 ## Before you launch
 
 - The dms checkout is installed and built: `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm --dir packages/dms build`, `pnpm --dir packages/dms/playground build`. `prepare` of this skill installs and builds the renderer in this checkout (`--prepare`).
-- The renderer checkout's version must satisfy the playground's `@antelopejs/dms-frontend` range. On campaign/integration the range is `>=0.10.0 <0.11.0`, the version the campaign tarballs stamp on dms-frontend (`tgz.sh`), while `package.json` says another one; `frontend-build` then fails with a range error. Never commit that version: it is the release's call. Stamp `0.10.0` in a throwaway local commit of your own and run from there.
+- The renderer checkout's version must satisfy the playground's `@antelopejs/dms-frontend` range. When it does not, `frontend-build` fails with a range error.
 - The playground loads `@antelopejs/api ^1.5.0` from the registry, which answers controller routes (every page layout, the data API) as 500 (AntelopeJS/dms#620). Point its `api` module at the api tarball of the dms checkout (`type: "local"`, `path` to `node_modules/.pnpm/@antelopejs+api@file*/node_modules/@antelopejs/api`) in your own copy of the playground until that is fixed. Journeys that open a data page fail without it.
 - `mongod` comes from `DMS_CONTROL_MONGOD`, `PATH`, or the mongodb-memory-server cache (`~/.cache/mongodb-binaries`).
 
