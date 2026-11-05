@@ -9,6 +9,33 @@ export interface DoorRule {
   why: string;
 }
 
+/**
+ * How the gate decides whether a diff changed what the covered code does:
+ * `emit` compares the JavaScript statements of the covered files on the
+ * base and on HEAD (types, comments, formatting, imports and export
+ * keywords left out); `probe` runs a command on a checkout of each, the
+ * checkout's path as last argument, and compares what it prints.
+ */
+export type Behaviour = { kind: "emit" } | { kind: "probe"; command: string[] };
+
+/**
+ * A formal check: the source files it covers, the check's own files, the
+ * command that runs it, how its output names a violated and a passing rule,
+ * how the gate decides that a diff changed the covered behaviour, and the
+ * command run on the base when it did or when the check's own files changed
+ * (`command` when absent).
+ */
+export interface FormalCheck {
+  name: string;
+  covers: string[];
+  files: string[];
+  command: string[];
+  baseCommand?: string[];
+  violation: RegExp | null;
+  passing: RegExp | null;
+  behaviour: Behaviour;
+}
+
 /** The repo-owned layer of the verification skill, read by `dms-control`. */
 export interface VerifyConfig {
   playground: string;
@@ -19,7 +46,7 @@ export interface VerifyConfig {
   smoke: string;
   smokeJourney: string;
   doors: Record<DoorKind, DoorRule | null>;
-  formal: never[];
+  formal: FormalCheck[];
 }
 
 const config: VerifyConfig = {
@@ -66,7 +93,37 @@ const config: VerifyConfig = {
       why: "the package name, its files and the release workflow claim @antelopejs/dms-frontend in the npm registry",
     },
   },
-  formal: [],
+  formal: [
+    {
+      name: "formal-backend-exposure",
+      covers: [
+        "templates/vue/server.mjs",
+        "templates/vue/icon-api.mjs",
+        "templates/vue/server/auth/backend.mjs",
+        "templates/vue/server/auth/client-ip.mjs",
+        "templates/vue/server/auth/session.mjs",
+        "templates/vue/server/backend-proxies.mjs",
+        "templates/vue/server/backend-request.mjs",
+        "templates/vue/server/icons.mjs",
+        "templates/vue/server/module-routes.mjs",
+        "templates/vue/server/module-server.mjs",
+        "templates/vue/server/page-props.mjs",
+        "templates/vue/server/path-patterns.mjs",
+        "templates/vue/server/proxy-compression.mjs",
+        "templates/vue/server/proxy-request.mjs",
+        "templates/vue/server/proxy-transfers.mjs",
+        "templates/vue/server/public-endpoints.mjs",
+        "templates/vue/server/request-routing.mjs",
+        "templates/vue/server/request-target.mjs",
+      ],
+      files: [".agents/skills/formal-backend-exposure/**"],
+      command: ["node", ".agents/skills/formal-backend-exposure/check.mjs", "--full"],
+      baseCommand: ["node", ".agents/skills/formal-backend-exposure/check.mjs"],
+      violation: /^(?:finding|BROKEN|CHANGED|HOLDS) +(\w+)/gm,
+      passing: /(?<=^holds +(?:\w+, )*)(\w+)(?=,| \()/gm,
+      behaviour: { kind: "emit" },
+    },
+  ],
 };
 
 export default config;

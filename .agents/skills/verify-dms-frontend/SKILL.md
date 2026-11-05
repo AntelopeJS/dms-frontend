@@ -45,6 +45,7 @@ Do not drive a run that fails doctor. It also fails a renderer `dist` older than
 $C plan                                  # the diff mapped to features; unmapped surfaces
 $C journey "$RUN" smoke
 $C journey "$RUN" rendering [journey-id...]
+$C formal "$RUN"                         # the formal checks that cover the diff (verdict rule 5)
 ```
 
 - Each feature file in [features/](features/README.md) lists its source globs (`covers:`), its docs pages (`docs:`), its journeys and its "Not driven" rows; the journeys are in `journeys/<feature>.mjs`, with the helpers they share in `web.mjs` (HTTP against the frontend server, the Inertia page object and the payload) and `signin.mjs` (sign-in that survives a click before hydration), plus the helpers each feature names.
@@ -54,7 +55,7 @@ $C journey "$RUN" rendering [journey-id...]
 
 ## Evidence
 
-Everything goes under `$RUN/evidence/`: `<feature>/<journey>/NN-<step>/` with `action.json`, `url.txt`, `aria.yml` and `screenshot.png` for a browser step, `request.json` and `response.json` for an API step, `checks.json` for every step that checks something, and `result.json` plus `<feature>/feature.json` per journey. Read the evidence before you judge a PASS: a check passing proves only what it asserts.
+Everything goes under `$RUN/evidence/`: `formal/<name>/` for each formal check, `<feature>/<journey>/NN-<step>/` with `action.json`, `url.txt`, `aria.yml` and `screenshot.png` for a browser step, `request.json` and `response.json` for an API step, `checks.json` for every step that checks something, and `result.json` plus `<feature>/feature.json` per journey. Read the evidence before you judge a PASS: a check passing proves only what it asserts.
 
 ## Cleanup
 
@@ -70,7 +71,12 @@ A journey that starts its own frontend server stops it itself; `down` stops ever
 2. **Unmapped surface fails the verdict.** User-facing code is `src/**`, `templates/**` (not the patches and the dotfile templates), `skills/**` and `package.json`. `map` checks the whole tree.
 3. **Every registered journey of a feature in `run` must have run and passed.** Known findings stay as failing journeys (see the feature files' Gotchas): they fail a verdict only when the diff touches their feature.
 4. **Docs.** Judge every `docs:` page of each touched feature against what the journeys showed.
-5. **Formal checks.** None.
+5. **Formal checks.** `verify.config.ts` lists each formal check with the files it covers and its own files. Today there is one, [`formal-backend-exposure`](../formal-backend-exposure/SKILL.md): it runs the real frontend server on generated deployments and visits, and checks which requests reach the backend, on which path, with whose session and headers. Run `$C formal "$RUN"` before the verdict. It runs the full configuration of every check whose covered files or own files the diff touches, records it under `evidence/formal/<name>/`, and decides with `emit` whether the diff changed what the covered code does:
+   - a covered check that did not run, or exits non-zero (a tool error, or a check that no longer matches its record), fails the verdict;
+   - recorded findings (F1 and F2 of `formal-backend-exposure`) fail the verdict only when the covered behaviour changed; when it did not, the verdict reports them as known findings;
+   - when the covered behaviour changed, or the diff changed the check's own files, `formal` also runs the check on the base. A rule the base broke counts as fixed only when HEAD reports it passing; a rule the base broke that HEAD does not report at all fails the verdict.
+
+   `--all` runs the checks that do not cover the diff too, without gating. The check needs no running playground: `node .agents/skills/formal-backend-exposure/check.mjs --full` gives the same rules on HEAD, without the base comparison.
 6. **One-way doors.** The section comes right after the result line and is mandatory. `$C doors` prints the `One-way-door:` line for the diff. No journey contains a Format door (the next release must read the workspace this one builds), so a Format row says so.
 7. **Result.** FAIL if any of rules 1 to 6 fail. PASS+NOTES when something is not verified or needs the owner's attention. PASS otherwise.
 
