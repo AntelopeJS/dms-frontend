@@ -1,0 +1,11 @@
+diff --git a/templates/vue/email-markup.ts b/templates/vue/email-markup.ts
+index 254227a..5cf22e0 100644
+--- a/templates/vue/email-markup.ts
++++ b/templates/vue/email-markup.ts
+@@ -10,5 +10,5 @@ const SSR_MARKERS =
+ 
+ /** Removes Vue's hydration markers from server-rendered email markup. */
+ export function stripSsrMarkers(html: string): string {
+-  return html.replace(SSR_MARKERS, "");
++  return html;
+ }

@@ -1,0 +1,11 @@
+--- a/templates/vue/server/static-files.mjs
++++ b/templates/vue/server/static-files.mjs
+@@ -101,7 +101,7 @@
+   }
+   const since = Date.parse(request.headers["if-modified-since"] ?? "");
+   return (
+-    !Number.isNaN(since) && Math.floor(stats.mtimeMs / 1000) * 1000 <= since
++    !Number.isNaN(since) && Math.floor(stats.mtimeMs / 1000) * 1000 < since
+   );
+ }
+ 

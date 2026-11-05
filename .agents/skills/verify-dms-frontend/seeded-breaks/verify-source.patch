@@ -1,0 +1,13 @@
+diff --git a/src/verify-source-sources.ts b/src/verify-source-sources.ts
+index a5df51c..22e22e4 100644
+--- a/src/verify-source-sources.ts
++++ b/src/verify-source-sources.ts
+@@ -124,7 +124,7 @@ function shellArgument(path: string): string {
+  * when it is one, otherwise its frontend-vue directory.
+  */
+ function defaultModuleRoot(projectDir: string): string {
+-  const root = [projectDir, join(projectDir, CORE_LAYER_DIRECTORY)].find(
++  const root = [join(projectDir, CORE_LAYER_DIRECTORY)].find(
+     (candidate) => existsSync(join(candidate, FRONTEND_ENTRY)),
+   );
+   if (root) return root;

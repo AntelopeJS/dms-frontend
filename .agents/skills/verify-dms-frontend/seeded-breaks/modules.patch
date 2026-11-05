@@ -1,0 +1,13 @@
+diff --git a/templates/vue/server/public-options.mjs b/templates/vue/server/public-options.mjs
+index 3e4c49c..172c731 100644
+--- a/templates/vue/server/public-options.mjs
++++ b/templates/vue/server/public-options.mjs
+@@ -56,7 +56,7 @@ export function publicOptionsOf(registry) {
+  * browser's setup of the modules; nothing when the build's options stand.
+  */
+ export function publicOptionsScript() {
+-  if (!RUNTIME_PUBLIC_OPTIONS) return "";
++  if (RUNTIME_PUBLIC_OPTIONS) return "";
+   const value = JSON.stringify(RUNTIME_PUBLIC_OPTIONS).replaceAll(
+     "<",
+     "\\u003c",

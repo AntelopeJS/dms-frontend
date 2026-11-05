@@ -1,0 +1,11 @@
+--- a/templates/vue/server/request-routing.mjs
++++ b/templates/vue/server/request-routing.mjs
+@@ -14,7 +14,7 @@
+  *   | { kind: "not-found" }} RequestOwner
+  */
+ 
+-const PAGE_METHODS = new Set(["GET", "HEAD"]);
++const PAGE_METHODS = new Set(["GET", "HEAD", "POST"]);
+ 
+ /**
+  * The owner of a request.

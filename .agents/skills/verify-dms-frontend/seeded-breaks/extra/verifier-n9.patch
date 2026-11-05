@@ -1,0 +1,13 @@
+diff --git a/src/update-check.ts b/src/update-check.ts
+index 10c2a80..dbcd394 100644
+--- a/src/update-check.ts
++++ b/src/update-check.ts
+@@ -51,7 +51,7 @@ export const UPDATE_CHECK_TIMEOUT_MS = 3000;
+ export const NO_UPDATE_CHECK_FLAG = "--no-update-check";
+ 
+ /** Flags whose output a script is the most likely to parse. */
+-const SILENT_FLAGS = ["--help", "-h", "--version", "-v", "--json"];
++const SILENT_FLAGS = ["--help", "-h", "--version", "-v"];
+ 
+ /**
+  * Options whose value is the next argv token. A flag spelled in that

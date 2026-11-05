@@ -1,0 +1,13 @@
+diff --git a/src/commands/dev-action.ts b/src/commands/dev-action.ts
+index e8666ea..413c991 100644
+--- a/src/commands/dev-action.ts
++++ b/src/commands/dev-action.ts
+@@ -326,7 +326,7 @@ function runDevServer(
+       ...process.env,
+       PORT: String(session.port),
+       DMS_DEV: "true",
+-      DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "false",
++      DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE ?? "true",
+       DMS_API_BASE_URL: session.backendUrl,
+       DMS_BOOTSTRAP_SECRET: session.bootstrapSecret,
+       DMS_SESSION_SECRET: session.sessionSecret,

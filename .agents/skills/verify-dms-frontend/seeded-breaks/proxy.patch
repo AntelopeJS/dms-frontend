@@ -1,0 +1,11 @@
+--- a/templates/vue/server/proxy-transfers.mjs
++++ b/templates/vue/server/proxy-transfers.mjs
+@@ -59,7 +59,7 @@
+ function declaresTooLargeBody(request, maxBodyBytes) {
+   return (
+     maxBodyBytes !== undefined &&
+-    Number(request.headers["content-length"] ?? 0) > maxBodyBytes
++    Number(request.headers["content-length"] ?? 0) >= maxBodyBytes
+   );
+ }
+ 

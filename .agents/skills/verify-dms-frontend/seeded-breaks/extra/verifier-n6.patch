@@ -1,0 +1,13 @@
+diff --git a/src/locale-files.ts b/src/locale-files.ts
+index 8d00824..10902c9 100644
+--- a/src/locale-files.ts
++++ b/src/locale-files.ts
+@@ -123,7 +123,7 @@ export function readLocaleFile(path: string): LocaleMessages {
+   const problems = messageProblems(value, "");
+   if (problems.length) {
+     const reason = [
+-      `${problems.length} message(s) vue-i18n cannot compile:`,
++      `${problems.length} message(s) failed to compile:`,
+       ...problems.map(describeProblem),
+     ].join("\n");
+     throw new InvalidLocaleFileError(path, reason);

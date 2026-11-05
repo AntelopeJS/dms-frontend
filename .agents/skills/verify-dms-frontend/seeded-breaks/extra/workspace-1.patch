@@ -1,0 +1,13 @@
+diff --git a/src/commands/clean-action.ts b/src/commands/clean-action.ts
+index 407549c..cbf855f 100644
+--- a/src/commands/clean-action.ts
++++ b/src/commands/clean-action.ts
+@@ -100,7 +100,7 @@ async function confirmCleanAll(
+     message: "Continue?",
+     flag: YES_FLAG,
+     answer: options.yes || undefined,
+-    defaultAnswer: false,
++    defaultAnswer: true,
+   });
+ }
+ 

@@ -6,6 +6,10 @@ const TEST_SUITE_ENTRIES = ["tests/**/*.test.ts"];
 /** Every file of the suite under tests/, helpers and fixtures included. */
 const TEST_SUITE_FILES = ["tests/**/*.ts"];
 
+/** The formal checks that `dms-control formal` runs, with the files they import. */
+const FORMAL_CHECK_ENTRIES = [".agents/skills/formal-*/check.mjs"];
+const FORMAL_CHECK_FILES = [".agents/skills/formal-*/*.mjs"];
+
 /**
  * Templates are compiled inside the consumer's project, against its
  * dependency graph (vite, the Vue plugins, the generated modules). Analysing
@@ -25,8 +29,8 @@ const SHIPPED_TEMPLATE_DEPENDENCIES = [
 ];
 
 export default antelopeKnipConfig({
-  entry: TEST_SUITE_ENTRIES,
-  project: TEST_SUITE_FILES,
+  entry: [...TEST_SUITE_ENTRIES, ...FORMAL_CHECK_ENTRIES],
+  project: [...TEST_SUITE_FILES, ...FORMAL_CHECK_FILES],
   ignore: CONSUMER_COMPILED_TEMPLATES,
   ignoreDependencies: SHIPPED_TEMPLATE_DEPENDENCIES,
 });

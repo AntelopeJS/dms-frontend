@@ -1,0 +1,16 @@
+diff --git a/templates/vue/email-renderer.ts b/templates/vue/email-renderer.ts
+index be7ee66..c583017 100644
+--- a/templates/vue/email-renderer.ts
++++ b/templates/vue/email-renderer.ts
+@@ -41,10 +41,10 @@ const orderedRegistries = moduleRegistry.modules
+  * configs applied to them.
+  */
+ const emailAppConfigs = moduleRegistry.modules.flatMap((module) => [
+-  registries[`/frontend-modules/${module.id}/dms.email.ts`]?.appConfig ?? {},
+   ...appConfigs
+     .filter((layer) => layer.module === module.id)
+     .map((layer) => layer.config),
++  registries[`/frontend-modules/${module.id}/dms.email.ts`]?.appConfig ?? {},
+ ]);
+ 
+ function templateEntries(): Array<[string, () => Promise<EmailModule>]> {

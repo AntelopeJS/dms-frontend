@@ -1,0 +1,13 @@
+diff --git a/templates/vue/server/page-props.mjs b/templates/vue/server/page-props.mjs
+index 15ff418..55fc710 100644
+--- a/templates/vue/server/page-props.mjs
++++ b/templates/vue/server/page-props.mjs
+@@ -13,7 +13,7 @@ export const SHARED_PROP = "shared";
+  * reloads it sooner, and the backend checks access on every request whatever
+  * the menu shows.
+  */
+-export const SHARED_PROP_TTL_MS = 5 * 60 * 1000;
++export const SHARED_PROP_TTL_MS = 60 * 1000;
+ const SITE_LAYOUT_PATH = "/dms/sitelayout";
+ const NOT_FOUND = 404;
+ 
