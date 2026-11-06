@@ -90,9 +90,9 @@
     "semver": "^7.7.4"
   },
   "devDependencies": {
-    "@antelopejs/core": "^1.20.0",
+    "@antelopejs/core": "^1.21.0",
     "@antelopejs/interface-dms": "^0.10.0",
-    "@antelopejs/tooling-configs": "^0.3.1",
+    "@antelopejs/tooling-configs": "^0.3.3",
     "@iconify/utils": "^3.1.0",
     "@iconify/vue": "^5.0.1",
     "@inertiajs/vue3": "^3.7.1",
@@ -122,7 +122,7 @@
     "vue-i18n": "^11.2.7"
   },
   "peerDependencies": {
-    "@antelopejs/core": ">=1.16.0 <2"
+    "@antelopejs/core": ">=1.21.0 <2"
   },
   "optionalDependencies": {
     "@oxc-parser/binding-darwin-arm64": "^0.95.0",
