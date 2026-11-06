@@ -122,7 +122,7 @@
     "vue-i18n": "^11.2.7"
   },
   "peerDependencies": {
-    "@antelopejs/core": ">=1.21.0 <2"
+    "@antelopejs/core": ">=1.16.0 <2"
   },
   "optionalDependencies": {
     "@oxc-parser/binding-darwin-arm64": "^0.95.0",
