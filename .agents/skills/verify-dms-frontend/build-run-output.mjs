@@ -7,6 +7,7 @@ import { startCliBackend } from "./cli-backend.mjs";
 import { observe, runCli, scratch } from "./cli-run.mjs";
 import { serve, snapshot, whileServing } from "./build-server.mjs";
 import { humanSize } from "./workspace-fixtures.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -79,6 +80,7 @@ export const journeys = [
     id: "build-output",
     title: "build writes the client, compressed, SSR, e-mail and server bundles in the order the page shows, reports the client entry, keeps no secret, and start serves the result",
     entryPoint: "ajs dms build --workspace <dir> from the run's playground, then ajs dms start --workspace <dir>",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const workspace = join(scratch(ctx, "built"), "workspace");
       const first = await build(ctx, workspace);

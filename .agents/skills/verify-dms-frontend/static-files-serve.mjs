@@ -5,6 +5,7 @@ import { brotliCompressSync, gzipSync } from "node:zlib";
 import { exchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
 import { privacyChecks, traversalChecks } from "./static-files-serve-privacy.mjs";
+import { standalone } from "./standalone.mjs";
 
 const CLIENT = "dist/client";
 const TEXT = Buffer.from("static file content for the verification of the production server. ".repeat(40));
@@ -215,7 +216,7 @@ export const journeys = [
     id: "static-files-serve",
     title: "built files: pre-compressed variants, MIME types, cache headers, conditional requests, and the files that stay private",
     entryPoint: "GET/HEAD of built files on a second `ajs dms start` whose client build holds known files",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await withSatellite(ctx, { backend: undefined, files: files() }, async (server) => {
         const get = (/** @type {string} */ path, /** @type {Record<string, string>} */ headers = {}, method = "GET") => exchange(server.url, { method, path, headers });
@@ -235,7 +236,7 @@ export const qualityJourneys = [
     id: "static-files-encoding-quality",
     title: "a pre-compressed copy is sent only to a client that accepts that coding",
     entryPoint: "GET of a built file with Accept-Encoding values that refuse a coding with q=0",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await withSatellite(ctx, { files: files() }, async (server) => {
         const refused = await exchange(server.url, { path: "/assets/pre.js", headers: { "accept-encoding": "br;q=0, gzip" } });

@@ -4,6 +4,7 @@ import { listedWorkspaces } from "./cli-json.mjs";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, runCli, runCliOnTerminal, sameText, scratch } from "./cli-run.mjs";
 import { META_FILE, humanSize, sha256, workspacesRoot, writeForeign, writeWorkspace } from "./workspace-fixtures.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -32,6 +33,7 @@ export const journeys = [
     id: "workspaces-listing",
     title: "workspaces lists id, backend, key, size, last use: as a table on a terminal, as tab-separated lines piped, as JSON with --json",
     entryPoint: "ajs dms workspaces, | cat, --json, in a home holding hand-written workspaces",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const empty = await runCli(ctx, ["workspaces"], { home });
@@ -137,6 +139,7 @@ export const journeys = [
     id: "clean-one-backend",
     title: "clean -b removes the workspace keyed on that url, whatever its spelling, and says what it freed; project-keyed workspaces and builds are left alone",
     entryPoint: "ajs dms clean -b <url>",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const key = "http://127.0.0.1:5999";
@@ -182,6 +185,7 @@ export const journeys = [
     id: "clean-all",
     title: "clean --all asks first: no terminal and no --yes is a usage error that removes nothing; --yes removes every workspace and lists them",
     entryPoint: "ajs dms clean --all [--yes] with and without a terminal",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const first = writeWorkspace(home, { key: "http://127.0.0.1:5010", backendUrl: "http://127.0.0.1:5010", updatedAt: ago(2 * MINUTE), padTo: 2_048 });

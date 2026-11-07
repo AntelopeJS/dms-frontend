@@ -3,6 +3,7 @@ import { brotliDecompressSync, gunzipSync, gzipSync, createGunzip } from "node:z
 import { get as httpGet } from "node:http";
 import { exchange } from "./proxy-http.mjs";
 import { observe, sleep, withSatellite } from "./proxy-satellite.mjs";
+import { standalone } from "./standalone.mjs";
 
 /**
  * @param {number} length How many bytes
@@ -290,7 +291,7 @@ export const journeys = [
     id: "proxy-answers",
     title: "the proxy compresses eligible answers by the client's qualities, leaves the rest alone, and keeps the representation headers right",
     entryPoint: "GET/HEAD through /api/** of a second `ajs dms start` whose backend answers many content types",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       /** @type {{ backendEndedAt: number | null }} */
       const timeline = { backendEndedAt: null };

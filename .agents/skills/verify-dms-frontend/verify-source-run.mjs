@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { versionOf } from "./cli-json.mjs";
 import { observe, runCli, scratch } from "./cli-run.mjs";
 import { SYNTAX_ERROR_COMPONENT, TYPE_ERROR_COMPONENT, projectFolder, writeModule, writeProject } from "./verify-source-fixtures.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -54,6 +55,7 @@ export const journeys = [
     id: "verify-source-usage",
     title: "verify-source refuses what it cannot verify before it installs anything: a core layer that is not one, no @antelopejs/dms, bad paths, an excluded release",
     entryPoint: "ajs dms verify-source with --layer, -m, --local-package and a module whose engines exclude this release",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const good = writeProject(projectFolder(ctx, "usage-ok"));
       const excluded = writeProject(projectFolder(ctx, "usage-engines"), { engines: ">=0.5.0 <0.6.0" });
@@ -94,6 +96,7 @@ export const journeys = [
     id: "verify-source-pass",
     title: "verify-source builds and type-checks a module on the core layer without a backend: every step in the page's output, exit 0, no temporary workspace left",
     entryPoint: "ajs dms verify-source from a project folder holding frontend-vue",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const fixture = writeProject(projectFolder(ctx, "pass"));
       const run = await verify(ctx, fixture.project, []);
@@ -129,6 +132,7 @@ export const journeys = [
     id: "verify-source-failures",
     title: "verify-source stops with exit 1 on a type error, a template that does not compile, or a server module that imports application code, and points at the file in the module",
     entryPoint: "ajs dms verify-source -m <module> with a faulty module, with and without --verbose",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const typed = writeProject(projectFolder(ctx, "type"), { component: TYPE_ERROR_COMPONENT });
       const syntax = writeProject(projectFolder(ctx, "syntax"), { component: SYNTAX_ERROR_COMPONENT });
@@ -160,6 +164,7 @@ export const journeys = [
     id: "verify-source-local-package",
     title: "--local-package binds a local build of a package into the workspace, and -m can be repeated",
     entryPoint: "ajs dms verify-source -m <a> -m <b> --local-package fx-lib=<dir>",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const root = join(projectFolder(ctx, "local"), "..", "local-package");
       mkdirSync(join(root, "lib"), { recursive: true });
@@ -186,6 +191,7 @@ export const journeys = [
     id: "verify-source-email-limit",
     title: "verify-source keeps the e-mail bundle under 256 KiB of JavaScript: a module that stays under passes and one that goes over fails naming the size and the limit",
     entryPoint: "ajs dms verify-source -m <module> with a dms.email.ts that carries about 90 KB and about 140 KB of JavaScript",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       /**
        * @param {string} name The project folder

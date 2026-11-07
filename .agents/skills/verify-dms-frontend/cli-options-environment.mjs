@@ -4,6 +4,7 @@ import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, runCli, runCliOnTerminal, sameText, scratch } from "./cli-run.mjs";
 import { parseJson } from "./json.mjs";
 import { EMPTY_LISTING, SECRET_32, put } from "./cli-options-flags.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -12,6 +13,7 @@ export const journeys = [
     id: "env-files",
     title: ".env.local then .env are read from the working directory only and never overwrite a variable the shell set, an empty one included",
     entryPoint: "ajs dms start with DMS_API_BASE_URL from the shell, ./.env.local, ./.env",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const base = scratch(ctx, "base");
@@ -83,6 +85,7 @@ export const journeys = [
     id: "boolean-variables",
     title: "DMS_PREPARE_STRICT is on unless empty, 0, false, no or off, in any case and with spaces",
     entryPoint: "DMS_PREPARE_STRICT=<value> ajs dms prepare, without a backend",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const off = ["", "0", "false", "no", "off", "OFF", "False", " No ", "NO"];
       const on = ["1", "true", "yes", "on", "TRUE", "2", "anything", "nope"];
@@ -104,6 +107,7 @@ export const journeys = [
     id: "update-notice",
     title: "a newer release is announced once, on stderr, after a command that succeeded on a terminal, and never for the silent cases",
     entryPoint: "~/.antelopejs/dms-frontend/update-check.json with a newer version, run on a pseudo terminal",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const notice = (latest) => `ℹ ajs dms ${latest} is available (you have`;
       /**

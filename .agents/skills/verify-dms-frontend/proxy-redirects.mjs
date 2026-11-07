@@ -1,5 +1,6 @@
 import { exchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
+import { standalone } from "./standalone.mjs";
 
 const NONE_PROXY = JSON.stringify([{ path: "/hook/**", auth: "none" }]);
 const STATUSES = [301, 302, 303, 307, 308];
@@ -31,7 +32,7 @@ export const journeys = [
     id: "proxy-redirects",
     title: "a backend redirect is never followed: its status, Location and cookies reach the browser, and a Location on a proxied backend path becomes a frontend path",
     entryPoint: "GET through /api/** and an auth none proxy of a second `ajs dms start` whose backend answers redirects",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       /** @type {import("./proxy-satellite.mjs").BackendHandler} */
       const handler = (request, response) => {
@@ -80,7 +81,7 @@ export const iconJourneys = [
     id: "proxy-redirect-icons",
     title: "a Location on a backend path that the renderer's icon endpoint answers first stays an absolute backend URL",
     entryPoint: "GET /api/redirect of a second `ajs dms start` whose backend redirects to its own /api/_dms/icons",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       /** @type {import("./proxy-satellite.mjs").BackendHandler} */
       const handler = (request, response) => {

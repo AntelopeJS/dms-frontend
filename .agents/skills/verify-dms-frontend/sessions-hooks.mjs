@@ -3,6 +3,7 @@ import { at, isNumber, numberAt, rowAt, textAt } from "./json.mjs";
 import { bodyJson, exchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
 import { cookieHeader, fakeAuthBackend, setCookies, signIn } from "./proxy-signin.mjs";
+import { standalone } from "./standalone.mjs";
 
 const source = (name) => readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
 const inertia = { "x-inertia": "true" };
@@ -38,7 +39,7 @@ export const journeys = [
     id: "sessions-hooks",
     title: "auth hooks: a refused session is renewed once and the visit retried, a signed-out visit goes to sign-in, the highest-priority module provides every hook",
     entryPoint: "Inertia visits with and without a session to a second `ajs dms start` whose backend refuses stale tokens",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       /** @type {import("./proxy-signin.mjs").FakeAuth} */
       let auth = { refreshes: [], version: 1, current: "", logins: 0, refuse: false };

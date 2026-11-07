@@ -6,6 +6,7 @@ import { docsPage } from "./cli-docs.mjs";
 import { freePort, holdPort, observe, scratch } from "./cli-run.mjs";
 import { BOOTSTRAP_SECRET, RELAY_SECRET, RENDER_SECRET, SESSION_SECRET, builtWorkspace, serve, snapshot, whileServing } from "./build-server.mjs";
 import { writeFileSync } from "node:fs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -16,6 +17,7 @@ export const journeys = [
     id: "start-ready",
     title: "start prints its ready block, serves on the port asked, reports its modules to the backend, and exits 130 on Ctrl+C",
     entryPoint: "ajs dms start -b <backend> -p <port> from the run's playground",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       try {
@@ -58,6 +60,7 @@ export const journeys = [
     id: "start-ready-report-retries",
     title: "the ready report is repeated after 2 s, then 4 s while the backend is starting, ends on any other answer, and finds a backend that comes up later",
     entryPoint: "ajs dms start against a backend that answers 503, 401, 404, or is not there yet",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const flaky = await startCliBackend();
       flaky.behaviour.ready = (index) => (index < 2 ? 503 : 204);
@@ -128,6 +131,7 @@ export const journeys = [
     id: "start-addresses-and-ports",
     title: "start binds 0.0.0.0 unless HOST says otherwise, stops on a busy port, reads PORT and ./.env, and writes nothing into the workspace",
     entryPoint: "ajs dms start with HOST, PORT, -p, a busy port and a .env in the working directory",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       try {
@@ -192,6 +196,7 @@ export const journeys = [
     id: "start-secrets-and-environment",
     title: "start names the secrets it runs without, warns when NODE_ENV is not production, and -q prints only the Local url",
     entryPoint: "ajs dms start with and without DMS_HTML_RENDER_SECRET, DMS_OAUTH_RELAY_SECRET, NODE_ENV, -q",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       const secretLines = "▲ DMS_HTML_RENDER_SECRET is not set: e-mail renders will be refused\n▲ DMS_OAUTH_RELAY_SECRET is not set: OAuth sign-in will be refused by the backend\n  → Set them in the server's environment, with the values the backend uses\n";
@@ -242,6 +247,7 @@ export const journeys = [
     id: "start-quiet",
     title: "start -q prints only the Local url once ready",
     entryPoint: "ajs dms start -q, and ANTELOPEJS_QUIET=1",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       try {
