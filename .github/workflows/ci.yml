@@ -61,10 +61,15 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-          cache: pnpm
-          cache-dependency-path: |
-            pnpm-lock.yaml
-            dms/pnpm-lock.yaml
+          package-manager-cache: false
+      - id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - id: pnpm-store-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: verify-source-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'dms/pnpm-lock.yaml') }}
+          restore-keys: verify-source-pnpm-store-
       - run: pnpm install --frozen-lockfile
       - name: Pack at the version dms requires
         run: |
@@ -102,6 +107,13 @@ jobs:
         working-directory: dms
       - run: pnpm --dir packages/dms/frontend-vue typecheck
         working-directory: dms
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.pnpm-store-cache.outputs.cache-hit != 'true'
+        run: pnpm store prune
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.pnpm-store-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-store-cache.outputs.cache-primary-key }}
 
   ubuntu:
     if: always()
