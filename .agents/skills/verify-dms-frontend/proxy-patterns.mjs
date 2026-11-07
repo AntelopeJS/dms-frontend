@@ -1,11 +1,12 @@
 import { observe, withSatellite } from "./proxy-satellite.mjs";
+import { standalone } from "./standalone.mjs";
 
 export const journeys = [
   {
     id: "proxy-pattern-forms",
     title: "a pattern with a wildcard in the middle is not /x, /x/* or /x/** and is refused with a warning",
     entryPoint: "DMS_BACKEND_PROXIES with /mid/*/leaf on a second `ajs dms start`",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await withSatellite(ctx, { env: { DMS_BACKEND_PROXIES: JSON.stringify([{ path: "/mid/*/leaf", auth: "none" }]) } }, async (server) => {
         const lines = server.log().split("\n");

@@ -1,6 +1,7 @@
 import { exchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
 import { fakeAuthBackend, signIn } from "./proxy-signin.mjs";
+import { standalone } from "./standalone.mjs";
 
 const NONE_PROXY = JSON.stringify([{ path: "/hook/**", auth: "none" }]);
 
@@ -61,7 +62,7 @@ export const journeys = [
     id: "proxy-relay",
     title: "the proxy relays the documented client headers, sets X-Forwarded-*, and never relays Cookie or Authorization",
     entryPoint: "GET through a backend proxy of a second `ajs dms start` (auth none and session), with the headers of a browser",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await withSatellite(ctx, { env: { DMS_BACKEND_PROXIES: NONE_PROXY } }, async (server) => {
         const seen = await relayRequest(server);

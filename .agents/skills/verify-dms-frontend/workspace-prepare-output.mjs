@@ -6,6 +6,7 @@ import { startCliBackend } from "./cli-backend.mjs";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, runCli, scratch } from "./cli-run.mjs";
 import { META_FILE, sha256, workspacesRoot, writeModule } from "./workspace-fixtures.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -34,6 +35,7 @@ export const journeys = [
     id: "prepare-workspace",
     title: "prepare against a backend writes a 0700 workspace keyed on the canonical url, a 0600 manifest cache, and reinstalls only with --force",
     entryPoint: "ajs dms prepare -b <url> against a backend of the journey's own",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const backend = await startCliBackend();
@@ -96,6 +98,7 @@ export const journeys = [
     id: "prepare-private-options",
     title: "a module's lifecycle scripts are stripped from its copy, and generated-server-options.json is 0600 only while it holds a private value",
     entryPoint: "ajs dms prepare -b <url> against a manifest listing a module with private options",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const moduleDir = join(scratch(ctx, "module"), "mod");

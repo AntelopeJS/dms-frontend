@@ -1,6 +1,7 @@
 import { keysOf, listAt, numberAt, parseJson, rowAt, textAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { cookieOf, get, header } from "../web.mjs";
+import { standalone } from "../standalone.mjs";
 
 /**
  * @typedef {import("../control.d.ts").JourneyContext} Ctx
@@ -38,6 +39,7 @@ export const journeys = [
     id: "the-icon-route-answers-iconify-json-from-the-installed-collections",
     title: "GET /api/_dms/icons/<prefix>.json answers Iconify JSON with the documented cache header, and refuses what it cannot serve",
     entryPoint: "GET /api/_dms/icons/lucide.json?icons=house",
+    ...standalone,
     async run(/** @type {Ctx} */ ctx) {
       const lucide = await icons(ctx, "lucide.json?icons=house,nonexistent-zzz");
       const body = parseJson(lucide.text);
@@ -71,6 +73,7 @@ export const journeys = [
     id: "the-icon-route-refuses-unknown-collections-and-bad-names",
     title: "an unknown collection answers 404 and a name outside Iconify's rule answers 400, never cached",
     entryPoint: "GET /api/_dms/icons/<prefix>.json?icons=<names>",
+    ...standalone,
     async run(/** @type {Ctx} */ ctx) {
       const unknown = await icons(ctx, "nope.json?icons=house");
       await ctx.verify("an unknown collection answers 404", [

@@ -5,6 +5,7 @@ import { extname, join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
 import { isRow, isText, listAt, numberAt, parseJson, rowAt } from "./json.mjs";
 import { observe } from "./proxy-satellite.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./control.d.ts").JourneyContext} Ctx */
 
@@ -178,7 +179,7 @@ export const journeys = [
     id: "static-files-build",
     title: "ajs dms build needs no secret and writes pre-compressed assets and a document that paints before it hydrates",
     entryPoint: "`ajs dms build --workspace <dir>` from the run's project with a bare environment and umask 022",
-    onboard: false,
+    ...standalone,
     async run(/** @type {Ctx} */ ctx) {
       const target = join(ctx.state.dir, "satellites", "build");
       rmSync(target, { recursive: true, force: true });

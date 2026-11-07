@@ -8,6 +8,7 @@ import { startFakeBackend } from "./proxy-satellite.mjs";
 import { exchange } from "./proxy-http.mjs";
 import { fakeAuthBackend, signIn } from "./proxy-signin.mjs";
 import { BUILD_TIMEOUT_MS, untimed } from "./build-run-output.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -16,6 +17,7 @@ export const journeys = [
     id: "build-arguments",
     title: "build checks DMS_ENTRY_WEIGHT_WARNING before it does anything, and reads the project and environment it is given",
     entryPoint: "DMS_ENTRY_WEIGHT_WARNING=<value> ajs dms build, --project, -e",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const cwd = scratch(ctx, "cwd");
       const values = ["abc", "-1", "NaN", "12KB"];
@@ -38,6 +40,7 @@ export const journeys = [
     id: "build-failure",
     title: "a build step that fails stops the build with exit 1 and points at the file in the module, not its copy in the workspace",
     entryPoint: "ajs dms build --project <project> with a module whose component does not compile",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const bad = writeBuildProject(buildProjectFolder(ctx, "bad"), { component: BROKEN_COMPONENT });
       const workspace = join(scratch(ctx, "ws"), "workspace");
@@ -59,6 +62,7 @@ export const journeys = [
     id: "build-entry-weight-default",
     title: "with no threshold set, a module that adds more than 50 KB of Brotli to the client entry is warned about and one that adds less is not",
     entryPoint: "ajs dms build --project <project> without DMS_ENTRY_WEIGHT_WARNING, for a module that adds about 70 KB and one that adds about 25 KB",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       /**
        * @param {string} name The project folder
@@ -97,6 +101,7 @@ export default fixture;
     id: "build-locale-error",
     title: "a locale message vue-i18n cannot compile stops the build with exit 1, names the file and the count, and --verbose adds the key and the message to write instead",
     entryPoint: "ajs dms build --project <project> with a module whose en-GB catalog holds an unescaped @",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const locales = { "billing-en-GB.json": JSON.stringify({ auth: { email: { placeholder: "first.last@example.com" } }, fine: "plain text" }) };
       const bad = writeBuildProject(buildProjectFolder(ctx, "locale"), { locales });
@@ -118,6 +123,7 @@ export default fixture;
     id: "build-locale-error-names-the-key",
     title: "the default output of a failed locale build names the key and the message to write instead, as the page shows",
     entryPoint: "ajs dms build --project <project> with a module whose en-GB catalog holds an unescaped @",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const locales = { "billing-en-GB.json": JSON.stringify({ auth: { email: { placeholder: "first.last@example.com" } } }) };
       const bad = writeBuildProject(buildProjectFolder(ctx, "locale-key"), { locales });
@@ -132,6 +138,7 @@ export default fixture;
     id: "build-access-redirect",
     title: "a page visit the backend refuses with a typed 403 goes to the path a module registered for its code, document or Inertia, and a refused destination shows the error page",
     entryPoint: "registerAccessRedirect in a built module, then GET pages the backend refuses with 403",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const entry = `import type { DmsFrontendModule } from "#dms/frontend-module";
 
@@ -198,6 +205,7 @@ export default fixture;
     id: "build-interrupt",
     title: "Ctrl+C during a build stops it with exit code 130 and says how long it ran",
     entryPoint: "ajs dms build, interrupted with SIGINT while a step runs",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const workspace = join(scratch(ctx, "ws"), "workspace");
       const cli = startCli(ctx, ["build", "-e", "docs", "--workspace", workspace], { cwd: ctx.state.runPlayground, home: ctx.state.home });

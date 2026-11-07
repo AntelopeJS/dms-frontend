@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, plain, runCli, runCliOnTerminal, sameText, scratch } from "./cli-run.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -30,6 +31,7 @@ export const journeys = [
     id: "global-options",
     title: "-q, --no-color, --verbose and their variables work before and after the command name",
     entryPoint: "ajs dms [-q|--no-color|--verbose[=channels]] <command> [...]",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       /**
@@ -114,6 +116,7 @@ export const journeys = [
     id: "exit-codes",
     title: "a usage error exits 2 with the fix on stderr, a failure exits 1, a success exits 0; ports and the session secret are checked at their limits",
     entryPoint: "ajs dms start / clean with bad input; the exit-code table of docs/3.cli/1.overview.md",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const cwd = scratch(ctx, "cwd");
       const url = "http://127.0.0.1:9";

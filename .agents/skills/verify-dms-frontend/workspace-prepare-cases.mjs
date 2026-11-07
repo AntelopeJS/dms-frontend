@@ -7,6 +7,7 @@ import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { freePort, observe, runCli, scratch } from "./cli-run.mjs";
 import { workspacesRoot, writeModule } from "./workspace-fixtures.mjs";
 import { SKIPPED_HINT, NOT_GENERATED, workspaceFor } from "./workspace-prepare-output.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -15,6 +16,7 @@ export const journeys = [
     id: "prepare-failures",
     title: "prepare without --strict warns and exits 0 whenever it cannot prepare; --strict exits 1, or 2 for a missing or invalid url",
     entryPoint: "ajs dms prepare [-b <url>] [--strict] against missing, closed, refusing and broken backends",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const closedPort = await freePort();
@@ -82,6 +84,7 @@ export const journeys = [
     id: "prepare-cache",
     title: "prepare falls back to the cached manifest when the backend is out of reach or failing, never after a refusal; --offline and DMS_OFFLINE never ask the backend",
     entryPoint: "ajs dms prepare -b <url> after a first successful run, with the backend failing, refusing, closed",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const backend = await startCliBackend();
@@ -156,6 +159,7 @@ export const journeys = [
     id: "prepare-discovered-credential",
     title: "prepare reads the development credential from .antelope/dms-dev.json for the project's own backend only, and an explicit credential always wins",
     entryPoint: "ajs dms prepare -b <url> from a folder holding .antelope/dev.json and .antelope/dms-dev.json",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const own = await startCliBackend();
@@ -209,6 +213,7 @@ export const journeys = [
     id: "prepare-trailing-slash",
     title: "a backend url with a trailing slash reaches the same endpoints as the one without",
     entryPoint: "ajs dms prepare -b <url>/ and ajs dms start -b <url>/ against a backend of the journey's own",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       const home = scratch(ctx, "home");
