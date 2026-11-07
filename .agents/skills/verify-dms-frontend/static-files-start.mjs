@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { exchange, rawExchange } from "./proxy-http.mjs";
 import { observe, sleep, startSatellite, withSatellite } from "./proxy-satellite.mjs";
+import { standalone } from "./standalone.mjs";
 
 const RETRY_FIRST_MIN_MS = 1700;
 const RETRY_FIRST_MAX_MS = 4500;
@@ -44,7 +45,7 @@ export const journeys = [
     id: "static-files-start",
     title: "start serves the build as it is, reports what it serves to the backend, and stops on SIGINT and SIGTERM",
     entryPoint: "`ajs dms start` against a backend of the test's own, from a read-only copy of the run's workspace",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const secret = ctx.state.secrets.DMS_BOOTSTRAP_SECRET;
       /** @type {unknown} */

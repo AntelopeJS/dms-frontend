@@ -1,6 +1,7 @@
 import { get as httpGet } from "node:http";
 import { exchange } from "./proxy-http.mjs";
 import { observe, sleep, withSatellite } from "./proxy-satellite.mjs";
+import { standalone } from "./standalone.mjs";
 
 const WAIT_STEP_MS = 100;
 
@@ -58,7 +59,7 @@ export const journeys = [
     id: "proxy-streams",
     title: "an event stream is relayed as written; a client that leaves closes its backend request; a broken backend stream ends only that response",
     entryPoint: "GET text/event-stream through /api/** of a second `ajs dms start`",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       /** @type {import("node:http").ServerResponse[]} */
       const open = [];

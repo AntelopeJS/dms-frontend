@@ -6,6 +6,7 @@ import { parseJson, textAt } from "./json.mjs";
 import { startFakeBackend } from "./proxy-satellite.mjs";
 import { fakeAuthBackend } from "./proxy-signin.mjs";
 import { serviceToken } from "./web.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -66,6 +67,7 @@ export const journeys = [
     id: "an-email-logo-is-on-the-public-dashboard-url-the-variable-names",
     title: "the logo of a rendered e-mail starts with DMS_CLIENT_BASE_URL when it is set, and with the project's public clientBaseUrl when it is not (the documented override of public.dms.clientBaseUrl)",
     entryPoint: "POST /api/html/render on a built module whose e-mail config sets a logo and a project whose dms config sets another clientBaseUrl",
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const project = writeBuildProject(buildProjectFolder(ctx, "email-logo"), {
         files: { "dms.email.ts": EMAIL_ENTRY, "app/app.config.ts": LAYER_CONFIG, "emails/Probe.vue": PROBE },

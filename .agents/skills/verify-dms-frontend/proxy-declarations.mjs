@@ -1,5 +1,6 @@
 import { bodyJson, exchange, rawExchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
+import { standalone } from "./standalone.mjs";
 
 const CROSS_ORIGIN = { error: "Forbidden", reason: "missing or untrusted Origin header" };
 const PROXIES = [
@@ -42,7 +43,7 @@ export const journeys = [
     id: "proxy-declarations",
     title: "backend proxy declarations: the most specific pattern wins, bad ones are ignored with a warning, the startup report lists them, and the proxied path is the normalized one",
     entryPoint: "DMS_BACKEND_PROXIES on a second `ajs dms start`, then requests with exact and malicious targets",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await withSatellite(ctx, { env: { DMS_BACKEND_PROXIES: JSON.stringify(PROXIES) } }, async (server) => {
         const log = server.log();

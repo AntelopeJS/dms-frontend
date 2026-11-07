@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { exchange, rawExchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
 import { cookieHeader, setCookies } from "./proxy-signin.mjs";
+import { standalone } from "./standalone.mjs";
 
 const HEADER_LIMIT = 16384;
 
@@ -47,7 +48,7 @@ export const journeys = [
     id: "static-files-client-errors",
     title: "a request Node refuses before any route runs gets a status and, for oversized headers, a hint in the server output",
     entryPoint: "raw requests to a second `ajs dms start`",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await withSatellite(ctx, {}, async (server) => {
         /** @type {Record<number, number>} */

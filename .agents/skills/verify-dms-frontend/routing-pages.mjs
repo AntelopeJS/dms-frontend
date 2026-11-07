@@ -4,6 +4,7 @@ import { at, keysOf, numberAt, rowAt, textAt } from "./json.mjs";
 import { bodyJson, exchange } from "./proxy-http.mjs";
 import { freePort, observe, sleep, startSatellite, withSatellite } from "./proxy-satellite.mjs";
 import { cookieHeader, setCookies } from "./proxy-signin.mjs";
+import { standalone } from "./standalone.mjs";
 
 const html = { accept: "text/html" };
 const inertia = { "x-inertia": "true" };
@@ -149,7 +150,7 @@ export const journeys = [
     id: "routing-listen",
     title: "start listens on every interface; HOST narrows it; a taken port stops the server with a message",
     entryPoint: "`ajs dms start` with and without HOST, and on a port another process holds",
-    onboard: false,
+    ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const address = externalAddress();
       await withSatellite(ctx, {}, async (server) => {
