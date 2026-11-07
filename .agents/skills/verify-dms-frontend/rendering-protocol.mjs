@@ -187,7 +187,7 @@ export const journeys = [
       /** @type {unknown[]} */
       const answered = [];
       tab.page.on("response", (/** @type {Response} */ response) => {
-        if (new URL(response.url()).pathname === "/examples/features") answered.push(response.json());
+        if (new URL(response.url()).pathname === "/examples/features") answered.push(response.json().catch((/** @type {unknown} */ error) => ({ unreadable: String(error) })));
       });
       let clicks = 0;
       while (!requests.some((request) => request.url === "/examples/features") && clicks < CLICKS) {
