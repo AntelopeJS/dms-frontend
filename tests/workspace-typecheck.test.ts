@@ -13,7 +13,8 @@ import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { writeAppConfigs } from "../src/common";
-import { isNumber, isObjectLike, isText } from "../src/internal/guards";
+import { isObjectLike, isText } from "../src/internal/guards";
+import { projectTypeErrors } from "./helpers/type-check";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templateTsconfig = join(repoRoot, "templates", "vue", "tsconfig.json");
@@ -99,25 +100,8 @@ function shippedRuntimeWorkspace(moduleFiles: Record<string, string>): string {
   return workspace;
 }
 
-function typecheck(workspace: string) {
-  try {
-    const output = execFileSync(
-      process.execPath,
-      [tsc, "--noEmit", "-p", "tsconfig.json"],
-      { cwd: workspace, encoding: "utf8" },
-    );
-    return { code: 0, output };
-  } catch (err: unknown) {
-    const code =
-      isObjectLike(err) && "status" in err && isNumber(err.status)
-        ? err.status
-        : 1;
-    const output =
-      isObjectLike(err) && "stdout" in err && isText(err.stdout)
-        ? err.stdout
-        : "";
-    return { code, output };
-  }
+function typecheck(workspace: string): string[] {
+  return projectTypeErrors(join(workspace, "tsconfig.json"));
 }
 
 describe("generated workspace typecheck", () => {
@@ -127,10 +111,12 @@ describe("generated workspace typecheck", () => {
       "probe.ts": 'export const probe: number = "not a number";\n',
     });
 
-    const result = typecheck(workspace);
-    assert.notEqual(result.code, 0, "a broken module source must fail");
-    assert.match(result.output, /frontend-modules\/fixture\/probe\.ts/);
-    assert.match(result.output, /TS2322/);
+    const [error, ...more] = typecheck(workspace);
+    assert.deepEqual(more, [], "only the broken source fails");
+    assert.match(
+      error ?? "",
+      /^frontend-modules\/fixture\/probe\.ts\(1,14\): error TS2322:/,
+    );
   });
 
   it("passes a module whose sources typecheck", () => {
@@ -141,8 +127,7 @@ describe("generated workspace typecheck", () => {
         "export function widget(): string {\n  return 'ok';\n}\n",
     });
 
-    const result = typecheck(workspace);
-    assert.equal(result.code, 0, result.output);
+    assert.deepEqual(typecheck(workspace), []);
   });
 
   it("ignores the dev-only files a module ships next to its sources", () => {
@@ -154,8 +139,7 @@ describe("generated workspace typecheck", () => {
       "dist/stale.ts": "export const stale: number = 'compiled output';\n",
     });
 
-    const result = typecheck(workspace);
-    assert.equal(result.code, 0, result.output);
+    assert.deepEqual(typecheck(workspace), []);
   });
 
   it("checks the shipped frontend runtime against Vue's public typings", () => {
@@ -164,8 +148,7 @@ describe("generated workspace typecheck", () => {
         'import { useDmsState } from "#dms/frontend-module";\nexport const probe = useDmsState("probe", () => 1);\n',
     });
 
-    const result = typecheck(workspace);
-    assert.equal(result.code, 0, result.output);
+    assert.deepEqual(typecheck(workspace), []);
   });
 
   it("checks the shipped frontend runtime against the config modules declare", () => {
@@ -174,8 +157,7 @@ describe("generated workspace typecheck", () => {
         'declare module "#dms/frontend-module" {\n  interface PublicRuntimeConfig {\n    dms: { baseURL: string };\n  }\n}\n\nexport {};\n',
     });
 
-    const result = typecheck(workspace);
-    assert.equal(result.code, 0, result.output);
+    assert.deepEqual(typecheck(workspace), []);
   });
 
   it("checks a module's server entry and server files against Node.js and #dms/server", () => {
@@ -194,8 +176,7 @@ describe("generated workspace typecheck", () => {
       '{ "compilerOptions": { "paths": { "#dms/server": ["./server-module.ts"] } } }\n',
     );
 
-    const result = typecheck(workspace);
-    assert.equal(result.code, 0, result.output);
+    assert.deepEqual(typecheck(workspace), []);
   });
 
   it("checks the generated app configs against the shipped runtime", () => {
@@ -204,8 +185,7 @@ describe("generated workspace typecheck", () => {
         'export default defineDmsAppConfig({\n  branding: { logo: "/logo.svg" },\n  ui: { colors: { primary: "green" } },\n});\n',
     });
 
-    const result = typecheck(workspace);
-    assert.equal(result.code, 0, result.output);
+    assert.deepEqual(typecheck(workspace), []);
   });
 
   it("covers Vue single-file components too", () => {

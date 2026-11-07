@@ -251,10 +251,10 @@ describe("the server secrets report", () => {
   });
 });
 
-describe("ajs dms start", () => {
+describe("ajs dms start", { concurrency: true }, () => {
   const BACKEND_URL = "http://127.0.0.1:5010";
   const PUBLIC_KEY_VARIABLE = "FIXTURE_PUBLIC_KEY";
-  const SERVER_LIFETIME_MS = 1000;
+  const SERVER_LIFETIME_MS = 3000;
 
   interface StartReport {
     secret?: string;
