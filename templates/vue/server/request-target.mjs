@@ -68,5 +68,5 @@ export function isServerRequest(request) {
  * @returns {request is ServerRequest}
  */
 export function hasOriginFormTarget(request) {
-  return isString(request.method) && isOriginForm(request.url);
+  return isOriginForm(request.url) && isString(request.method);
 }
