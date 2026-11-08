@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
 import type { ResolvedLayer } from "../src/common";
 import { materializeWorkspace } from "../src/verify-source-workspace";
@@ -24,25 +24,44 @@ function directory(prefix: string): string {
   return root;
 }
 
-/** A frontend layer named `packageName` with its own `pnpm.overrides`. */
+/** A pnpm lockfile whose `overrides:` section holds `lines`, as pnpm writes it. */
+function lockfile(...lines: string[]): string {
+  return [
+    "lockfileVersion: '9.0'",
+    "",
+    "overrides:",
+    ...lines.map((line) => `  ${line}`),
+    "",
+    "importers:",
+    "",
+    "  .: {}",
+    "",
+  ].join("\n");
+}
+
+const PROJECT = "project";
+const MODULE = "project/frontend-vue";
+
+/**
+ * A frontend layer named `packageName` at `project/frontend-vue` in a
+ * directory holding `files`, by path relative to that directory.
+ */
 function layer(
   packageName: string,
-  overrides: Record<string, string>,
-  dependencies: Record<string, string> = {},
+  files: Record<string, string> = {},
 ): ResolvedLayer {
   const root = directory("dms-layer-");
-  const path = join(root, "frontend-vue");
-  mkdirSync(path);
+  const path = join(root, MODULE);
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, "dms.frontend.ts"), "export default {};\n");
   writeFileSync(
     join(path, "package.json"),
-    JSON.stringify({
-      name: packageName,
-      version: "1.0.0",
-      dependencies,
-      pnpm: { overrides },
-    }),
+    JSON.stringify({ name: packageName, version: "1.0.0" }),
   );
-  writeFileSync(join(path, "dms.frontend.ts"), "export default {};\n");
+  for (const [file, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), content);
+  }
   return { path, packageName };
 }
 
@@ -57,47 +76,60 @@ function workspaceOverrides(
 }
 
 describe("the workspace verify-source installs", () => {
-  it("carries a layer's pnpm.overrides, resolving file: and link: paths from the layer", () => {
+  it("carries the overrides the layer's lockfile records, resolving file: and link: paths from it", () => {
     const module = layer("demo-frontend-vue", {
-      "@antelopejs/interface-database":
-        "file:../.tgz-deps/antelopejs-interface-database-abc1234.tgz",
-      "local-tool": "link:../tools/local-tool",
-      "left-pad": "1.3.0",
+      [`${MODULE}/pnpm-lock.yaml`]: lockfile(
+        "'@antelopejs/interface-database': file:../.tgz-deps/antelopejs-interface-database-abc1234.tgz",
+        "local-tool: link:../tools/local-tool",
+        "'@antelopejs/dms>@antelopejs/interface-core': 0.4.0",
+        "left-pad: 1.3.0",
+      ),
     });
     assert.deepEqual(workspaceOverrides([module]), {
       "@antelopejs/interface-database": `file:${join(module.path, "..", ".tgz-deps", "antelopejs-interface-database-abc1234.tgz")}`,
       "local-tool": `link:${join(module.path, "..", "tools", "local-tool")}`,
+      "@antelopejs/dms>@antelopejs/interface-core": "0.4.0",
       "left-pad": "1.3.0",
       "demo-frontend-vue": "workspace:*",
     });
   });
 
-  it("resolves a $<name> override to the layer's own dependency on it", () => {
-    const module = layer(
-      "demo-frontend-vue",
-      {
-        "is-odd": "$is-odd",
-        "@antelopejs/interface-core": "$@antelopejs/interface-core",
-        "is-even": "$is-even",
-      },
-      {
-        "is-odd": "^3.0.0",
-        "@antelopejs/interface-core": "file:../vendor/interface-core.tgz",
-      },
-    );
+  it("reads the lockfile of the workspace the layer belongs to, not the overrides pnpm ignores in the layer", () => {
+    const module = layer("demo-frontend-vue", {
+      [`${PROJECT}/pnpm-workspace.yaml`]: "packages:\n  - frontend-vue\n",
+      [`${PROJECT}/pnpm-lock.yaml`]: lockfile(
+        "is-number: 6.0.0",
+        "is-odd: file:.tgz-deps/is-odd-abc1234.tgz",
+      ),
+      [`${MODULE}/package.json`]: JSON.stringify({
+        name: "demo-frontend-vue",
+        pnpm: { overrides: { "is-number": "7.0.0" } },
+      }),
+    });
     assert.deepEqual(workspaceOverrides([module]), {
-      "is-odd": "^3.0.0",
-      "@antelopejs/interface-core": `file:${join(module.path, "..", "vendor", "interface-core.tgz")}`,
-      "is-even": "$is-even",
+      "is-number": "6.0.0",
+      "is-odd": `file:${join(module.path, "..", ".tgz-deps", "is-odd-abc1234.tgz")}`,
       "demo-frontend-vue": "workspace:*",
     });
   });
 
-  it("keeps the layers and --local-package links over a layer's overrides", () => {
+  it("carries no overrides for a layer whose workspace has no lockfile", () => {
+    const module = layer("demo-frontend-vue", {
+      [`${PROJECT}/pnpm-workspace.yaml`]: "packages:\n  - frontend-vue\n",
+      "pnpm-lock.yaml": lockfile("is-number: 6.0.0"),
+    });
+    assert.deepEqual(workspaceOverrides([module]), {
+      "demo-frontend-vue": "workspace:*",
+    });
+  });
+
+  it("keeps the layers and --local-package links over the overrides a layer was installed with", () => {
     const local = directory("dms-local-");
     const module = layer("demo-frontend-vue", {
-      "demo-frontend-vue": "2.0.0",
-      "@antelopejs/dms": "1.0.0",
+      [`${MODULE}/pnpm-lock.yaml`]: lockfile(
+        "demo-frontend-vue: 2.0.0",
+        "'@antelopejs/dms': 1.0.0",
+      ),
     });
     assert.deepEqual(
       workspaceOverrides([module], { "@antelopejs/dms": local }),

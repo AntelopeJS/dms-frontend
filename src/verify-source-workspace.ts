@@ -5,7 +5,8 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { parse } from "yaml";
 import {
   createFrontendModuleRegistry,
   getPackageRoot,
@@ -27,67 +28,54 @@ function removeDevelopmentDependencies(root: string): void {
   writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
 }
 
-/** The pnpm protocols whose spec is a path, relative to the package. */
+/** The pnpm protocols whose spec is a path, relative to the project. */
 const PATH_PROTOCOLS = ["file:", "link:"];
-/**
- * The fields a `$<name>` override reads the direct dependency from, each over
- * the ones before it.
- */
-const DIRECT_DEPENDENCY_FIELDS = [
-  "optionalDependencies",
-  "devDependencies",
-  "dependencies",
-];
+const LOCKFILE = "pnpm-lock.yaml";
+const WORKSPACE_FILE = "pnpm-workspace.yaml";
 
 /**
- * An override spec as the layer means it: a `$<name>` reference replaced by
- * the layer's direct dependency on `<name>`, and a relative `file:` or `link:`
- * path resolved from the layer's source. A reference to no direct dependency
- * stays as is, and fails the install as it does in the layer.
+ * The lockfile of the install that holds `directory`: the nearest one above
+ * it, short of a pnpm workspace root that has none.
  */
-function resolveLayerSpec(
-  layerPath: string,
-  directDependencies: ReadonlyMap<string, string>,
-  spec: string,
-): string {
-  const resolved =
-    (spec.startsWith("$") && directDependencies.get(spec.slice(1))) || spec;
-  const protocol = PATH_PROTOCOLS.find((prefix) => resolved.startsWith(prefix));
-  if (!protocol) return resolved;
-  const path = resolved.slice(protocol.length);
-  return isAbsolute(path) ? resolved : `${protocol}${resolve(layerPath, path)}`;
+function findLockfile(directory: string): string | undefined {
+  const lockfile = join(directory, LOCKFILE);
+  if (existsSync(lockfile)) return lockfile;
+  const parent = dirname(directory);
+  if (existsSync(join(directory, WORKSPACE_FILE)) || parent === directory)
+    return undefined;
+  return findLockfile(parent);
 }
 
 /**
- * A layer's own `pnpm.overrides` as the layer means them, since pnpm reads
- * overrides only from the workspace root.
+ * The overrides the install of a layer applied, as its lockfile records them,
+ * with each relative `file:` or `link:` path resolved from the lockfile's
+ * directory. The lockfile already holds what pnpm read from the
+ * `package.json` and `pnpm-workspace.yaml` files that apply to the layer,
+ * with every `$<name>` resolved; pnpm reads overrides only from the root of
+ * the workspace verify-source installs.
  */
 function readLayerOverrides(layer: ResolvedLayer): [string, string][] {
-  const packagePath = join(layer.path, "package.json");
-  if (!existsSync(packagePath)) return [];
-  const packageData: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
-  if (!isPlainObject(packageData) || !isPlainObject(packageData.pnpm))
-    return [];
-  const { overrides } = packageData.pnpm;
-  if (!isPlainObject(overrides)) return [];
-  const directDependencies = new Map<string, string>();
-  for (const field of DIRECT_DEPENDENCY_FIELDS) {
-    const dependencies = packageData[field];
-    if (!isPlainObject(dependencies)) continue;
-    for (const [name, range] of Object.entries(dependencies))
-      if (isText(range)) directDependencies.set(name, range);
-  }
-  return Object.entries(overrides).flatMap(
-    ([name, spec]): [string, string][] =>
-      isText(spec)
-        ? [[name, resolveLayerSpec(layer.path, directDependencies, spec)]]
-        : [],
+  const lockfile = findLockfile(layer.path);
+  if (!lockfile) return [];
+  const lock: unknown = parse(readFileSync(lockfile, "utf8"));
+  if (!isPlainObject(lock) || !isPlainObject(lock.overrides)) return [];
+  const root = dirname(lockfile);
+  return Object.entries(lock.overrides).flatMap(
+    ([name, spec]): [string, string][] => {
+      if (!isText(spec)) return [];
+      const protocol = PATH_PROTOCOLS.find((prefix) => spec.startsWith(prefix));
+      if (!protocol) return [[name, spec]];
+      const path = spec.slice(protocol.length);
+      return [
+        [name, isAbsolute(path) ? spec : `${protocol}${resolve(root, path)}`],
+      ];
+    },
   );
 }
 
 /**
  * Fills `workspace` with the renderer template and `layers`, carries the
- * layers' own `pnpm.overrides`, and points the layers and `localPackages` at
+ * overrides the layers were installed with, and points the layers and `localPackages` at
  * their copies through `pnpm.overrides`, over any layer override.
  */
 export function materializeWorkspace(
