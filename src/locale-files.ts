@@ -30,6 +30,9 @@ export class InvalidLocaleFileError extends CliError {
   }
 }
 
+/** The line breaks of the excerpt a JSON parse error quotes from the file. */
+const LINE_BREAKS = /\r?\n/g;
+
 /** The characters vue-i18n's syntax reserves, as a message writes them literally. */
 const LITERAL_ESCAPES = {
   "@": "{'@'}",
@@ -118,7 +121,7 @@ export function readLocaleFile(path: string): LocaleMessages {
     value = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new InvalidLocaleFileError(path, reason);
+    throw new InvalidLocaleFileError(path, reason.replace(LINE_BREAKS, "\\n"));
   }
   if (!isLocaleValue(value) || !isMessageGroup(value)) {
     throw new InvalidLocaleFileError(

@@ -120,6 +120,21 @@ describe("a locale file that is not a JSON object", () => {
     });
   }
 
+  it("is named on one line when its JSON does not parse", () => {
+    const path = locale("abc\ndef");
+    assert.throws(
+      () => readLocaleFile(path),
+      (error) => {
+        assert.ok(error instanceof InvalidLocaleFileError, String(error));
+        assert.equal(
+          problemText(error),
+          `✖ Invalid locale file ${path}: Unexpected token 'a', "abc\\ndef" is not valid JSON\n`,
+        );
+        return true;
+      },
+    );
+  });
+
   it("is read as before when it holds an object", () => {
     assert.deepEqual(
       readLocaleFile(locale('{"greeting":"Hello {name}","nested":{"a":"b"}}')),
