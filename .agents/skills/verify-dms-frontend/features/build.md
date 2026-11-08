@@ -21,6 +21,7 @@ docs:
   - docs/3.cli/2.dev.md
   - docs/3.cli/3.build.md
   - docs/3.cli/4.start.md
+  - docs/4.configuration.md
   - docs/7.deployment/1.production.md
 ---
 
