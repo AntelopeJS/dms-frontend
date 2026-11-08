@@ -29,11 +29,38 @@ function removeDevelopmentDependencies(root: string): void {
 
 /** The pnpm protocols whose spec is a path, relative to the package. */
 const PATH_PROTOCOLS = ["file:", "link:"];
+/**
+ * The fields a `$<name>` override reads the direct dependency from, each over
+ * the ones before it.
+ */
+const DIRECT_DEPENDENCY_FIELDS = [
+  "optionalDependencies",
+  "devDependencies",
+  "dependencies",
+];
 
 /**
- * A layer's own `pnpm.overrides`, with each relative `file:` or `link:` path
- * resolved from the layer's source, since pnpm reads overrides only from the
- * workspace root.
+ * An override spec as the layer means it: a `$<name>` reference replaced by
+ * the layer's direct dependency on `<name>`, and a relative `file:` or `link:`
+ * path resolved from the layer's source. A reference to no direct dependency
+ * stays as is, and fails the install as it does in the layer.
+ */
+function resolveLayerSpec(
+  layerPath: string,
+  directDependencies: ReadonlyMap<string, string>,
+  spec: string,
+): string {
+  const resolved =
+    (spec.startsWith("$") && directDependencies.get(spec.slice(1))) || spec;
+  const protocol = PATH_PROTOCOLS.find((prefix) => resolved.startsWith(prefix));
+  if (!protocol) return resolved;
+  const path = resolved.slice(protocol.length);
+  return isAbsolute(path) ? resolved : `${protocol}${resolve(layerPath, path)}`;
+}
+
+/**
+ * A layer's own `pnpm.overrides` as the layer means them, since pnpm reads
+ * overrides only from the workspace root.
  */
 function readLayerOverrides(layer: ResolvedLayer): [string, string][] {
   const packagePath = join(layer.path, "package.json");
@@ -43,19 +70,18 @@ function readLayerOverrides(layer: ResolvedLayer): [string, string][] {
     return [];
   const { overrides } = packageData.pnpm;
   if (!isPlainObject(overrides)) return [];
+  const directDependencies = new Map<string, string>();
+  for (const field of DIRECT_DEPENDENCY_FIELDS) {
+    const dependencies = packageData[field];
+    if (!isPlainObject(dependencies)) continue;
+    for (const [name, range] of Object.entries(dependencies))
+      if (isText(range)) directDependencies.set(name, range);
+  }
   return Object.entries(overrides).flatMap(
-    ([name, spec]): [string, string][] => {
-      if (!isText(spec)) return [];
-      const protocol = PATH_PROTOCOLS.find((prefix) => spec.startsWith(prefix));
-      if (!protocol) return [[name, spec]];
-      const path = spec.slice(protocol.length);
-      return [
-        [
-          name,
-          isAbsolute(path) ? spec : `${protocol}${resolve(layer.path, path)}`,
-        ],
-      ];
-    },
+    ([name, spec]): [string, string][] =>
+      isText(spec)
+        ? [[name, resolveLayerSpec(layer.path, directDependencies, spec)]]
+        : [],
   );
 }
 

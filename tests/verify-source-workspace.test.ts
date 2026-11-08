@@ -28,6 +28,7 @@ function directory(prefix: string): string {
 function layer(
   packageName: string,
   overrides: Record<string, string>,
+  dependencies: Record<string, string> = {},
 ): ResolvedLayer {
   const root = directory("dms-layer-");
   const path = join(root, "frontend-vue");
@@ -37,6 +38,7 @@ function layer(
     JSON.stringify({
       name: packageName,
       version: "1.0.0",
+      dependencies,
       pnpm: { overrides },
     }),
   );
@@ -66,6 +68,27 @@ describe("the workspace verify-source installs", () => {
       "@antelopejs/interface-database": `file:${join(module.path, "..", ".tgz-deps", "antelopejs-interface-database-abc1234.tgz")}`,
       "local-tool": `link:${join(module.path, "..", "tools", "local-tool")}`,
       "left-pad": "1.3.0",
+      "demo-frontend-vue": "workspace:*",
+    });
+  });
+
+  it("resolves a $<name> override to the layer's own dependency on it", () => {
+    const module = layer(
+      "demo-frontend-vue",
+      {
+        "is-odd": "$is-odd",
+        "@antelopejs/interface-core": "$@antelopejs/interface-core",
+        "is-even": "$is-even",
+      },
+      {
+        "is-odd": "^3.0.0",
+        "@antelopejs/interface-core": "file:../vendor/interface-core.tgz",
+      },
+    );
+    assert.deepEqual(workspaceOverrides([module]), {
+      "is-odd": "^3.0.0",
+      "@antelopejs/interface-core": `file:${join(module.path, "..", "vendor", "interface-core.tgz")}`,
+      "is-even": "$is-even",
       "demo-frontend-vue": "workspace:*",
     });
   });
