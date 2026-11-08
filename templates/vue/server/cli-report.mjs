@@ -40,6 +40,23 @@ export async function reportReady(address, port) {
   );
 }
 
+/** The `ANTELOPEJS_QUIET` values that leave a run verbose, as `@antelopejs/core` reads them. */
+const DISABLED_FLAG_VALUES = ["0", "false"];
+
+/**
+ * Prints the routing summary, unless the run is quiet: `-q` given to `ajs` or
+ * `ajs dms` reaches the server as `ANTELOPEJS_QUIET`, and a quiet ready server
+ * prints only its `Local` url.
+ *
+ * @param {readonly string[]} lines What `routingReport` returned
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function reportRouting(lines, env = process.env) {
+  const quiet = env.ANTELOPEJS_QUIET;
+  if (quiet && !DISABLED_FLAG_VALUES.includes(quiet.toLowerCase())) return;
+  for (const line of lines) console.log(line);
+}
+
 /**
  * The server cannot listen: a port taken by another process, an address this
  * host does not have. Reported instead of Node's unhandled-error dump, then

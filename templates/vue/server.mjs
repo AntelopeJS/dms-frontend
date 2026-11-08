@@ -17,6 +17,7 @@ import { handleClientError } from "./server/client-error.mjs";
 import {
   reportListenError,
   reportReady,
+  reportRouting,
   reportStartError,
 } from "./server/cli-report.mjs";
 import { publicBuildFile } from "./server/built-files.mjs";
@@ -543,11 +544,10 @@ if (
 }
 
 /** Prints who owns which paths, once the server is up. */
-async function reportRouting() {
+async function reportServerModules() {
   try {
     const modules = await loadServerModules(await developmentServer());
-    for (const line of routingReport(modules.proxies, modules.routes.length))
-      console.log(line);
+    reportRouting(routingReport(modules.proxies, modules.routes.length));
   } catch (error) {
     console.error("DMS server modules failed to load", error);
   }
@@ -573,6 +573,6 @@ async function announceReady() {
     throw new TypeError("The DMS server is not listening on a port");
   const { address, port } = listening;
   await reportReady(address, port);
-  await reportRouting();
+  await reportServerModules();
   if (process.env.DMS_DEV === "true") watchEmailBundle();
 }
