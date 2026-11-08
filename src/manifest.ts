@@ -118,11 +118,14 @@ export function displayUrl(url: string | URL): string {
 
 /**
  * The URL of an endpoint of the backend. The command line rejects a URL fetch
- * cannot use, but a discovered backend never went through that check.
+ * cannot use, but a discovered backend never went through that check. A
+ * trailing slash of the backend URL is dropped, so `http://host/` and
+ * `http://host` reach the same endpoint.
  */
 export function backendEndpoint(backendUrl: string, path: string): URL {
   try {
-    return new URL(`${parseBackendUrl(backendUrl)}${path}`);
+    const base = parseBackendUrl(backendUrl).replace(/\/+$/, "");
+    return new URL(`${base}${path}`);
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
     throw new CliError(
