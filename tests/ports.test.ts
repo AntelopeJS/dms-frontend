@@ -31,6 +31,7 @@ describe("reserveFreePort", () => {
     try {
       assert.notEqual(reserved.port, 0);
       assert.ok(reserved.port > 0);
+      assert.equal(reserved.isFallback, false);
     } finally {
       await reserved.release();
     }
@@ -42,6 +43,7 @@ describe("reserveFreePort", () => {
     const reserved = await reserveFreePort(port);
     try {
       assert.equal(reserved.port, port);
+      assert.equal(reserved.isFallback, false);
     } finally {
       await reserved.release();
     }
@@ -54,6 +56,7 @@ describe("reserveFreePort", () => {
       try {
         assert.notEqual(reserved.port, port);
         assert.ok(reserved.port > port && reserved.port <= port + 20);
+        assert.equal(reserved.isFallback, true);
       } finally {
         await reserved.release();
       }
