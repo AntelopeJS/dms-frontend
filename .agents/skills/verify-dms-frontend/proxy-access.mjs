@@ -4,12 +4,16 @@ import { observe, withSatellite } from "./proxy-satellite.mjs";
 import { fakeAuthBackend, signIn } from "./proxy-signin.mjs";
 
 const CROSS_ORIGIN = { error: "Forbidden", reason: "missing or untrusted Origin header" };
-const NONE_PROXY = JSON.stringify([{ path: "/hook/**", auth: "none" }]);
+const NONE_PROXY = JSON.stringify([
+  { path: "/hook/**", auth: "none" },
+  { path: "/api/acme/open/**", auth: "none" },
+]);
 
 const MANIFEST_FILE = JSON.stringify({
   endpoints: [
     { path: "/api/acme/events/*/*", methods: ["POST", "put"], headers: ["X-Acme-Secret"] },
     { path: "/api/acme/default/*" },
+    { path: "/api/acme/open/hook", methods: ["PUT"], headers: ["x-acme-open"] },
   ],
   proxies: [{ module: "acme-backend", path: "/webhooks/acme/**", auth: "none" }],
 });
@@ -235,11 +239,20 @@ async function checkAuthNone(ctx, server, login) {
     none[method] = { status: answer.status, authorization: seen.headers.authorization ?? null, cookie: seen.headers.cookie ?? null, origin: seen.headers.origin };
   }
   const bare = await exchange(server.url, { method: "POST", path: "/webhooks/acme/event", body: "x" });
-  observe(ctx, "auth none: no Origin is needed and the session is never sent", { none, bare: shortAnswer(bare) }, [
+  const signed = { cookie: login.cookie, origin: "https://evil.example", "x-acme-open": "s3cret", "x-acme-other": "dropped" };
+  const hook = await exchange(server.url, { method: "PUT", path: "/api/acme/open/hook", headers: signed, body: "{}" });
+  const seenHook = server.backend.to("/api/acme/open/hook").at(-1)?.headers ?? {};
+  const other = await exchange(server.url, { method: "PUT", path: "/api/acme/open/other", headers: signed, body: "{}" });
+  const seenOther = server.backend.to("/api/acme/open/other").at(-1)?.headers ?? {};
+  const openHook = { status: hook.status, open: seenHook["x-acme-open"] ?? null, other: seenHook["x-acme-other"] ?? null, authorization: seenHook.authorization ?? null };
+  const openOther = { status: other.status, open: seenOther["x-acme-open"] ?? null };
+  observe(ctx, "auth none: no Origin is needed and the session is never sent", { none, bare: shortAnswer(bare), openHook, openOther }, [
     ctx.equal("every state-changing method is proxied without the own Origin", Object.values(none).map((entry) => entry.status), [200, 200, 200, 200]),
     ctx.equal("the signed-in browser's session is never sent", Object.values(none).map((entry) => [entry.authorization, entry.cookie]), [[null, null], [null, null], [null, null], [null, null]]),
     ctx.equal("the Origin is relayed as received", Object.values(none).map((entry) => entry.origin), ["https://evil.example", "https://evil.example", "https://evil.example", "https://evil.example"]),
     ctx.equal("a proxy declared in the manifest by a backend module works without Origin", bare.status, 200),
+    ctx.equal("a public endpoint under it keeps its declared header, and only that one, without the session", openHook, { status: 200, open: "s3cret", other: null, authorization: null }),
+    ctx.equal("a path under it that is no public endpoint relays no declared header", openOther, { status: 200, open: null }),
   ]);
 }
 
