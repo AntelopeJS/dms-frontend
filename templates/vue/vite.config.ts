@@ -267,6 +267,7 @@ export default defineConfig({
     paintBeforeHydrate(),
     ...vitePlugins(registry.modules, frontendBuilds),
   ],
+  worker: { plugins: () => vitePlugins(registry.modules, frontendBuilds) },
   resolve: {
     // `@iconify/vue` keeps its API providers in module state: `main.ts` and
     // Nuxt UI's `Icon` must share one copy for the same-origin provider to apply.
