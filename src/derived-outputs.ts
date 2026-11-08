@@ -15,7 +15,7 @@ import {
 } from "./asset-roots";
 import { frontendLayerTypePaths } from "./layer-aliases";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
-import { readShippingVersion } from "./project-modules";
+import { readShippingPackage } from "./project-modules";
 import { FrontendModuleOptions, ResolvedLayer } from "./workspace";
 
 import {
@@ -40,6 +40,12 @@ export interface FrontendModuleRegistryEntry {
   packageName?: string;
   /** The version of the package the module ships in, when it has one. */
   version?: string;
+  /**
+   * The package the module ships in, whose `src` is backend code that no
+   * frontend file may import. Absent when the module's source directory has
+   * no named package above it.
+   */
+  backendPackage?: string;
   root: string;
   priority: number;
   entry?: string;
@@ -89,11 +95,13 @@ export function createFrontendModuleRegistry(
     const buildEntry = join(layer.path, FRONTEND_BUILD_ENTRY);
     const serverEntry = join(layer.path, SERVER_MODULE_ENTRY);
     const options = layer.options ?? {};
+    const shipping = readShippingPackage(layer.sourcePath ?? layer.path);
     return {
       id: getLayerSafeName(layer),
       name: layer.name ?? layer.packageName,
       packageName: layer.packageName,
-      version: readShippingVersion(layer.sourcePath ?? layer.path),
+      version: shipping.version,
+      backendPackage: shipping.name,
       root: getLayerWorkspacePath(workspaceDir, layer),
       priority: layer.priority ?? 0,
       entry: existsSync(sourceEntry) ? FRONTEND_MODULE_ENTRY : undefined,

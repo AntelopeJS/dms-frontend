@@ -36,7 +36,7 @@ import {
   moduleSetFingerprint,
   reportFrontendReady,
 } from "../module-set";
-import { readShippingVersion } from "../project-modules";
+import { readShippingPackage } from "../project-modules";
 import { setUpWorkspace } from "./workspace-task";
 import { serverNodeOptions } from "../node-options";
 
@@ -250,7 +250,7 @@ function reportServed(session: DevSession, setup: DevSetup): Promise<boolean> {
     session.backendUrl,
     setup.layers.map((layer) => ({
       name: layer.name ?? layer.path,
-      version: readShippingVersion(layer.path),
+      version: readShippingPackage(layer.path).version,
     })),
     session.bootstrapSecret,
   );

@@ -11,6 +11,7 @@ import {
 } from "vite";
 import { clientCodeSplitting, onBuildLog } from "./client-chunking.mjs";
 import { recordEntryWeight } from "./entry-weight.mjs";
+import { rejectBackendSources } from "./backend-boundary.mjs";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
 import { uiInertiaPage } from "./ui-inertia-page.mjs";
 import { uiKbd } from "./ui-kbd.mjs";
@@ -29,6 +30,7 @@ interface FrontendModuleRegistryEntry {
   id: string;
   name?: string;
   packageName?: string;
+  backendPackage?: string;
   root: string;
   priority: number;
 }
@@ -45,6 +47,9 @@ const registry = JSON.parse(
   readFileSync(registryPath, "utf8"),
 ) as FrontendModuleRegistry;
 const moduleRoots = registry.modules.map((module) => module.root);
+const backendPackages = registry.modules.flatMap((module) =>
+  module.backendPackage === undefined ? [] : [module.backendPackage],
+);
 const frontendSourceRoots = moduleRoots.flatMap((root) => {
   const layersRoot = resolve(root, "layers");
   if (!existsSync(layersRoot)) return [root];
@@ -175,6 +180,9 @@ export default defineConfig({
     // Fails a client build that imports a dms.server.ts or a file under a
     // module's server/ directory, however it is imported.
     rejectServerSourcesInClient(moduleRoots),
+    // Fails a build, a worker build or a dev request that resolves a file
+    // under the src of the package that ships a module.
+    rejectBackendSources(backendPackages),
     // What each module adds to the client entry, which `ajs dms build` reports.
     recordEntryWeight(registry.modules),
     {
