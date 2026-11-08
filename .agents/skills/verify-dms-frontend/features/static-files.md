@@ -25,7 +25,7 @@ docs:
 ## Sub-features
 
 - `static-files-serve`: the `.br`, `.gz` or plain variant by `Accept-Encoding`, `immutable` under `/assets/` and `no-cache` elsewhere, weak ETags from size and mtime, `304` by tag (weak, strong, list, `*`) and by date (equal, later, one second earlier, garbage, tag first), `HEAD`, 26 MIME types, dot files, `.vite/` and its compressed copies, `/.well-known/`, traversal forms.
-- `static-files-encoding-quality`: finding, see Gotchas.
+- `static-files-encoding-quality`: a coding refused with `q=0` is never sent; `br;q=0, gzip` gets the `.gz` copy and `gzip;q=0` the plain file.
 - `static-files-start`: a read-only workspace stays byte-identical, the ready report (method, path, credential, modules, version), its retries at about 2 s and 6 s, a refused credential ends them, HTTP/1.1 only, `SIGINT` and `SIGTERM`, the session secret at 31 and 32 characters, and no build.
 - `static-files-build`: a build with no variable exits 0, every compressible file of 1 KiB or more has `.br` and `.gz` that decode to it, the stylesheet precedes the low-priority entry script, the entry weight line matches the files, and no secret is written.
 - `static-files-dev`: owner-only modes under umask 022, 14 private paths answer 403, loopback only, the entry stylesheet first, a Vite error is a 500.
@@ -72,7 +72,6 @@ dms-control journey "$RUN" static-files
 
 ## Gotchas
 
-- `static-files-encoding-quality` fails on purpose: `Accept-Encoding: br;q=0, gzip` is answered with Brotli and `gzip;q=0` with gzip. Issue: AntelopeJS/dms-frontend#277.
 - `SIGINT` ends the server with code 130 and `SIGTERM` with 143 (the signal's conventional code); only `SIGTERM` is named in the message.
 - A workspace given with `--workspace` is created readable by others (a build that ships with its project holds no secret); only the loader-home workspace of `dev` is owner-only, which is what `static-files-dev` asserts.
 - `static-files-build` and `static-files-dev` need the pnpm store of the run (`npm_config_store_dir`) and take one to two minutes.

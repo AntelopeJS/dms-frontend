@@ -9,6 +9,7 @@ import { addressOf } from "./helpers/net";
 const FONT = Buffer.from("wOF2 font bytes");
 const SCRIPT = "export const probe = 1;\n".repeat(64);
 const SCRIPT_BROTLI = Buffer.from("brotli bytes");
+const SCRIPT_GZIP = Buffer.from("gzip bytes");
 const ONE_DAY_MS = 86_400_000;
 
 describe("the files of the build", () => {
@@ -27,6 +28,9 @@ describe("the files of the build", () => {
     await writeFile(join(root, "fonts", "Face.woff2"), FONT);
     await writeFile(join(root, "assets", "app-abc123.js"), SCRIPT);
     await writeFile(join(root, "assets", "app-abc123.js.br"), SCRIPT_BROTLI);
+    await writeFile(join(root, "assets", "app-abc123.js.gz"), SCRIPT_GZIP);
+    await writeFile(join(root, "assets", "style-def456.css"), SCRIPT);
+    await writeFile(join(root, "assets", "style-def456.css.gz"), SCRIPT_GZIP);
     await mkdir(join(root, ".vite"));
     await writeFile(join(root, ".vite", "manifest.json"), "{}");
     server = createServer((request, response) => {
@@ -119,6 +123,29 @@ describe("the files of the build", () => {
     });
     assert.equal(crossed.status, 200);
     await crossed.body?.cancel();
+  });
+
+  it("sends the precompressed copy the client wants most, never one it refused with q=0", async () => {
+    const answers = [
+      ["app-abc123.js", "br;q=0, gzip", "gzip"],
+      ["app-abc123.js", "gzip;q=0", null],
+      ["app-abc123.js", "br;q=0.5, gzip", "gzip"],
+      ["app-abc123.js", "*;q=0, gzip", "gzip"],
+      ["app-abc123.js", "br, gzip, identity;q=0", "br"],
+      ["app-abc123.js", "identity, br;q=0.5, gzip;q=0.5", null],
+      ["style-def456.css", "br, gzip;q=0.5", "gzip"],
+    ] as const;
+    for (const [path, accepted, encoding] of answers) {
+      const response = await fetch(`${base}/assets/${path}`, {
+        method: "HEAD",
+        headers: { "accept-encoding": accepted },
+      });
+      assert.equal(
+        response.headers.get("content-encoding"),
+        encoding,
+        `${path} with Accept-Encoding: ${accepted}`,
+      );
+    }
   });
 
   it("answers a HEAD request without a body", async () => {

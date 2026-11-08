@@ -1,5 +1,6 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname } from "node:path";
+import { acceptedCodings } from "./content.mjs";
 
 /**
  * What a build or a module's `public/` directory may hold. A type missing
@@ -48,22 +49,26 @@ const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
  */
 const REVALIDATED_CACHE = "no-cache";
 
+/** The suffix the build gives the copy of a file in each coding. */
+const VARIANT_SUFFIXES = { br: ".br", gzip: ".gz" };
+
 /** @param {string} path */
 const isFile = (path) => existsSync(path) && statSync(path).isFile();
 
 /**
- * The precompressed variant of `file` the client accepts, if the build wrote one.
+ * The precompressed variant of `file` the client wants most among those the
+ * build wrote, or `file` itself.
  *
  * @param {string} file
  * @param {import("node:http").IncomingMessage} request
  */
 function acceptedVariant(file, request) {
-  const accepted = request.headers["accept-encoding"] ?? "";
-  if (accepted.includes("br") && isFile(`${file}.br`))
-    return { file: `${file}.br`, encoding: "br" };
-  if (accepted.includes("gzip") && isFile(`${file}.gz`))
-    return { file: `${file}.gz`, encoding: "gzip" };
-  return { file, encoding: undefined };
+  const encoding = acceptedCodings(request).find((coding) =>
+    isFile(`${file}${VARIANT_SUFFIXES[coding]}`),
+  );
+  return encoding
+    ? { file: `${file}${VARIANT_SUFFIXES[encoding]}`, encoding }
+    : { file, encoding: undefined };
 }
 
 /**
