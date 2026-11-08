@@ -9,6 +9,8 @@ export const ICON_API_PATH = "/api/_dms/icons/";
 /**
  * The `@iconify/vue` API provider serving every icon the client bundle lacks
  * from `origin`, instead of `api.iconify.design` and its fallbacks.
+ *
+ * @param {string} origin
  */
 export function sameOriginIconProvider(origin) {
   return { resources: [origin], path: ICON_API_PATH };

@@ -104,12 +104,12 @@ async function loadCollection(root, prefix) {
  */
 function collection(root, prefix) {
   const key = join(root, prefix);
-  if (!collections.has(key)) {
-    const loading = loadCollection(root, prefix);
-    loading.catch(() => collections.delete(key));
-    collections.set(key, loading);
-  }
-  return collections.get(key);
+  const cached = collections.get(key);
+  if (cached) return cached;
+  const loading = loadCollection(root, prefix);
+  loading.catch(() => collections.delete(key));
+  collections.set(key, loading);
+  return loading;
 }
 
 /**
@@ -128,7 +128,7 @@ export async function installedCollections(root) {
       .filter((prefix) => ICON_NAME.test(prefix))
       .map((prefix) => collection(root, prefix)),
   );
-  return loaded.filter(Boolean);
+  return loaded.filter((loadedCollection) => loadedCollection !== undefined);
 }
 
 /**
@@ -218,7 +218,7 @@ export function isIconRequest(pathname) {
  * @returns {Promise<IconAnswer>}
  */
 export async function iconResponse(root, method, url) {
-  if (!READ_METHODS.has(method)) {
+  if (method === undefined || !READ_METHODS.has(method)) {
     const response = errorResponse(405, "Method not allowed");
     response.headers.allow = [...READ_METHODS].join(", ");
     return response;
@@ -238,7 +238,7 @@ export async function iconResponse(root, method, url) {
  * Serve an Iconify API query from the collections installed in the workspace,
  * the same way under `ajs dms dev` and `ajs dms start`: both run this server.
  *
- * @param {import("node:http").IncomingMessage} request
+ * @param {import("./request-target.mjs").ServerRequest} request
  * @param {import("node:http").ServerResponse} response
  */
 export async function handleIcons(request, response) {

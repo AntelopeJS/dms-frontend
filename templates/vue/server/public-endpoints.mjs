@@ -96,7 +96,7 @@ export function readDeclaredPublicEndpoints(file = DECLARED_ENDPOINTS_FILE) {
  * when the proxies are resolved.
  *
  * @param {unknown} entry
- * @returns {entry is { path: string, auth?: "session" | "none", maxBodyBytes?: number }}
+ * @returns {entry is { path: string, auth?: "session" | "none", maxBodyBytes?: number, module?: unknown }}
  */
 function isProxyDeclaration(entry) {
   return (
@@ -284,7 +284,9 @@ export function allowedPublicEndpoints(
 ) {
   return [...declared, ...environmentEndpoints(declaration)].flatMap(
     (entry) => {
-      const endpoint = compilePublicEndpoint(entry);
+      const endpoint = isRecord(entry)
+        ? compilePublicEndpoint(entry)
+        : undefined;
       if (!endpoint)
         console.warn(
           `Ignoring malformed public endpoint ${JSON.stringify(entry)}: expected ` +
@@ -338,7 +340,7 @@ export function matchPublicEndpoint(
  * it reaches a public endpoint, which is why the proxy never sends a public
  * endpoint the session: a cross-site form posting to it acts as nobody.
  *
- * @param {import("node:http").IncomingMessage} request The incoming request
+ * @param {import("./request-target.mjs").ServerRequest} request The incoming request
  * @param {ReadonlySet<string>} safeMethods Methods that change nothing and need no Origin
  * @param {import("./backend-proxies.mjs").BackendProxy} proxy The backend proxy the request reached
  * @returns `{ anonymous, headers, isRefused }`

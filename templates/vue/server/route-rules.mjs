@@ -1,5 +1,11 @@
 import { compilePathPattern, PATH_PATTERN_FORMS } from "./path-patterns.mjs";
-import { isNonNullObject, isObjectLike, isString } from "./type-guards.mjs";
+import {
+  isNonNullObject,
+  isNumber,
+  isObjectLike,
+  isRecord,
+  isString,
+} from "./type-guards.mjs";
 
 /** @typedef {import("../server-module.ts").DmsRouteRule} RouteRule */
 /** @typedef {RouteRule & { headers: Record<string, string> }} MergedRouteRule */
@@ -37,7 +43,7 @@ const RESERVED_HEADERS = new Set([
 
 /** @param {unknown} value */
 function isSeconds(value) {
-  return Number.isSafeInteger(value) && value >= 0;
+  return isNumber(value) && Number.isSafeInteger(value) && value >= 0;
 }
 
 /** @param {unknown} headers */
@@ -63,7 +69,7 @@ function headersRejection(headers) {
 function cacheRejection(cache) {
   if (cache === undefined || cache === false) return undefined;
   if (
-    !isNonNullObject(cache) ||
+    !isRecord(cache) ||
     cache.public !== true ||
     !isSeconds(cache.maxAge) ||
     (cache.staleWhileRevalidate !== undefined &&
@@ -86,7 +92,7 @@ function cacheRejection(cache) {
 export function ruleRejection(pattern, rule) {
   if (!compilePathPattern(pattern))
     return `the pattern is not ${PATH_PATTERN_FORMS}`;
-  if (!isNonNullObject(rule)) return "it is not an object";
+  if (!isRecord(rule)) return "it is not an object";
   if (rule.ssr !== undefined && rule.ssr !== false)
     return "ssr is either left out or false";
   return headersRejection(rule.headers) ?? cacheRejection(rule.cache);

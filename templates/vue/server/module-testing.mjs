@@ -2,7 +2,9 @@ import { createServer } from "node:http";
 import { RequestBodyError, UpstreamError } from "./auth/backend.mjs";
 import { UNEXPECTED_ERROR_BODY } from "./backend-response.mjs";
 import { createServerModules, handleModuleRoute } from "./module-server.mjs";
-import { failureStatus } from "./request-failure.mjs";
+import { failureStatus, writeBadRequest } from "./request-failure.mjs";
+import { isServerRequest } from "./request-target.mjs";
+import { isString } from "./type-guards.mjs";
 
 /**
  * What the frontend server answers an API request whose handler failed.
@@ -52,6 +54,10 @@ export async function serveModuleRoutes(declarations, deployment = {}) {
     warn: (message) => warnings.push(message),
   });
   const server = createServer((request, response) => {
+    if (!isServerRequest(request)) {
+      writeBadRequest(response);
+      return;
+    }
     const { pathname } = new URL(request.url, "http://frontend.local");
     handleModuleRoute(request, response, pathname, modules)
       .then((answered) => {
@@ -61,16 +67,25 @@ export async function serveModuleRoutes(declarations, deployment = {}) {
         /** @param {unknown} error */ (error) => writeFailure(error, response),
       );
   });
-  await new Promise((settle) => server.listen(0, "127.0.0.1", settle));
-  const { port } = server.address();
+  /** @type {Promise<void>} */
+  const listening = new Promise((settle) =>
+    server.listen(0, "127.0.0.1", settle),
+  );
+  await listening;
+  const address = server.address();
+  if (address === null || isString(address))
+    throw new TypeError("The module test server is not listening on a port");
+  const { port } = address;
+  /** @returns {Promise<void>} */
+  const close = () =>
+    new Promise((settle) => {
+      server.closeAllConnections();
+      server.close(() => settle());
+    });
   return {
     url: `http://127.0.0.1:${port}`,
     modules,
     warnings,
-    close: () =>
-      new Promise((settle) => {
-        server.closeAllConnections();
-        server.close(() => settle());
-      }),
+    close,
   };
 }

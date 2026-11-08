@@ -11,6 +11,7 @@ const HEADER_OVERFLOW_HINT_INTERVAL_MS = 60_000;
 
 let lastHeaderOverflowHint = -Infinity;
 
+/** @param {number} maxHeaderSize */
 function warnHeaderOverflow(maxHeaderSize) {
   const now = Date.now();
   if (now - lastHeaderOverflowHint < HEADER_OVERFLOW_HINT_INTERVAL_MS) return;
@@ -32,6 +33,10 @@ function warnHeaderOverflow(maxHeaderSize) {
  *
  * Once a response went out on this connection, a status line would land in the
  * middle of it.
+ *
+ * @param {NodeJS.ErrnoException} error
+ * @param {import("node:stream").Duplex & { bytesWritten?: number }} socket
+ * @param {number} maxHeaderSize
  */
 export function handleClientError(error, socket, maxHeaderSize) {
   let response = BAD_REQUEST_RESPONSE;

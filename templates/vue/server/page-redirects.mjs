@@ -17,7 +17,7 @@ export function redirectToHomepage(request, response, pathname) {
 }
 
 /**
- * @param {import("node:http").IncomingMessage} request
+ * @param {import("./request-target.mjs").ServerRequest} request
  * @param {import("node:http").ServerResponse} response
  * @param {import("./page-props.mjs").PageProps} props
  * @param {import("./module-server.mjs").ServerModules["serverAuth"]} auth

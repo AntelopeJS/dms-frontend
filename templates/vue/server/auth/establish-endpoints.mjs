@@ -71,8 +71,8 @@ export function allowedEstablishEndpoints(
     .map((entry) => entry.trim());
   return [
     ...new Set(
-      [...declared, ...fromEnvironment].filter(
-        (entry) => isString(entry) && BACKEND_API_PATH.test(entry),
+      [...declared, ...fromEnvironment].flatMap((entry) =>
+        isString(entry) && BACKEND_API_PATH.test(entry) ? [entry] : [],
       ),
     ),
   ];

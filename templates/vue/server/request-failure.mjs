@@ -38,7 +38,7 @@ export function failureStatus(error) {
  */
 export function isResponseGone(error, response) {
   return (
-    error?.code === "ERR_STREAM_PREMATURE_CLOSE" ||
+    (isObjectLike(error) && error.code === "ERR_STREAM_PREMATURE_CLOSE") ||
     response.destroyed ||
     response.writableEnded ||
     response.headersSent

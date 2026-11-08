@@ -6,6 +6,7 @@ export const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
  * @returns {string | undefined}
  */
 function originOf(url) {
+  if (url === undefined) return undefined;
   try {
     return new URL(url).origin;
   } catch {

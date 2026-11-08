@@ -65,7 +65,10 @@ import * as icons from "./server/icons.mjs";
 import { ssrRenderer } from "./server/ssr-module.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
 import { proxy } from "./server/proxy-request.mjs";
-import { refuseForeignTarget } from "./server/request-target.mjs";
+import {
+  hasOriginFormTarget,
+  isServerRequest,
+} from "./server/request-target.mjs";
 import { SERVER_OPTIONS } from "./server/proxy-transfers.mjs";
 import {
   createInertiaPage,
@@ -75,10 +78,12 @@ import {
   isFrontendVisit,
   redirectFrontendVisit,
   handleAssetVersionMismatch,
+  isSsrPage,
 } from "./server/inertia.mjs";
 export * from "./server/inertia.mjs";
 
 /** @typedef {import("node:http").IncomingMessage} IncomingMessage */
+/** @typedef {import("./server/request-target.mjs").ServerRequest} ServerRequest */
 /** @typedef {import("node:http").ServerResponse} ServerResponse */
 /** @typedef {import("vite").ViteDevServer} ViteDevServer */
 /** @typedef {import("./server/inertia.mjs").InertiaPage} InertiaPage */
@@ -87,6 +92,12 @@ export * from "./server/inertia.mjs";
 const INERTIA_HEADER = "x-inertia";
 const JSON_TYPE = "application/json";
 const PROJECT_ROOT = fileURLToPath(new URL(".", import.meta.url));
+/**
+ * @type {[
+ *   (pathname: string) => boolean,
+ *   (request: ServerRequest, response: ServerResponse) => Promise<void>
+ * ][]}
+ */
 const LOCAL_ROUTES = [[icons.isIconRequest, icons.handleIcons]];
 const CLIENT_ROOT = join(PROJECT_ROOT, "dist/client");
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
@@ -98,7 +109,9 @@ const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
  * NODE_ENV=production throws a ReferenceError on the first render.
  */
 function defineVueCompileFlags() {
-  globalThis.__VUE_PROD_DEVTOOLS__ ??= false;
+  /** @type {typeof globalThis & { __VUE_PROD_DEVTOOLS__?: boolean }} */
+  const vueGlobals = globalThis;
+  vueGlobals.__VUE_PROD_DEVTOOLS__ ??= false;
 }
 
 defineVueCompileFlags();
@@ -146,7 +159,7 @@ async function currentAuth() {
 }
 
 /**
- * @param {IncomingMessage} request
+ * @param {ServerRequest} request
  * @returns {import("./server/page-props.mjs").PageBackend}
  */
 function pageBackend(request) {
@@ -160,7 +173,7 @@ function pageBackend(request) {
 }
 
 /**
- * @param {IncomingMessage} request
+ * @param {ServerRequest} request
  * @param {import("./server/page-props.mjs").PageAuth} auth
  */
 function pageProps(request, auth) {
@@ -208,6 +221,8 @@ function clientRenderedShell(page) {
 async function serverRendered(page, serverFetch, requestCookies, devServer) {
   try {
     const renderer = await ssrRenderer(devServer);
+    if (!isSsrPage(page))
+      throw new TypeError("The page has no path and no page props to render");
     return await renderer.renderDmsPage(page, serverFetch, requestCookies);
   } catch (error) {
     console.error(
@@ -223,7 +238,7 @@ async function serverRendered(page, serverFetch, requestCookies, devServer) {
  * renders the page from the shell instead.
  *
  * @param {InertiaPage} page
- * @param {string | undefined} requestUrl
+ * @param {string} requestUrl
  * @param {ServerReads} serverFetch
  * @param {string | undefined} requestCookies
  * @param {{ ssr?: false }} [options]
@@ -272,7 +287,7 @@ export async function renderHtml(
 
 /**
  * @param {InertiaPage} page
- * @param {IncomingMessage} request
+ * @param {ServerRequest} request
  * @param {Pick<import("./server/route-rules.mjs").RouteRule, "ssr">} [rule]
  * @param {ServerReads} [reads]
  */
@@ -288,7 +303,7 @@ function renderRequestHtml(page, request, rule = {}, reads) {
  * see `renderInPlace`.
  *
  * @param {InertiaPage} page
- * @param {IncomingMessage} request
+ * @param {ServerRequest} request
  * @param {import("./server/route-rules.mjs").MergedRouteRule} rule
  * @param {import("./server/page-props.mjs").PageAuth} auth
  */
@@ -305,7 +320,7 @@ function renderDocument(page, request, rule, auth) {
 
 /**
  * @param {unknown} error
- * @param {IncomingMessage} request
+ * @param {ServerRequest} request
  * @param {ServerResponse} response
  */
 async function writeBackendError(error, request, response) {
@@ -423,7 +438,7 @@ function writeNotFound(response) {
 }
 
 /**
- * @param {IncomingMessage} request
+ * @param {ServerRequest} request
  * @param {ServerResponse} response
  */
 export async function handleRequest(request, response) {
@@ -489,6 +504,8 @@ export async function handleRequest(request, response) {
  */
 async function writeRequestFailure(error, request, response) {
   if (requestFailure.isResponseGone(error, response)) return;
+  if (!isServerRequest(request))
+    return requestFailure.abandonResponse(error, response);
   if (
     error instanceof BackendResponseError &&
     error.status === 401 &&
@@ -514,7 +531,10 @@ async function writeRequestFailure(error, request, response) {
  */
 export async function handleRequestSafely(request, response) {
   try {
-    if (refuseForeignTarget(request, response)) return;
+    if (!hasOriginFormTarget(request)) {
+      requestFailure.writeBadRequest(response);
+      return;
+    }
     await handleRequest(request, response);
   } catch (error) {
     await writeRequestFailure(error, request, response).catch(
@@ -529,16 +549,17 @@ if (
   import.meta.url === new URL(`file://${process.argv[1]}`).href
 ) {
   frontendHttpServer = createServer(SERVER_OPTIONS, handleRequestSafely);
-  frontendHttpServer.on("clientError", (error, socket) =>
+  const server = frontendHttpServer;
+  server.on("clientError", (error, socket) =>
     handleClientError(error, socket, maxHeaderSize),
   );
   const port = Number(process.env.PORT ?? 3001);
   const host = listenHost();
   /** @param {NodeJS.ErrnoException} error */
   const onListenError = (error) => void reportListenError(error, host, port);
-  frontendHttpServer.once("error", onListenError);
-  frontendHttpServer.listen(port, host, () => {
-    frontendHttpServer.off("error", onListenError);
+  server.once("error", onListenError);
+  server.listen(port, host, () => {
+    server.off("error", onListenError);
     void announceReady();
   });
 }
@@ -568,8 +589,8 @@ async function announceReady() {
     await reportStartError(error);
     return;
   }
-  const listening = frontendHttpServer.address();
-  if (listening === null || isString(listening))
+  const listening = frontendHttpServer?.address();
+  if (!listening || isString(listening))
     throw new TypeError("The DMS server is not listening on a port");
   const { address, port } = listening;
   await reportReady(address, port);

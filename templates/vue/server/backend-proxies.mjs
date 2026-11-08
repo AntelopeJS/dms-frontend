@@ -1,5 +1,5 @@
 import { compilePathPattern, PATH_PATTERN_FORMS } from "./path-patterns.mjs";
-import { isNonNullObject } from "./type-guards.mjs";
+import { isNonNullObject, isString } from "./type-guards.mjs";
 
 /** @typedef {import("../server-module.ts").DmsBackendProxyOptions} ProxyOptions */
 /**
@@ -53,12 +53,13 @@ function literalPrefix(pattern) {
 /**
  * Why a proxy declaration is ignored, or `undefined`.
  *
- * @param {string} pattern
+ * @param {string | undefined} pattern
  * @param {ProxyOptions | undefined} options
  */
 export function proxyRejection(pattern, options) {
   const compiled = compilePathPattern(pattern);
-  if (!compiled) return `the pattern is not ${PATH_PATTERN_FORMS}`;
+  if (!compiled || !isString(pattern))
+    return `the pattern is not ${PATH_PATTERN_FORMS}`;
   const prefix = literalPrefix(pattern);
   if (prefix === "/")
     return "its first segment is not literal: it would take every page";
@@ -81,15 +82,15 @@ export function proxyRejection(pattern, options) {
 }
 
 /**
- * @param {string} pattern A pattern `proxyRejection` accepted
+ * @param {import("./path-patterns.mjs").CompiledPathPattern} compiled A pattern `proxyRejection` accepted
  * @param {ProxyOptions | undefined} options
  * @param {string} owner Who declared it
  * @returns {BackendProxy}
  */
-function compileProxy(pattern, options, owner) {
+function compileProxy(compiled, options, owner) {
   return {
-    pattern: compilePathPattern(pattern),
-    path: pattern,
+    pattern: compiled,
+    path: compiled.pattern,
     owner,
     auth: options?.auth ?? DEFAULT_AUTH,
     maxBodyBytes: options?.maxBodyBytes,
@@ -122,15 +123,18 @@ export function resolveBackendProxies(declared, manifest, warn) {
    * @param {string} owner
    */
   const add = (pattern, options, owner) => {
-    const reason = proxyRejection(pattern, options);
+    const compiled = compilePathPattern(pattern);
     const current = kept.get(pattern);
-    if (reason || current) {
+    const reason =
+      proxyRejection(pattern, options) ??
+      (current && `${current.owner} declares it`);
+    if (!compiled || reason) {
       warn(
-        `${owner} declares the backend proxy "${pattern}", which is ignored: ${reason ?? `${current.owner} declares it`}.`,
+        `${owner} declares the backend proxy "${pattern}", which is ignored: ${reason}.`,
       );
       return;
     }
-    kept.set(pattern, compileProxy(pattern, options, owner));
+    kept.set(pattern, compileProxy(compiled, options, owner));
   };
   for (const { id, pattern, options } of declared)
     add(pattern, options, `Frontend module ${id}`);

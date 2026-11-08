@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { allowedEstablishEndpoints } from "./auth/establish-endpoints.mjs";
 import { serverAuth } from "./auth-hooks.mjs";
 import { answerModuleRoute } from "./module-event.mjs";
-import { isNonNullObject, isString } from "./type-guards.mjs";
+import { isNonNullObject, isRecord, isString } from "./type-guards.mjs";
 import {
   matchModuleRoute,
   mayHaveModuleRoute,
@@ -81,19 +81,24 @@ function readJsonFile(url, fallback) {
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 /**
- * The object holding `path`'s last key, when every key up to it is own.
+ * The object holding `path`'s last key, and that key, when every key up to it
+ * is own.
  *
  * @param {Record<string, unknown>} target
  * @param {string[]} path
+ * @returns {{ holder: Record<string, unknown>, key: string } | undefined}
  */
-function holderOf(target, path) {
+function slotOf(target, path) {
+  const key = path.at(-1);
+  if (key === undefined || UNSAFE_KEYS.has(key)) return undefined;
   let node = target;
-  for (const key of path.slice(0, -1)) {
-    if (UNSAFE_KEYS.has(key) || !Object.hasOwn(node, key)) return undefined;
-    node = node[key];
-    if (!isNonNullObject(node)) return undefined;
+  for (const step of path.slice(0, -1)) {
+    if (UNSAFE_KEYS.has(step) || !Object.hasOwn(node, step)) return undefined;
+    const next = node[step];
+    if (!isRecord(next)) return undefined;
+    node = next;
   }
-  return UNSAFE_KEYS.has(path.at(-1)) ? undefined : node;
+  return { holder: node, key };
 }
 
 /**
@@ -104,10 +109,12 @@ function holderOf(target, path) {
  * @param {string} value
  */
 function fillPath(target, path, value) {
-  const holder = holderOf(target, path);
-  const key = path.at(-1);
-  if (holder && (holder[key] === undefined || holder[key] === ""))
-    holder[key] = value;
+  const slot = slotOf(target, path);
+  if (
+    slot &&
+    (slot.holder[slot.key] === undefined || slot.holder[slot.key] === "")
+  )
+    slot.holder[slot.key] = value;
 }
 
 /**
@@ -118,10 +125,13 @@ function fillPath(target, path, value) {
  * @param {string} value
  */
 function fillEmptied(target, path, value) {
-  const holder = holderOf(target, path);
-  const key = path.at(-1);
-  if (holder && Object.hasOwn(holder, key) && holder[key] === "")
-    holder[key] = value;
+  const slot = slotOf(target, path);
+  if (
+    slot &&
+    Object.hasOwn(slot.holder, slot.key) &&
+    slot.holder[slot.key] === ""
+  )
+    slot.holder[slot.key] = value;
 }
 
 /**
@@ -327,7 +337,7 @@ export async function loadServerModules(devServer) {
  * module route serves is the module's for every method: another method is
  * answered `405`.
  *
- * @param {import("node:http").IncomingMessage} request The Node request
+ * @param {import("./request-target.mjs").ServerRequest} request The Node request
  * @param {import("node:http").ServerResponse} response The Node response
  * @param {string} pathname The request's normalized path
  * @param {ServerModules} modules What `loadServerModules` or `createServerModules` returned

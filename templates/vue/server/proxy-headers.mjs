@@ -57,7 +57,7 @@ export function writeProxyHeaders(
   for (const name of [...HOP_BY_HOP_HEADERS, ...named]) delete headers[name];
   delete headers["set-cookie"];
   const cookies = upstream.headers.getSetCookie?.() ?? [];
-  if (cookies.length) headers["set-cookie"] = cookies;
+  if (cookies.length) Object.assign(headers, { "set-cookie": cookies });
   if (headers.location && upstream.url)
     headers.location = relayedLocation(
       headers.location,

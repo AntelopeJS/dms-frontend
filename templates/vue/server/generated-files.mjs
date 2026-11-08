@@ -116,6 +116,14 @@ function isManifestChunk(value) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {value is import("vite").Manifest}
+ */
+function isManifest(value) {
+  return isPlainRecord(value) && Object.values(value).every(isManifestChunk);
+}
+
+/**
  * The manifest `vite build` wrote to `dist/client/.vite/manifest.json`.
  *
  * @param {unknown} content The file's JSON
@@ -123,7 +131,7 @@ function isManifestChunk(value) {
  * @throws {Error} When it is not an object of chunks
  */
 export function viteManifestOf(content) {
-  if (!isPlainRecord(content) || !Object.values(content).every(isManifestChunk))
+  if (!isManifest(content))
     throw new Error("the client manifest is not an object of Vite chunks");
   return content;
 }
@@ -132,8 +140,12 @@ export function viteManifestOf(content) {
  * The members of an Iconify collection that `iconCollectionOf` checks, the
  * ones an icon query and a server render read.
  *
+ * @typedef {Parameters<typeof import("@iconify/utils").getIcons>[0]} Iconify
+ */
+
+/**
  * @typedef {Pick<
- *   Parameters<typeof import("@iconify/utils").getIcons>[0],
+ *   Iconify,
  *   | "prefix"
  *   | "icons"
  *   | "aliases"
@@ -142,10 +154,8 @@ export function viteManifestOf(content) {
  *   | "top"
  *   | "width"
  *   | "height"
- *   | "rotate"
- *   | "hFlip"
- *   | "vFlip"
- * >} IconCollection
+ * > &
+ *   Pick<Iconify["icons"][string], "rotate" | "hFlip" | "vFlip">} IconCollection
  */
 
 /**

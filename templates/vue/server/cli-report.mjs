@@ -13,7 +13,11 @@ const WILDCARD_ADDRESSES = ["0.0.0.0", "::"];
  */
 async function report(message, line, write) {
   if (!process.send) return write(line);
-  await new Promise((sent) => process.send(message, () => sent()));
+  /** @type {Promise<void>} */
+  const sent = new Promise((resolve) =>
+    process.send?.(message, () => resolve()),
+  );
+  await sent;
 }
 
 /**

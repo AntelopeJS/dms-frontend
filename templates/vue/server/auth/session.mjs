@@ -96,7 +96,10 @@ function decode(value) {
     );
     decipher.setAuthTag(payload.subarray(12, 28));
     return JSON.parse(
-      Buffer.concat([decipher.update(payload.subarray(28)), decipher.final()]),
+      Buffer.concat([
+        decipher.update(payload.subarray(28)),
+        decipher.final(),
+      ]).toString(),
     );
   } catch {
     return undefined;
@@ -150,7 +153,7 @@ function appendCookie(response, name, value, cookieAttributes) {
   response.setHeader(
     "set-cookie",
     current
-      ? [cookie, ...(Array.isArray(current) ? current : [current])]
+      ? [cookie, ...(Array.isArray(current) ? current : [String(current)])]
       : cookie,
   );
 }

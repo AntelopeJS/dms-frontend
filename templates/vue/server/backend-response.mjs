@@ -1,6 +1,6 @@
 import { GENERIC_ERROR_MESSAGE } from "./auth/backend.mjs";
 import { isFrontendVisit, redirectFrontendVisit } from "./inertia.mjs";
-import { isString } from "./type-guards.mjs";
+import { isObjectLike, isString } from "./type-guards.mjs";
 
 /**
  * What a JSON caller gets when the backend fails: the generic i18n key of
@@ -45,7 +45,7 @@ async function refusalCode(response) {
   try {
     /** @type {unknown} */
     const data = JSON.parse(text);
-    value = isString(data) ? data : data?.message;
+    value = isObjectLike(data) ? data.message : data;
   } catch {}
   return isString(value) && REFUSAL_CODE.test(value) ? value : undefined;
 }
@@ -67,7 +67,7 @@ export async function backendResponseError(response) {
  * qualifies: a refused destination sent to itself again would loop.
  *
  * @param {unknown} error What the request failed with
- * @param {import("node:http").IncomingMessage} request
+ * @param {import("./request-target.mjs").ServerRequest} request
  * @param {import("node:http").ServerResponse} response
  * @param {() => Promise<typeof import("../ssr-renderer.ts")>} loadRenderer
  * @returns {Promise<boolean>} Whether the visit was redirected
