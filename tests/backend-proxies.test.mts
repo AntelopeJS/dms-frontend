@@ -15,7 +15,7 @@ const handler = () => null;
 
 function resolved(
   declarations: { id: string; priority?: number; setup: DmsServerSetup }[],
-  manifest: { module: string; path: string; auth?: string }[] = [],
+  manifest: Parameters<typeof resolveServerDeclarations>[3] = [],
 ) {
   const warnings: string[] = [];
   const modules = resolveServerDeclarations(

@@ -225,6 +225,7 @@ describe("The generated build declarations loader", () => {
 
       assert.ok(loaded);
       const root = registry.modules[0].root;
+      assert.ok("dirs" in loaded.config);
       assert.deepEqual(loaded.config.dirs, [
         { glob: `${root}/app/composables/**/*`, types: true },
         { glob: `!${root}/**/app/build/**`, types: true },

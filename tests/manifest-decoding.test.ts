@@ -18,7 +18,8 @@ const vueModule = {
   renderer: { name: "vue", version: "3" },
 };
 
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+type JsonObject = { [key: string]: Json | undefined };
+type Json = null | boolean | number | string | Json[] | JsonObject;
 
 async function manifestFailure(answer: Json): Promise<Error | undefined> {
   const { server, baseUrl } = await startBackend(200, JSON.stringify(answer));
@@ -51,7 +52,8 @@ describe("fetchManifest decoding", () => {
   });
 
   it("refuses a manifest without a list of modules", async () => {
-    for (const modules of [undefined, null, "abc", 5, {}]) {
+    const answers: (Json | undefined)[] = [undefined, null, "abc", 5, {}];
+    for (const modules of answers) {
       const failure = await manifestFailure({ version: 2, modules });
       assert.ok(
         failure instanceof ManifestRefusedError,
@@ -62,7 +64,7 @@ describe("fetchManifest decoding", () => {
   });
 
   it("refuses a module that is not an object, or has no name or priority", async () => {
-    for (const bad of [
+    const badModules: Json[] = [
       null,
       "abc",
       5,
@@ -71,7 +73,8 @@ describe("fetchManifest decoding", () => {
       { ...vueModule, name: 5 },
       { ...vueModule, priority: "1" },
       { name: "no-priority", renderer: vueModule.renderer },
-    ]) {
+    ];
+    for (const bad of badModules) {
       const failure = await manifestFailure({
         version: 2,
         modules: [vueModule, bad],
@@ -81,7 +84,7 @@ describe("fetchManifest decoding", () => {
   });
 
   it("refuses a module field of the wrong type instead of passing it on", async () => {
-    for (const field of [
+    const badFields: JsonObject[] = [
       { path: 5 },
       { configKey: [] },
       { options: "x" },
@@ -93,7 +96,8 @@ describe("fetchManifest decoding", () => {
       { publicEndpoints: [{ path: 5 }] },
       { backendProxies: [{ path: "/x", auth: "other" }] },
       { backendProxies: [{ path: "/x", maxBodyBytes: "1" }] },
-    ]) {
+    ];
+    for (const field of badFields) {
       const failure = await manifestFailure({
         version: 2,
         modules: [{ ...vueModule, ...field }],
@@ -103,11 +107,12 @@ describe("fetchManifest decoding", () => {
   });
 
   it("refuses a settling flag or origin rewrites of the wrong type", async () => {
-    for (const extra of [
+    const badExtras: JsonObject[] = [
       { settling: "yes" },
       { originRewrites: {} },
       { originRewrites: [{ from: "http://a" }] },
-    ]) {
+    ];
+    for (const extra of badExtras) {
       const failure = await manifestFailure({
         version: 2,
         modules: [vueModule],

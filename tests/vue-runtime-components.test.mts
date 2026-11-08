@@ -6,6 +6,7 @@ import {
   type App,
   createSSRApp,
   defineAsyncComponent,
+  type DefineComponent,
   defineComponent,
   h,
   nextTick,
@@ -39,6 +40,7 @@ import {
   mountRuntime,
   registerGlobalMiddleware,
 } from "./fixtures/vue-runtime.mts";
+import { inertiaPage } from "./helpers/inertia-page";
 
 describe("Cookie refs", () => {
   it("shares one browser ref per cookie and writes it to the document", (context) => {
@@ -149,7 +151,7 @@ describe("Server render scopes", () => {
 });
 
 describe("Page meta", () => {
-  const DeclaringPage = defineComponent({
+  const DeclaringPage: DefineComponent = defineComponent({
     setup() {
       defineDmsPageMeta({ auth: true });
       useDmsRoute();
@@ -161,12 +163,7 @@ describe("Page meta", () => {
     const runtime = createDmsFrontendRuntime(undefined, {}, true);
     const props = { path: new URL(url, "http://frontend.local").pathname };
     await createInertiaApp({
-      page: {
-        component: "Page",
-        props: { ...props, page: {} },
-        url,
-        version: "",
-      },
+      page: inertiaPage(url, { ...props, page: {} }),
       render: renderToString,
       resolve: () => DeclaringPage,
       setup({ App, props: inertiaProps }) {
@@ -273,8 +270,13 @@ describe("Page meta", () => {
       defineDmsPageMeta({ auth: true });
     });
     await runtime.pendingNavigation;
-    assert.equal(runtime.currentError.value?.statusCode, 404);
-    assert.equal(runtime.currentError.value?.message, "Not here");
+    const error = runtime.currentError.value;
+    assert.ok(
+      error && "statusCode" in error,
+      "the middleware's error is shown",
+    );
+    assert.equal(error.statusCode, 404);
+    assert.equal(error.message, "Not here");
   });
 
   it("drops a page's meta when an error page replaces it at the same path", async () => {

@@ -235,7 +235,7 @@ describe("reading the packages verify-source builds", () => {
   it("refuses an installed @antelopejs/dms whose version is not text, naming the field", () => {
     for (const version of [5, {}, undefined]) {
       for (const withCoreLayer of [true, false]) {
-        const files = withCoreLayer
+        const files: Record<string, string | JsonFile> = withCoreLayer
           ? { ...DEMO_PROJECT, ...installedDms() }
           : { ...DEMO_PROJECT };
         files[`${INSTALLED_DMS}/package.json`] = JSON.stringify({

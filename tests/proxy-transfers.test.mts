@@ -4,7 +4,7 @@ import { connect } from "node:net";
 import { after, afterEach, before, describe, it } from "node:test";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
 import { parseJson } from "./helpers/json";
-import { addressOf } from "./helpers/net";
+import { addressOf, streamedBody } from "./helpers/net";
 
 interface BackendRequest {
   method?: string;
@@ -159,7 +159,7 @@ describe("the proxy streams large file-storage transfers", () => {
   it("streams an upload to the backend without the cookie or the session", async () => {
     const response = await fetch(
       `${frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
-      {
+      streamedBody({
         method: "PUT",
         headers: {
           cookie: "dms_session=sealed; other=1",
@@ -167,8 +167,7 @@ describe("the proxy streams large file-storage transfers", () => {
           "content-type": "application/octet-stream",
         },
         body: gatedBody(TRANSFER_BYTES, firstUploadChunk.promise),
-        duplex: "half",
-      },
+      }),
     );
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { received: TRANSFER_BYTES });
@@ -218,11 +217,10 @@ describe("the proxy streams large file-storage transfers", () => {
   it("cuts a chunked body off with 413 once it goes over the limit", async () => {
     const response = await fetch(
       `${frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
-      {
+      streamedBody({
         method: "PUT",
         body: gatedBody(TOO_LARGE_BYTES, Promise.resolve()),
-        duplex: "half",
-      },
+      }),
     );
     assert.equal(response.status, 413);
     await response.arrayBuffer();

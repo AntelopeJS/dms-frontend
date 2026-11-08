@@ -4,6 +4,7 @@ import { after, afterEach, before, describe, it } from "node:test";
 import { backend } from "../templates/vue/server/auth/backend.mjs";
 import { clientCountryHeader } from "../templates/vue/server/auth/client-ip.mjs";
 import "./fixtures/dms-backend-proxies.mts";
+import { requestOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 
 const ENVIRONMENT = [
@@ -19,7 +20,7 @@ async function listen(server: Server): Promise<string> {
 }
 
 function request(headers: Record<string, string>) {
-  return { headers, socket: { remoteAddress: "10.0.0.2" } };
+  return requestOf({ headers, remoteAddress: "10.0.0.2" });
 }
 
 describe("client country header", () => {

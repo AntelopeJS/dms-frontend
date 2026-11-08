@@ -232,6 +232,7 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
         activeTenantId: `tenant-${id}`,
         accessToken: "private-access-token",
         refreshToken: "private-refresh-token",
+        persistent: false,
       });
       const [cookie] = [jar.getHeader("set-cookie")].flat().filter(isText);
       return cookie.split(";", 1)[0];
@@ -293,7 +294,11 @@ it("renders setup errors as HTTP errors without corrupting simultaneous successf
       failedSessionBody,
       /private-access-token|private-refresh-token/,
     );
-    for (const headers of [{ accept: "text/html" }, { "x-inertia": "true" }]) {
+    const variants: Record<string, string>[] = [
+      { accept: "text/html" },
+      { "x-inertia": "true" },
+    ];
+    for (const headers of variants) {
       const suspended = await fetch(`${base}/suspended`, {
         headers: { ...headers, cookie: sessionCookie("bob", "en") },
         redirect: "manual",

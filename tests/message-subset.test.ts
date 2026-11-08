@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import { createI18n } from "vue-i18n";
 import { recordMessageReads } from "../templates/vue/message-subset.ts";
 
+type MessageSchema = ReturnType<typeof recordMessageReads>["messages"];
+
 const CATALOG = {
   page: {
     auth: { title: "Sign in", subtitle: "Welcome back" },
@@ -15,7 +17,7 @@ const CATALOG = {
 /** The recorded catalog as an application reads it: through vue-i18n. */
 function translator() {
   const recorder = recordMessageReads(CATALOG);
-  const i18n = createI18n({
+  const i18n = createI18n<[MessageSchema], "en">({
     legacy: false,
     locale: "en",
     missingWarn: false,
@@ -61,7 +63,7 @@ describe("the messages a render reads", () => {
     const { recorder, t } = translator();
     t("list[1]");
     t("page.auth.title");
-    const client = createI18n({
+    const client = createI18n<[MessageSchema], "en">({
       legacy: false,
       locale: "en",
       missingWarn: false,

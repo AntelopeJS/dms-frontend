@@ -254,7 +254,7 @@ describe("The module testing helper", () => {
       other: { apiKey: "" },
     });
     assert.equal(Object.hasOwn(Object.prototype, "polluted"), false);
-    assert.deepEqual(warnings, []);
+    assert.deepEqual<string[]>(warnings, []);
 
     const untouched = { shop: { apiKey: "" } };
     privateOptionsFromJson(

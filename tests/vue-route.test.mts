@@ -1,24 +1,43 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isCallable } from "../src/internal/guards";
 import { createInertiaApp } from "@inertiajs/vue3";
 import { renderToString } from "@vue/server-renderer";
 import {
   type App,
-  type Component,
   createSSRApp,
+  type DefineComponent,
   defineComponent,
   h,
-  withAsyncContext,
 } from "vue";
+import * as Vue from "vue";
 import {
   createDmsFrontendRuntime,
   hydrateDmsPageProps,
   provideDmsFrontendRuntime,
   useDmsRoute,
 } from "../templates/vue/frontend-module.ts";
+import { inertiaPage } from "./helpers/inertia-page";
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+type WithAsyncContext = (
+  getAwaitable: () => Promise<void>,
+) => [awaitable: Promise<void>, restore: () => void];
+
+function isAsyncContext(value: unknown): value is WithAsyncContext {
+  return typeof value === "function";
+}
+
+/** The helper Vue's compiler wraps around an `await` in `<script setup>`; the typings leave it out. */
+function vueAsyncContext(): WithAsyncContext {
+  const exported: unknown = Object.getOwnPropertyDescriptor(
+    Vue,
+    "withAsyncContext",
+  )?.value;
+  assert.ok(isAsyncContext(exported), "Vue exports withAsyncContext");
+  return exported;
+}
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function pageProps(url: string) {
   return { path: new URL(url, "http://frontend.local").pathname, page: {} };
@@ -30,19 +49,14 @@ function pageProps(url: string) {
  */
 async function render(
   url: string,
-  page: Component,
+  page: DefineComponent,
   props: { delay?: number } = {},
   setUpPlugins: (app: App) => void = () => {},
 ): Promise<string> {
   const runtime = createDmsFrontendRuntime(undefined, {}, true);
   let body: string | undefined;
   await createInertiaApp({
-    page: {
-      component: "Page",
-      props: { ...pageProps(url), ...props },
-      url,
-      version: "",
-    },
+    page: inertiaPage(url, { ...pageProps(url), ...props }),
     render: async (app: App) => (body = await renderToString(app)),
     resolve: () => page,
     setup({ App, props: inertiaProps }) {
@@ -70,7 +84,9 @@ describe("Route of the page", () => {
   });
 
   it("gives a plugin its own request's URL during a server render", async () => {
-    const Page = defineComponent({ setup: () => () => h("p", "page") });
+    const Page: DefineComponent = defineComponent({
+      setup: () => () => h("p", "page"),
+    });
     const seen: string[] = [];
     const readRoute = (app: App) =>
       seen.push(app.runWithContext(() => useDmsRoute().fullPath));
@@ -81,22 +97,23 @@ describe("Route of the page", () => {
 
   it("gives a component its own request's URL after an await, while another request renders", async () => {
     const RouteAfterAwait = defineComponent({
-      props: { delay: { type: Number, required: true } },
-      async setup(props) {
-        const started: unknown = withAsyncContext(() => sleep(props.delay));
-        assert.ok(Array.isArray(started), "withAsyncContext answers a pair");
-        const pair: unknown[] = started;
-        const [pending, restore] = pair;
+      inheritAttrs: false,
+      async setup(_props, { attrs }) {
+        const [pending, restore] = vueAsyncContext()(() =>
+          sleep(Number(attrs.delay)),
+        );
         await pending;
-        assert.ok(isCallable(restore), "the pair ends with the restore");
         restore();
         const route = useDmsRoute();
         return () => h("p", `route:${route.fullPath}`);
       },
     });
-    const Page = defineComponent({
-      props: { delay: { type: Number, required: true } },
-      setup: (props) => () => h("div", [h(RouteAfterAwait, props)]),
+    const Page: DefineComponent = defineComponent({
+      inheritAttrs: false,
+      setup:
+        (_props, { attrs }) =>
+        () =>
+          h("div", [h(RouteAfterAwait, attrs)]),
     });
     const first = render("/orders/1?tab=a", Page, { delay: 30 });
     await sleep(5);

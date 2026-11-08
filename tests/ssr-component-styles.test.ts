@@ -190,7 +190,10 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     assert.equal(new Set(linked).size, linked.length, "each link once");
 
     const catalog = manifest["locales.generated/en.ts"];
-    assert.ok(catalog?.isDynamicEntry, "the catalog is a file of its own");
+    assert.ok(
+      catalog?.isDynamicEntry && catalog.file,
+      "the catalog is a file of its own",
+    );
     const head = html.slice(0, html.indexOf("</head>"));
     assert.ok(
       !head.includes(catalog.file),

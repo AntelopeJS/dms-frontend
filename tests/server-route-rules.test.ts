@@ -7,7 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -22,6 +22,7 @@ import {
   ruleHeaders,
 } from "../templates/vue/server/route-rules.mjs";
 import type { DmsServerSetup } from "../templates/vue/server-module";
+import { requestOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
@@ -152,7 +153,7 @@ describe("Route rule declarations", () => {
 
 describe("Route rule headers", () => {
   const rule = { cache: PUBLIC_CACHE, headers: { "x-section": "legal" } };
-  const anonymous = { method: "GET", headers: {} };
+  const anonymous = requestOf({ method: "GET" });
 
   it("make a cookie-less visit to a public page publicly cacheable", () => {
     assert.deepEqual(
@@ -166,14 +167,14 @@ describe("Route rule headers", () => {
   });
 
   it("keep everything else private", () => {
-    const privateCases: [unknown, unknown, number][] = [
+    const privateCases: [IncomingMessage, unknown, number][] = [
       [
-        { method: "GET", headers: { cookie: "dms_locale=fr" } },
+        requestOf({ method: "GET", headers: { cookie: "dms_locale=fr" } }),
         { publicAccess: true },
         200,
       ],
       [
-        { method: "GET", headers: { "x-content-language": "fr" } },
+        requestOf({ method: "GET", headers: { "x-content-language": "fr" } }),
         { publicAccess: true },
         200,
       ],
@@ -283,7 +284,8 @@ describe("Route rules in the production server", () => {
     });
 
   it("serves a cookie-less public page with the rule's cache and headers, document and Inertia alike", async () => {
-    for (const headers of [{}, { "x-inertia": "true" }]) {
+    const variants: Record<string, string>[] = [{}, { "x-inertia": "true" }];
+    for (const headers of variants) {
       const response = await visit("/legal/terms", headers);
       assert.equal(response.status, 200);
       assert.equal(
