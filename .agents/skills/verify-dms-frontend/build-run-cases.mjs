@@ -99,7 +99,7 @@ export default fixture;
   },
   {
     id: "build-locale-error",
-    title: "a locale message vue-i18n cannot compile stops the build with exit 1, names the file and the count, and --verbose adds the key and the message to write instead",
+    title: "a locale message vue-i18n cannot compile stops the build with exit 1, names the file and the count, and --verbose keeps the key and the message to write instead",
     entryPoint: "ajs dms build --project <project> with a module whose en-GB catalog holds an unescaped @",
     ...standalone,
     async run(/** @type {Context} */ ctx) {
@@ -114,7 +114,7 @@ export default fixture;
         ctx.equal("exit 1, nothing on stdout", [failed.code, failed.stdout], [1, ""]),
         ctx.equal("the failure names the file, the count and the compiler", lines.filter((line) => line.startsWith("✖ ")), [`✖ Invalid locale file ${file}: 1 message(s) vue-i18n cannot compile:`]),
         ctx.equal("the build did not reach the bundles", lines.filter((line) => line.startsWith("✔ Built the")).length, 0),
-        ctx.holds("--verbose names the key and the message to write instead", verbose.stderr.includes("  auth.email.placeholder: Invalid linked format in \"first.last@example.com\". Write a literal @ as {'@'}: \"first.last{'@'}example.com\"."), verbose.stderr),
+        ctx.holds("--verbose still names the key and the message to write instead", verbose.stderr.includes("  auth.email.placeholder: Invalid linked format in \"first.last@example.com\". Write a literal @ as {'@'}: \"first.last{'@'}example.com\"."), verbose.stderr),
         ctx.equal("the message that compiles is not named", verbose.stderr.includes("fine:"), false),
       ]);
     },

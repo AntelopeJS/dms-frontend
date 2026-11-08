@@ -615,6 +615,10 @@ function writeDerivedOutputs(
   } catch (error) {
     if (!(error instanceof InvalidLocaleFileError)) throw error;
     const showSource = createPathMapper(workspaceDir, layers);
-    throw new InvalidLocaleFileError(showSource(error.path), error.reason);
+    throw new InvalidLocaleFileError(
+      showSource(error.path),
+      error.reason,
+      error.details,
+    );
   }
 }
