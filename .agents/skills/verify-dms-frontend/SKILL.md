@@ -1,6 +1,6 @@
 ---
 name: verify-dms-frontend
-description: "Drive the AntelopeJS DMS frontend renderer (@antelopejs/dms-frontend: the `ajs dms` CLI, the Vue renderer with Vite, Inertia and server-side rendering, the frontend server with its sessions, backend proxy, icons and e-mails) the way an operator and a visitor do, by serving this checkout as the dashboard of the dms playground on free ports with its own MongoDB database and a mail sink, and post a verdict with evidence. Use to prove a change to AntelopeJS/dms-frontend works before merge, or to verify a PR."
+description: "Drive the AntelopeJS DMS frontend renderer (@antelopejs/dms-frontend: the `ajs dms` CLI, the Vue renderer with Vite, Inertia and server-side rendering, the frontend server with its sessions, backend proxy, icons and e-mails) the way an operator and a visitor do, by serving this checkout as the dashboard of the dms playground on free ports with its own MongoDB database and a mail sink, and report a verdict with evidence. Use to prove a change to AntelopeJS/dms-frontend works before merge, or to verify a PR."
 ---
 
 # Verify dms-frontend
@@ -80,11 +80,7 @@ A journey that starts its own frontend server stops it itself; `down` stops ever
 6. **One-way doors.** The section comes right after the result line and is mandatory. `$C doors` prints the `One-way-door:` line for the diff.
 7. **Result.** FAIL if any of rules 1 to 6 fail. PASS+NOTES when something is not verified or needs the owner's attention. PASS otherwise.
 
-Write `$RUN/evidence/judgement.json` (`doors`, `docs`, `notVerified`, `attention`, `verifier`), then `$C verdict "$RUN" --pr <n>` and, from a thread that did not write the change, `$C publish "$RUN" --pr <n>`.
-
-## Trust
-
-The skill is not Trusted yet. It becomes Trusted when it passes a shadow run of 10 consecutive agent PRs, and its last maintain pass is newer than the last change to the repository or its `@antelopejs` dependencies and at most 30 days old.
+Write `$RUN/evidence/judgement.json` (`doors`, `docs`, `notVerified`, `attention`, `verifier`), then `$C verdict "$RUN" --pr <n>`, which writes `$RUN/evidence/verdict.md`. Report the verdict and what you saw in your own reply.
 
 ## Gotchas
 
