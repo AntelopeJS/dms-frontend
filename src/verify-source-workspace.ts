@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { parse } from "yaml";
+import { parseAllDocuments } from "yaml";
 import {
   createFrontendModuleRegistry,
   getPackageRoot,
@@ -18,6 +18,7 @@ import {
 import { ensure } from "./internal/ensure";
 import { isText } from "./internal/guards";
 import { isPlainObject } from "./internal/plain-object";
+import { showPath } from "./output";
 
 function removeDevelopmentDependencies(root: string): void {
   const packagePath = join(root, "package.json");
@@ -30,6 +31,11 @@ function removeDevelopmentDependencies(root: string): void {
 
 /** The pnpm protocols whose spec is a path, relative to the project. */
 const PATH_PROTOCOLS = ["file:", "link:"];
+/**
+ * The protocol of a package of the layer's own pnpm workspace, which the
+ * generated workspace holds only for the layers it binds itself.
+ */
+const WORKSPACE_PROTOCOL = "workspace:";
 const LOCKFILE = "pnpm-lock.yaml";
 const WORKSPACE_FILE = "pnpm-workspace.yaml";
 
@@ -52,25 +58,37 @@ function findLockfile(directory: string): string | undefined {
  * directory. The lockfile already holds what pnpm read from the
  * `package.json` and `pnpm-workspace.yaml` files that apply to the layer,
  * with every `$<name>` resolved; pnpm reads overrides only from the root of
- * the workspace verify-source installs.
+ * the workspace verify-source installs. A `workspace:` override names a
+ * package of the layer's own workspace, which the generated one lacks.
  */
 function readLayerOverrides(layer: ResolvedLayer): [string, string][] {
   const lockfile = findLockfile(layer.path);
   if (!lockfile) return [];
-  const lock: unknown = parse(readFileSync(lockfile, "utf8"));
-  if (!isPlainObject(lock) || !isPlainObject(lock.overrides)) return [];
   const root = dirname(lockfile);
-  return Object.entries(lock.overrides).flatMap(
-    ([name, spec]): [string, string][] => {
-      if (!isText(spec)) return [];
-      const protocol = PATH_PROTOCOLS.find((prefix) => spec.startsWith(prefix));
-      if (!protocol) return [[name, spec]];
-      const path = spec.slice(protocol.length);
-      return [
-        [name, isAbsolute(path) ? spec : `${protocol}${resolve(root, path)}`],
-      ];
-    },
-  );
+  const overrides: [string, string][] = [];
+  for (const document of parseAllDocuments(readFileSync(lockfile, "utf8"))) {
+    const [error] = document.errors;
+    ensure(
+      error === undefined,
+      `${showPath(lockfile)} is not a pnpm lockfile`,
+      error?.message,
+    );
+    const lock: unknown = document.toJS();
+    if (!isPlainObject(lock) || !isPlainObject(lock.overrides)) continue;
+    for (const [name, spec] of Object.entries(lock.overrides)) {
+      if (!isText(spec) || spec.startsWith(WORKSPACE_PROTOCOL)) continue;
+      overrides.push([name, resolveSpec(root, spec)]);
+    }
+  }
+  return overrides;
+}
+
+/** `spec` with a relative `file:` or `link:` path resolved from `root`. */
+function resolveSpec(root: string, spec: string): string {
+  const protocol = PATH_PROTOCOLS.find((prefix) => spec.startsWith(prefix));
+  if (!protocol) return spec;
+  const path = spec.slice(protocol.length);
+  return isAbsolute(path) ? spec : `${protocol}${resolve(root, path)}`;
 }
 
 /**

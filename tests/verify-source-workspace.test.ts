@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
+import { CliError } from "@antelopejs/core/cli";
 import type { ResolvedLayer } from "../src/common";
 import { materializeWorkspace } from "../src/verify-source-workspace";
 import { jsonAt, readJson } from "./helpers/json";
@@ -83,6 +84,7 @@ describe("the workspace verify-source installs", () => {
         "local-tool: link:../tools/local-tool",
         "'@antelopejs/dms>@antelopejs/interface-core': 0.4.0",
         "left-pad: 1.3.0",
+        "is-odd: workspace:*",
       ),
     });
     assert.deepEqual(workspaceOverrides([module]), {
@@ -121,6 +123,45 @@ describe("the workspace verify-source installs", () => {
     assert.deepEqual(workspaceOverrides([module]), {
       "demo-frontend-vue": "workspace:*",
     });
+  });
+
+  it("reads every document of a lockfile pnpm splits in two", () => {
+    const module = layer("demo-frontend-vue", {
+      [`${MODULE}/pnpm-lock.yaml`]: [
+        "lockfileVersion: '9.0'",
+        "",
+        "importers:",
+        "",
+        "  .: {}",
+        "",
+        "---",
+        lockfile("is-number: 6.0.0"),
+      ].join("\n"),
+    });
+    assert.deepEqual(workspaceOverrides([module]), {
+      "is-number": "6.0.0",
+      "demo-frontend-vue": "workspace:*",
+    });
+  });
+
+  it("stops on a lockfile that does not parse, naming it", () => {
+    const module = layer("demo-frontend-vue", {
+      [`${MODULE}/pnpm-lock.yaml`]: [
+        "<<<<<<< HEAD",
+        lockfile("is-number: 6.0.0"),
+        "=======",
+        lockfile("is-number: 7.0.0"),
+        ">>>>>>> main",
+      ].join("\n"),
+    });
+    assert.throws(
+      () => workspaceOverrides([module]),
+      (error) =>
+        error instanceof CliError &&
+        error.problem.title.endsWith(
+          "frontend-vue/pnpm-lock.yaml is not a pnpm lockfile",
+        ),
+    );
   });
 
   it("keeps the layers and --local-package links over the overrides a layer was installed with", () => {
