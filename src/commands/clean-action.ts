@@ -148,7 +148,7 @@ export async function runClean(options: CleanOptions): Promise<void> {
       reason:
         "clean never uses DMS_API_BASE_URL from the environment or ./.env.",
       fixes: [
-        "Remove the workspace build, start and dev -b share for a URL: ajs dms clean -b <url>",
+        "Remove the workspace dev -b and prepare use for a URL: ajs dms clean -b <url>",
         "Remove every workspace, including those dev created without -b: ajs dms clean --all",
         "List the workspaces: ajs dms workspaces",
       ],

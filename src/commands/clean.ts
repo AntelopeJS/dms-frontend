@@ -4,7 +4,7 @@ import type { CleanOptions } from "./clean-action";
 
 const CLEAN_EXAMPLES: HelpExample[] = [
   {
-    description: "The workspace build, start and dev -b share for a backend",
+    description: "The workspace dev -b and prepare use for a backend",
     command: "ajs dms clean -b https://dms.example.com",
   },
   {

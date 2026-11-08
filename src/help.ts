@@ -87,7 +87,7 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
 
 const ENVIRONMENT_NOTES = [
   "A variable set in the shell wins over both files, and .env.local wins over .env. Only the current directory is read: the generated workspace never loads a .env of its own.",
-  "Workspaces live in ~/.antelopejs/dms-frontend, one per backend URL. dev without -b keys its own on the project directory instead; pass -b to share one with build and start. ajs dms workspaces lists them.",
+  "dev and prepare keep their workspaces in ~/.antelopejs/dms-frontend, one per backend URL, and ajs dms workspaces lists them. dev without -b keys its own on the project directory instead. build and start use <project>/.dms-frontend, or --workspace.",
 ];
 
 /** A command's name and arguments, without Commander's `[options]`. */
