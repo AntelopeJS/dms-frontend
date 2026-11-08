@@ -9,7 +9,13 @@ import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runner = join(repoRoot, "scripts", "typecheck-projects.ts");
 
-const CONFIG = {
+/** The tsconfig a test project is written with. */
+interface ProjectConfig {
+  compilerOptions: Record<string, boolean | string | string[]>;
+  include: string[];
+}
+
+const CONFIG: ProjectConfig = {
   compilerOptions: {
     strict: true,
     allowJs: true,
@@ -23,9 +29,13 @@ const CONFIG = {
 };
 
 /** A project that lists `own.mjs` and reaches `imported.ts` only through its import. */
-function project(own: string, imported: string): string {
+function project(
+  own: string,
+  imported: string,
+  config: ProjectConfig = CONFIG,
+): string {
   const directory = temporaryDirectory("dms-typecheck-projects-");
-  writeFileSync(join(directory, "tsconfig.json"), JSON.stringify(CONFIG));
+  writeFileSync(join(directory, "tsconfig.json"), JSON.stringify(config));
   writeFileSync(join(directory, "own.mjs"), own);
   writeFileSync(join(directory, "imported.ts"), imported);
   return join(directory, "tsconfig.json");
@@ -81,6 +91,29 @@ describe("typecheck-projects", { concurrency: true }, () => {
     const result = await typecheck(config);
 
     assert.deepEqual(result, { status: 0, stderr: "", stdout: "" });
+  });
+
+  it("fails on an error in the project's own tsconfig, such as a misspelled checkJs", async () => {
+    const config = project(
+      '/** @type {number} */\nexport const own = "text";\n',
+      "export const imported = 1;\n",
+      {
+        ...CONFIG,
+        compilerOptions: {
+          ...Object.fromEntries(
+            Object.entries(CONFIG.compilerOptions).filter(
+              ([option]) => option !== "checkJs",
+            ),
+          ),
+          checkJS: true,
+        },
+      },
+    );
+
+    const result = await typecheck(config);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /tsconfig\.json\(\d+,\d+\): error TS5025:/);
   });
 
   it("fails when any of the projects it is given fails", async () => {

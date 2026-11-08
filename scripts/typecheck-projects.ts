@@ -32,11 +32,11 @@ function readProject(configFile: string): ts.ParsedCommandLine {
 }
 
 /**
- * The errors `tsc --noEmit -p <configFile>` reports in the files the project
- * lists itself, and in its options. A file the project only reaches through an
- * import is left to the project that lists it: the consumer-compiled template
- * `.ts` files resolve against the generated workspace, so `test:real-source`
- * checks them there.
+ * The errors `tsc --noEmit -p <configFile>` reports, except those in a source
+ * file the project only reaches through an import, which is left to the
+ * project that lists it: the consumer-compiled template `.ts` files resolve
+ * against the generated workspace, so `test:real-source` checks them there.
+ * The errors of the project's own files and of its tsconfig chain are kept.
  */
 function ownFileErrors(configFile: string): readonly ts.Diagnostic[] {
   const config = readProject(configFile);
@@ -49,12 +49,18 @@ function ownFileErrors(configFile: string): readonly ts.Diagnostic[] {
     projectReferences: config.projectReferences,
     configFileParsingDiagnostics: config.errors,
   });
+  const importedFiles = new Set(
+    program
+      .getSourceFiles()
+      .map((file) => ts.sys.resolvePath(file.fileName))
+      .filter((file) => !ownFiles.has(file)),
+  );
   return ts
     .getPreEmitDiagnostics(program)
     .filter(
       (diagnostic) =>
         diagnostic.file === undefined ||
-        ownFiles.has(ts.sys.resolvePath(diagnostic.file.fileName)),
+        !importedFiles.has(ts.sys.resolvePath(diagnostic.file.fileName)),
     );
 }
 
