@@ -35,7 +35,8 @@ The frontend server sends the paths that a backend prefix covers to the backend:
 - `proxy-streams`: an event stream relayed as written, a client that leaves closes its backend request, a broken backend stream ends only that response.
 - `proxy-declarations`: the most specific pattern wins, ignored declarations and their exact warnings, the startup report, normalized paths (`..`, `%2e%2e`, `\`), and request targets that are not origin-form.
 - `proxy-offline`: the Connection lost toast of a navigation that never reaches the server.
-- `proxy-redirect-icons` and `proxy-pattern-forms`: findings, see Gotchas.
+- `proxy-redirect-icons`: a backend redirect to its own `/api/_dms/icons` stays an absolute backend URL, since the renderer answers that path first.
+- `proxy-pattern-forms`: a finding, see Gotchas.
 
 ## How to get to it (user POV)
 
@@ -81,7 +82,6 @@ Most journeys start a second `ajs dms start` (`proxy-satellite.mjs`) on a free p
 ## Gotchas
 
 - Each satellite takes 3 to 5 seconds to start; a journey stops its servers in a `finally`.
-- `proxy-redirect-icons` fails on purpose: a backend redirect to `/api/_dms/icons` becomes a frontend path although the renderer answers that path. Issue: AntelopeJS/dms-frontend#276.
 - `proxy-pattern-forms` fails on purpose: a pattern with a wildcard in the middle (`/mid/*/leaf`) is accepted without a warning. Issue: AntelopeJS/dms-frontend#275.
 - A warning for a malformed public endpoint is printed twice by the server (once when the modules resolve, once for the request matcher); the journey asserts that each entry is reported, not how often.
 - A `HEAD` of an eligible answer carries the backend's `Vary` without `Accept-Encoding`, unlike the `GET`; the journey does not assert it.

@@ -193,13 +193,17 @@ function requestedIcons(url) {
 }
 
 /**
- * Whether the generated server answers `pathname` with `iconResponse`.
+ * Whether the generated server answers `pathname` with `iconResponse`: the
+ * icon endpoint, with or without its trailing slash, and every path under it.
  *
  * @param {string} pathname
  * @returns {boolean}
  */
 export function isIconRequest(pathname) {
-  return pathname.startsWith(ICON_API_PATH);
+  return (
+    pathname === ICON_API_PATH.slice(0, -1) ||
+    pathname.startsWith(ICON_API_PATH)
+  );
 }
 
 /**

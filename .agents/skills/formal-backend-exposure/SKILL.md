@@ -87,7 +87,7 @@ servers.close();
 
 A modeling error sits in one of three places:
 
-- `contract.mjs` reads the docs wrongly. Check the sentence the rule cites. Where the docs are silent, the contract follows the TSDoc of the covered function, and a disagreement is a finding about that TSDoc, not a reason to copy the code. The contract's own readings: a trailing slash names the same path; the icon endpoint is the paths under `/api/_dms/icons/`; public endpoint methods and header names are case-insensitive; two equally specific proxies leave the choice to declaration order, so the rules accept either.
+- `contract.mjs` reads the docs wrongly. Check the sentence the rule cites. Where the docs are silent, the contract follows the TSDoc of the covered function, and a disagreement is a finding about that TSDoc, not a reason to copy the code. The contract's own readings: a trailing slash names the same path; the icon endpoint is `/api/_dms/icons` and the paths under it; public endpoint methods and header names are case-insensitive; two equally specific proxies leave the choice to declaration order, so the rules accept either.
 - `inputs.mjs` makes a request no browser or caller sends. Node's HTTP client and parser pass every target verbatim, so odd targets are real. Only the seven methods `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` and `OPTIONS` are generated: `fetch` refuses `TRACE`, and the proxy answers 502.
 - `drive.mjs` loses track of the server. The check sets the declarations in the environment for each case, and the server reads them on each request in a workspace without built server modules (`loadServerModules`, module-server.mjs:291-323). A change that caches them, or a built `templates/vue/dist`, makes `DeclaredPrefixesReach` break on cases that follow another deployment. That is a harness error: run one deployment per process.
 
@@ -108,7 +108,7 @@ Paths are under `templates/vue/`.
 | What the check drives | Code |
 | --- | --- |
 | Refusing a foreign target | `isOriginForm`, `refuseForeignTarget` (server/request-target.mjs:14-59), `handleRequestSafely` (server.mjs:514-524) |
-| Who answers a path | `handleRequest` (server.mjs:428-450), `requestOwner`, `reachesBackend` (server/request-routing.mjs:39-68), `isRendererFilePath` (server/module-routes.mjs:50-54), `isIconRequest` (server/icons.mjs:201-203), `ICON_API_PATH` (icon-api.mjs:7) |
+| Who answers a path | `handleRequest` (server.mjs:428-450), `requestOwner`, `reachesBackend` (server/request-routing.mjs:40-75), `isRendererFilePath` (server/module-routes.mjs:50-54), `isIconRequest` (server/icons.mjs:202-207), `ICON_API_PATH` (icon-api.mjs:7) |
 | Reading the declarations | `loadServerModules`, `serverModules` (server/module-server.mjs:291-323), `environmentBackendProxies` (server/public-endpoints.mjs:180-197), `allowedPublicEndpoints`, `compilePublicEndpoint` (server/public-endpoints.mjs:258-296) |
 | Valid proxies and their order | `proxyRejection`, `resolveBackendProxies`, `matchBackendProxy` (server/backend-proxies.mjs:59-156), `compilePathPattern` (server/path-patterns.mjs:25-50) |
 | Session, Origin and public endpoints | `proxyAccess`, `matchPublicEndpoint` (server/public-endpoints.mjs:320-367), `isSameOrigin` (server/auth/client-ip.mjs:144-155), `readSession` (server/auth/session.mjs:163-168) |

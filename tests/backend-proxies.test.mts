@@ -148,6 +148,9 @@ describe("Request owners", () => {
   it("are the renderer first, for its own paths and the files it has", () => {
     assert.equal(owner("GET", "/@vite/client").kind, "renderer");
     assert.equal(owner("GET", "/assets/app.js").kind, "renderer");
+    assert.equal(owner("GET", "/api/_dms/icons").kind, "renderer");
+    assert.equal(owner("POST", "/api/_dms/icons/x.json").kind, "renderer");
+    assert.equal(owner("GET", "/api/_dms/iconsets").kind, "backend");
     assert.equal(owner("GET", "/robots.txt", ["/robots.txt"]).kind, "renderer");
   });
 
