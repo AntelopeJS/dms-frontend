@@ -31,10 +31,11 @@ export interface DmsFrontendBuild {
 
   /**
    * Adds Vite plugins to the application's build, for `ajs dms dev`,
-   * `ajs dms build` and the preview alike.
+   * `ajs dms build` and the preview alike, and to the bundle of each web worker
+   * it starts with `new Worker(new URL(...))`.
    *
-   * `create` runs in the build process each time Vite loads its configuration,
-   * and returns real Vite plugin objects (an array, each with a `name`; false,
+   * `create` runs in the build process each time Vite loads its configuration
+   * and once more for each worker bundle, and returns real Vite plugin objects (an array, each with a `name`; false,
    * null and undefined entries are skipped and nested arrays flattened, as in a
    * Vite configuration) or nothing. It is synchronous: a Promise is refused,
    * because the configuration is built synchronously. The plugins come after
