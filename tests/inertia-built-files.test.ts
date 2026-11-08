@@ -149,6 +149,10 @@ describe("Inertia HTTP protocol", () => {
         const response = await fetch(`${base}/broken`, { headers });
         const body = await response.text();
         assert.equal(response.status, 503);
+        assert.equal(
+          response.headers.get("cache-control"),
+          "private, no-cache",
+        );
         assert.doesNotMatch(body, /must-not-leak/);
         assert.doesNotMatch(body, /DMS backend request failed/);
         assert.doesNotMatch(body, /An unexpected error occurred/);
