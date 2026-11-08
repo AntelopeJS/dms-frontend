@@ -19,7 +19,11 @@ import {
 import { serverAuth } from "../templates/vue/server/auth-hooks.mjs";
 import * as sessions from "../templates/vue/server/auth/session.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
-import type { DmsServerSetup } from "../templates/vue/server-module";
+import type {
+  DmsServerEvent,
+  DmsServerSetup,
+  DmsSession,
+} from "../templates/vue/server-module";
 import { addressOf } from "./helpers/net";
 import { isNumber, isText } from "./helpers/guards";
 import { requestOf, responseOf } from "./helpers/http-doubles";
@@ -47,7 +51,6 @@ function resolved(
 
 describe("Auth hook declarations", () => {
   it("come from the highest-priority module that registers them, and another one is reported", () => {
-    const refreshSession = async () => undefined;
     const { modules, warnings } = resolved([
       {
         id: "low",
@@ -57,11 +60,11 @@ describe("Auth hook declarations", () => {
       {
         id: "dms",
         priority: 5,
-        setup: (s) => s.registerAuth({ signInPath: "/auth", refreshSession }),
+        setup: (s) => s.registerAuth({ signInPath: "/auth" }),
       },
     ]);
     assert.equal(modules.auth.id, "dms");
-    assert.equal(modules.auth.refreshSession, refreshSession);
+    assert.equal(modules.auth.signInPath, "/auth");
     assert.deepEqual(warnings, [
       "Frontend module low registers auth hooks, which are ignored: dms (priority 5) provides them.",
     ]);
@@ -161,6 +164,45 @@ describe("Auth hook declarations", () => {
       { user: { name: "Ada" }, session: { accountId: "a", updatedAt: 9 } },
     );
     assert.deepEqual(auth.view(undefined), {});
+  });
+
+  it("call the provider's hooks with the registered object as this", async () => {
+    const secret = process.env.DMS_SESSION_SECRET;
+    process.env.DMS_SESSION_SECRET = SESSION_SECRET;
+    try {
+      const hooks = {
+        async refreshSession(_event: DmsServerEvent, session: DmsSession) {
+          return this.userOf(session) ? session : undefined;
+        },
+        publicSession(session: DmsSession) {
+          return { user: this.userOf(session) };
+        },
+        userOf: (session: DmsSession) => session.user,
+      };
+      const { modules } = resolved([
+        { id: "dms", setup: (s) => s.registerAuth(hooks) },
+      ]);
+      const auth = serverAuth(modules.auth, (id) => ({
+        module: { id, options: {}, privateOptions: {} },
+        app: { authEstablishEndpoints: [] },
+        authOwner: id,
+      }));
+      assert.deepEqual(auth.view({ user: { name: "Ada" } }), {
+        user: { name: "Ada" },
+      });
+      const jar = responseOf();
+      sessions.writeSession(jar, { accessToken: "a", user: { name: "Ada" } });
+      const request = requestOf({
+        method: "GET",
+        url: "/private",
+        headers: { cookie: cookiePairs(jar).join("; "), host: "localhost" },
+      });
+      const refreshed = await auth.refresh(request, responseOf(request));
+      assert.equal(refreshed?.accessToken, "a");
+    } finally {
+      if (secret === undefined) delete process.env.DMS_SESSION_SECRET;
+      else process.env.DMS_SESSION_SECRET = secret;
+    }
   });
 });
 

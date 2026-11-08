@@ -455,8 +455,8 @@ function resolveAuth(modules, warn) {
         priority: module.priority ?? 0,
         signInPath: auth.signInPath,
         signInExempt: auth.signInExempt?.map(compilePathPattern),
-        refreshSession: auth.refreshSession,
-        publicSession: auth.publicSession,
+        refreshSession: auth.refreshSession?.bind(auth),
+        publicSession: auth.publicSession?.bind(auth),
       };
     }
   }

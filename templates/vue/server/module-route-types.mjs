@@ -2,8 +2,8 @@ export {};
 
 /** @typedef {import("../server-module.ts").DmsServerMethod} ServerMethod */
 /**
- * What `registerAuth` declared. The hooks are read as plain functions, as the
- * server calls them.
+ * What `registerAuth` declared. The server binds each hook to the declared
+ * object, so a hook may use `this`.
  *
  * @typedef {object} AuthDeclaration
  * @property {string} [signInPath]
