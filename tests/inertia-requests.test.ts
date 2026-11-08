@@ -46,12 +46,10 @@ describe("Inertia HTTP protocol", () => {
     const released = new Promise<void>((settle) => {
       backendClosed = settle;
     });
-    const backend = createServer((request, response) => {
+    const client = new AbortController();
+    const backend = createServer((request) => {
       request.socket.once("close", backendClosed);
-      setTimeout(() => {
-        response.writeHead(200, { "content-type": "text/event-stream" });
-        response.write(": open\n\n");
-      }, 100);
+      client.abort();
     });
     await new Promise<void>((resolve) =>
       backend.listen(0, "127.0.0.1", resolve),
@@ -68,7 +66,7 @@ describe("Inertia HTTP protocol", () => {
       await assert.rejects(
         fetch(`http://127.0.0.1:${frontendAddress.port}/api/feed`, {
           headers: { accept: "text/event-stream" },
-          signal: AbortSignal.timeout(20),
+          signal: AbortSignal.any([client.signal, AbortSignal.timeout(2_000)]),
         }),
       );
       const timeout = new Promise<string>((settle) =>
