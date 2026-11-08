@@ -1,4 +1,4 @@
-import { compilePathPattern } from "./path-patterns.mjs";
+import { compilePathPattern, PATH_PATTERN_FORMS } from "./path-patterns.mjs";
 import { isNonNullObject } from "./type-guards.mjs";
 
 /** @typedef {import("../server-module.ts").DmsBackendProxyOptions} ProxyOptions */
@@ -58,7 +58,7 @@ function literalPrefix(pattern) {
  */
 export function proxyRejection(pattern, options) {
   const compiled = compilePathPattern(pattern);
-  if (!compiled) return "the pattern is not /x, /x/* or /x/**";
+  if (!compiled) return `the pattern is not ${PATH_PATTERN_FORMS}`;
   const prefix = literalPrefix(pattern);
   if (prefix === "/")
     return "its first segment is not literal: it would take every page";

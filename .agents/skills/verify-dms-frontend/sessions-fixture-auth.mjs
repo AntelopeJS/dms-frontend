@@ -32,6 +32,7 @@ export const modules = [
     setup(/** @type {Server} */ server) {
       server.registerAuth({ signInPath: "/a/*" });
       server.registerAuth({ signInExempt: ["bad"] });
+      server.registerAuth({ signInExempt: ["/share/*/view"] });
       server.registerAuth({ refreshSession: "no" });
       server.registerAuth("text");
     },

@@ -109,7 +109,8 @@ export const journeys = [
         const ignored = (id, reason) => `Frontend module ${id} registers auth hooks, which are ignored: ${reason}.`;
         const expected = [
           ignored("auth/bad", "signInPath is not a page path"),
-          ignored("auth/bad", "signInExempt is not a list of /x, /x/* or /x/** patterns"),
+          ignored("auth/bad", 'signInExempt holds "bad", which is not /x, /x/* or /x/**'),
+          ignored("auth/bad", 'signInExempt holds "/share/*/view", which is not /x, /x/* or /x/**'),
           ignored("auth/bad", "refreshSession is not a function"),
           ignored("auth/bad", "it is not an object"),
           ignored("auth/low", "auth/high (priority 50) provides them"),

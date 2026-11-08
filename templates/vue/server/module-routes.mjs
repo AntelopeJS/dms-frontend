@@ -1,3 +1,4 @@
+import { authRejection } from "./auth-hooks.mjs";
 import { resolveBackendProxies } from "./backend-proxies.mjs";
 import { compilePathPattern } from "./path-patterns.mjs";
 import { matchPublicEndpoint } from "./public-endpoints.mjs";
@@ -397,32 +398,6 @@ function resolveRoutes(modules, warn, publicEndpoints) {
   );
   warnOverlaps(routes, warn);
   return routes;
-}
-
-const AUTH_HOOKS = ["refreshSession", "publicSession"];
-
-/** @param {unknown} auth */
-function authRejection(auth) {
-  if (!isNonNullObject(auth)) return "it is not an object";
-  for (const hook of AUTH_HOOKS)
-    if (auth[hook] !== undefined && !isFunction(auth[hook]))
-      return `${hook} is not a function`;
-  if (
-    auth.signInPath !== undefined &&
-    (!isString(auth.signInPath) ||
-      !compilePathPattern(auth.signInPath) ||
-      auth.signInPath.includes("*"))
-  )
-    return "signInPath is not a page path";
-  if (
-    auth.signInExempt !== undefined &&
-    !(
-      Array.isArray(auth.signInExempt) &&
-      auth.signInExempt.every((pattern) => compilePathPattern(pattern))
-    )
-  )
-    return "signInExempt is not a list of /x, /x/* or /x/** patterns";
-  return undefined;
 }
 
 /**

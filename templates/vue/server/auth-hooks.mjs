@@ -1,6 +1,7 @@
 import { readSession, setRequestSession } from "./auth/session.mjs";
 import { createServerEvent } from "./module-event.mjs";
-import { compilePathPattern } from "./path-patterns.mjs";
+import { compilePathPattern, PATH_PATTERN_FORMS } from "./path-patterns.mjs";
+import { isFunction, isNonNullObject, isString } from "./type-guards.mjs";
 
 const DEFAULT_SIGN_IN_PATH = "/auth";
 const DEFAULT_ONBOARDING_PATH = "/onboarding";
@@ -18,6 +19,41 @@ const HOOK_ROUTE = Object.freeze({ bodyLimit: 0 });
 function defaultExempt(signInPath) {
   const signIn = signInPath === "/" ? "/" : `${signInPath}/**`;
   return [signIn, DEFAULT_ONBOARDING_PATH].map(compilePathPattern);
+}
+
+const AUTH_HOOKS = ["refreshSession", "publicSession"];
+
+/**
+ * Why an auth hooks registration is ignored, or `undefined`.
+ *
+ * @param {unknown} auth
+ */
+export function authRejection(auth) {
+  if (!isNonNullObject(auth)) return "it is not an object";
+  for (const hook of AUTH_HOOKS)
+    if (auth[hook] !== undefined && !isFunction(auth[hook]))
+      return `${hook} is not a function`;
+  if (
+    auth.signInPath !== undefined &&
+    (!isString(auth.signInPath) ||
+      !compilePathPattern(auth.signInPath) ||
+      auth.signInPath.includes("*"))
+  )
+    return "signInPath is not a page path";
+  return exemptionRejection(auth.signInExempt);
+}
+
+/** @param {unknown} signInExempt */
+function exemptionRejection(signInExempt) {
+  if (signInExempt === undefined) return undefined;
+  if (!Array.isArray(signInExempt))
+    return `signInExempt is not a list of ${PATH_PATTERN_FORMS} patterns`;
+  for (const pattern of signInExempt)
+    if (!compilePathPattern(pattern))
+      return isString(pattern)
+        ? `signInExempt holds "${pattern}", which is not ${PATH_PATTERN_FORMS}`
+        : "signInExempt holds an entry that is not a string";
+  return undefined;
 }
 
 /**

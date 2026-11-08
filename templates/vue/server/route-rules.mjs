@@ -1,4 +1,4 @@
-import { compilePathPattern } from "./path-patterns.mjs";
+import { compilePathPattern, PATH_PATTERN_FORMS } from "./path-patterns.mjs";
 import { isNonNullObject, isObjectLike, isString } from "./type-guards.mjs";
 
 /** @typedef {import("../server-module.ts").DmsRouteRule} RouteRule */
@@ -85,7 +85,7 @@ function cacheRejection(cache) {
  */
 export function ruleRejection(pattern, rule) {
   if (!compilePathPattern(pattern))
-    return "the pattern is not /x, /x/* or /x/**";
+    return `the pattern is not ${PATH_PATTERN_FORMS}`;
   if (!isNonNullObject(rule)) return "it is not an object";
   if (rule.ssr !== undefined && rule.ssr !== false)
     return "ssr is either left out or false";
