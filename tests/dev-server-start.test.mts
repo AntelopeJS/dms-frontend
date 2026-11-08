@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
@@ -15,14 +15,18 @@ const STARTS = "DMS_TEST_VITE_STARTS";
 /** Counts each Vite start in `STARTS`, and fails while `BROKEN` is set. */
 const COUNTING_VITE_CONFIG = `process.env.${STARTS} = String(Number(process.env.${STARTS} ?? 0) + 1);
 if (process.env.${BROKEN}) throw new Error("broken Vite config");
-export default { logLevel: "silent", server: { watch: null, ws: false } };
+export default { logLevel: "silent", optimizeDeps: { noDiscovery: true }, server: { watch: null, ws: false } };
 `;
 
-function projectRoot(context: TestContext, viteConfig: string): string {
+function projectRoot(viteConfig: string): string {
   const root = mkdtempSync(join(tmpdir(), "dms-dev-start-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
   writeFileSync(join(root, "vite.config.mjs"), viteConfig);
   return root;
+}
+
+function removeRoot(root: string): void {
+  assert.equal(existsSync(join(root, ".vite")), false, "Vite wrote no cache");
+  rmSync(root, { recursive: true, force: true });
 }
 
 async function listen(server: Server): Promise<string> {
@@ -30,6 +34,7 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${addressOf(server).port}`;
 }
 
+/** Starts the server in `root`; the root is removed once the server has exited. */
 async function startDevServer(
   context: TestContext,
   root: string,
@@ -39,7 +44,12 @@ async function startDevServer(
     env: { ...process.env, PORT: "0", HOST: "127.0.0.1", DMS_DEV: "true" },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  context.after(() => server.kill());
+  const exited = new Promise((settle) => server.once("exit", settle));
+  context.after(async () => {
+    server.kill();
+    await exited;
+    removeRoot(root);
+  });
   let stdout = "";
   let stderr = "";
   server.stderr.on("data", (chunk: Buffer) => (stderr += chunk));
@@ -84,8 +94,7 @@ describe("the development server's Vite instance", () => {
     { timeout: 30_000 },
     async (context) => {
       const root = projectRoot(
-        context,
-        "export default { logLevel: 'silent', server: { watch: null } };",
+        "export default { logLevel: 'silent', optimizeDeps: { noDiscovery: true }, server: { watch: null } };",
       );
       const port = await startDevServer(context, root);
       assert.match(await hmrHandshake(port), /^HTTP\/1\.1 101 /);
@@ -96,7 +105,7 @@ describe("the development server's Vite instance", () => {
     "starts Vite again after a failed start, once for concurrent requests",
     { timeout: 30_000 },
     async (context) => {
-      const root = projectRoot(context, COUNTING_VITE_CONFIG);
+      const root = projectRoot(COUNTING_VITE_CONFIG);
       process.env[BROKEN] = "true";
       const previousCwd = process.cwd();
       const previousDev = process.env.DMS_DEV;
@@ -108,6 +117,7 @@ describe("the development server's Vite instance", () => {
         frontend.close();
         process.chdir(previousCwd);
         process.env.DMS_DEV = previousDev;
+        removeRoot(root);
       });
       const base = await listen(frontend);
       const failed = await fetch(`${base}/@vite/client`);

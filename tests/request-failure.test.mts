@@ -110,7 +110,8 @@ describe("requests the frontend server cannot serve", () => {
     assert.equal(body, "Internal Server Error");
   });
 
-  it("falls back to the client-rendered shell when the server render fails", async () => {
+  it("falls back to the client-rendered shell when the server render fails", async (context) => {
+    const errors = context.mock.method(console, "error", () => undefined);
     const page = runtime.createInertiaPage("/articles", { path: "/articles" });
     const reads = Object.assign(async () => undefined, {
       reuseCompletedReads: () => undefined,
@@ -125,6 +126,12 @@ describe("requests the frontend server cannot serve", () => {
     assert.ok(
       html.includes(runtime.inertiaAppHtml(page)),
       "the page document carries the page for the client to render",
+    );
+    assert.ok(
+      errors.mock.calls.some(({ arguments: [message] }) =>
+        String(message).includes("falling back to client rendering"),
+      ),
+      "the operator is told the page was not server-rendered",
     );
   });
 
