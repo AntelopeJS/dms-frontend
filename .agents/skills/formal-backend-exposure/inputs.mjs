@@ -27,7 +27,7 @@ const FIRST = ["api", "api", "media", "a"];
 const REST = ["hooks", "b", "a", "_dms", "icons", "x.y"];
 const VISIT_FIRST = [...FIRST, "dms", "assets", "node_modules", "@vite", "API"];
 const ODD_SEGMENTS = ["..", ".", "%2e%2e", "%2E.", "", "%61pi", "API", "a%2Fb", "x;y", "%zz", "a\\b", "a%2F..%2F..%2Fapi", '"q"', "{b}"];
-const MALFORMED_PROXIES = ["/", "/**", "/*", "/*/a", "a/b", "/a/**/b", "/a//b", "/a/..", "/a/./b", "/assets/**", "/api/_dms/**", "/@vite/**", "/a b", "/a%2Fb/**"];
+const MALFORMED_PROXIES = ["/", "/**", "/*", "/*/a", "a/b", "/a/**/b", "/a/*/b", "/api/*/**", "/a//b", "/a/..", "/a/./b", "/assets/**", "/api/_dms/**", "/@vite/**", "/a b", "/a%2Fb/**"];
 const MALFORMED_ENDPOINTS = ["/api/*", "/api/*/b", "/media/a", "/api/a/**", "/api/a/../b", "/api", "/api/.a", "/api/a/b?x=1"];
 /** @type {import("./contract.mjs").ProxyEntry} */
 const DMS_API = { path: "/api/**" };
@@ -74,8 +74,8 @@ const VISITOR_HEADERS = [
 const rest = fc.constantFrom(...REST);
 
 const wellFormedProxy = fc
-  .tuple(fc.constantFrom(...FIRST), fc.array(fc.oneof({ weight: 3, arbitrary: rest }, { weight: 2, arbitrary: fc.constant("*") }), { maxLength: 3 }), fc.boolean())
-  .map(([first, more, deep]) => `/${[first, ...more].join("/")}${deep ? "/**" : ""}`);
+  .tuple(fc.constantFrom(...FIRST), fc.array(rest, { maxLength: 3 }), fc.constantFrom([], ["*"], ["**"]))
+  .map(([first, more, tail]) => `/${[first, ...more, ...tail].join("/")}`);
 
 const proxyEntry = fc
   .record({

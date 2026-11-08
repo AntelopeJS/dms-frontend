@@ -59,7 +59,7 @@ export const journeys = [
             warn("/hook/**", "Backend module DMS_BACKEND_PROXIES declares it"),
             warn("/api/**", "Frontend module antelopejs__dms-frontend-vue declares it"),
             warn("/a/b*", kinds),
-            warn("/*/x", "its first segment is not literal: it would take every page"),
+            warn("/*/x", kinds),
             warn("/**", "its first segment is not literal: it would take every page"),
             warn("/api/_dms/**", "/api/_dms, /@, /assets, /node_modules are the renderer's own paths"),
             warn("/assets/**", "/api/_dms, /@, /assets, /node_modules are the renderer's own paths"),

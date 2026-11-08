@@ -27,7 +27,7 @@ One owner answers each path: the renderer's files, then the modules' `dms.server
 ## Sub-features
 
 - `routing-routes`: the 405 and `Allow` header, `HEAD`, trailing slash, parameters (decoded, `%2F`), literal before parameter, priority and tie-breaking across modules, reserved paths, `204` for nothing, `Response` passthrough, `no-store`, `readJson`, `bodyLimit` (64 KiB, a route's own, chunked), `sameOrigin: false`, error mapping, `event.backend` and its headers, relayed redirects and cookies, `event.module`, `clientIp()`, sealed cookies by module, and 21 exact startup warnings.
-- `routing-rules`: public `cache` under its five conditions, `ssr: false` (shell against server render), headers on documents and Inertia answers, merging from the least to the most specific pattern, priority between modules, and 17 rejected rules with their warnings.
+- `routing-rules`: public `cache` under its five conditions, `ssr: false` (shell against server render), headers on documents and Inertia answers, merging from the least to the most specific pattern, priority between modules, and 18 rejected rules with their warnings.
 - `routing-pages`: `/` to the homepage, page paths take only `GET` and `HEAD`, `<page>/pagelayout` is not a backend route, a signed-out visit goes to sign-in, a malformed path is `400`, a stale asset version is `409`.
 - `routing-page-props`: the once-prop layout, partial reloads, and a build without the server-modules bundle.
 - `routing-listen`: every interface by default, `HOST`, a taken port.

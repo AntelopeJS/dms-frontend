@@ -15,7 +15,7 @@ import { exposureCase } from "./inputs.mjs";
 
 /**
  * The rank the server sorts proxies by (`compilePathPattern`'s
- * `specificity`), which F2 is about.
+ * `specificity`).
  *
  * @param {Proxy} proxy
  */
@@ -41,12 +41,6 @@ export const FINDINGS = [
     rule: "PublicEndpointsWork",
     alsoBreaks: [],
     isIn: (owner) => owner.kind === "backend" && owner.endpoints.length > 0 && serverWinner(owner).auth === "none",
-  },
-  {
-    id: "F2",
-    rule: "WinningProxyDecides",
-    alsoBreaks: ["DeclaredPrefixesReach"],
-    isIn: (owner) => owner.kind === "backend" && !owner.winners.includes(serverWinner(owner)),
   },
 ];
 
