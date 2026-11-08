@@ -96,7 +96,7 @@ describe("the workspace verify-source installs", () => {
     });
   });
 
-  it("reads the lockfile of the workspace the layer belongs to, not the overrides pnpm ignores in the layer", () => {
+  it("reads the lockfile of the workspace the layer belongs to, not the layer's own overrides or stale lockfile", () => {
     const module = layer("demo-frontend-vue", {
       [`${PROJECT}/pnpm-workspace.yaml`]: "packages:\n  - frontend-vue\n",
       [`${PROJECT}/pnpm-lock.yaml`]: lockfile(
@@ -107,9 +107,25 @@ describe("the workspace verify-source installs", () => {
         name: "demo-frontend-vue",
         pnpm: { overrides: { "is-number": "7.0.0" } },
       }),
+      [`${MODULE}/pnpm-lock.yaml`]: lockfile("is-number: 7.0.0"),
     });
     assert.deepEqual(workspaceOverrides([module]), {
       "is-number": "6.0.0",
+      "is-odd": `file:${join(module.path, "..", ".tgz-deps", "is-odd-abc1234.tgz")}`,
+      "demo-frontend-vue": "workspace:*",
+    });
+  });
+
+  it("reads the layer's own lockfile in a workspace that gives each project one", () => {
+    const module = layer("demo-frontend-vue", {
+      [`${PROJECT}/pnpm-workspace.yaml`]: "packages:\n  - frontend-vue\n",
+      [`${PROJECT}/.npmrc`]: "shared-workspace-lockfile=false\n",
+      [`${PROJECT}/pnpm-lock.yaml`]: lockfile("is-number: 6.0.0"),
+      [`${MODULE}/pnpm-lock.yaml`]: lockfile(
+        "is-odd: file:../.tgz-deps/is-odd-abc1234.tgz",
+      ),
+    });
+    assert.deepEqual(workspaceOverrides([module]), {
       "is-odd": `file:${join(module.path, "..", ".tgz-deps", "is-odd-abc1234.tgz")}`,
       "demo-frontend-vue": "workspace:*",
     });

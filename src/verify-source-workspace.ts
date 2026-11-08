@@ -5,8 +5,8 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
-import { parseAllDocuments } from "yaml";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { parse, parseAllDocuments } from "yaml";
 import {
   createFrontendModuleRegistry,
   getPackageRoot,
@@ -39,17 +39,46 @@ const WORKSPACE_PROTOCOL = "workspace:";
 const LOCKFILE = "pnpm-lock.yaml";
 const WORKSPACE_FILE = "pnpm-workspace.yaml";
 
+/** The `.npmrc` line that gives each workspace project its own lockfile. */
+const OWN_LOCKFILES = /^\s*shared-workspace-lockfile\s*=\s*false\s*$/m;
+
+/** The nearest directory from `directory` up that holds `file`. */
+function findUp(directory: string, file: string): string | undefined {
+  if (existsSync(join(directory, file))) return directory;
+  const parent = dirname(directory);
+  return parent === directory ? undefined : findUp(parent, file);
+}
+
+/** Whether the projects of the pnpm workspace at `root` share its lockfile. */
+function sharesLockfile(root: string): boolean {
+  const npmrc = join(root, ".npmrc");
+  if (existsSync(npmrc) && OWN_LOCKFILES.test(readFileSync(npmrc, "utf8")))
+    return false;
+  const settings: unknown = parse(
+    readFileSync(join(root, WORKSPACE_FILE), "utf8"),
+  );
+  return !(
+    isPlainObject(settings) && settings.sharedWorkspaceLockfile === false
+  );
+}
+
 /**
- * The lockfile of the install that holds `directory`: the nearest one above
- * it, short of a pnpm workspace root that has none.
+ * The lockfile pnpm installs `directory` from: that of the pnpm workspace it
+ * belongs to, unless the workspace gives each project its own, in which case
+ * the nearest one up to the workspace root.
  */
 function findLockfile(directory: string): string | undefined {
-  const lockfile = join(directory, LOCKFILE);
-  if (existsSync(lockfile)) return lockfile;
-  const parent = dirname(directory);
-  if (existsSync(join(directory, WORKSPACE_FILE)) || parent === directory)
-    return undefined;
-  return findLockfile(parent);
+  const workspaceRoot = findUp(directory, WORKSPACE_FILE);
+  const lockfileRoot =
+    workspaceRoot && sharesLockfile(workspaceRoot)
+      ? workspaceRoot
+      : findUp(directory, LOCKFILE);
+  if (!lockfileRoot) return undefined;
+  const lockfile = join(lockfileRoot, LOCKFILE);
+  const outsideWorkspace =
+    workspaceRoot !== undefined &&
+    relative(workspaceRoot, lockfileRoot).startsWith("..");
+  return existsSync(lockfile) && !outsideWorkspace ? lockfile : undefined;
 }
 
 /**
