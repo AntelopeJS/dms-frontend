@@ -227,8 +227,8 @@ describe("The Vite plugins a module registers", () => {
 
     for (const value of invalid) {
       assert.throws(
-        // SAFETY: the value is wrong on purpose, to reach the runtime validation.
-        () => pluginsOf(declaring((() => value) as Registered)),
+        // @ts-expect-error the registration returns a value that is not a plugin list on purpose, to reach the runtime validation
+        () => pluginsOf(declaring(() => value)),
         /Frontend module @acme\/billing-frontend registered Vite plugins that are not valid/,
       );
     }

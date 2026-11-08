@@ -36,6 +36,7 @@ export async function proxy(request, response, backendProxy, isProxiedPath) {
   if (response.closed) return;
   const abandoned = new AbortController();
   response.once("close", () => abandoned.abort());
+  /** @type {RequestInit} */
   const init = {
     signal: abandoned.signal,
     method: request.method,

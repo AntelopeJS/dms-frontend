@@ -126,9 +126,13 @@ async function readJson(webRequestValue) {
   const chunks = [];
   const reader = webRequestValue.body.getReader();
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
+    const read = await reader.read();
+    if (read.done) break;
+    /** @type {unknown} */
+    const chunk = read.value;
+    if (!(chunk instanceof Uint8Array))
+      throw new RequestBodyError(400, "Invalid request body");
+    chunks.push(chunk);
   }
   if (!chunks.length) return {};
   try {
@@ -240,7 +244,14 @@ function frozenCopy(value) {
 export function createServerEvent(context) {
   const { request, response, route, params } = context;
   const webRequestValue = webRequest(request, route);
+  // SAFETY: `server-module.ts` lets a handler name the JSON shape it expects from the backend and from the client, as `Response.json()` does; the server parses that JSON and hands it on unchecked, which these two members are the only place to state.
+  const parsedJson = /** @type {Pick<ServerEvent, "backend" | "readJson">} */ ({
+    backend: (/** @type {string} */ path, init = {}) =>
+      backend(path, request, init),
+    readJson: () => readJson(webRequestValue),
+  });
   return {
+    ...parsedJson,
     request: webRequestValue,
     params: Object.freeze({ ...params }),
     session: sessionAccess(request, response, context.view),
@@ -250,8 +261,6 @@ export function createServerEvent(context) {
       context.module.id,
       context.authOwner,
     ),
-    backend: (/** @type {string} */ path, init = {}) =>
-      backend(path, request, init),
     backendUrl: (/** @type {string} */ path) => backendUrl(path),
     clientIp: () => clientIp(request),
     module: Object.freeze({
@@ -270,7 +279,6 @@ export function createServerEvent(context) {
       ]),
     }),
     url: new URL(webRequestValue.url),
-    readJson: () => readJson(webRequestValue),
   };
 }
 

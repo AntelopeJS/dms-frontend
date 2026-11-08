@@ -4,6 +4,10 @@ import {
   ServerResponse,
 } from "node:http";
 import { Socket } from "node:net";
+import {
+  isServerRequest,
+  type ServerRequest,
+} from "../../templates/vue/server/request-target.mjs";
 
 /** The parts of a request the server under test reads. */
 interface RequestInit {
@@ -30,6 +34,15 @@ export function requestOf(init: RequestInit = {}): IncomingMessage {
   request.method = init.method;
   request.url = init.url;
   request.headers = init.headers ?? {};
+  return request;
+}
+
+/** A request as a server receives it, whose URL and method Node always sets. */
+export function serverRequestOf(
+  init: RequestInit & { method: string; url: string },
+): ServerRequest {
+  const request = requestOf(init);
+  if (!isServerRequest(request)) throw new Error("the request has no URL");
   return request;
 }
 

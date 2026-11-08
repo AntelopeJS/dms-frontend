@@ -8,6 +8,7 @@ import {
   type DmsServerSetup,
   defineDmsServer,
 } from "../templates/vue/server-module";
+import { isServerRequest } from "../templates/vue/server/request-target.mjs";
 import { isText } from "../src/internal/guards";
 import { isPlainObject } from "../src/internal/plain-object";
 import { writeFixture, listen, close } from "./fixtures/server-modules";
@@ -78,6 +79,7 @@ describe("Module server routes in development", () => {
         "handleModuleRoute" | "loadServerModules"
       >;
       frontend = createServer(async (request, response) => {
+        assert.ok(isServerRequest(request), "Node sets the request URL");
         void handleModuleRoute(
           request,
           response,

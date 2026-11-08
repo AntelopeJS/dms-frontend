@@ -51,7 +51,7 @@ export function backendUrl(
  * @returns {request is Request & ServerRequest}
  */
 export function isServerRequest(request) {
-  return isString(request.url);
+  return isString(request.url) && isString(request.method);
 }
 
 /**
@@ -68,5 +68,5 @@ export function isServerRequest(request) {
  * @returns {request is ServerRequest}
  */
 export function hasOriginFormTarget(request) {
-  return isOriginForm(request.url);
+  return isString(request.method) && isOriginForm(request.url);
 }

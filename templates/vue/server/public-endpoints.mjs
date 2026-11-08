@@ -2,13 +2,7 @@ import { readFileSync } from "node:fs";
 import { json } from "./auth/backend.mjs";
 import { CROSS_ORIGIN_ERROR, isSameOrigin } from "./auth/client-ip.mjs";
 import { PROXY_AUTH_MODES } from "./backend-proxies.mjs";
-import {
-  isNonNullObject,
-  isNumber,
-  isObjectLike,
-  isRecord,
-  isString,
-} from "./type-guards.mjs";
+import { isNumber, isObjectLike, isRecord, isString } from "./type-guards.mjs";
 
 /**
  * A public endpoint, compiled from a declaration that passed every check.
@@ -252,11 +246,11 @@ function pathMatcher(path) {
  * A declaration made usable, or `undefined` when any part of it is malformed:
  * a bad entry is dropped whole, never widened to what it might have meant.
  *
- * @param {PublicEndpointDeclaration | null | undefined} entry
+ * @param {unknown} entry
  * @returns {PublicEndpoint | undefined}
  */
 export function compilePublicEndpoint(entry) {
-  if (!isNonNullObject(entry)) return undefined;
+  if (!isObjectLike(entry)) return undefined;
   if (!isString(entry.path) || !PUBLIC_PATH.test(entry.path)) return undefined;
   const methods = normalizedMethods(entry.methods);
   const headers = normalizedHeaders(entry.headers);

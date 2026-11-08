@@ -109,7 +109,6 @@ async function buildFixture(): Promise<string> {
       manifest: true,
       rolldownOptions: {
         input: join(root, "main.ts"),
-        // @ts-expect-error `codeSplitting` is typed as a boolean here
         output: { codeSplitting: clientCodeSplitting },
       },
     },

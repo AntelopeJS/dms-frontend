@@ -119,7 +119,7 @@ function pagePath(url, withShared) {
   }
   for (const [name, value] of pageQuery) query.set(name, value);
   if (!withShared) query.set(SHARED_PROP, "false");
-  return `/dms/page?${query}`;
+  return `/dms/page?${query.toString()}`;
 }
 
 /**

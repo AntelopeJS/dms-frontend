@@ -7,7 +7,7 @@ import {
   matchPublicEndpoint,
   proxyAccess,
 } from "../templates/vue/server/public-endpoints.mjs";
-import { requestOf } from "./helpers/http-doubles";
+import { serverRequestOf } from "./helpers/http-doubles";
 
 const WEBHOOK = {
   path: "/api/mailing/events/*/*",
@@ -96,7 +96,11 @@ describe("public endpoints", () => {
     process.env.DMS_PUBLIC_ENDPOINTS = declaration;
     const access = (url: string) =>
       proxyAccess(
-        requestOf({ method: "POST", url, headers: { host: "frontend.local" } }),
+        serverRequestOf({
+          method: "POST",
+          url,
+          headers: { host: "frontend.local" },
+        }),
         new Set(["GET", "HEAD"]),
         proxyWith("session"),
       );
@@ -129,7 +133,7 @@ describe("public endpoints", () => {
 
   it("sends nothing of the session through a proxy without auth, and needs no Origin", () => {
     const access = proxyAccess(
-      requestOf({
+      serverRequestOf({
         method: "POST",
         url: "/media/upload",
         headers: { host: "x" },

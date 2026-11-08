@@ -26,7 +26,7 @@ import type {
 } from "../templates/vue/server-module";
 import { addressOf } from "./helpers/net";
 import { isNumber, isText } from "./helpers/guards";
-import { requestOf, responseOf } from "./helpers/http-doubles";
+import { requestOf, responseOf, serverRequestOf } from "./helpers/http-doubles";
 import { jsonAt, responseJson } from "./helpers/json";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
@@ -121,7 +121,13 @@ describe("Auth hook declarations", () => {
 
   it("renew no session where no module registers them", async () => {
     const auth = serverAuth(undefined, context);
-    assert.equal(await auth.refresh(requestOf(), responseOf()), undefined);
+    assert.equal(
+      await auth.refresh(
+        serverRequestOf({ method: "GET", url: "/" }),
+        responseOf(),
+      ),
+      undefined,
+    );
   });
 
   it("exempt the provider's sign-in path when it names no exempt pages", () => {

@@ -8,10 +8,16 @@ const FORMAT_HOST: ts.FormatDiagnosticsHost = {
   getNewLine: () => "\n",
 };
 
+/**
+ * The project `configFile` describes, as a standalone program that emits
+ * nothing. `composite` is dropped: it only serves the project reference that
+ * lets the lint read `tsconfig.templates.json`, and its rule that every
+ * imported file be listed belongs to a `tsc -b` build, which never runs here.
+ */
 function readProject(configFile: string): ts.ParsedCommandLine {
   const config = ts.getParsedCommandLineOfConfigFile(
     configFile,
-    { noEmit: true },
+    { noEmit: true, composite: false },
     {
       ...ts.sys,
       onUnRecoverableConfigFileDiagnostic: (diagnostic) => {

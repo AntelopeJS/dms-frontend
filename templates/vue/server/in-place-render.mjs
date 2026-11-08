@@ -44,7 +44,7 @@ function reusableReadKey(path, options, headers) {
  * A read returns a copy: the render that read it may still change the object it
  * got. A body that cannot be copied is read again.
  *
- * @param {() => HeadersInit} backendHeaders
+ * @param {() => ConstructorParameters<typeof Headers>[0]} backendHeaders
  * @returns {ServerReads}
  */
 export function serverReads(backendHeaders) {

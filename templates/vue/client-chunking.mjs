@@ -18,6 +18,8 @@
  * quarter to four fifths, but every group is loaded whole by each page that
  * uses any of it, and the anonymous pages pay 70 to 115 KB of Brotli for code
  * only the signed-in shell uses.
+ *
+ * @type {import("vite").Rolldown.CodeSplittingOptions}
  */
 export const clientCodeSplitting = {
   groups: [{ name: "entry", tags: ["$initial"] }],
