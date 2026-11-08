@@ -1,28 +1,11 @@
 import * as assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { join } from "node:path";
 import { describe, it } from "node:test";
 import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
 describe("Inertia HTTP protocol", () => {
-  it("shares the frontend HTTP server with the Vite HMR websocket", async () => {
-    const source = await import("node:fs/promises").then(({ readFile }) =>
-      readFile(join(process.cwd(), "templates", "vue", "server.mjs"), "utf8"),
-    );
-    assert.match(
-      source,
-      /serverOptions\.ws = \{ server: frontendHttpServer \}/,
-    );
-    assert.match(source, /vitePromise \?\?=/);
-    assert.match(source, /vitePromise = undefined/);
-    assert.match(
-      source,
-      /frontendHttpServer = createServer\(SERVER_OPTIONS, handleRequestSafely\)/,
-    );
-  });
-
   it("returns the required page object", async () => {
     const runtime = await server;
     const page = runtime.createInertiaPage("/articles", { path: "/articles" });
@@ -82,6 +65,14 @@ describe("Inertia HTTP protocol", () => {
         { headers: { "x-inertia": "true" } },
       );
       assert.equal(response.headers.get("cache-control"), "private, no-cache");
+      await response.body?.cancel();
+      const html = await fetch(
+        `http://127.0.0.1:${frontendAddress.port}/articles`,
+        { headers: { accept: "text/html" } },
+      );
+      assert.equal(html.headers.get("cache-control"), "private, no-cache");
+      assert.match(html.headers.get("content-type") ?? "", /^text\/html/);
+      await html.body?.cancel();
     } finally {
       frontend.close();
       backend.close();
@@ -91,10 +82,6 @@ describe("Inertia HTTP protocol", () => {
       "content-type": "text/html",
       vary: "X-Inertia",
     });
-    const source = await import("node:fs/promises").then(({ readFile }) =>
-      readFile(join(process.cwd(), "templates", "vue", "server.mjs"), "utf8"),
-    );
-    assert.doesNotMatch(source, /"content-type": "text\/html"/);
   });
 
   it("uses native Inertia v3 semantics for internal, fragment, and external redirects", async () => {

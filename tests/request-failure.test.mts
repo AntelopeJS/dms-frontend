@@ -110,6 +110,24 @@ describe("requests the frontend server cannot serve", () => {
     assert.equal(body, "Internal Server Error");
   });
 
+  it("falls back to the client-rendered shell when the server render fails", async () => {
+    const page = runtime.createInertiaPage("/articles", { path: "/articles" });
+    const reads = Object.assign(async () => undefined, {
+      reuseCompletedReads: () => undefined,
+    });
+    const { html, status } = await runtime.renderHtml(
+      page,
+      "/articles",
+      reads,
+      undefined,
+    );
+    assert.equal(status, 500);
+    assert.ok(
+      html.includes(runtime.inertiaAppHtml(page)),
+      "the page document carries the page for the client to render",
+    );
+  });
+
   it("drops the connection when the failed response had already started", async () => {
     let destroyed = false;
     let headersSent = false;

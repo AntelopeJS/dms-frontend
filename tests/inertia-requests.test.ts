@@ -1,6 +1,5 @@
 import * as assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { join } from "node:path";
 import { describe, it } from "node:test";
 import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
@@ -86,14 +85,28 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
-  it("injects the SSR body without replacement-token expansion", async () => {
-    const source = await import("node:fs/promises").then(({ readFile }) =>
-      readFile(join(process.cwd(), "templates", "vue", "server.mjs"), "utf8"),
+  it("injects the rendered body without expanding replacement patterns", async () => {
+    const runtime = await server;
+    const patterns = "$& $` $' $$";
+    const page = runtime.createInertiaPage("/articles", {
+      path: "/articles",
+      patterns,
+    });
+    const reads = Object.assign(async () => undefined, {
+      reuseCompletedReads: () => undefined,
+    });
+    const { html } = await runtime.renderHtml(
+      page,
+      "/articles",
+      reads,
+      undefined,
+      { ssr: false },
     );
-    assert.match(source, /renderer\.renderDmsPage\(/);
-    assert.match(source, /\(\) => rendered\.body/);
-    assert.doesNotMatch(source, /, rendered\.body\)/);
-    assert.match(source, /falling back to client rendering/);
+    assert.ok(
+      html.includes(runtime.inertiaAppHtml(page)),
+      "the body is inserted as written",
+    );
+    assert.ok(html.includes(JSON.stringify(patterns)));
   });
 
   it("leaves the session, sign-in, e-mail render and tester paths to the modules and the backend", async () => {
