@@ -54,22 +54,19 @@ A proxied request is one the backend receives for the visit. A page read is the 
 | `ForwardedByTheProxy` | With no trusted proxy, `X-Forwarded-For`, `-Proto` and `-Host` are the socket's address, `http` and the request's Host, whatever the visitor sent. | A client picks the address the backend rate-limits and logs. | holds |
 | `ListedHeadersOnly` | Of the visitor's headers, the backend gets only the ones the docs list, plus a matched public endpoint's declared headers. | A header the backend gives a meaning to (`x-dms-*`, a method override, `x-real-ip`, `cf-ipcountry`) comes from any caller. | holds |
 | `DeclaredPrefixesReach` | A visit a valid declaration covers, that the renderer does not answer and the Origin rule does not refuse, reaches the backend. | A module's backend route answers 404 or a page. | holds |
-| `WinningProxyDecides` | When proxies cover a path, the one with more literal segments wins, then a single `*` over `**`. Its auth mode decides whether a cross-site write gets 403 and whether a signed-in visitor's session goes. | A request goes out under another declaration's auth mode than the one written for its path. | finding F2 |
+| `WinningProxyDecides` | When proxies cover a path, the one with more literal segments wins, then a single `*` over `**`. Its auth mode decides whether a cross-site write gets 403 and whether a signed-in visitor's session goes. | A request goes out under another declaration's auth mode than the one written for its path. | holds |
 | `PublicEndpointsWork` | A visit to a public endpoint's method and path, under a covering proxy, reaches the backend without the session and without an Origin, with the endpoint's declared headers. | A provider's webhook is refused, or loses its secret header. | finding F1 |
 
-A case in a finding is left out of the rules that finding breaks: F1 out of `PublicEndpointsWork`, F2 out of `WinningProxyDecides` and `DeclaredPrefixesReach`. The check then confirms that each finding's rule still breaks on its own cases.
+A case in a finding is left out of the rules that finding breaks: F1 out of `PublicEndpointsWork`. The check then confirms that each finding's rule still breaks on its own cases.
 
 ## Findings on main
 
-Each counterexample below is a run of the real server, as `check.mjs` printed it. The check shrinks it, then drops each declaration and header it does not need. F2's three effects come from the default seed, `--seed 1` and `--seed 2`.
+Each counterexample below is a run of the real server, as `check.mjs` printed it. The check shrinks it, then drops each declaration and header it does not need.
 
 - **F1, a public endpoint under an `auth: "none"` proxy loses its declared headers (`PublicEndpointsWork`).** AntelopeJS/dms-frontend#290. `proxyAccess` (public-endpoints.mjs:346-348) returns `{ anonymous: true, headers: [] }` for an `auth: "none"` proxy before it looks for a public endpoint. `backendHeaders` then relays none of the endpoint's headers. The docs say a request to a public endpoint "carries the module's declared headers on top of the usual ones". With `DMS_BACKEND_PROXIES=[{"path":"/api/**","auth":"none"}]` and `DMS_PUBLIC_ENDPOINTS=[{"path":"/api/hooks","methods":["PUT"],"headers":["x-hook-secret","x-acme-signature"]}]`, `PUT /api/hooks` with `x-hook-secret` reaches the backend without it. A webhook that authenticates by that header is refused on every delivery. Under an `auth: "session"` proxy the same endpoint gets its header.
-- **F2, the server's proxy order disagrees with its documented order (`WinningProxyDecides`).** AntelopeJS/dms-frontend#291. `compilePathPattern` (path-patterns.mjs:47) ranks a pattern `literals * 4 + segments * 2 + (deep ? 0 : 1)`, and `resolveBackendProxies` (backend-proxies.mjs:143-145) sorts by it. Its TSDoc (path-patterns.mjs:14-16) says "more literal segments first, then a single-segment `*` over `**`". Two extra `*` segments outweigh one literal, so for `/api/hooks/a/b` the server picks `/api/*/*/*` (rank 13) over `/api/hooks/**` (rank 12). It happens only when a pattern has at least two more segments than a covering pattern with more literals. The DMS's own `/api/**` and `/dms/**` never trigger it. Three effects:
-  - `/media/a/**` declared `auth: "none"` and `/media/*/*/*` with the session: a signed-in `HEAD /media/a/b/_dms` goes out with the session.
-  - `/api/b/**` declared `auth: "none"` and `/api/*/*/*/**` with the session: a webhook's `POST /api/b/_dms/a/hooks` with no Origin gets 403.
-  - `/api/icons/**` with the session and `/api/*/*/*/**` declared `auth: "none"`: `POST /api/icons/a/b/_dms` with no Origin goes out with no session and no 403. No session leaves, so this is not CSRF.
+F1 is left to the owner: the code or the docs may change. It lets no session out without an Origin check. `SessionOnlyWhereDeclared` and `NoCrossSiteSessionWrite` hold on every case, F1's included.
 
-Both findings are left to the owner: the code or the docs may change. Neither lets a session out without an Origin check. `SessionOnlyWhereDeclared` and `NoCrossSiteSessionWrite` hold on every case, findings included.
+F2 (AntelopeJS/dms-frontend#291), a proxy order that let extra `*` segments outrank a literal, needed a `*` before the last segment. AntelopeJS/dms-frontend#275 refuses that form, so F2 can no longer occur, and `WinningProxyDecides` holds on every case.
 
 ## Real bug or modeling error
 
@@ -110,7 +107,7 @@ Paths are under `templates/vue/`.
 | Refusing a foreign target | `isOriginForm`, `refuseForeignTarget` (server/request-target.mjs:14-59), `handleRequestSafely` (server.mjs:514-524) |
 | Who answers a path | `handleRequest` (server.mjs:428-450), `requestOwner`, `reachesBackend` (server/request-routing.mjs:40-75), `isRendererFilePath` (server/module-routes.mjs:50-54), `isIconRequest` (server/icons.mjs:202-207), `ICON_API_PATH` (icon-api.mjs:7) |
 | Reading the declarations | `loadServerModules`, `serverModules` (server/module-server.mjs:291-323), `environmentBackendProxies` (server/public-endpoints.mjs:180-197), `allowedPublicEndpoints`, `compilePublicEndpoint` (server/public-endpoints.mjs:258-296) |
-| Valid proxies and their order | `proxyRejection`, `resolveBackendProxies`, `matchBackendProxy` (server/backend-proxies.mjs:59-156), `compilePathPattern` (server/path-patterns.mjs:25-50) |
+| Valid proxies and their order | `proxyRejection`, `resolveBackendProxies`, `matchBackendProxy` (server/backend-proxies.mjs:59-156), `compilePathPattern` (server/path-patterns.mjs:39-61) |
 | Session, Origin and public endpoints | `proxyAccess`, `matchPublicEndpoint` (server/public-endpoints.mjs:320-367), `isSameOrigin` (server/auth/client-ip.mjs:144-155), `readSession` (server/auth/session.mjs:163-168) |
 | What the backend receives | `proxy` (server/proxy-request.mjs:30-57), `backendHeaders` (server/backend-request.mjs:17-38), `relayedHeaders`, `CLIENT_HEADERS` (server/auth/backend.mjs:10-66), `forwardedHeaders` (server/auth/client-ip.mjs:97-107), `backendUrl` (server/request-target.mjs:31-38), `sendWithinLimit` (server/proxy-transfers.mjs:133), `PLAIN_ANSWER_HEADERS` (server/proxy-compression.mjs:11) |
 | Page reads | `SITE_LAYOUT_PATH`, `pagePath`, `loadPageProps` (server/page-props.mjs:17, 112-121, 217-240) |
@@ -136,15 +133,15 @@ Each break was made in the real product code of the worktree, one at a time, and
 
 | Rule | Scratch change | First `BROKEN` line of the rule |
 | --- | --- | --- |
-| `DeclaredPrefixesOnly` | a deep pattern matches inside a segment: `(?:/.*)?` becomes `.*` (path-patterns.mjs:43) | `the backend received GET /apix, but the docs give the visit to the page` |
+| `DeclaredPrefixesOnly` | a deep pattern matches inside a segment: `(?:/.*)?` becomes `.*` (path-patterns.mjs:14) | `the backend received PATCH /api/hooks/x.yx, but the docs give the visit to the not-found` |
 | `SamePathAsMatched` | `backendUrl` sends `decodeURIComponent(pathname)` (request-target.mjs:37) | `the backend received HEAD /media/a/b/x.y/_dms, the server matched HEAD /media/a%2Fb/x.y/_dms` |
-| `SessionOnlyWhereDeclared` | `proxyAccess` loses its `auth: "none"` return (public-endpoints.mjs:347-348) | `the backend received GET /api/hooksx with the session, and no auth: "session" proxy covers it` |
-| `NoCrossSiteSessionWrite` | `proxyAccess` refuses nothing (public-endpoints.mjs:362) | `the backend received PUT /api/icons/ with the session, and the visitor sent no Origin` |
+| `SessionOnlyWhereDeclared` | `proxyAccess` loses its `auth: "none"` return (public-endpoints.mjs:347-348) | `the backend received GET /api/hooks with the session, and no auth: "session" proxy covers it` |
+| `NoCrossSiteSessionWrite` | `proxyAccess` refuses nothing (public-endpoints.mjs:362) | `the backend received PATCH /a/%zz with the session, and the visitor sent no Origin` |
 | `NoVisitorCredentials` | `backendHeaders` relays `cookie` (backend-request.mjs:23-31) | `the backend received GET /dms/page?path=%2Fapi with Cookie "zqother=zqmark-cookie"` |
-| `ForwardedByTheProxy` | `trustedHops` defaults to 1 (client-ip.mjs:25) | `the backend received GET /dms/page?path=%2F%252F%252Fevil.example%2Fa with x-forwarded-host "zqmark-x-forwarded-host"` |
-| `ListedHeadersOnly` | `backendHeaders` relays `x-http-method-override` (backend-request.mjs:23-31) | `the backend received GET /dms/page?path=%2Fdms with the visitor's x-http-method-override` |
-| `DeclaredPrefixesReach` | `/x/**` no longer covers `/x`: `(?:/.*)?` becomes `/.*` (path-patterns.mjs:43) | `the visit answered 404 and the backend received nothing, though /dms/** covers it` |
-| `WinningProxyDecides` | `resolveBackendProxies` sorts least specific first (backend-proxies.mjs:143-145) | `/api/b/** (auth: "session") decides: the backend received GET /api/b/icons/a without the session` |
+| `ForwardedByTheProxy` | `trustedHops` defaults to 1 (client-ip.mjs:25) | `the backend received GET /dms/page?path=%2Fapi%2Fhooks with x-forwarded-host "zqmark-x-forwarded-host"` |
+| `ListedHeadersOnly` | `backendHeaders` relays `x-http-method-override` (backend-request.mjs:23-31) | `the backend received GET /dms/page?path=%2Fdmsx with the visitor's x-http-method-override` |
+| `DeclaredPrefixesReach` | `/x/**` no longer covers `/x`: `(?:/.*)?` becomes `/.*` (path-patterns.mjs:14) | `the visit answered 404 and the backend received nothing, though /dms/** covers it` |
+| `WinningProxyDecides` | `resolveBackendProxies` sorts least specific first (backend-proxies.mjs:143-145) | `/media/b/** (auth: "none") decides: the visit is not refused, and it answered 403` |
 | `PublicEndpointsWork` | `proxyAccess` checks the Origin before the public endpoints (public-endpoints.mjs:349) | `the public endpoint /api/hooks/*/* answered 403, and the backend received 0 requests` |
 
-With every change reverted, both configurations exit 0 with F1 and F2 as recorded.
+With every change reverted, both configurations exit 0 with F1 as recorded.

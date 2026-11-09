@@ -32,6 +32,7 @@ export const modules = [
         "/bad-value": { headers: { "x-a": "a\r\nb" } },
         "/bad-text": { headers: { "x-a": 1 } },
         "/bad-object": "rule",
+        "/bad/*/mid": { ssr: false },
       });
     },
   },

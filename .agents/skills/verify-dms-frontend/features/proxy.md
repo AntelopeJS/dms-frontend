@@ -82,7 +82,6 @@ Most journeys start a second `ajs dms start` (`proxy-satellite.mjs`) on a free p
 ## Gotchas
 
 - Each satellite takes 3 to 5 seconds to start; a journey stops its servers in a `finally`.
-- `proxy-pattern-forms` fails on purpose: a pattern with a wildcard in the middle (`/mid/*/leaf`) is accepted without a warning. Issue: AntelopeJS/dms-frontend#275.
 - A warning for a malformed public endpoint is printed twice by the server (once when the modules resolve, once for the request matcher); the journey asserts that each entry is reported, not how often.
 - A `HEAD` of an eligible answer carries the backend's `Vary` without `Accept-Encoding`, unlike the `GET`; the journey does not assert it.
 - Node 24's `fetch` decodes `zstd`: use a coding it does not know (`x-custom`) to reach the proxy's passthrough.

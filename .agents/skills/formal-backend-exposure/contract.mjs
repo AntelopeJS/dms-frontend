@@ -83,8 +83,9 @@ function segmentsMatch(pattern, deep, segments) {
 }
 
 /**
- * A backend proxy pattern: `/x`, `/x/*` or `/x/**`, made of literal segments
- * and `*`, its first segment literal, outside the renderer's own paths.
+ * A backend proxy pattern: `/x`, `/x/*` or `/x/**`, literal segments with a
+ * `*` or `**` only as the last one, its first segment literal, outside the
+ * renderer's own paths.
  *
  * @param {string} pattern
  */
@@ -93,13 +94,14 @@ function proxyPattern(pattern) {
   const segments = pattern.slice(1).split("/");
   const deep = segments.at(-1) === "**";
   const body = deep ? segments.slice(0, -1) : segments;
-  if (body.length === 0 || body[0] === "*") return undefined;
-  const isSegment = (/** @type {string} */ segment) => segment === "*" || (PROXY_SEGMENT.test(segment) && segment !== "." && segment !== "..");
-  if (!body.every(isSegment)) return undefined;
-  const firstWildcard = body.indexOf("*");
-  const prefix = `/${(firstWildcard === -1 ? body : body.slice(0, firstWildcard)).join("/")}`;
+  const one = !deep && body.at(-1) === "*";
+  const literal = one ? body.slice(0, -1) : body;
+  if (literal.length === 0) return undefined;
+  const isSegment = (/** @type {string} */ segment) => PROXY_SEGMENT.test(segment) && segment !== "." && segment !== "..";
+  if (!literal.every(isSegment)) return undefined;
+  const prefix = `/${literal.join("/")}`;
   if (RENDERER_PREFIXES.some((reserved) => prefix === reserved || prefix.startsWith(`${reserved}/`))) return undefined;
-  return { literals: body.map((segment) => (segment === "*" ? null : segment)), deep };
+  return { literals: one ? [...literal, null] : literal, deep };
 }
 
 /**

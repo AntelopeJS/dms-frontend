@@ -62,6 +62,7 @@ export const journeys = [
           rule("rules/mod", "/bad-value", text("x-a")),
           rule("rules/mod", "/bad-text", text("x-a")),
           rule("rules/mod", "/bad-object", "it is not an object"),
+          rule("rules/mod", "/bad/*/mid", "the pattern is not /x, /x/* or /x/**"),
         ];
         observe(ctx, "every rejected rule is warned about with its reason", { warnings: lines.filter((line) => line.includes("route rule")) }, [
           ctx.equal("each warning appears exactly once", expected.map((line) => lines.filter((candidate) => candidate === line).length), expected.map(() => 1)),
