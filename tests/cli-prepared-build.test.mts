@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { FakePnpmCli, projectHome } from "./fixtures/fake-pnpm-cli.mts";
@@ -66,6 +66,26 @@ describePosix("build --setup-only and build --prepared", () => {
     assert.match(run.stderr, /\nBuilt the production frontend → /);
   });
 
+  it("--prepared bundles once the module sources moved or changed after the setup", async () => {
+    const moved = await setUp();
+    renameSync(join(moved, "frontend-vue"), join(moved, "moved-away"));
+    const edited = await setUp();
+    writeFileSync(
+      join(edited, "frontend-vue/package.json"),
+      JSON.stringify({ name: "framed-layer", dependencies: { vue: "3" } }),
+    );
+
+    for (const sandbox of [moved, edited]) {
+      const run = await cli.run(["build", "--prepared"], { sandbox });
+
+      assert.equal(run.code, 0, run.stderr);
+      assert.deepEqual(
+        run.calls.map((call) => call.args),
+        BUNDLES,
+      );
+    }
+  });
+
   it("--prepared points a failed step at the module's own file", async () => {
     const sandbox = await setUp();
 
@@ -114,6 +134,23 @@ describePosix("build --setup-only and build --prepared", () => {
       refused.stderr,
       /Its dependencies are not installed, or changed since they were\./,
     );
+  });
+
+  it("--prepared refuses an installed workspace a --no-install setup rewrote for new dependencies", async () => {
+    const sandbox = await setUp();
+    writeFileSync(
+      join(sandbox, "frontend-vue/package.json"),
+      JSON.stringify({ name: "framed-layer", dependencies: { vue: "3" } }),
+    );
+    const rewritten = await cli.run(["build", "--setup-only", "--no-install"], {
+      sandbox,
+    });
+    assert.equal(rewritten.code, 0, rewritten.stderr);
+
+    const run = await cli.run(["build", "--prepared"], { sandbox });
+
+    assert.equal(run.code, 3);
+    assert.deepEqual(run.calls, []);
   });
 
   it("a setup that fails leaves a workspace --prepared refuses", async () => {
