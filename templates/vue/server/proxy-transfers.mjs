@@ -93,7 +93,10 @@ function refuseTooLargeBody(request, response) {
     connection: "close",
   });
   response.write(TOO_LARGE_BODY);
-  if (request.complete) return response.end();
+  if (request.complete) {
+    response.end();
+    return;
+  }
   const close = () => {
     clearTimeout(timer);
     response.end();
@@ -125,10 +128,8 @@ function refuseTooLargeBody(request, response) {
  * ) => Promise<Response>} send The backend request with the body to stream:
  *   none for a GET or a HEAD, the request itself, or its bytes cut off past
  *   the limit
- * @returns {Promise<Response | import("node:http").ServerResponse | undefined>}
- *   The backend's answer, or once the body went over and `response` got the
- *   413: `undefined`, or `response` itself when the request had been read
- *   already (`response.end()`'s own return)
+ * @returns {Promise<Response | undefined>} The backend's answer, or
+ *   `undefined` once the body went over and `response` got the 413
  */
 export async function sendWithinLimit(request, response, maxBodyBytes, send) {
   if (declaresTooLargeBody(request, maxBodyBytes))

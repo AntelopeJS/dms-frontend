@@ -316,3 +316,37 @@ describe("the proxy streams large file-storage transfers", () => {
     );
   });
 });
+
+describe("sendWithinLimit", () => {
+  it("resolves undefined after its 413 when the over-limit body was already read", async () => {
+    const { sendWithinLimit } =
+      await import("../templates/vue/server/proxy-transfers.mjs");
+    const body = "0123456789";
+    const sent: unknown[] = [];
+    const answered = new Promise<{ complete: boolean; result: unknown }>(
+      (resolve) => {
+        const server = createServer((request, response) => {
+          request.once("end", () => {
+            void sendWithinLimit(request, response, 5, (stream) => {
+              sent.push(stream);
+              return Promise.resolve(new Response());
+            }).then((result) => {
+              server.close();
+              resolve({ complete: request.complete, result });
+            });
+          });
+          request.resume();
+        });
+        void listen(server).then((port) =>
+          connect(port, "127.0.0.1").end(
+            `POST / HTTP/1.1\r\nhost: 127.0.0.1\r\ncontent-length: ${body.length}\r\n\r\n${body}`,
+          ),
+        );
+      },
+    );
+    const { complete, result } = await answered;
+    assert.equal(complete, true, "the body was read before the limit check");
+    assert.equal(result, undefined);
+    assert.deepEqual(sent, []);
+  });
+});
