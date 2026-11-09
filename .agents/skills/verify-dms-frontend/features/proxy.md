@@ -28,7 +28,7 @@ The frontend server sends the paths that a backend prefix covers to the backend:
 ## Sub-features
 
 - `proxy-relay`: the client headers that reach the backend, the ones that never do (`Cookie`, `Authorization`, `x-dms-bootstrap`), `X-Forwarded-*` under `DMS_TRUSTED_PROXY_HOPS`, `DMS_CLIENT_IP_HEADER` and `DMS_COUNTRY_HEADER`, and the session's token as the only credential.
-- `proxy-access`: the Origin rule for `POST`, `PUT`, `PATCH` and `DELETE` against seven kinds of foreign Origin, safe methods, `auth: "none"`, and public endpoints from the manifest, from `DMS_PUBLIC_ENDPOINTS` and from a module (path, methods, headers, every malformed declaration dropped whole).
+- `proxy-access`: the Origin rule for `POST`, `PUT`, `PATCH` and `DELETE` against seven kinds of foreign Origin, safe methods, `auth: "none"` (with a public endpoint under it keeping its declared headers), and public endpoints from the manifest, from `DMS_PUBLIC_ENDPOINTS` and from a module (path, methods, headers, every malformed declaration dropped whole).
 - `proxy-limits`: `maxBodyBytes` at the limit, one below and one above, declared and chunked, the 413 body, the 5-second drain, no cap by default, streaming in both directions, invalid limits, and the DMS's 500 MiB upload prefix.
 - `proxy-redirects`: five redirect statuses relayed as they are, with the backend's cookies, never followed, and every `Location` rule.
 - `proxy-answers`: Brotli and gzip chosen by `Accept-Encoding` qualities, the 1 KiB threshold, content types, `no-transform`, ranges, unknown and ignored codings, `Vary`, `ETag`, `HEAD`, hop-by-hop headers and streaming compression.

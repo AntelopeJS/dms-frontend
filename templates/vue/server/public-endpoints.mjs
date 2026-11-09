@@ -333,6 +333,8 @@ export function matchPublicEndpoint(
  * Origin. Under `auth: "session"`, a state-changing request needs one unless
  * it reaches a public endpoint, which is why the proxy never sends a public
  * endpoint the session: a cross-site form posting to it acts as nobody.
+ * Under either mode, a request that reaches a public endpoint carries the
+ * endpoint's declared headers.
  *
  * @param {import("./request-target.mjs").ServerRequest} request The incoming request
  * @param {ReadonlySet<string>} safeMethods Methods that change nothing and need no Origin
@@ -340,16 +342,14 @@ export function matchPublicEndpoint(
  * @returns `{ anonymous, headers, isRefused }`
  */
 export function proxyAccess(request, safeMethods, proxy) {
-  if (proxy.auth === "none")
-    return { anonymous: true, headers: [], isRefused: false };
   const publicEndpoint = matchPublicEndpoint(
     request.method,
     new URL(request.url, "http://frontend.local").pathname,
   );
-  if (publicEndpoint)
+  if (publicEndpoint || proxy.auth === "none")
     return {
       anonymous: true,
-      headers: publicEndpoint.headers,
+      headers: publicEndpoint?.headers ?? [],
       isRefused: false,
     };
   return {

@@ -156,6 +156,66 @@ describe("public endpoints through the proxy", () => {
       backend.close();
     }
   });
+
+  it("relays a public endpoint's headers under a proxy without auth", async () => {
+    const proxies = process.env.DMS_BACKEND_PROXIES;
+    process.env.DMS_BACKEND_PROXIES = JSON.stringify([
+      { path: "/api/**", auth: "none" },
+    ]);
+    process.env.DMS_PUBLIC_ENDPOINTS = JSON.stringify([
+      { path: "/api/hooks", methods: ["PUT"], headers: ["x-hook-secret"] },
+    ]);
+    const seen: Record<string, string | string[] | undefined>[] = [];
+    const backend = createServer((request, response) => {
+      seen.push({
+        url: request.url,
+        secret: request.headers["x-hook-secret"],
+        other: request.headers["x-other"],
+      });
+      response.writeHead(202, { "content-type": "application/json" });
+      response.end("{}");
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${addressOf(backend).port}`;
+    const runtime = await server;
+    const frontend = createServer(runtime.handleRequestSafely);
+    await new Promise<void>((resolve) =>
+      frontend.listen(0, "127.0.0.1", resolve),
+    );
+    const base = `http://127.0.0.1:${addressOf(frontend).port}`;
+    try {
+      const hook = await fetch(`${base}/api/hooks`, {
+        method: "PUT",
+        headers: { "x-hook-secret": "s3cret", "x-other": "dropped" },
+        body: "{}",
+      });
+      assert.equal(hook.status, 202);
+      assert.deepEqual(seen.at(-1), {
+        url: "/api/hooks",
+        secret: "s3cret",
+        other: undefined,
+      });
+
+      const undeclared = await fetch(`${base}/api/items`, {
+        method: "PUT",
+        headers: { "x-hook-secret": "not-relayed" },
+        body: "{}",
+      });
+      assert.equal(undeclared.status, 202);
+      assert.deepEqual(seen.at(-1), {
+        url: "/api/items",
+        secret: undefined,
+        other: undefined,
+      });
+    } finally {
+      process.env.DMS_BACKEND_PROXIES = proxies;
+      delete process.env.DMS_PUBLIC_ENDPOINTS;
+      frontend.close();
+      backend.close();
+    }
+  });
 });
 
 describe("Site layout as an Inertia once prop", () => {
