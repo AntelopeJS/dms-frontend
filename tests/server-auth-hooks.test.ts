@@ -201,12 +201,19 @@ describe("Auth hook declarations", () => {
         app: { authEstablishEndpoints: [] },
         authOwner: id,
       }));
-      assert.deepEqual(auth.view({ user: { name: "Ada" } }), {
-        user: { name: "Ada" },
-      });
+      assert.deepEqual(
+        auth.view({ user: { name: "Ada" }, persistent: false }),
+        {
+          user: { name: "Ada" },
+        },
+      );
       const jar = responseOf();
-      sessions.writeSession(jar, { accessToken: "a", user: { name: "Ada" } });
-      const request = requestOf({
+      sessions.writeSession(jar, {
+        accessToken: "a",
+        user: { name: "Ada" },
+        persistent: false,
+      });
+      const request = serverRequestOf({
         method: "GET",
         url: "/private",
         headers: { cookie: cookiePairs(jar).join("; "), host: "localhost" },
