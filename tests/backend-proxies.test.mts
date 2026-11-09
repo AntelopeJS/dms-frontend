@@ -121,6 +121,24 @@ describe("Backend proxy declarations", () => {
     ]);
   });
 
+  it("rank a literal segment above a wildcard tail, whatever the declaration order", () => {
+    const { modules } = resolved(
+      [],
+      [
+        { module: "@acme/any", path: "/api/*", auth: "none" },
+        { module: "@acme/hooks", path: "/api/hooks" },
+      ],
+    );
+    assert.equal(
+      matchBackendProxy(modules.proxies, "/api/hooks")?.auth,
+      "session",
+    );
+    assert.equal(
+      matchBackendProxy(modules.proxies, "/api/other")?.auth,
+      "none",
+    );
+  });
+
   it("are listed at startup with their owner and their auth", () => {
     const proxies = resolveBackendProxies(
       [{ id: "dms", pattern: "/api/**", options: undefined }],
