@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
+import { CliError } from "@antelopejs/core/cli";
 import { readLocaleFile } from "../src/locale-files";
+import { problemText } from "./fixtures/memory-ui";
 import {
   InvalidLocaleFileError,
   materializeLayers,
@@ -52,16 +54,33 @@ describe("locale messages vue-i18n cannot compile", () => {
     });
     assert.ok(error instanceof InvalidLocaleFileError, String(error));
     assert.match(error.path, /app-en-GB\.json$/);
-    const lines = error.reason.split("\n");
-    assert.equal(lines[0], "2 message(s) vue-i18n cannot compile:");
-    assert.match(lines[1], /^auth\.email\.placeholder: /);
+    assert.equal(error.reason, "2 message(s) vue-i18n cannot compile:");
+    const [placeholder, broken, ...rest] = error.details;
+    assert.match(placeholder, /^auth\.email\.placeholder: /);
     assert.ok(
-      lines[1].endsWith(
+      placeholder.endsWith(
         `Write a literal @ as {'@'}: "first.last{'@'}example.com".`,
       ),
-      lines[1],
+      placeholder,
     );
-    assert.match(lines[2], /^broken: .*Write a literal \{ as \{'\{'\}: /);
+    assert.match(broken, /^broken: .*Write a literal \{ as \{'\{'\}: /);
+    assert.deepEqual(rest, []);
+  });
+
+  it("prints the key and the message to write without --verbose", () => {
+    const error = materializeWith({
+      auth: { email: { placeholder: "first.last@example.com" } },
+    });
+    assert.ok(error instanceof CliError, String(error));
+    assert.ok(error instanceof InvalidLocaleFileError, String(error));
+    assert.equal(
+      problemText(error),
+      [
+        `✖ Invalid locale file ${error.path}: 1 message(s) vue-i18n cannot compile:`,
+        `  auth.email.placeholder: Invalid linked format in "first.last@example.com". Write a literal @ as {'@'}: "first.last{'@'}example.com".`,
+        "",
+      ].join("\n"),
+    );
   });
 
   it("accepts what vue-i18n compiles: placeholders, plurals, links, escapes", () => {
@@ -100,6 +119,21 @@ describe("a locale file that is not a JSON object", () => {
       });
     });
   }
+
+  it("is named on one line when its JSON does not parse", () => {
+    const path = locale("abc\ndef");
+    assert.throws(
+      () => readLocaleFile(path),
+      (error) => {
+        assert.ok(error instanceof InvalidLocaleFileError, String(error));
+        assert.equal(
+          problemText(error),
+          `✖ Invalid locale file ${path}: Unexpected token 'a', "abc\\ndef" is not valid JSON\n`,
+        );
+        return true;
+      },
+    );
+  });
 
   it("is read as before when it holds an object", () => {
     assert.deepEqual(

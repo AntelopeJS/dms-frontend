@@ -48,8 +48,8 @@ The production path of the CLI: `build` into a workspace, `start` serving it aga
 - `dev-discovery`: `.antelope/dev.json` of the enclosing project (found from a subfolder), the workspace keyed on the project and kept when the backend changes port, `DMS_API_BASE_URL` in `./.env` ends discovery, a stale, malformed or api-less registry fails with its message, the first file found decides.
 - `dev-public-files`: a file added to a module's `public/` is served at once, and not any more once removed.
 - `build-entry-weight-default`: with no threshold set, a module adding about 70 KB of Brotli to the client entry is warned about with its size and the 50 KB threshold, and one adding about 25 KB is not.
-- `build-locale-error`: a message vue-i18n cannot compile stops the build with exit 1 and names the file and the count; `--verbose` adds the key and the message to write instead.
-- `build-locale-error-names-the-key`: finding AntelopeJS/dms-frontend#281: the default output lacks the key line the page shows. Fails today.
+- `build-locale-error`: a message vue-i18n cannot compile stops the build with exit 1 and names the file and the count; `--verbose` keeps the key and the message to write instead.
+- `build-locale-error-names-the-key`: the default output names the key and the message to write instead, as the page shows (AntelopeJS/dms-frontend#281).
 - `build-access-redirect`: a page visit the backend refuses with a typed 403 goes to the path a module registered for its code (document, Inertia, plain-text and JSON bodies, first registration wins); a refused destination, another origin, an unregistered code and a request that is no page visit show the error page.
 - `dev-secret-precedence`: with `DMS_HTML_RENDER_SECRET` set and the manifest publishing another value, `dev` takes the variable (the docs disagree: AntelopeJS/dms-frontend#282).
 

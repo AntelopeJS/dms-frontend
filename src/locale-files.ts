@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { CliError } from "@antelopejs/core/cli";
 import { baseCompile, type CompileError } from "@intlify/message-compiler";
 import { isObjectLike, isText } from "./internal/guards";
 import {
@@ -11,18 +12,26 @@ import {
 /**
  * A locale file that does not parse, or holds a message vue-i18n cannot
  * compile: in development an editor can save a catalog half-written. Carries
- * the file, which the dev watcher shows as the source the user edits, and why,
- * naming each message and its fix.
+ * the file, which the dev watcher shows as the source the user edits, why, and
+ * one detail line per message naming its key and its fix, which the CLI prints
+ * without `--verbose`.
  */
-export class InvalidLocaleFileError extends Error {
+export class InvalidLocaleFileError extends CliError {
   constructor(
     readonly path: string,
     readonly reason: string,
+    readonly details: readonly string[] = [],
   ) {
-    super(`Invalid locale file ${path}: ${reason}`);
+    super({
+      title: `Invalid locale file ${path}: ${reason}`,
+      details: [...details],
+    });
     this.name = "InvalidLocaleFileError";
   }
 }
+
+/** The line breaks of the excerpt a JSON parse error quotes from the file. */
+const LINE_BREAKS = /\r?\n/g;
 
 /** The characters vue-i18n's syntax reserves, as a message writes them literally. */
 const LITERAL_ESCAPES = {
@@ -112,7 +121,7 @@ export function readLocaleFile(path: string): LocaleMessages {
     value = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new InvalidLocaleFileError(path, reason);
+    throw new InvalidLocaleFileError(path, reason.replace(LINE_BREAKS, "\\n"));
   }
   if (!isLocaleValue(value) || !isMessageGroup(value)) {
     throw new InvalidLocaleFileError(
@@ -122,11 +131,11 @@ export function readLocaleFile(path: string): LocaleMessages {
   }
   const problems = messageProblems(value, "");
   if (problems.length) {
-    const reason = [
+    throw new InvalidLocaleFileError(
+      path,
       `${problems.length} message(s) vue-i18n cannot compile:`,
-      ...problems.map(describeProblem),
-    ].join("\n");
-    throw new InvalidLocaleFileError(path, reason);
+      problems.map(describeProblem),
+    );
   }
   return value;
 }

@@ -306,7 +306,7 @@ function createDerivedOutputRefresher(
         const file = reporter.show(err.path);
         fail(output, {
           text: `${file} is not a valid locale file`,
-          options: { details: [...err.reason.split("\n"), kept] },
+          options: { details: [err.reason, ...err.details, kept] },
           fixed: [`${file} fixed`, `${output.name} regenerated`].join(
             getProcessUi().symbols.separator,
           ),
