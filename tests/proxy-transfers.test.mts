@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { connect } from "node:net";
 import { after, afterEach, before, describe, it } from "node:test";
+import { isServerRequest } from "../templates/vue/server/request-target.mjs";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
 import { parseJson } from "./helpers/json";
 import { addressOf, streamedBody } from "./helpers/net";
@@ -324,6 +325,7 @@ describe("sendWithinLimit", () => {
     const answered = new Promise<{ complete: boolean; result: unknown }>(
       (resolve) => {
         const server = createServer((request, response) => {
+          assert.ok(isServerRequest(request), "Node sets the request URL");
           request.once("end", () => {
             void sendWithinLimit(request, response, 5, (stream) => {
               sent.push(stream);
