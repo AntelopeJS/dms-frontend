@@ -87,7 +87,8 @@
     "chokidar": "^4.0.3",
     "commander": "^13.1.0",
     "ignore": "^7.0.5",
-    "semver": "^7.7.4"
+    "semver": "^7.7.4",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@antelopejs/core": "^1.21.0",

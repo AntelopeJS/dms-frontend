@@ -1,11 +1,5 @@
-import {
-  cpSync,
-  existsSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { join, resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   CliError,
   type CliProblem,
@@ -18,18 +12,11 @@ import {
 import { createPathMapper } from "./child-output";
 import { ensure } from "./internal/ensure";
 import { isText } from "./internal/guards";
-import { isPlainObject } from "./internal/plain-object";
 import { parseViteManifest } from "./internal/vite-manifest";
 import {
   assertLayersSupportRenderer,
   CancelledError,
-  createFrontendModuleRegistry,
-  getPackageRoot,
   installDeps,
-  materializeLayers,
-  type ResolvedLayer,
-  writeFrontendModuleRegistry,
-  writeWorkspacePackageJson,
 } from "./common";
 import {
   exitOnBrokenPipe,
@@ -38,6 +25,7 @@ import {
   writeHeader,
 } from "./output";
 import { createTemporaryWorkspace } from "./temporary-workspace";
+import { materializeWorkspace } from "./verify-source-workspace";
 import { checkClientBundle } from "./verify-source-client-bundle";
 import {
   buildAndTypeCheck,
@@ -58,66 +46,6 @@ import {
 const EMAIL_BUILD_SIZE_CEILING_BYTES = 256 * 1024;
 const NON_EMAIL_RUNTIME_PATTERN =
   /DisplayRichText|ApexCharts|Tiptap|FlowCanvas|app\/.*table|components\/table/i;
-function removeDevelopmentDependencies(root: string): void {
-  const packagePath = join(root, "package.json");
-  if (!existsSync(packagePath)) return;
-  const packageData: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
-  if (!isPlainObject(packageData)) return;
-  delete packageData.devDependencies;
-  writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`);
-}
-
-function materializeWorkspace(
-  workspace: string,
-  layers: ResolvedLayer[],
-  localPackages: Record<string, string>,
-) {
-  const templateRoot = join(getPackageRoot(), "templates", "vue");
-  const templateFiles = readdirSync(templateRoot).filter(
-    (file) => !file.startsWith("npmrc"),
-  );
-  for (const file of templateFiles)
-    cpSync(join(templateRoot, file), join(workspace, file), {
-      recursive: true,
-    });
-  materializeLayers(workspace, layers);
-  const registry = createFrontendModuleRegistry(workspace, layers);
-  registry.modules.forEach((module) => {
-    removeDevelopmentDependencies(module.root);
-  });
-  writeFrontendModuleRegistry(workspace, layers);
-  writeFileSync(
-    join(workspace, "dms-main.css"),
-    '@import "tailwindcss";\n@import "@nuxt/ui";\n',
-  );
-  writeWorkspacePackageJson(workspace, layers);
-  const packagePath = join(workspace, "package.json");
-  const workspacePackage: unknown = JSON.parse(
-    readFileSync(packagePath, "utf8"),
-  );
-  ensure(
-    isPlainObject(workspacePackage),
-    "The workspace package.json is not a JSON object",
-  );
-  workspacePackage.pnpm = {
-    overrides: {
-      ...Object.fromEntries(
-        layers.map((layer): [string, string] => [
-          String(layer.packageName),
-          "workspace:*",
-        ]),
-      ),
-      ...Object.fromEntries(
-        Object.entries(localPackages).map(([name, path]) => [
-          name,
-          `link:${resolve(path)}`,
-        ]),
-      ),
-    },
-  };
-  writeFileSync(packagePath, `${JSON.stringify(workspacePackage, null, 2)}\n`);
-}
-
 /**
  * The server modules bundle holds no application code and loads in Node.js.
  * Returns the line the task ends on.
