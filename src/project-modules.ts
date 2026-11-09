@@ -331,20 +331,30 @@ function moduleFolder(
   return candidates.find((folder) => existsSync(join(folder, "package.json")));
 }
 
+/** The name and version of the package shipping a frontend module. */
+export interface ShippingPackage {
+  name?: string;
+  version?: string;
+}
+
 /**
- * The version of the package shipping a frontend module, the one above its
- * source directory, as the backend reads it.
+ * The package shipping a frontend module, the one above its source directory,
+ * as the backend reads it. Empty when that directory holds no readable
+ * `package.json`.
  */
-export function readShippingVersion(sourcePath: string): string | undefined {
+export function readShippingPackage(sourcePath: string): ShippingPackage {
   try {
     const pkg: unknown = JSON.parse(
       readFileSync(join(dirname(sourcePath), "package.json"), "utf-8"),
     );
-    return isObjectLike(pkg) && "version" in pkg && isText(pkg.version)
-      ? pkg.version
-      : undefined;
+    if (!isObjectLike(pkg)) return {};
+    return {
+      name: "name" in pkg && isText(pkg.name) ? pkg.name : undefined,
+      version:
+        "version" in pkg && isText(pkg.version) ? pkg.version : undefined,
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -468,6 +478,6 @@ export async function readProjectFrontendModules(
     .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0))
     .map((registration) => ({
       layer: toLayer(registration),
-      version: readShippingVersion(registration.sourcePath),
+      version: readShippingPackage(registration.sourcePath).version,
     }));
 }
