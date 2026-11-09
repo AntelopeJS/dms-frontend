@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { Options } from "../config";
 import { type HelpExample, withExamples } from "@antelopejs/core/cli";
 import type { BuildOptions } from "./build-action";
@@ -12,6 +12,11 @@ const BUILD_EXAMPLES: HelpExample[] = [
   {
     description: "With another environment's configuration, into a directory",
     command: "ajs dms build -e staging --workspace /srv/dms-frontend",
+  },
+  {
+    description:
+      "Set the workspace up and install it, then build it later as it is",
+    command: "ajs dms build --setup-only && ajs dms build --prepared",
   },
 ];
 
@@ -29,6 +34,24 @@ export function cmdBuild(): Command {
       ),
     )
     .addOption(Options.force("Reinstall the workspace dependencies"))
+    .addOption(
+      new Option(
+        "--setup-only",
+        "Set the workspace up and install its dependencies, then stop before the bundles",
+      ),
+    )
+    .addOption(
+      new Option(
+        "--no-install",
+        "With --setup-only, write the workspace without installing its dependencies",
+      ),
+    )
+    .addOption(
+      new Option(
+        "--prepared",
+        "Build the workspace --setup-only set up, as it is, without setting it up again; exit 3 when it is not prepared",
+      ).conflicts(["setupOnly", "force"]),
+    )
     .action(async (options: BuildOptions) =>
       (await import("./build-action")).runBuild(options),
     );

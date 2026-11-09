@@ -1,11 +1,19 @@
-import { join, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import {
   CliError,
   formatDuration,
   getProcessTasks,
   getProcessUi,
   isVerboseRun,
+  type SummaryBlock,
 } from "@antelopejs/core/cli";
+import { UsageError } from "../config";
+import {
+  forgetPreparedLayers,
+  readPreparedWorkspace,
+  type RecordedLayer,
+  recordPreparedLayers,
+} from "../internal/prepared-workspace";
 import {
   createFileNamer,
   createPathMapper,
@@ -42,6 +50,110 @@ export interface BuildOptions {
   /** Workspace directory to build into, `<project>/.dms-frontend` by default. */
   workspace?: string;
   force?: boolean;
+  /** Set the workspace up, then stop before the bundles. */
+  setupOnly?: boolean;
+  /** False (`--no-install`) leaves the dependencies of a `--setup-only` run uninstalled. */
+  install?: boolean;
+  /** Bundle the workspace a setup finished, without setting it up again. */
+  prepared?: boolean;
+}
+
+/** What one run of `build` does, out of setting the workspace up and bundling it. */
+type BuildPlan =
+  | { kind: "full" }
+  | { kind: "setup"; install: boolean }
+  | { kind: "prepared" };
+
+/** A production workspace and the layers written into it. */
+interface ProductionWorkspace {
+  workspaceDir: string;
+  layers: RecordedLayer[];
+}
+
+/** Exit code of a `--prepared` build whose workspace no setup finished. */
+const NOT_PREPARED_EXIT_CODE = 3;
+
+function buildPlan(options: BuildOptions): BuildPlan {
+  const install = options.install !== false;
+  if (options.setupOnly) return { kind: "setup", install };
+  if (!install)
+    throw new UsageError({
+      title: "--no-install needs --setup-only",
+      fixes: ["Run ajs dms build --setup-only --no-install"],
+    });
+  return options.prepared ? { kind: "prepared" } : { kind: "full" };
+}
+
+/** The `--workspace` a printed command repeats. */
+function workspaceFlag(options: BuildOptions): string {
+  return options.workspace ? ` --workspace ${options.workspace}` : "";
+}
+
+/**
+ * Sets the workspace up for the project, then records the layers it wrote so
+ * a later `--prepared` build reads them.
+ */
+async function setUpProductionWorkspace(
+  options: BuildOptions,
+  workspace: string,
+  install: boolean,
+): Promise<ProductionWorkspace> {
+  forgetPreparedLayers(workspace);
+  const { workspaceDir, layers } = await setUpWorkspace({
+    force: !!options.force,
+    mode: "build",
+    workspaceDir: workspace,
+    project: { projectDir: options.project, environment: options.env },
+    install,
+  });
+  recordPreparedLayers(workspaceDir, layers);
+  return { workspaceDir, layers };
+}
+
+/** How a `--setup-only` run ends: what it left, and the command that follows. */
+function setupSummary(
+  options: BuildOptions,
+  install: boolean,
+  workspaceDir: string,
+  startedAt: number,
+): SummaryBlock {
+  const flag = workspaceFlag(options);
+  return {
+    headline: install
+      ? "Set up the production workspace"
+      : "Wrote the production workspace without installing it",
+    artifact: showWorkspace(workspaceDir),
+    durationMs: Date.now() - startedAt,
+    nextSteps: [
+      install
+        ? {
+            command: `ajs dms build --prepared${flag}`,
+            description: "builds this workspace as it is",
+          }
+        : {
+            command: `ajs dms build --setup-only${flag}`,
+            description: "installs its dependencies",
+          },
+    ],
+  };
+}
+
+/** The workspace a setup finished, or the refusal that names the fix. */
+function preparedProductionWorkspace(
+  options: BuildOptions,
+  workspace: string,
+): ProductionWorkspace {
+  const workspaceDir = resolve(workspace);
+  const found = readPreparedWorkspace(workspaceDir);
+  if (found.prepared) return { workspaceDir, layers: found.layers };
+  throw new CliError({
+    title: `${showWorkspace(workspaceDir)} is not prepared`,
+    reason: found.reason,
+    fixes: [
+      `Run ajs dms build --setup-only${workspaceFlag(options)} first, or build without --prepared`,
+    ],
+    exitCode: NOT_PREPARED_EXIT_CODE,
+  });
 }
 
 /** Where a project's production frontend is built, unless --workspace names one. */
@@ -221,17 +333,26 @@ async function buildProduction(
   options: BuildOptions,
   startedAt: number,
 ): Promise<void> {
+  const plan = buildPlan(options);
   entryWeightThreshold(process.env);
   const ui = getProcessUi();
   const workspace = productionWorkspace(options);
 
   writeHeader("build", [options.project, options.env]);
-  const { workspaceDir, layers } = await setUpWorkspace({
-    force: !!options.force,
-    mode: "build",
-    workspaceDir: workspace,
-    project: { projectDir: options.project, environment: options.env },
-  });
+  if (plan.kind === "setup") {
+    const { workspaceDir } = await setUpProductionWorkspace(
+      options,
+      workspace,
+      plan.install,
+    );
+    writeBlankLine();
+    ui.summary(setupSummary(options, plan.install, workspaceDir, startedAt));
+    return;
+  }
+  const { workspaceDir, layers } =
+    plan.kind === "prepared"
+      ? preparedProductionWorkspace(options, workspace)
+      : await setUpProductionWorkspace(options, workspace, true);
 
   ui.message("info", "Building for production", {
     detail: `Workspace  ${showWorkspace(workspaceDir)}`,

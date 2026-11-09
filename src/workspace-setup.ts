@@ -408,6 +408,8 @@ export interface SetupWorkspaceOptions {
   project?: ProjectModulesOptions;
   /** Called before `pnpm install` starts, e.g. to end the task that set the workspace up */
   beforeInstall?: () => Promise<void>;
+  /** False writes the workspace and leaves its dependencies as they are. */
+  install?: boolean;
 }
 
 export interface SetupWorkspaceResult {
@@ -583,7 +585,9 @@ export async function setupWorkspace(
   writeDmsMainCss(workspaceDir, layers);
 
   const layerPaths = layers.map((layer) => layer.path);
-  const shouldInstall = needsInstall(workspaceDir, layerPaths, opts.force);
+  const shouldInstall =
+    opts.install !== false &&
+    needsInstall(workspaceDir, layerPaths, opts.force);
 
   if (shouldInstall) {
     await opts.beforeInstall?.();
