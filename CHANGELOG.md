@@ -1,5 +1,68 @@
 # Changelog
 
+## v0.10.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.0...v0.10.1)
+
+### 🚀 Enhancements
+
+- **skills:** Add the verify-dms-frontend verification skill ([#274](https://github.com/AntelopeJS/dms-frontend/pull/274))
+- **build:** Set up and build a production workspace in two steps ([#321](https://github.com/AntelopeJS/dms-frontend/pull/321))
+
+### 🔥 Performance
+
+- **tests:** Share parsed typings and run the start suite concurrently ([#296](https://github.com/AntelopeJS/dms-frontend/pull/296))
+- **ci:** Restore the newest pnpm store in verify-source-dms, save it on main ([#297](https://github.com/AntelopeJS/dms-frontend/pull/297))
+- **verify:** Keep the database for journeys that never use the backend ([#298](https://github.com/AntelopeJS/dms-frontend/pull/298))
+
+### 🩹 Fixes
+
+- **verify:** Keep a late Inertia answer from crashing the rendering journeys ([#299](https://github.com/AntelopeJS/dms-frontend/pull/299))
+- **tests:** Abort the client once the backend holds the stream request ([#306](https://github.com/AntelopeJS/dms-frontend/pull/306))
+- **dev:** Stop calling port 0 busy when -p 0 picks a free port ([#313](https://github.com/AntelopeJS/dms-frontend/pull/313))
+- **manifest:** Drop a trailing slash of the backend url before adding the endpoint path ([#314](https://github.com/AntelopeJS/dms-frontend/pull/314))
+- **server:** Keep a backend redirect to the icon endpoint absolute ([#310](https://github.com/AntelopeJS/dms-frontend/pull/310))
+- **proxy:** End a request already read in full at its 413 ([#303](https://github.com/AntelopeJS/dms-frontend/pull/303))
+- **cli:** Stop saying dev -b shares its workspace with build and start ([#309](https://github.com/AntelopeJS/dms-frontend/pull/309))
+- **locales:** Print the key and the message to write of an uncompilable entry without --verbose ([#315](https://github.com/AntelopeJS/dms-frontend/pull/315))
+- **start:** Leave the Routing block out of a quiet run ([#312](https://github.com/AntelopeJS/dms-frontend/pull/312))
+- **static-files:** Honour q=0 when picking a pre-compressed copy ([#311](https://github.com/AntelopeJS/dms-frontend/pull/311))
+- **build:** Apply registered Vite plugins to worker builds ([#301](https://github.com/AntelopeJS/dms-frontend/pull/301))
+- **server:** Call registerAuth hooks with the registered object as this ([#304](https://github.com/AntelopeJS/dms-frontend/pull/304))
+- **server:** Refuse a * before the last segment of a path pattern ([#300](https://github.com/AntelopeJS/dms-frontend/pull/300))
+- **typecheck:** Type-check the shipped .mjs templates and the tests ([#307](https://github.com/AntelopeJS/dms-frontend/pull/307))
+- **build:** Enforce each module's backend boundary in the generated Vite config ([#302](https://github.com/AntelopeJS/dms-frontend/pull/302))
+- **proxy:** Relay a public endpoint's declared headers under an auth: "none" proxy ([#317](https://github.com/AntelopeJS/dms-frontend/pull/317))
+- **verify:** Carry the overrides a module was installed with into the verify-source workspace ([#308](https://github.com/AntelopeJS/dms-frontend/pull/308))
+
+### 📖 Documentation
+
+- **verify:** Drop verify publish ([#319](https://github.com/AntelopeJS/dms-frontend/pull/319))
+- **dev:** State once that the manifest's secret wins over the variable ([#316](https://github.com/AntelopeJS/dms-frontend/pull/316))
+- **readme:** Open with the AntelopeJS DMS module kit ([#320](https://github.com/AntelopeJS/dms-frontend/pull/320))
+
+### 📦 Build
+
+- **deps:** Bump @antelopejs packages to the 2026-11-06 releases ([#295](https://github.com/AntelopeJS/dms-frontend/pull/295))
+
+### 🏡 Chore
+
+- **verify:** Remove seeded runs from the verification skill ([#292](https://github.com/AntelopeJS/dms-frontend/pull/292))
+- **ci:** Remove the weekly mutation caller ([#293](https://github.com/AntelopeJS/dms-frontend/pull/293))
+
+### ✅ Tests
+
+- **server:** Drive server.mjs behaviour instead of reading its source ([#305](https://github.com/AntelopeJS/dms-frontend/pull/305))
+- **server:** Lock the literal-first ranking of proxies and route rules ([#318](https://github.com/AntelopeJS/dms-frontend/pull/318))
+
+### 🤖 CI
+
+- Call ci-node.yml@v1 ([#294](https://github.com/AntelopeJS/dms-frontend/pull/294))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.10.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.9.3...v0.10.0)
