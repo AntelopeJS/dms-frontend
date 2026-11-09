@@ -1,12 +1,7 @@
 import { readSession, setRequestSession } from "./auth/session.mjs";
 import { createServerEvent } from "./module-event.mjs";
 import { compilePathPattern, PATH_PATTERN_FORMS } from "./path-patterns.mjs";
-import {
-  isFunction,
-  isNonNullObject,
-  isRecord,
-  isString,
-} from "./type-guards.mjs";
+import { isFunction, isRecord, isString } from "./type-guards.mjs";
 
 const DEFAULT_SIGN_IN_PATH = "/auth";
 const DEFAULT_ONBOARDING_PATH = "/onboarding";
