@@ -21,6 +21,7 @@ docs:
   - docs/3.cli/2.dev.md
   - docs/3.cli/3.build.md
   - docs/3.cli/4.start.md
+  - docs/4.configuration.md
   - docs/7.deployment/1.production.md
 ---
 
@@ -51,7 +52,7 @@ The production path of the CLI: `build` into a workspace, `start` serving it aga
 - `build-locale-error`: a message vue-i18n cannot compile stops the build with exit 1 and names the file and the count; `--verbose` keeps the key and the message to write instead.
 - `build-locale-error-names-the-key`: the default output names the key and the message to write instead, as the page shows (AntelopeJS/dms-frontend#281).
 - `build-access-redirect`: a page visit the backend refuses with a typed 403 goes to the path a module registered for its code (document, Inertia, plain-text and JSON bodies, first registration wins); a refused destination, another origin, an unregistered code and a request that is no page visit show the error page.
-- `dev-secret-precedence`: with `DMS_HTML_RENDER_SECRET` set and the manifest publishing another value, `dev` takes the variable (the docs disagree: AntelopeJS/dms-frontend#282).
+- `dev-secret-precedence`: with `DMS_HTML_RENDER_SECRET` set and the manifest publishing another value for a module of the project, `dev` takes the manifest's, and the configuration and dev pages agree (AntelopeJS/dms-frontend#282).
 
 ## How to get to it (user POV)
 

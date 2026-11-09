@@ -11,6 +11,7 @@ import { observe, runCli, scratch } from "./cli-run.mjs";
 import { buildProjectFolder, writeBuildProject } from "./build-project.mjs";
 import { dev, writeRegistry, deadPid } from "./build-dev-launch.mjs";
 import { standalone } from "./standalone.mjs";
+import { docsPage } from "./cli-docs.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -159,12 +160,18 @@ export const journeys = [
   },
   {
     id: "dev-secret-precedence",
-    title: "a variable that sets the e-mail render secret wins over the one the manifest publishes (the docs disagree: see the issue draft dms-frontend-secret-precedence-docs-contradict)",
-    entryPoint: "ajs dms dev -b <backend> with DMS_HTML_RENDER_SECRET set and a manifest that publishes htmlRender.serviceSecret",
+    title: "the e-mail render secret the manifest publishes for a module of the project wins over DMS_HTML_RENDER_SECRET, as the configuration page says and the dev page does not contradict (AntelopeJS/dms-frontend#282)",
+    entryPoint: "ajs dms dev -b <backend> with DMS_HTML_RENDER_SECRET set and a manifest that publishes htmlRender.serviceSecret for the playground's @antelopejs/dms-frontend-vue",
     ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
-      const module = writeModule(join(scratch(ctx, "module"), "mod"), { name: "@fixture/secret", privateOptions: undefined });
+      const configuration = docsPage(ctx, "4.configuration.md");
+      const devPage = docsPage(ctx, "3.cli/2.dev.md");
+      observe(ctx, "docs", { configuration: configuration.includes("The manifest value wins over a variable you set"), devPage: devPage.includes("wins over the manifest") }, [
+        ctx.holds("the configuration page says the manifest value wins", configuration.includes("The manifest value wins over a variable you set"), "4.configuration.md"),
+        ctx.holds("the dev page does not say a variable wins over the manifest", !devPage.includes("wins over the manifest"), "3.cli/2.dev.md"),
+      ]);
+      const module = writeModule(join(scratch(ctx, "module"), "mod"), { name: "@antelopejs/dms-frontend-vue", privateOptions: undefined });
       const published = { ...module, privateOptions: { htmlRender: { serviceSecret: "manifest-render-secret-0123456789" } } };
       const backend = await startCliBackend({ modules: [published] });
       try {
@@ -176,9 +183,9 @@ export const journeys = [
           const withManifest = await post("manifest-render-secret-0123456789");
           const withVariable = await post("variable-render-secret-0123456789");
           observe(ctx, "both set", { block, withManifest, withVariable }, [
-            ctx.equal("the ready block says the secret came from the environment", /^ {5}Secrets: {3}(.*)$/m.exec(block)?.[1], "DMS_HTML_RENDER_SECRET from the environment"),
-            ctx.equal("a token signed with the variable's value renders", withVariable, 200),
-            ctx.equal("a token signed with the manifest's value is refused", withManifest, 401),
+            ctx.equal("the ready block says the secret came from the manifest", /^ {5}Secrets: {3}(.*)$/m.exec(block)?.[1], "DMS_HTML_RENDER_SECRET from the manifest"),
+            ctx.equal("a token signed with the manifest's value renders", withManifest, 200),
+            ctx.equal("a token signed with the variable's value is refused", withVariable, 401),
           ]);
         } finally {
           await server.stop("SIGINT");
