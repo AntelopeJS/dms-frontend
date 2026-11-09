@@ -28,7 +28,8 @@ const FRONTEND = "http://frontend.local";
 const PROXY_SEGMENT = /^[A-Za-z0-9._~-]+$/;
 const ENDPOINT_PATH = /^\/api\/[A-Za-z0-9][A-Za-z0-9._~-]*(?:\/(?:\*|[A-Za-z0-9][A-Za-z0-9._~-]*))*$/;
 const RENDERER_PREFIXES = ["/api/_dms", "/@", "/assets", "/node_modules"];
-const RENDERER_PATHS = ["/@", "/assets/", "/node_modules/", "/api/_dms/icons/"];
+const ICON_ENDPOINT = "/api/_dms/icons";
+const RENDERER_PATHS = ["/@", "/assets/", "/node_modules/", `${ICON_ENDPOINT}/`];
 const ENDPOINT_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 const OWN_HEADER = /^x-[a-z0-9-]+$/;
 const RESERVED_HEADERS = [/^x-forwarded-/, /^x-real-ip$/, /^x-dms-/, /^x-inertia/, /^x-http-method/, /^x-method-override$/, /^x-original-/, /^x-rewrite-/];
@@ -193,7 +194,7 @@ function mostSpecific(covering) {
  * @param {string} pathname
  */
 function isRendererPath(pathname) {
-  return RENDERER_PATHS.some((prefix) => pathname.startsWith(prefix));
+  return pathname === ICON_ENDPOINT || RENDERER_PATHS.some((prefix) => pathname.startsWith(prefix));
 }
 
 /**

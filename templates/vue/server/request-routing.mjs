@@ -1,4 +1,5 @@
 import { matchBackendProxy } from "./backend-proxies.mjs";
+import { isIconRequest } from "./icons.mjs";
 import { isRendererFilePath, moduleRouteMethods } from "./module-routes.mjs";
 
 /**
@@ -37,7 +38,11 @@ const PAGE_METHODS = new Set(["GET", "HEAD"]);
  *   `{ kind: "not-found" }`
  */
 export function requestOwner(method, pathname, modules, hasRendererFile) {
-  if (isRendererFilePath(pathname) || hasRendererFile(pathname))
+  if (
+    isIconRequest(pathname) ||
+    isRendererFilePath(pathname) ||
+    hasRendererFile(pathname)
+  )
     return { kind: "renderer" };
   const route = modules.routes.find((candidate) =>
     candidate.matcher.test(pathname),

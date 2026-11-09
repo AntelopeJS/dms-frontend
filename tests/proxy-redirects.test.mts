@@ -18,6 +18,8 @@ const ENVIRONMENT = [
 ] as const;
 const REDIRECT_STATUSES = [302, 303, 307] as const;
 const BACKEND_COOKIE = "backend=1; Path=/";
+/** Backend paths the renderer's icon endpoint answers before any proxy. */
+const ICON_URLS = ["/api/_dms/icons", "/api/_dms/icons/lucide.json?icons=x"];
 /** A URL the backend serves itself, on a path no proxy covers. */
 const UNPROXIED_URL = "/exports/report.pdf?token=signed";
 
@@ -52,6 +54,7 @@ describe("backend redirects", () => {
       "/api/relative": "target?from=relative",
       "/api/climbing": `${backendUrl}//elsewhere.test/x`,
       "/api/unproxied": `${backendUrl}${UNPROXIED_URL}`,
+      "/api/to-icons": `${backendUrl}${url.searchParams.get("to")}`,
     }[url.pathname];
     if (location) {
       response.writeHead(status, { location, "set-cookie": BACKEND_COOKIE });
@@ -144,6 +147,16 @@ describe("backend redirects", () => {
         response.headers.get("location"),
         `${backendUrl}${UNPROXIED_URL}`,
       );
+    });
+
+    it("keeps a backend path the renderer answers first on the backend", async () => {
+      for (const path of ICON_URLS) {
+        const response = await visit(
+          `/api/to-icons?to=${encodeURIComponent(path)}`,
+        );
+        assert.equal(response.status, 302);
+        assert.equal(response.headers.get("location"), `${backendUrl}${path}`);
+      }
     });
 
     it("never turns a backend path that starts with // into another host", async () => {
