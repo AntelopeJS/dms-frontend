@@ -330,7 +330,7 @@ describe("documenting the commands", () => {
         /^Environment \(read from the shell, then \.\/\.env\.local, then \.\/\.env\)\n\n {2}DMS_API_BASE_URL {14}Backend URL, same as -b; clean ignores it\n/,
       );
       assert.match(result.stdout, /\n {2}NO_UPDATE_NOTIFIER, CI {8}Either one/);
-      assert.match(result.stdout, /ajs dms workspaces lists them\.\n$/);
+      assert.match(result.stdout, /\s--workspace\.\n$/);
       for (const line of result.stdout.split("\n")) {
         assert.ok(line.length <= HELP_WIDTH, line);
       }

@@ -9,7 +9,7 @@ const DEV_EXAMPLES: HelpExample[] = [
     command: "ajs dms dev",
   },
   {
-    description: "Share one workspace with build and start",
+    description: "Run in the workspace prepare uses for that backend",
     command: "ajs dms dev -b http://localhost:5010 -p 3001",
   },
 ];
