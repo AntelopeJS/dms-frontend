@@ -1,28 +1,17 @@
 import * as assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { isObjectLike } from "../src/internal/guards";
-import { readText } from "./helpers/files";
-import { isText } from "./helpers/guards";
+import {
+  FakePnpmCli,
+  MODULE,
+  projectHome,
+  writeLayer,
+} from "./fixtures/fake-pnpm-cli.mts";
 import { addressOf } from "./helpers/net";
 
-const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const CLI = join(REPOSITORY, "dist/index.js");
-const FAKE_PNPM = join(REPOSITORY, "tests/fixtures/fake-pnpm.mjs");
-const SESSION_SECRET = "framed-output-test-session-secret-0123";
 const OFFLINE_BACKEND = "http://127.0.0.1:9";
 const GUTTER = /pnpm [│|] /;
 /** The symbols that start the only lines a quiet run prints: warnings and errors. */
@@ -37,105 +26,6 @@ function chattyLines(output: string): string[] {
 
 /** A finished task, with the duration a slow machine may add. */
 const DONE = "(?: \\S+)?\n";
-
-let scratch: string;
-let bin: string;
-
-interface PnpmCall {
-  args: string[];
-  env: { updateNotifier?: string; viteLogLevel?: string };
-}
-
-function isPnpmCall(value: unknown): value is PnpmCall {
-  return (
-    isObjectLike(value) &&
-    "args" in value &&
-    Array.isArray(value.args) &&
-    value.args.every(isText) &&
-    "env" in value &&
-    isObjectLike(value.env) &&
-    (!("updateNotifier" in value.env) ||
-      value.env.updateNotifier === undefined ||
-      isText(value.env.updateNotifier)) &&
-    (!("viteLogLevel" in value.env) ||
-      value.env.viteLogLevel === undefined ||
-      isText(value.env.viteLogLevel))
-  );
-}
-
-function parsePnpmCall(line: string): PnpmCall {
-  const call: unknown = JSON.parse(line);
-  assert.ok(isPnpmCall(call), `a pnpm call, got ${line}`);
-  return call;
-}
-
-interface Run {
-  code: number | null;
-  stdout: string;
-  stderr: string;
-  calls: PnpmCall[];
-}
-
-interface RunOptions {
-  scenario?: string;
-  /** Prepares the sandbox, which is both the cwd and HOME, before the run. */
-  setUp?: (sandbox: string) => void;
-  env?: NodeJS.ProcessEnv;
-}
-
-function runCli(args: string[], options: RunOptions = {}): Promise<Run> {
-  const sandbox = mkdtempSync(join(scratch, "run-"));
-  options.setUp?.(sandbox);
-  const log = join(sandbox, "pnpm-calls.jsonl");
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    PATH: `${bin}:${process.env.PATH}`,
-    HOME: sandbox,
-    USERPROFILE: sandbox,
-    NO_COLOR: "1",
-    NO_UPDATE_NOTIFIER: "1",
-    DMS_API_BASE_URL: "",
-    DMS_SESSION_SECRET: SESSION_SECRET,
-    FAKE_PNPM_SCENARIO: options.scenario ?? "success",
-    FAKE_PNPM_LOG: log,
-    ...options.env,
-  };
-  delete env.ANTELOPEJS_VERBOSE;
-  delete env.ANTELOPEJS_QUIET;
-  delete env.FORCE_COLOR;
-  const cli = spawn(process.execPath, [CLI, ...args], {
-    cwd: sandbox,
-    stdio: ["ignore", "pipe", "pipe"],
-    env,
-  });
-  let stdout = "";
-  let stderr = "";
-  cli.stdout.on("data", (chunk) => (stdout += chunk));
-  cli.stderr.on("data", (chunk) => (stderr += chunk));
-  return new Promise((settle) =>
-    cli.on("close", (code) => {
-      const calls = existsSync(log)
-        ? readText(log).trim().split("\n").map(parsePnpmCall)
-        : [];
-      settle({ code, stdout, stderr, calls });
-    }),
-  );
-}
-
-function writeLayer(dir: string): void {
-  mkdirSync(join(dir, "app/components"), { recursive: true });
-  writeFileSync(
-    join(dir, "package.json"),
-    JSON.stringify({ name: "framed-layer" }),
-  );
-  writeFileSync(join(dir, "app/components/Callout.vue"), "<template />\n");
-}
-
-const MODULE = {
-  name: "framed-layer",
-  priority: 0,
-  renderer: { name: "vue", version: "3" },
-};
 
 /** A backend serving a one-module manifest whose source is `layer`. */
 function serveManifest(
@@ -177,61 +67,30 @@ function pathlessDevHome(sandbox: string, backendUrl: string): void {
   );
 }
 
-/**
- * A project whose one module declares its frontend, `<sandbox>/frontend-vue`,
- * with `dmsFrontend`: what `build` reads, without any backend.
- */
-function projectHome(sandbox: string): void {
-  writeLayer(join(sandbox, "frontend-vue"));
-  writeFileSync(
-    join(sandbox, "package.json"),
-    JSON.stringify({ name: "framed-project", dmsFrontend: "frontend.js" }),
-  );
-  writeFileSync(
-    join(sandbox, "frontend.js"),
-    `exports.frontendModule = () => ({
-  name: ${JSON.stringify(MODULE.name)},
-  sourcePath: require("node:path").join(__dirname, "frontend-vue"),
-  renderer: { name: "vue", version: "3" },
-});\n`,
-  );
-  writeFileSync(
-    join(sandbox, "antelope.config.ts"),
-    `export default { name: "framed", modules: { framed: { source: { type: "local", path: "." } } } };\n`,
-  );
-}
-
 const projectBuild = ["build"];
 
 /** The fake pnpm is a shell script, like the one cli-signals puts on PATH. */
 const describePosix = process.platform === "win32" ? describe.skip : describe;
+
+let cli: FakePnpmCli;
 
 describePosix("framing pnpm install and the production build", () => {
   let layer: string;
   let backend: { server: Server; url: string };
 
   before(async () => {
-    assert.ok(existsSync(CLI), `${CLI} is missing: run pnpm build first`);
-    scratch = mkdtempSync(join(tmpdir(), "dms-frontend-framed-"));
-    bin = join(scratch, "bin");
-    mkdirSync(bin);
-    const pnpm = join(bin, "pnpm");
-    writeFileSync(
-      pnpm,
-      `#!/bin/sh\nexec "${process.execPath}" "${FAKE_PNPM}" "$@"\n`,
-    );
-    chmodSync(pnpm, 0o755);
-    layer = join(scratch, "layer");
+    cli = new FakePnpmCli("dms-frontend-framed-");
+    layer = join(cli.scratch, "layer");
     writeLayer(layer);
     backend = await serveManifest(layer);
   });
   after(async () => {
     await new Promise((settle) => backend.server.close(settle));
-    rmSync(scratch, { recursive: true, force: true });
+    cli.dispose();
   });
 
   it("installs as one task and keeps pnpm's own output to itself", async () => {
-    const run = await runCli(["prepare", "-b", backend.url]);
+    const run = await cli.run(["prepare", "-b", backend.url]);
 
     assert.equal(run.code, 0, run.stderr);
     assert.equal(run.stdout, "");
@@ -250,7 +109,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("replays the end of a failed install, with paths at their source", async () => {
-    const run = await runCli(["dev", "-b", backend.url, "-p", "0"], {
+    const run = await cli.run(["dev", "-b", backend.url, "-p", "0"], {
       setUp: projectHome,
       scenario: "install-fails",
     });
@@ -269,7 +128,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("streams everything behind a gutter in a verbose run", async () => {
-    const run = await runCli(
+    const run = await cli.run(
       ["dev", "-b", backend.url, "-p", "0", "--verbose"],
       { setUp: projectHome, scenario: "install-fails" },
     );
@@ -285,7 +144,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("builds step by step and lists Vite's warnings where logs are read later", async () => {
-    const run = await runCli(projectBuild, { setUp: projectHome });
+    const run = await cli.run(projectBuild, { setUp: projectHome });
 
     assert.equal(run.code, 0, run.stderr);
     assert.match(
@@ -329,7 +188,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("keeps only the warnings of a quiet build", async () => {
-    const run = await runCli([...projectBuild, "-q"], {
+    const run = await cli.run([...projectBuild, "-q"], {
       setUp: projectHome,
     });
 
@@ -344,7 +203,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("keeps only the warnings of a quiet prepare", async () => {
-    const run = await runCli(["-q", "prepare", "-b", backend.url]);
+    const run = await cli.run(["-q", "prepare", "-b", backend.url]);
 
     assert.equal(run.code, 0, run.stderr);
     assert.equal(run.stdout, "");
@@ -353,7 +212,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("says the cached manifest has no layer paths when prepare runs offline", async () => {
-    const run = await runCli(
+    const run = await cli.run(
       ["prepare", "-b", OFFLINE_BACKEND, "--offline", "--strict"],
       { setUp: (sandbox) => pathlessDevHome(sandbox, OFFLINE_BACKEND) },
     );
@@ -367,7 +226,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("ends a build in ASCII on a dumb terminal", async () => {
-    const run = await runCli(projectBuild, {
+    const run = await cli.run(projectBuild, {
       setUp: projectHome,
       env: { TERM: "dumb" },
     });
@@ -381,7 +240,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 
   it("reports a Vite error once, at the layer source, without the stack", async () => {
-    const run = await runCli(projectBuild, {
+    const run = await cli.run(projectBuild, {
       setUp: projectHome,
       scenario: "ssr-fails",
     });
@@ -398,18 +257,9 @@ describePosix("framing pnpm install and the production build", () => {
 
 describePosix("framing verify-source", () => {
   before(() => {
-    assert.ok(existsSync(CLI), `${CLI} is missing: run pnpm build first`);
-    scratch = mkdtempSync(join(tmpdir(), "dms-frontend-verify-"));
-    bin = join(scratch, "bin");
-    mkdirSync(bin);
-    const pnpm = join(bin, "pnpm");
-    writeFileSync(
-      pnpm,
-      `#!/bin/sh\nexec "${process.execPath}" "${FAKE_PNPM}" "$@"\n`,
-    );
-    chmodSync(pnpm, 0o755);
+    cli = new FakePnpmCli("dms-frontend-verify-");
   });
-  after(() => rmSync(scratch, { recursive: true, force: true }));
+  after(() => cli.dispose());
 
   /** The DMS core layer, the only one the checks run against. */
   function sourceLayer(sandbox: string): void {
@@ -425,7 +275,7 @@ describePosix("framing verify-source", () => {
   }
 
   it("reports a failed check once, at the layer source, without a stack", async () => {
-    const run = await runCli(["verify-source", "-l", "frontend-vue"], {
+    const run = await cli.run(["verify-source", "-l", "frontend-vue"], {
       setUp: sourceLayer,
       scenario: "ssr-fails",
     });
@@ -478,7 +328,7 @@ describePosix("framing verify-source", () => {
   }
 
   it("verifies the project's module on the installed core layer", async () => {
-    const run = await runCli(["verify-source"], {
+    const run = await cli.run(["verify-source"], {
       setUp: project,
       scenario: "ssr-fails",
     });
@@ -495,7 +345,7 @@ describePosix("framing verify-source", () => {
   });
 
   it("keeps only the failure of a quiet run", async () => {
-    const run = await runCli(["verify-source", "-l", "frontend-vue", "-q"], {
+    const run = await cli.run(["verify-source", "-l", "frontend-vue", "-q"], {
       setUp: sourceLayer,
       scenario: "ssr-fails",
     });
