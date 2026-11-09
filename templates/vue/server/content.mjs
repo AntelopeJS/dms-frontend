@@ -11,17 +11,14 @@ export const MINIMUM_COMPRESSION_BYTES = 1_024;
 const DYNAMIC_BROTLI_QUALITY = 4;
 
 /**
- * A compressor for a body generated or relayed now, in the encoding the client
- * accepts (Brotli first), or `undefined` when it accepts neither. `streaming`
- * flushes what each write gives at once, for a body written over time: the
- * client gets each part when it is written, not when a block fills.
- *
- * Implicit identity is a fallback, not a preference over compression.
+ * The codings among `br` and `gzip` the client accepts, most wanted first
+ * (Brotli on a tie). Empty when it accepts neither, or ranks identity above
+ * both: implicit identity is a fallback, not a preference over compression.
  *
  * @param {import("node:http").IncomingMessage} request
- * @param {{ streaming?: boolean }} [options]
+ * @returns {("br" | "gzip")[]}
  */
-export function acceptedEncoder(request, { streaming = false } = {}) {
+export function acceptedCodings(request) {
   const accepted = request.headers["accept-encoding"] ?? "";
   /** @type {Map<string, number>} */
   const qualities = new Map();
@@ -46,8 +43,24 @@ export function acceptedEncoder(request, { streaming = false } = {}) {
   const br = quality("br");
   const gzip = quality("gzip");
   const identity = qualities.get("identity") ?? 0;
-  if (identity > Math.max(br, gzip)) return undefined;
-  if (br > 0 && br >= gzip)
+  if (identity > Math.max(br, gzip)) return [];
+  /** @type {("br" | "gzip")[]} */
+  const ranked = gzip > br ? ["gzip", "br"] : ["br", "gzip"];
+  return ranked.filter((coding) => quality(coding) > 0);
+}
+
+/**
+ * A compressor for a body generated or relayed now, in the encoding the client
+ * wants most (see `acceptedCodings`), or `undefined` when it accepts neither.
+ * `streaming` flushes what each write gives at once, for a body written over
+ * time: the client gets each part when it is written, not when a block fills.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {{ streaming?: boolean }} [options]
+ */
+export function acceptedEncoder(request, { streaming = false } = {}) {
+  const [coding] = acceptedCodings(request);
+  if (coding === "br")
     return {
       encoding: "br",
       stream: createBrotliCompress({
@@ -57,7 +70,7 @@ export function acceptedEncoder(request, { streaming = false } = {}) {
         },
       }),
     };
-  if (gzip > 0)
+  if (coding === "gzip")
     return {
       encoding: "gzip",
       stream: createGzip(
