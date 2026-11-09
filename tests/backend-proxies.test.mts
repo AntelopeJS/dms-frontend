@@ -6,6 +6,7 @@ import {
   resolveBackendProxies,
   routingReport,
 } from "../templates/vue/server/backend-proxies.mjs";
+import { reportRouting } from "../templates/vue/server/cli-report.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
 import { requestOwner } from "../templates/vue/server/request-routing.mjs";
 import type { DmsServerSetup } from "../templates/vue/server-module";
@@ -126,6 +127,23 @@ describe("Backend proxy declarations", () => {
       "  /media/**  -> backend (none), declared by @acme/media",
     ]);
     assert.match(routingReport([], 0)[1], /no request reaches the backend/);
+  });
+
+  it("are left out of a quiet run, as the Local url alone is printed", (t) => {
+    const log = t.mock.method(console, "log", () => {});
+    const lines = routingReport([], 0);
+    const printed = (env: NodeJS.ProcessEnv) => {
+      log.mock.resetCalls();
+      reportRouting(lines, env);
+      return log.mock.calls.map((call) => call.arguments);
+    };
+    assert.deepEqual(printed({ ANTELOPEJS_QUIET: "1" }), []);
+    assert.deepEqual(printed({ ANTELOPEJS_QUIET: "true" }), []);
+    const listed = lines.map((line) => [line]);
+    assert.deepEqual(printed({}), listed);
+    assert.deepEqual(printed({ ANTELOPEJS_QUIET: "" }), listed);
+    assert.deepEqual(printed({ ANTELOPEJS_QUIET: "0" }), listed);
+    assert.deepEqual(printed({ ANTELOPEJS_QUIET: "FALSE" }), listed);
   });
 });
 

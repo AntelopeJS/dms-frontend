@@ -38,7 +38,7 @@ The production path of the CLI: `build` into a workspace, `start` serving it aga
 - `start-ready-report-retries`: the report repeats after 2 s then 4 s while the backend answers 503, ends on 401 and 404, and reaches a backend that starts later.
 - `start-addresses-and-ports`: 0.0.0.0 by default (every LAN address accepts), `HOST=127.0.0.1` shuts the LAN out, a busy port stops the server even when the other process listens on loopback only, `PORT`, `-p` over `PORT`, `PORT` from `./.env`, nothing written into the workspace.
 - `start-secrets-and-environment`: warnings for the two secrets it runs without (singular and plural hint), the `Secrets` line, the `NODE_ENV` warning for development and a value from `./.env`, none for production or an empty value.
-- `start-quiet`: `-q` and `ANTELOPEJS_QUIET=1` print only the Local url. Fails today: finding below.
+- `start-quiet`: `-q` and `ANTELOPEJS_QUIET=1` print only the Local url.
 - `dev-arguments`: no backend and no project, session secrets of 5, 0 and 31 characters, a bad port and url fail before any work.
 - `dev-server`: ready block, loopback only, `x-dms-route-owner` for backend proxies, renderer assets and pages, the `clientUrl` the backend is given, the workspace keyed on the url, the ready report, the warning for a project module the backend does not register, SIGINT exits 130.
 - `dev-ports-and-host`: a busy port moves to the next free one and the warning names both, `HOST=0.0.0.0` opens the LAN.
@@ -81,7 +81,6 @@ The journeys build into a workspace of their own and start `start` and `dev` aga
 
 ## Gotchas
 
-- Known finding, kept as a failing journey: `start-quiet` (AntelopeJS/dms-frontend#278: the Routing block survives `-q`).
 - The build installs from the registry: a package published minutes ago can make the install fail with a 404 until the registry catches up.
 - A build step's Vite warnings are listed in full when piped; the page's `Run with --verbose` hint is the terminal form.
 - Files copied from `public/` keep the mode of their source in the workspace; the check on readable files leaves them out.
