@@ -186,7 +186,8 @@ export interface DmsServerRouteOptions {
  * The session logic the frontend server runs outside any route, which the
  * module owning sign-in provides. Without `publicSession`, pages carry no
  * `user` and `session`; without `refreshSession`, a session the backend
- * refuses is not renewed; `signInPath` is `/auth` by default.
+ * refuses is not renewed; `signInPath` is `/auth` by default. The server
+ * calls each hook with the registered object as `this`.
  */
 export interface DmsServerAuth {
   /** Where a signed-out visit to a private page goes, with `?redirect=`. */
