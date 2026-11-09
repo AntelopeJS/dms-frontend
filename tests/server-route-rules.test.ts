@@ -83,6 +83,23 @@ describe("Route rule declarations", () => {
     assert.deepEqual(routeRuleFor(rules, "/dashboard"), { headers: {} });
   });
 
+  it("let a literal segment override a wildcard tail, whatever the declaration order", () => {
+    const { rules, warnings } = resolved([
+      {
+        id: "site",
+        setup: (server) =>
+          server.registerRouteRules({
+            "/legal/drafts": { headers: { "x-robots-tag": "noindex" } },
+            "/legal/*": { headers: { "x-robots-tag": "all" } },
+          }),
+      },
+    ]);
+    assert.deepEqual(warnings, []);
+    assert.deepEqual(routeRuleFor(rules, "/legal/drafts"), {
+      headers: { "x-robots-tag": "noindex" },
+    });
+  });
+
   it("keep the higher-priority module's rule for one pattern, and say so", () => {
     const { rules, warnings } = resolved([
       {
