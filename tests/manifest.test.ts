@@ -59,6 +59,20 @@ describe("fetchManifest", () => {
     }
   });
 
+  it("drops a trailing slash of the backend url, keeping its path", async () => {
+    const { server, baseUrl, requests } = await startBackend();
+    try {
+      await fetchManifest(`${baseUrl}/`);
+      await fetchManifest(`${baseUrl}/api//`);
+      assert.deepEqual(requests, [
+        "/dms/frontend?renderer=vue&rendererVersion=3",
+        "/api/dms/frontend?renderer=vue&rendererVersion=3",
+      ]);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
   it("requests and validates Vue manifests", async () => {
     const previousModules = frontendManifest.modules;
     frontendManifest.modules = [
