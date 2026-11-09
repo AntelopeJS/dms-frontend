@@ -21,7 +21,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * the storage's signed URL, on the public origin the server itself may not
  * reach, which turned every download into a 502.
  *
- * @param {import("node:http").IncomingMessage} request
+ * @param {import("./request-target.mjs").ServerRequest} request
  * @param {import("node:http").ServerResponse} response
  * @param {import("./backend-proxies.mjs").BackendProxy} backendProxy
  * @param {(path: string) => boolean} isProxiedPath
@@ -36,6 +36,7 @@ export async function proxy(request, response, backendProxy, isProxiedPath) {
   if (response.closed) return;
   const abandoned = new AbortController();
   response.once("close", () => abandoned.abort());
+  /** @type {RequestInit} */
   const init = {
     signal: abandoned.signal,
     method: request.method,

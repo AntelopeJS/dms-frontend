@@ -15,7 +15,7 @@ const handler = () => null;
 
 function resolved(
   declarations: { id: string; priority?: number; setup: DmsServerSetup }[],
-  manifest: { module: string; path: string; auth?: string }[] = [],
+  manifest: Parameters<typeof resolveServerDeclarations>[3] = [],
 ) {
   const warnings: string[] = [];
   const modules = resolveServerDeclarations(
@@ -37,15 +37,21 @@ describe("Backend proxy declarations", () => {
         /renderer's own paths/,
       );
     assert.match(
+      // @ts-expect-error auth is "cookie", an off-contract mode a JavaScript module can still register, which must be refused
       proxyRejection("/api/**", { auth: "cookie" }) ?? "",
       /auth is not one of "session", "none"/,
     );
     assert.equal(proxyRejection("/api/**", { auth: "none" }), undefined);
-    for (const maxBodyBytes of [0, -1, 1.5, "1024"])
+    for (const maxBodyBytes of [0, -1, 1.5])
       assert.match(
         proxyRejection("/upload/**", { maxBodyBytes }) ?? "",
         /maxBodyBytes is not a positive whole number/,
       );
+    assert.match(
+      // @ts-expect-error maxBodyBytes is the string "1024", an off-contract size a JavaScript module can still register, which must be refused
+      proxyRejection("/upload/**", { maxBodyBytes: "1024" }) ?? "",
+      /maxBodyBytes is not a positive whole number/,
+    );
     assert.equal(
       proxyRejection("/upload/**", { maxBodyBytes: 1024 }),
       undefined,

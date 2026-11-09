@@ -11,6 +11,7 @@ import { renderToString } from "@vue/server-renderer";
 import {
   type App,
   createSSRApp,
+  type DefineComponent,
   defineComponent,
   type EffectScope,
   effectScope,
@@ -25,8 +26,14 @@ import {
   useDmsRoute,
   useDmsRouter,
 } from "../templates/vue/frontend-module.ts";
+import { activeVisit, inertiaPage } from "./helpers/inertia-page";
 
-const Page = defineComponent({ setup: () => () => h("p", "page") });
+type VisitOptions = NonNullable<Parameters<typeof router.visit>[1]>;
+type ClientSideVisitOptions = Parameters<typeof router.push>[0];
+
+const Page: DefineComponent = defineComponent({
+  setup: () => () => h("p", "page"),
+});
 
 /**
  * Makes `url` Inertia's page: Inertia keeps it in one module-level ref, which
@@ -34,7 +41,7 @@ const Page = defineComponent({ setup: () => () => h("p", "page") });
  */
 async function showPage(url: string): Promise<void> {
   await createInertiaApp({
-    page: { component: "Page", props: {}, url, version: "" },
+    page: inertiaPage(url),
     render: renderToString,
     resolve: () => Page,
     setup: ({ App, props }) => createSSRApp({ render: () => h(App, props) }),
@@ -127,12 +134,16 @@ describe("Navigation to the URL shown", () => {
     context: TestContext,
   ): Promise<string[]> {
     const urls: string[] = [];
-    context.mock.method(router, "visit", (url: string, options) => {
-      urls.push(url);
-      options?.onFinish?.({});
-    });
+    context.mock.method(
+      router,
+      "visit",
+      (url: string, options?: VisitOptions) => {
+        urls.push(url);
+        options?.onFinish?.(activeVisit());
+      },
+    );
     for (const kind of ["push", "replace"] as const)
-      context.mock.method(router, kind, (params) => {
+      context.mock.method(router, kind, (params: ClientSideVisitOptions) => {
         urls.push(`${kind} ${params.url}`);
         params.onFinish?.(params);
       });

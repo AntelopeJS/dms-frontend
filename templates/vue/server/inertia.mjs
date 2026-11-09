@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isObjectLike, isString } from "./type-guards.mjs";
 
 const CLIENT_MANIFEST_PATH = fileURLToPath(
   new URL("../dist/client/.vite/manifest.json", import.meta.url),
@@ -53,14 +54,26 @@ export const DMS_PAGE_COMPONENT = "DmsDynamicPage";
  * @typedef {{
  *   component: string,
  *   props: Record<string, unknown>,
- *   url: string | undefined,
+ *   url: string,
  *   version: string,
  *   onceProps?: OnceProps
  * }} InertiaPage
  */
 
 /**
- * @param {string | undefined} url
+ * Whether the page has the props the server render needs: the path and the
+ * page the backend described. A full visit carries both; the page payload is
+ * the backend's JSON, read as the renderer reads it.
+ *
+ * @param {InertiaPage} page
+ * @returns {page is InertiaPage & import("../ssr-renderer.ts").DmsSsrPage}
+ */
+export function isSsrPage(page) {
+  return isString(page.props.path) && isObjectLike(page.props.page);
+}
+
+/**
+ * @param {string} url
  * @param {Record<string, unknown> | undefined} props
  * @param {string} [version]
  * @param {OnceProps} [onceProps]
@@ -72,6 +85,7 @@ export function createInertiaPage(
   version = assetVersion(),
   onceProps,
 ) {
+  /** @type {InertiaPage} */
   const page = {
     component: DMS_PAGE_COMPONENT,
     props: { ...props, errors: props?.errors ?? {} },
@@ -180,7 +194,7 @@ export function isFrontendVisit(request) {
   if (request.method !== "GET") return false;
   return (
     Boolean(request.headers["x-inertia"]) ||
-    request.headers.accept?.includes("text/html")
+    request.headers.accept?.includes("text/html") === true
   );
 }
 

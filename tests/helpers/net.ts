@@ -19,3 +19,11 @@ export function boundAddress(server: Server): AddressInfo | undefined {
   const address = server.address();
   return isAddressInfo(address) ? address : undefined;
 }
+
+/** Request options that send a streamed body: Node's `fetch` needs `duplex: "half"`, which the DOM `RequestInit` type does not list. */
+export function streamedBody(
+  init: RequestInit & { body: ReadableStream },
+): RequestInit {
+  const streamed = { ...init, duplex: "half" };
+  return streamed;
+}

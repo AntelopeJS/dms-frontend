@@ -55,23 +55,27 @@ export function entryOwner(id, modules) {
  * their static imports, transitively, by file name.
  *
  * @param {import("vite").Rollup.OutputBundle} bundle
- * @returns {(import("vite").Rollup.OutputChunk | undefined)[]}
+ * @returns {import("vite").Rollup.OutputChunk[]}
  */
 function entryClosure(bundle) {
   const chunks = Object.values(bundle).filter(
+    /**
+     * @param {import("vite").Rollup.OutputChunk | import("vite").Rollup.OutputAsset} output
+     * @returns {output is import("vite").Rollup.OutputChunk}
+     */
     (output) => output.type === "chunk",
   );
   const byName = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
-  /** @type {Set<string>} */
-  const seen = new Set();
+  /** @type {Map<string, import("vite").Rollup.OutputChunk>} */
+  const seen = new Map();
   /** @param {import("vite").Rollup.OutputChunk | undefined} chunk */
   const visit = (chunk) => {
     if (!chunk || seen.has(chunk.fileName)) return;
-    seen.add(chunk.fileName);
+    seen.set(chunk.fileName, chunk);
     for (const file of chunk.imports ?? []) visit(byName.get(file));
   };
   for (const chunk of chunks) if (chunk.isEntry) visit(chunk);
-  return [...seen].map((file) => byName.get(file));
+  return [...seen.values()];
 }
 
 /**

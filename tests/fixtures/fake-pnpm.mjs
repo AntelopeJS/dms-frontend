@@ -7,7 +7,9 @@ const env = {
   updateNotifier: process.env.npm_config_update_notifier,
   viteLogLevel: process.env.DMS_VITE_LOG_LEVEL,
 };
-appendFileSync(process.env.FAKE_PNPM_LOG, `${JSON.stringify({ args, env })}\n`);
+const log = process.env.FAKE_PNPM_LOG;
+if (!log) throw new Error("FAKE_PNPM_LOG is not set");
+appendFileSync(log, `${JSON.stringify({ args, env })}\n`);
 
 /** The first materialized layer, as Vite and pnpm name it. */
 const layerCopy = join(
@@ -38,6 +40,7 @@ function install() {
   console.log("Progress: resolved 3, reused 3, downloaded 0, added 3, done");
 }
 
+/** @param {string | undefined} script The package script the fake runs, the last argument */
 function build(script) {
   if (script === "build:types")
     writeFileSync(join(process.cwd(), "auto-imports.d.ts"), "export {};\n");

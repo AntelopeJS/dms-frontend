@@ -142,10 +142,11 @@ describe("Inertia HTTP protocol", () => {
     const frontendAddress = addressOf(frontend);
     const base = `http://127.0.0.1:${frontendAddress.port}`;
     try {
-      for (const headers of [
+      const variants: Record<string, string>[] = [
         { accept: "text/html" },
         { "x-inertia": "true" },
-      ]) {
+      ];
+      for (const headers of variants) {
         const response = await fetch(`${base}/broken`, { headers });
         const body = await response.text();
         assert.equal(response.status, 503);
@@ -231,10 +232,11 @@ describe("Inertia HTTP protocol", () => {
         redirect: "manual",
       });
     try {
-      for (const headers of [
+      const variants: Record<string, string>[] = [
         { accept: "text/html" },
         { "x-inertia": "true" },
-      ]) {
+      ];
+      for (const headers of variants) {
         for (const path of ["/projects", "/json-refusal"]) {
           const redirected = await visit(path, headers);
           assert.equal(redirected.status, 302);

@@ -20,6 +20,8 @@ import {
   FIXTURE_HANDLERS,
   FIXTURE_ENTRY,
 } from "./fixtures/server-modules";
+import { requestOf } from "./helpers/http-doubles";
+import { streamedBody } from "./helpers/net";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
 describe("Module server routes in the production server", () => {
@@ -140,7 +142,7 @@ describe("Module server routes in the production server", () => {
     const pair = cookie.split(";", 1)[0];
     assert.deepEqual(
       readSealedCookie(
-        { headers: { cookie: pair } },
+        requestOf({ headers: { cookie: pair } }),
         "acme__fixture-frontend.fixture_flow",
       ),
       { input: { a: 1 } },
@@ -161,17 +163,19 @@ describe("Module server routes in the production server", () => {
 
   it("answers 413 for a streamed body past the limit, which declares no length", async () => {
     const chunk = new TextEncoder().encode(`"${"x".repeat(100)}"`);
-    const response = await fetch(`${frontendUrl}/api/_fixture/echo`, {
-      method: "POST",
-      headers: { origin: frontendUrl },
-      body: new ReadableStream({
-        start(controller) {
-          controller.enqueue(chunk);
-          controller.close();
-        },
+    const response = await fetch(
+      `${frontendUrl}/api/_fixture/echo`,
+      streamedBody({
+        method: "POST",
+        headers: { origin: frontendUrl },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(chunk);
+            controller.close();
+          },
+        }),
       }),
-      duplex: "half",
-    });
+    );
     assert.equal(response.status, 413);
   });
 

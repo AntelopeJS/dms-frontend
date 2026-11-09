@@ -17,10 +17,11 @@ import { pipeline } from "node:stream/promises";
  */
 export async function pipeWebBody(body, ...streams) {
   const response = streams.at(-1);
+  if (!response) throw new TypeError("pipeWebBody needs a response to write");
   if (response.closed || response.destroyed) {
     for (const stream of streams.slice(0, -1)) stream.destroy();
     await body.cancel().catch(() => {});
     return;
   }
-  await pipeline(Readable.fromWeb(body), ...streams);
+  await pipeline([Readable.fromWeb(body), ...streams]);
 }

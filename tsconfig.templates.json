@@ -8,9 +8,10 @@
     "tsBuildInfoFile": "node_modules/.cache/templates-config/.tsbuildinfo",
     "module": "esnext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022"],
     "allowImportingTsExtensions": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    "checkJs": true
   },
   "include": ["./templates/vue/**/*.mjs"]
 }

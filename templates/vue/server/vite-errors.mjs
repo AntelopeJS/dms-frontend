@@ -1,3 +1,5 @@
+import { isObjectLike, isString } from "./type-guards.mjs";
+
 const INTERNAL_ERROR_STATUS = 500;
 const ERROR_CONTENT_TYPE = "text/plain; charset=utf-8";
 const VITE_ERROR = Symbol("dms.viteError");
@@ -69,9 +71,18 @@ export function runViteMiddlewares(devServer, request, response) {
   });
 }
 
-/** Answers 500 with Vite's error message instead of rendering a page. */
+/**
+ * Answers 500 with Vite's error message instead of rendering a page.
+ *
+ * @param {import("node:http").ServerResponse} response
+ * @param {unknown} error
+ */
 export function writeViteError(response, error) {
   response.statusCode = INTERNAL_ERROR_STATUS;
   response.setHeader("content-type", ERROR_CONTENT_TYPE);
-  response.end(error?.message ?? String(error));
+  response.end(
+    isObjectLike(error) && isString(error.message)
+      ? error.message
+      : String(error),
+  );
 }

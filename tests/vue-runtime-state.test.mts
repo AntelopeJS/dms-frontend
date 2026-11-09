@@ -70,8 +70,11 @@ describe("Vue request runtime", () => {
       },
     );
     const replaced: unknown[] = [];
-    context.mock.method(router, "replaceProp", (name: string, value) =>
-      replaced.push([name, value]),
+    context.mock.method(
+      router,
+      "replaceProp",
+      (name: string, value: Parameters<typeof router.replaceProp>[1]) =>
+        replaced.push([name, value]),
     );
     try {
       const older = { isOwner: false, modules: ["older"], quickActions: [] };

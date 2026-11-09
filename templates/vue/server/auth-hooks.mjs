@@ -1,7 +1,7 @@
 import { readSession, setRequestSession } from "./auth/session.mjs";
 import { createServerEvent } from "./module-event.mjs";
 import { compilePathPattern, PATH_PATTERN_FORMS } from "./path-patterns.mjs";
-import { isFunction, isNonNullObject, isString } from "./type-guards.mjs";
+import { isFunction, isRecord, isString } from "./type-guards.mjs";
 
 const DEFAULT_SIGN_IN_PATH = "/auth";
 const DEFAULT_ONBOARDING_PATH = "/onboarding";
@@ -18,7 +18,9 @@ const HOOK_ROUTE = Object.freeze({ bodyLimit: 0 });
  */
 function defaultExempt(signInPath) {
   const signIn = signInPath === "/" ? "/" : `${signInPath}/**`;
-  return [signIn, DEFAULT_ONBOARDING_PATH].map(compilePathPattern);
+  return [signIn, DEFAULT_ONBOARDING_PATH].flatMap(
+    (pattern) => compilePathPattern(pattern) ?? [],
+  );
 }
 
 const AUTH_HOOKS = ["refreshSession", "publicSession"];
@@ -29,7 +31,7 @@ const AUTH_HOOKS = ["refreshSession", "publicSession"];
  * @param {unknown} auth
  */
 export function authRejection(auth) {
-  if (!isNonNullObject(auth)) return "it is not an object";
+  if (!isRecord(auth)) return "it is not an object";
   for (const hook of AUTH_HOOKS)
     if (auth[hook] !== undefined && !isFunction(auth[hook]))
       return `${hook} is not a function`;
@@ -108,7 +110,7 @@ export function serverAuth(provider, context) {
      * Renews the request's session after the backend refused it. Returns the
      * new session, which the rest of the request runs with, or `undefined`.
      *
-     * @param {import("node:http").IncomingMessage} request
+     * @param {import("./request-target.mjs").ServerRequest} request
      * @param {import("node:http").ServerResponse} response
      */
     async refresh(request, response) {

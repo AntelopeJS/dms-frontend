@@ -120,7 +120,7 @@ describe("Vue request runtime", () => {
       filter: string;
       resolve(value: string): void;
     }> = [];
-    const entries = [];
+    const entries: Awaited<ReturnType<typeof useDmsAsyncData<string>>>[] = [];
     let mounts = 0;
     const Consumer = defineComponent({
       setup() {

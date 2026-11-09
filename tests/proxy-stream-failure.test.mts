@@ -18,13 +18,8 @@ interface ServerTemplate {
   ) => Promise<void>;
 }
 
-interface ProxyCompression {
-  relayAnswer: (
-    request: IncomingMessage,
-    response: ServerResponse,
-    upstream: { status: number; headers: Headers; body: ReadableStream },
-  ) => Promise<void>;
-}
+type ProxyCompression =
+  typeof import("../templates/vue/server/proxy-compression.mjs");
 
 type Handler = (request: IncomingMessage, response: ServerResponse) => void;
 
@@ -144,11 +139,12 @@ describe("a backend stream that fails", () => {
 
   it("cancels a body it can no longer relay instead of leaving it unread", async () => {
     let cancelled = false;
-    const relayed = new Promise<void>((resolve, reject) => {
+    const relayed = new Promise<unknown>((resolve, reject) => {
       handler = afterTheClientLeft((request, response) =>
         compression
           .relayAnswer(request, response, {
             status: 200,
+            url: "http://backend.local/dms/dev",
             headers: new Headers({ "content-type": EVENT_STREAM }),
             body: failingEventStream(() => (cancelled = true)),
           })

@@ -59,11 +59,12 @@ describe("requests the frontend server cannot serve", () => {
   });
 
   it("answers a malformed page path with 400 and keeps serving", async () => {
-    for (const headers of [
+    const variants: Record<string, string>[] = [
       { accept: "text/html" },
       { "x-inertia": "true" },
       {},
-    ]) {
+    ];
+    for (const headers of variants) {
       const response = await fetch(`${base}${MALFORMED_PATH}`, {
         headers,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

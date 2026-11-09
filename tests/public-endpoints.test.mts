@@ -1,16 +1,28 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { resolveBackendProxies } from "../templates/vue/server/backend-proxies.mjs";
 import {
   allowedPublicEndpoints,
   compilePublicEndpoint,
   matchPublicEndpoint,
   proxyAccess,
 } from "../templates/vue/server/public-endpoints.mjs";
+import { serverRequestOf } from "./helpers/http-doubles";
 
 const WEBHOOK = {
   path: "/api/mailing/events/*/*",
   headers: ["X-Mailing-Webhook-Secret"],
 };
+
+function proxyWith(auth: "session" | "none") {
+  const [proxy] = resolveBackendProxies(
+    [{ id: "test", pattern: "/api/**", options: { auth } }],
+    [],
+    () => undefined,
+  );
+  assert.ok(proxy);
+  return proxy;
+}
 
 describe("public endpoints", () => {
   it("matches the declared method and one segment per wildcard", () => {
@@ -84,9 +96,13 @@ describe("public endpoints", () => {
     process.env.DMS_PUBLIC_ENDPOINTS = declaration;
     const access = (url: string) =>
       proxyAccess(
-        { method: "POST", url, headers: { host: "frontend.local" } },
+        serverRequestOf({
+          method: "POST",
+          url,
+          headers: { host: "frontend.local" },
+        }),
         new Set(["GET", "HEAD"]),
-        { auth: "session" },
+        proxyWith("session"),
       );
     try {
       for (const url of [
@@ -117,9 +133,13 @@ describe("public endpoints", () => {
 
   it("sends nothing of the session through a proxy without auth, and needs no Origin", () => {
     const access = proxyAccess(
-      { method: "POST", url: "/media/upload", headers: { host: "x" } },
+      serverRequestOf({
+        method: "POST",
+        url: "/media/upload",
+        headers: { host: "x" },
+      }),
       new Set(["GET", "HEAD"]),
-      { auth: "none" },
+      proxyWith("none"),
     );
     assert.deepEqual(access, {
       anonymous: true,

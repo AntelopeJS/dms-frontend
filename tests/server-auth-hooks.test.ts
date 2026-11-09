@@ -26,7 +26,7 @@ import type {
 } from "../templates/vue/server-module";
 import { addressOf } from "./helpers/net";
 import { isNumber, isText } from "./helpers/guards";
-import { requestOf, responseOf } from "./helpers/http-doubles";
+import { requestOf, responseOf, serverRequestOf } from "./helpers/http-doubles";
 import { jsonAt, responseJson } from "./helpers/json";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
@@ -38,6 +38,12 @@ function writeFixture(root: string, path: string, content: string): void {
   mkdirSync(dirname(destination), { recursive: true });
   writeFileSync(destination, content);
 }
+
+const context: Parameters<typeof serverAuth>[1] = (id) => ({
+  module: { id, options: undefined, privateOptions: undefined },
+  app: { authEstablishEndpoints: [] },
+  authOwner: undefined,
+});
 
 function resolved(
   declarations: { id: string; priority?: number; setup: DmsServerSetup }[],
@@ -63,8 +69,8 @@ describe("Auth hook declarations", () => {
         setup: (s) => s.registerAuth({ signInPath: "/auth" }),
       },
     ]);
-    assert.equal(modules.auth.id, "dms");
-    assert.equal(modules.auth.signInPath, "/auth");
+    assert.equal(modules.auth?.id, "dms");
+    assert.equal(modules.auth?.signInPath, "/auth");
     assert.deepEqual(warnings, [
       "Frontend module low registers auth hooks, which are ignored: dms (priority 5) provides them.",
     ]);
@@ -91,7 +97,7 @@ describe("Auth hook declarations", () => {
   });
 
   it("leave pages without a session where no module registers them", () => {
-    const auth = serverAuth(undefined, () => ({}));
+    const auth = serverAuth(undefined, context);
     assert.equal(auth.signInPath, "/auth");
     assert.equal(auth.signInLocation("/x?y=1"), "/auth?redirect=%2Fx%3Fy%3D1");
     assert.equal(auth.isSignInExempt("/auth/2fa"), true);
@@ -107,21 +113,28 @@ describe("Auth hook declarations", () => {
         activeTenantId: "t",
         updatedAt: 7,
         accessToken: "secret",
+        persistent: false,
       }),
       {},
     );
   });
 
   it("renew no session where no module registers them", async () => {
-    const auth = serverAuth(undefined, () => ({}));
-    assert.equal(await auth.refresh({ headers: {} }, {}), undefined);
+    const auth = serverAuth(undefined, context);
+    assert.equal(
+      await auth.refresh(
+        serverRequestOf({ method: "GET", url: "/" }),
+        responseOf(),
+      ),
+      undefined,
+    );
   });
 
   it("exempt the provider's sign-in path when it names no exempt pages", () => {
     const { modules } = resolved([
       { id: "dms", setup: (s) => s.registerAuth({ signInPath: "/login" }) },
     ]);
-    const auth = serverAuth(modules.auth, () => ({}));
+    const auth = serverAuth(modules.auth, context);
     assert.equal(auth.signInLocation("/x"), "/login?redirect=%2Fx");
     assert.equal(auth.isSignInExempt("/login"), true);
     assert.equal(auth.isSignInExempt("/login/"), true);
@@ -147,7 +160,7 @@ describe("Auth hook declarations", () => {
           }),
       },
     ]);
-    const auth = serverAuth(modules.auth, () => ({}));
+    const auth = serverAuth(modules.auth, context);
     assert.equal(auth.provider, "dms");
     assert.equal(auth.signInLocation("/x"), "/login?redirect=%2Fx");
     assert.equal(auth.isSignInExempt("/login"), true);
@@ -160,6 +173,7 @@ describe("Auth hook declarations", () => {
         accountId: "a",
         updatedAt: 9,
         accessToken: "secret",
+        persistent: false,
       }),
       { user: { name: "Ada" }, session: { accountId: "a", updatedAt: 9 } },
     );
@@ -187,12 +201,19 @@ describe("Auth hook declarations", () => {
         app: { authEstablishEndpoints: [] },
         authOwner: id,
       }));
-      assert.deepEqual(auth.view({ user: { name: "Ada" } }), {
-        user: { name: "Ada" },
-      });
+      assert.deepEqual(
+        auth.view({ user: { name: "Ada" }, persistent: false }),
+        {
+          user: { name: "Ada" },
+        },
+      );
       const jar = responseOf();
-      sessions.writeSession(jar, { accessToken: "a", user: { name: "Ada" } });
-      const request = requestOf({
+      sessions.writeSession(jar, {
+        accessToken: "a",
+        user: { name: "Ada" },
+        persistent: false,
+      });
+      const request = serverRequestOf({
         method: "GET",
         url: "/private",
         headers: { cookie: cookiePairs(jar).join("; "), host: "localhost" },
@@ -318,9 +339,8 @@ describe("Auth hooks in the production server", () => {
   });
 
   const visit = (path: string, cookie?: string) => {
-    const headers = cookie
-      ? { "x-inertia": "true", cookie }
-      : { "x-inertia": "true" };
+    const headers = new Headers({ "x-inertia": "true" });
+    if (cookie) headers.set("cookie", cookie);
     return fetch(`${frontendUrl}${path}`, { redirect: "manual", headers });
   };
 
@@ -347,6 +367,7 @@ describe("Auth hooks in the production server", () => {
       accountId: "account-1",
       activeTenantId: "default",
       user: { name: "Ada", language: "fr" },
+      persistent: false,
     });
     const response = await visit("/private", cookiePairs(jar)[0]);
     assert.equal(response.status, 200);
@@ -376,12 +397,14 @@ describe("Auth hooks in the production server", () => {
       refreshToken: "r",
       accountId: ACCOUNT_ID,
       user: { _id: "u1", name: "Ada" },
+      persistent: false,
     };
     sessions.writeSession(jar, session);
     sessions.writeSealedCookie(
       jar,
       `dms_account_${ACCOUNT_ID.replaceAll("-", "")}`,
       { refreshToken: "r", accountId: ACCOUNT_ID },
+      undefined,
     );
     const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
       headers: { cookie: cookiePairs(jar).join("; ") },
@@ -401,7 +424,7 @@ describe("Auth hooks in the production server", () => {
     const persistent = responseOf();
     const session = responseOf();
     sessions.writeSession(persistent, { accessToken: "a", persistent: true });
-    sessions.writeSession(session, { accessToken: "b" });
+    sessions.writeSession(session, { accessToken: "b", persistent: false });
     assert.match(setCookies(persistent)[0] ?? "", /; Max-Age=2592000/);
     assert.doesNotMatch(setCookies(session)[0] ?? "", /Max-Age/);
   });

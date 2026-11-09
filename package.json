@@ -66,7 +66,7 @@
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
     "lint": "oxlint && antelopejs-check-interface-ranges && pnpm run docs:reference:check && pnpm run source-checks",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsx scripts/typecheck-projects.ts tsconfig.templates.json tsconfig.tests.json",
     "lint:fix": "oxlint --fix --max-warnings=1000000 && oxfmt .",
     "knip": "knip --dependencies",
     "knip:all": "knip",

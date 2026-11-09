@@ -1,4 +1,4 @@
-import { authRejection } from "./auth-hooks.mjs";
+import { resolveAuth } from "./auth-declarations.mjs";
 import { resolveBackendProxies } from "./backend-proxies.mjs";
 import { compilePathPattern } from "./path-patterns.mjs";
 import { matchPublicEndpoint } from "./public-endpoints.mjs";
@@ -13,8 +13,8 @@ import {
 /** @typedef {(message: string) => void} Warn */
 /**
  * @import {
- *   AuthProvider, DeclaredModule, ModuleDeclared, RouteRegistration,
- *   ServerDeclarations, ServerModuleDeclaration, ServerRoute
+ *   DeclaredModule, ModuleDeclared, RouteRegistration,
+ *   ServerDeclarations, ServerMethod, ServerModuleDeclaration, ServerRoute
  * } from "./module-route-types.mjs"
  * @import { PublicEndpoint } from "./public-endpoints.mjs"
  */
@@ -157,13 +157,19 @@ function collectDeclarations(setup) {
   return declared;
 }
 
+/**
+ * @param {unknown} name
+ * @returns {name is ServerMethod}
+ */
+function isMethod(name) {
+  return isString(name) && METHODS.has(name);
+}
+
 /** @param {unknown} method */
 function methodsOf(method) {
   /** @type {readonly unknown[]} */
   const methods = Array.isArray(method) ? method : [method];
-  return methods.length && methods.every((name) => METHODS.has(name))
-    ? methods
-    : undefined;
+  return methods.length && methods.every(isMethod) ? methods : undefined;
 }
 
 /** @param {RouteRegistration} registration */
@@ -177,7 +183,7 @@ function registrationRejection(registration) {
 }
 
 /**
- * @param {RouteRegistration["method"]} method
+ * @param {string | readonly string[]} method
  * @param {string} path
  */
 function describeRoute(method, path) {
@@ -242,15 +248,16 @@ function declarationsOfModule(declaration, warn) {
 function routesOfModule(module, warn) {
   const { id, priority = 0 } = module;
   return module.declared.routes.flatMap((registration, order) => {
+    const methods = methodsOf(registration.method);
     const reason = registrationRejection(registration);
-    if (reason) {
+    if (reason || !methods) {
       warn(
         `Frontend module ${id} declares route ${describeRoute(registration.method, registration.path)}, which is ignored: ${reason}.`,
       );
       return [];
     }
     const compiled = compilePath(registration.path);
-    return methodsOf(registration.method).map((method) => ({
+    return methods.map((method) => ({
       ...compiled,
       id,
       priority,
@@ -401,44 +408,6 @@ function resolveRoutes(modules, warn, publicEndpoints) {
 }
 
 /**
- * The auth hooks: those of the highest-priority module that registers them.
- * A module registering them twice, or after another one, is reported.
- *
- * @param {DeclaredModule[]} modules
- * @param {Warn} warn
- */
-function resolveAuth(modules, warn) {
-  /** @type {AuthProvider | undefined} */
-  let provider;
-  for (const module of modules) {
-    for (const auth of module.declared.auth) {
-      const reason = authRejection(auth);
-      if (reason) {
-        warn(
-          `Frontend module ${module.id} registers auth hooks, which are ignored: ${reason}.`,
-        );
-        continue;
-      }
-      if (provider) {
-        warn(
-          `Frontend module ${module.id} registers auth hooks, which are ignored: ${provider.id} (priority ${provider.priority ?? 0}) provides them.`,
-        );
-        continue;
-      }
-      provider = {
-        id: module.id,
-        priority: module.priority ?? 0,
-        signInPath: auth.signInPath,
-        signInExempt: auth.signInExempt?.map(compilePathPattern),
-        refreshSession: auth.refreshSession?.bind(auth),
-        publicSession: auth.publicSession?.bind(auth),
-      };
-    }
-  }
-  return provider;
-}
-
-/**
  * The route rules: of two declarations of the same pattern, the module of
  * higher priority keeps it, with a warning.
  *
@@ -457,18 +426,22 @@ function resolveRules(modules, warn) {
         continue;
       }
       for (const [pattern, rule] of Object.entries(rules)) {
-        const reason = ruleRejection(pattern, rule);
+        const compiled = compilePathPattern(pattern);
         const current = kept.get(pattern);
-        if (reason || current) {
+        const reason =
+          ruleRejection(pattern, rule) ??
+          (current &&
+            `${current.id} (priority ${current.priority}) declares it`);
+        if (!compiled || reason) {
           warn(
-            `Frontend module ${module.id} declares the route rule "${pattern}", which is ignored: ${reason ?? `${current.id} (priority ${current.priority}) declares it`}.`,
+            `Frontend module ${module.id} declares the route rule "${pattern}", which is ignored: ${reason}.`,
           );
           continue;
         }
         kept.set(pattern, {
           id: module.id,
           priority: module.priority ?? 0,
-          pattern: compilePathPattern(pattern),
+          pattern: compiled,
           rule,
         });
       }

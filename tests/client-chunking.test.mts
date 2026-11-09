@@ -145,7 +145,6 @@ async function entryClosure(
       minify: false,
       rolldownOptions: {
         input: join(root, "main.ts"),
-        // @ts-expect-error `codeSplitting` is typed as a boolean here
         output: codeSplitting === undefined ? {} : { codeSplitting },
       },
     },

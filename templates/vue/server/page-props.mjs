@@ -46,7 +46,7 @@ const NOT_FOUND = 404;
  *
  * @typedef {{
  *   signInPath: string,
- *   view: (session: unknown) => { user?: unknown, session?: unknown }
+ *   view: (session: import("./auth/session.mjs").Session | undefined) => { user?: unknown, session?: unknown }
  * }} PageAuth
  */
 
@@ -66,8 +66,9 @@ export function pageRoute(props) {
  * browser holding the layout of another account or workspace, after a sign-in,
  * a sign-out or a switch, holds another key, so it is sent the right one.
  *
- * @param {unknown} session The sealed session: any JSON value, since only its
- *   `accountId` and `activeTenantId` are read, as empty when it holds none
+ * @param {{ accountId?: string, activeTenantId?: string } | undefined} session
+ *   The sealed session, of which only the `accountId` and `activeTenantId` are
+ *   read, as empty when it holds none
  * @returns {string}
  */
 export function sharedOnceKey(session) {
@@ -118,7 +119,7 @@ function pagePath(url, withShared) {
   }
   for (const [name, value] of pageQuery) query.set(name, value);
   if (!withShared) query.set(SHARED_PROP, "false");
-  return `/dms/page?${query}`;
+  return `/dms/page?${query.toString()}`;
 }
 
 /**
@@ -206,7 +207,7 @@ export async function propsForQuery(props, url, backend, auth) {
  * session's layout, sent now or already held: declaring it otherwise would let
  * a layout of another session pass for this one.
  *
- * @param {import("node:http").IncomingMessage} request
+ * @param {import("./request-target.mjs").ServerRequest} request
  * @param {PageBackend} backend
  * @param {PageAuth} auth
  * @returns {Promise<{

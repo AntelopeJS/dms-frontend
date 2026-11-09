@@ -1,5 +1,5 @@
 import { REDIRECT_STATUSES } from "../proxy-redirects.mjs";
-import { isString } from "../type-guards.mjs";
+import { isObjectLike, isString } from "../type-guards.mjs";
 import { clientCountryHeader, clientIp, clientIpHeader } from "./client-ip.mjs";
 
 /**
@@ -39,7 +39,7 @@ export const GENERIC_ERROR_MESSAGE = "error.500.description";
  */
 export function publicBackendMessage(data) {
   /** @type {unknown} */
-  const message = isString(data) ? data : data?.message;
+  const message = isObjectLike(data) ? data.message : data;
   return isString(message) && PUBLIC_AUTH_MESSAGE.test(message)
     ? message
     : undefined;
@@ -59,7 +59,7 @@ export function relayedHeaders(request, names) {
     ...clientCountryHeader(request),
     ...Object.fromEntries(
       names.flatMap((name) =>
-        request.headers[name] ? [[name, request.headers[name]]] : [],
+        request.headers[name] ? [[name, String(request.headers[name])]] : [],
       ),
     ),
   };
@@ -86,7 +86,7 @@ export function relayedHeaders(request, names) {
  *   is not JSON
  */
 export async function backend(path, request, options = {}) {
-  /** @type {Record<string, string | string[]>} */
+  /** @type {Record<string, string>} */
   const headers = Object.fromEntries(
     Object.entries(options.headers ?? {}).map(([name, value]) => [
       name.toLowerCase(),

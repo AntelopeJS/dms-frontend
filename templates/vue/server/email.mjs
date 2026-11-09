@@ -1,6 +1,7 @@
 import { fork } from "node:child_process";
 import { constants, setPriority } from "node:os";
 import { fileURLToPath } from "node:url";
+import { isObjectLike } from "./type-guards.mjs";
 
 const EMAIL_RENDERER_URL = new URL(
   "../dist/server/email-renderer.js",
@@ -75,10 +76,11 @@ export function watchEmailBundle() {
     cwd: fileURLToPath(new URL("..", import.meta.url)),
   });
   try {
-    setPriority(builder.pid, constants.priority.PRIORITY_BELOW_NORMAL);
+    if (builder.pid !== undefined)
+      setPriority(builder.pid, constants.priority.PRIORITY_BELOW_NORMAL);
   } catch {}
   builder.on("message", (message) => {
-    if (message?.state !== "building") {
+    if (!isObjectLike(message) || message.state !== "building") {
       emailBuildSettled();
       return;
     }
@@ -115,7 +117,7 @@ async function waitForEmailBuild() {
 /** @returns {Promise<typeof import("../email-renderer.ts")>} */
 function loadEmailRenderer() {
   const url = new URL(EMAIL_RENDERER_URL);
-  if (emailBundleVersion) url.searchParams.set("v", emailBundleVersion);
+  if (emailBundleVersion) url.searchParams.set("v", String(emailBundleVersion));
   return import(url.href);
 }
 

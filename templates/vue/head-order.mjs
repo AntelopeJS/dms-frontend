@@ -35,8 +35,9 @@ function deprioritize(html) {
 export function orderHeadForFirstPaint(html) {
   const prioritized = deprioritize(html);
   const stylesheet = prioritized.match(STYLESHEET);
-  const script = prioritized.match(SCRIPT);
-  if (!stylesheet || !script || stylesheet.index < script.index)
+  const stylesheetAt = prioritized.search(STYLESHEET);
+  const scriptAt = prioritized.search(SCRIPT);
+  if (!stylesheet || scriptAt < 0 || stylesheetAt < scriptAt)
     return prioritized;
   return prioritized
     .replace(STYLESHEET, "")

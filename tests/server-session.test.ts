@@ -17,29 +17,17 @@ import {
   scopedCookieName,
   writeSession,
 } from "../templates/vue/server/auth/session.mjs";
-
-interface CookieResponse {
-  headers: Map<string, string | string[]>;
-  getHeader: (name: string) => string | string[] | undefined;
-  setHeader: (name: string, value: string | string[]) => void;
-}
-
-function cookieResponse(): CookieResponse {
-  const headers = new Map<string, string | string[]>();
-  return {
-    headers,
-    getHeader: (name) => headers.get(name),
-    setHeader: (name, value) => headers.set(name, value),
-  };
-}
+import { requestOf, responseOf } from "./helpers/http-doubles";
 
 describe("client of a request", () => {
   it("uses the socket address and never caller-forwarded headers", () => {
     assert.equal(
-      clientIp({
-        headers: { "x-forwarded-for": "forged" },
-        socket: { remoteAddress: "127.0.0.2" },
-      }),
+      clientIp(
+        requestOf({
+          headers: { "x-forwarded-for": "forged" },
+          remoteAddress: "127.0.0.2",
+        }),
+      ),
       "127.0.0.2",
     );
   });
@@ -49,26 +37,29 @@ describe("client of a request", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     try {
       assert.equal(
-        clientIp({
-          headers: {
-            "x-client-ip": "2001:db8::7",
-            "x-forwarded-for": "198.51.100.66, 10.0.0.1",
-          },
-          socket: { remoteAddress: "10.0.0.2" },
-        }),
+        clientIp(
+          requestOf({
+            headers: {
+              "x-client-ip": "2001:db8::7",
+              "x-forwarded-for": "198.51.100.66, 10.0.0.1",
+            },
+            remoteAddress: "10.0.0.2",
+          }),
+        ),
         "2001:db8::7",
       );
       assert.equal(
-        isSameOrigin({
-          headers: {
-            host: "127.0.0.1:32099",
-            origin: "https://dms.example.test",
-            "x-client-ip": "2001:db8::7",
-            "x-forwarded-host": "dms.example.test",
-            "x-forwarded-proto": "https",
-          },
-          socket: {},
-        }),
+        isSameOrigin(
+          requestOf({
+            headers: {
+              host: "127.0.0.1:32099",
+              origin: "https://dms.example.test",
+              "x-client-ip": "2001:db8::7",
+              "x-forwarded-host": "dms.example.test",
+              "x-forwarded-proto": "https",
+            },
+          }),
+        ),
         true,
       );
     } finally {
@@ -81,10 +72,12 @@ describe("client of a request", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "2";
     try {
       assert.equal(
-        clientIp({
-          headers: { "x-forwarded-for": "203.0.113.7, 10.0.0.1" },
-          socket: { remoteAddress: "10.0.0.2" },
-        }),
+        clientIp(
+          requestOf({
+            headers: { "x-forwarded-for": "203.0.113.7, 10.0.0.1" },
+            remoteAddress: "10.0.0.2",
+          }),
+        ),
         "203.0.113.7",
       );
     } finally {
@@ -96,15 +89,16 @@ describe("client of a request", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     try {
       assert.equal(
-        isSameOrigin({
-          headers: {
-            host: "127.0.0.1:32099",
-            origin: "https://dms.example.test",
-            "x-forwarded-host": "dms.example.test",
-            "x-forwarded-proto": "https",
-          },
-          socket: {},
-        }),
+        isSameOrigin(
+          requestOf({
+            headers: {
+              host: "127.0.0.1:32099",
+              origin: "https://dms.example.test",
+              "x-forwarded-host": "dms.example.test",
+              "x-forwarded-proto": "https",
+            },
+          }),
+        ),
         true,
       );
     } finally {
@@ -156,9 +150,13 @@ describe("cookies of instances sharing a host", () => {
   it("keeps one instance's session out of another's", () => {
     const write = (backendUrl: string, secret: string, accountId: string) =>
       asInstance(backendUrl, secret, () => {
-        const response = cookieResponse();
-        writeSession(response, { refreshToken: "refresh", accountId });
-        return String(response.headers.get("set-cookie")).split(";", 1)[0];
+        const response = responseOf();
+        writeSession(response, {
+          refreshToken: "refresh",
+          accountId,
+          persistent: false,
+        });
+        return String(response.getHeader("set-cookie")).split(";", 1)[0];
       });
     const cookie = [
       write(...first, "account-1"),
@@ -166,7 +164,7 @@ describe("cookies of instances sharing a host", () => {
     ].join("; ");
     const read = (backendUrl: string, secret: string) =>
       asInstance(backendUrl, secret, () =>
-        readSession({ headers: { cookie } }),
+        readSession(requestOf({ headers: { cookie } })),
       );
     assert.equal(read(...first)?.accountId, "account-1");
     assert.equal(read(...second)?.accountId, "account-2");

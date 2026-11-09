@@ -57,6 +57,16 @@ function page(language: string, updatedAt: number, accountId = "account-a") {
   };
 }
 
+interface LocaleSetter {
+  setLocale(locale: string): Promise<void>;
+}
+
+type AppI18n = App["config"]["globalProperties"]["$i18n"];
+
+function canSetLocale(value: AppI18n): value is AppI18n & LocaleSetter {
+  return "setLocale" in value && isCallable(value.setLocale);
+}
+
 type AppRuntime = Pick<
   typeof import("../templates/vue/app-runtime.ts"),
   "configureDmsApp" | "resolveDmsInertiaPage"
@@ -296,6 +306,7 @@ it("remembers the language a visitor picks, for the next page load", async () =>
     });
     try {
       const i18n = app.config.globalProperties.$i18n;
+      assert.ok(canSetLocale(i18n), "the app carries the DMS's i18n");
       await i18n.setLocale("fr");
       assert.equal(localeOf(app), "fr");
       assert.equal(written.length, 1);

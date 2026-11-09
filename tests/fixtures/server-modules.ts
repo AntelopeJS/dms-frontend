@@ -22,13 +22,13 @@ export function writeFixture(
 
 export function resolved(
   declarations: { id: string; priority?: number; setup: Setup }[],
-  publicEndpoints: unknown[] = [],
+  publicEndpoints: Parameters<typeof compilePublicEndpoint>[0][] = [],
 ) {
   const warnings: string[] = [];
   const { routes } = resolveServerDeclarations(
     declarations,
     (message: string) => warnings.push(message),
-    publicEndpoints.map(compilePublicEndpoint),
+    publicEndpoints.flatMap((entry) => compilePublicEndpoint(entry) ?? []),
   );
   return { routes, warnings };
 }

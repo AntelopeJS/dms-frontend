@@ -13,7 +13,7 @@ const ANY_INERTIA_PAGE_IMPORT =
  *   name: string,
  *   enforce: "pre",
  *   transform: (
- *     this: import("vite").Rollup.TransformPluginContext,
+ *     this: Pick<import("vite").Rollup.TransformPluginContext, "error">,
  *     code: string,
  *     id: string,
  *   ) => { code: string, map: null } | null,

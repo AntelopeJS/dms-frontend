@@ -25,13 +25,15 @@ import {
 import { backendUrl } from "./request-target.mjs";
 import {
   isFunction,
-  isNonNullObject,
   isNumber,
+  isObjectLike,
+  isRecord,
   isString,
 } from "./type-guards.mjs";
 import { pipeWebBody } from "./web-body.mjs";
 
 /** @typedef {import("node:http").IncomingMessage} IncomingMessage */
+/** @typedef {import("./request-target.mjs").ServerRequest} ServerRequest */
 /** @typedef {import("node:http").ServerResponse} ServerResponse */
 /** @typedef {import("../server-module.ts").DmsServerEvent} ServerEvent */
 /** @typedef {import("../server-module.ts").DmsSession} Session */
@@ -40,7 +42,7 @@ import { pipeWebBody } from "./web-body.mjs";
  * What an event is made from.
  *
  * @typedef {object} EventContext
- * @property {IncomingMessage} request
+ * @property {ServerRequest} request
  * @property {ServerResponse} response
  * @property {Pick<import("./module-route-types.mjs").ServerRoute, "bodyLimit">} route
  * @property {Readonly<Record<string, string>>} params
@@ -97,7 +99,7 @@ function limitedBody(request, limit) {
 }
 
 /**
- * @param {IncomingMessage} request
+ * @param {ServerRequest} request
  * @param {EventContext["route"]} route
  */
 function webRequest(request, route) {
@@ -124,9 +126,13 @@ async function readJson(webRequestValue) {
   const chunks = [];
   const reader = webRequestValue.body.getReader();
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
+    const read = await reader.read();
+    if (read.done) break;
+    /** @type {unknown} */
+    const chunk = read.value;
+    if (!(chunk instanceof Uint8Array))
+      throw new RequestBodyError(400, "Invalid request body");
+    chunks.push(chunk);
   }
   if (!chunks.length) return {};
   try {
@@ -237,8 +243,16 @@ function frozenCopy(value) {
  */
 export function createServerEvent(context) {
   const { request, response, route, params } = context;
-  const event = {
-    request: webRequest(request, route),
+  const webRequestValue = webRequest(request, route);
+  // SAFETY: `server-module.ts` lets a handler name the JSON shape it expects from the backend and from the client, as `Response.json()` does; the server parses that JSON and hands it on unchecked, which these two members are the only place to state.
+  const parsedJson = /** @type {Pick<ServerEvent, "backend" | "readJson">} */ ({
+    backend: (/** @type {string} */ path, init = {}) =>
+      backend(path, request, init),
+    readJson: () => readJson(webRequestValue),
+  });
+  return {
+    ...parsedJson,
+    request: webRequestValue,
     params: Object.freeze({ ...params }),
     session: sessionAccess(request, response, context.view),
     cookies: cookieAccess(
@@ -247,8 +261,6 @@ export function createServerEvent(context) {
       context.module.id,
       context.authOwner,
     ),
-    backend: (/** @type {string} */ path, init = {}) =>
-      backend(path, request, init),
     backendUrl: (/** @type {string} */ path) => backendUrl(path),
     clientIp: () => clientIp(request),
     module: Object.freeze({
@@ -266,19 +278,18 @@ export function createServerEvent(context) {
         ...(context.app?.authEstablishEndpoints ?? []),
       ]),
     }),
+    url: new URL(webRequestValue.url),
   };
-  event.url = new URL(event.request.url);
-  event.readJson = () => readJson(event.request);
-  return event;
 }
 
 /** @param {unknown} value */
 function isResponse(value) {
   return (
     value instanceof Response ||
-    (isNonNullObject(value) &&
+    (isRecord(value) &&
       isNumber(value.status) &&
-      isFunction(value.headers?.get) &&
+      isObjectLike(value.headers) &&
+      isFunction(value.headers.get) &&
       "body" in value)
   );
 }
@@ -304,7 +315,7 @@ function asResponse(result) {
  * on the frontend's origin when the frontend proxies its path, no cookie of
  * another site its fetch reached.
  *
- * @param {IncomingMessage} request
+ * @param {ServerRequest} request
  * @param {ServerResponse} response
  * @param {unknown} result
  * @param {(path: string) => boolean} isProxiedPath
@@ -313,6 +324,7 @@ async function writeServerResponse(request, response, result, isProxiedPath) {
   const answer = asResponse(result);
   const cookies = [response.getHeader("set-cookie") ?? []]
     .flat()
+    .map(String)
     .concat(relayableCookies(answer));
   answer.headers.forEach((value, name) => {
     if (name === "set-cookie") return;

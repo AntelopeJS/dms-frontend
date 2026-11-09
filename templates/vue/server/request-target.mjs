@@ -1,4 +1,3 @@
-import { writeBadRequest } from "./request-failure.mjs";
 import { isString } from "./type-guards.mjs";
 
 const FRONTEND_ORIGIN = "http://frontend.local";
@@ -30,7 +29,7 @@ export function isOriginForm(target) {
  */
 export function backendUrl(
   target,
-  backendBaseUrl = process.env.DMS_API_BASE_URL,
+  backendBaseUrl = process.env.DMS_API_BASE_URL ?? "",
 ) {
   const { pathname, search } = new URL(target, FRONTEND_ORIGIN);
   const url = new URL(new URL(backendBaseUrl).origin);
@@ -40,8 +39,24 @@ export function backendUrl(
 }
 
 /**
- * Answers 400 to a request whose target is not origin-form, before any route
- * reads it. Returns whether it answered.
+ * A request a server received, whose `url` and `method` Node always sets
+ * (`isServerRequest`).
+ *
+ * @typedef {import("node:http").IncomingMessage & { url: string, method: string }} ServerRequest
+ */
+
+/**
+ * @template {import("node:http").IncomingMessage} Request
+ * @param {Request} request
+ * @returns {request is Request & ServerRequest}
+ */
+export function isServerRequest(request) {
+  return isString(request.url) && isString(request.method);
+}
+
+/**
+ * Whether the request target is origin-form, the only kind the server routes:
+ * a request that fails it is answered 400 before any route reads it.
  *
  * The request target as the server reads it. Node hands `request.url` over
  * verbatim, so it is not always a path: `//host/x`, `/\host/x` and the absolute
@@ -50,10 +65,8 @@ export function backendUrl(
  * backend read the same normalized path from here.
  *
  * @param {import("node:http").IncomingMessage} request
- * @param {import("node:http").ServerResponse} response
+ * @returns {request is ServerRequest}
  */
-export function refuseForeignTarget(request, response) {
-  if (isOriginForm(request.url)) return false;
-  writeBadRequest(response);
-  return true;
+export function hasOriginFormTarget(request) {
+  return isOriginForm(request.url) && isString(request.method);
 }

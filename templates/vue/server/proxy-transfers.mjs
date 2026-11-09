@@ -1,3 +1,5 @@
+import { isObjectLike } from "./type-guards.mjs";
+
 const PAYLOAD_TOO_LARGE = 413;
 const TOO_LARGE_BODY = JSON.stringify({ message: "Payload Too Large" });
 /**
@@ -41,7 +43,7 @@ async function* limitedChunks(request, maxBodyBytes) {
 }
 
 /**
- * @param {import("node:http").IncomingMessage} request
+ * @param {import("./request-target.mjs").ServerRequest} request
  * @param {number | undefined} maxBodyBytes
  */
 function requestBody(request, maxBodyBytes) {
@@ -70,7 +72,7 @@ function declaresTooLargeBody(request, maxBodyBytes) {
 function isBodyTooLarge(error) {
   return (
     error instanceof BodyTooLargeError ||
-    error?.cause instanceof BodyTooLargeError
+    (isObjectLike(error) && error.cause instanceof BodyTooLargeError)
   );
 }
 
@@ -120,7 +122,7 @@ function refuseTooLargeBody(request, response) {
  * before a byte is passed on, a chunked body is cut off as soon as it goes
  * over.
  *
- * @param {import("node:http").IncomingMessage} request
+ * @param {import("./request-target.mjs").ServerRequest} request
  * @param {import("node:http").ServerResponse} response
  * @param {number | undefined} maxBodyBytes
  * @param {(
@@ -132,12 +134,15 @@ function refuseTooLargeBody(request, response) {
  *   `undefined` once the body went over and `response` got the 413
  */
 export async function sendWithinLimit(request, response, maxBodyBytes, send) {
-  if (declaresTooLargeBody(request, maxBodyBytes))
-    return refuseTooLargeBody(request, response);
+  if (declaresTooLargeBody(request, maxBodyBytes)) {
+    refuseTooLargeBody(request, response);
+    return undefined;
+  }
   try {
     return await send(requestBody(request, maxBodyBytes));
   } catch (error) {
     if (!isBodyTooLarge(error)) throw error;
-    return refuseTooLargeBody(request, response);
+    refuseTooLargeBody(request, response);
+    return undefined;
   }
 }
