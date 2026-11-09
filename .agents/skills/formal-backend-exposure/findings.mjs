@@ -12,6 +12,13 @@ import { exposureCase } from "./inputs.mjs";
  *
  * @typedef {{ id: string, rule: string, alsoBreaks: string[], isIn: (owner: Owner) => boolean }} Finding
  */
+/**
+ * A finding the code no longer breaks: its id, its rule, and which cases
+ * belong to it. Its cases are still sampled on their own, so `rule` must hold
+ * on them; a random sample of every case seldom draws them.
+ *
+ * @typedef {{ id: string, rule: string, isIn: (owner: Owner) => boolean }} FixedFinding
+ */
 
 /**
  * The rank the server sorts proxies by (`compilePathPattern`'s
@@ -35,11 +42,13 @@ function serverWinner(owner) {
 }
 
 /** @type {Finding[]} */
-export const FINDINGS = [
+export const FINDINGS = [];
+
+/** @type {FixedFinding[]} */
+export const FIXED = [
   {
     id: "F1",
     rule: "PublicEndpointsWork",
-    alsoBreaks: [],
     isIn: (owner) => owner.kind === "backend" && owner.endpoints.length > 0 && serverWinner(owner).auth === "none",
   },
 ];
@@ -59,9 +68,9 @@ export function casesFor(rule) {
 }
 
 /**
- * The cases of a finding.
+ * The cases of a finding, fixed or not.
  *
- * @param {Finding} finding
+ * @param {Pick<Finding, "isIn">} finding
  */
 export function casesOf(finding) {
   return exposureCase.filter((current) => finding.isIn(ownerOfCase(current)));
@@ -79,9 +88,9 @@ export function isCheckedOn(rule, current) {
 }
 
 /**
- * Whether `current` belongs to `finding`.
+ * Whether `current` belongs to `finding`, fixed or not.
  *
- * @param {Finding} finding
+ * @param {Pick<Finding, "isIn">} finding
  * @param {Case} current
  */
 export function belongsTo(finding, current) {

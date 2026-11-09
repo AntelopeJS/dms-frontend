@@ -55,16 +55,17 @@ A proxied request is one the backend receives for the visit. A page read is the 
 | `ListedHeadersOnly` | Of the visitor's headers, the backend gets only the ones the docs list, plus a matched public endpoint's declared headers. | A header the backend gives a meaning to (`x-dms-*`, a method override, `x-real-ip`, `cf-ipcountry`) comes from any caller. | holds |
 | `DeclaredPrefixesReach` | A visit a valid declaration covers, that the renderer does not answer and the Origin rule does not refuse, reaches the backend. | A module's backend route answers 404 or a page. | holds |
 | `WinningProxyDecides` | When proxies cover a path, the one with more literal segments wins, then a single `*` over `**`. Its auth mode decides whether a cross-site write gets 403 and whether a signed-in visitor's session goes. | A request goes out under another declaration's auth mode than the one written for its path. | holds |
-| `PublicEndpointsWork` | A visit to a public endpoint's method and path, under a covering proxy, reaches the backend without the session and without an Origin, with the endpoint's declared headers. | A provider's webhook is refused, or loses its secret header. | finding F1 |
+| `PublicEndpointsWork` | A visit to a public endpoint's method and path, under a covering proxy, reaches the backend without the session and without an Origin, with the endpoint's declared headers. | A provider's webhook is refused, or loses its secret header. | holds |
 
-A case in a finding is left out of the rules that finding breaks: F1 out of `PublicEndpointsWork`. The check then confirms that each finding's rule still breaks on its own cases.
+A case in a finding is left out of the rules that finding breaks. The check then confirms that each finding's rule still breaks on its own cases. No finding is recorded today.
+
+A fixed finding stays in `FIXED` (`findings.mjs`). Its cases are still sampled on their own, and its rule must hold on them. A random sample may not draw them, so the guard keeps the bug from coming back unseen. F1, a public endpoint under an `auth: "none"` proxy that lost its declared headers (AntelopeJS/dms-frontend#290), is one.
 
 ## Findings on main
 
-Each counterexample below is a run of the real server, as `check.mjs` printed it. The check shrinks it, then drops each declaration and header it does not need.
+None is open. A new finding is recorded with its counterexample, a run of the real server as `check.mjs` printed it, shrunk to the declarations and headers it needs.
 
-- **F1, a public endpoint under an `auth: "none"` proxy loses its declared headers (`PublicEndpointsWork`).** AntelopeJS/dms-frontend#290. `proxyAccess` (public-endpoints.mjs:346-348) returns `{ anonymous: true, headers: [] }` for an `auth: "none"` proxy before it looks for a public endpoint. `backendHeaders` then relays none of the endpoint's headers. The docs say a request to a public endpoint "carries the module's declared headers on top of the usual ones". With `DMS_BACKEND_PROXIES=[{"path":"/api/**","auth":"none"}]` and `DMS_PUBLIC_ENDPOINTS=[{"path":"/api/hooks","methods":["PUT"],"headers":["x-hook-secret","x-acme-signature"]}]`, `PUT /api/hooks` with `x-hook-secret` reaches the backend without it. A webhook that authenticates by that header is refused on every delivery. Under an `auth: "session"` proxy the same endpoint gets its header.
-F1 is left to the owner: the code or the docs may change. It lets no session out without an Origin check. `SessionOnlyWhereDeclared` and `NoCrossSiteSessionWrite` hold on every case, F1's included.
+F1 (AntelopeJS/dms-frontend#290), a public endpoint under an `auth: "none"` proxy that lost its declared headers, is fixed: `proxyAccess` now looks for a public endpoint before it returns for `auth: "none"`. `PublicEndpointsWork` holds on every case, and F1 stays in `FIXED`.
 
 F2 (AntelopeJS/dms-frontend#291), a proxy order that let extra `*` segments outrank a literal, needed a `*` before the last segment. AntelopeJS/dms-frontend#275 refuses that form, so F2 can no longer occur, and `WinningProxyDecides` holds on every case.
 
@@ -135,8 +136,8 @@ Each break was made in the real product code of the worktree, one at a time, and
 | --- | --- | --- |
 | `DeclaredPrefixesOnly` | a deep pattern matches inside a segment: `(?:/.*)?` becomes `.*` (path-patterns.mjs:14) | `the backend received PATCH /api/hooks/x.yx, but the docs give the visit to the not-found` |
 | `SamePathAsMatched` | `backendUrl` sends `decodeURIComponent(pathname)` (request-target.mjs:37) | `the backend received HEAD /media/a/b/x.y/_dms, the server matched HEAD /media/a%2Fb/x.y/_dms` |
-| `SessionOnlyWhereDeclared` | `proxyAccess` loses its `auth: "none"` return (public-endpoints.mjs:347-348) | `the backend received GET /api/hooks with the session, and no auth: "session" proxy covers it` |
-| `NoCrossSiteSessionWrite` | `proxyAccess` refuses nothing (public-endpoints.mjs:362) | `the backend received PATCH /a/%zz with the session, and the visitor sent no Origin` |
+| `SessionOnlyWhereDeclared` | `proxyAccess` loses its `auth: "none"` exception (public-endpoints.mjs:349) | `the backend received GET /api/hooks with the session, and no auth: "session" proxy covers it` |
+| `NoCrossSiteSessionWrite` | `proxyAccess` refuses nothing (public-endpoints.mjs:358) | `the backend received PATCH /a/%zz with the session, and the visitor sent no Origin` |
 | `NoVisitorCredentials` | `backendHeaders` relays `cookie` (backend-request.mjs:23-31) | `the backend received GET /dms/page?path=%2Fapi with Cookie "zqother=zqmark-cookie"` |
 | `ForwardedByTheProxy` | `trustedHops` defaults to 1 (client-ip.mjs:25) | `the backend received GET /dms/page?path=%2Fapi%2Fhooks with x-forwarded-host "zqmark-x-forwarded-host"` |
 | `ListedHeadersOnly` | `backendHeaders` relays `x-http-method-override` (backend-request.mjs:23-31) | `the backend received GET /dms/page?path=%2Fdmsx with the visitor's x-http-method-override` |
@@ -144,4 +145,6 @@ Each break was made in the real product code of the worktree, one at a time, and
 | `WinningProxyDecides` | `resolveBackendProxies` sorts least specific first (backend-proxies.mjs:143-145) | `/media/b/** (auth: "none") decides: the visit is not refused, and it answered 403` |
 | `PublicEndpointsWork` | `proxyAccess` checks the Origin before the public endpoints (public-endpoints.mjs:349) | `the public endpoint /api/hooks/*/* answered 403, and the backend received 0 requests` |
 
-With every change reverted, both configurations exit 0 with F1 as recorded.
+Reverting the fix of #290 (`git show 4a00496:templates/vue/server/public-endpoints.mjs`) is caught too: `BROKEN PublicEndpointsWork: the backend received DELETE /api/hooks/hooks without the declared x-acme-signature`.
+
+With every change reverted, both configurations exit 0 with no finding recorded.

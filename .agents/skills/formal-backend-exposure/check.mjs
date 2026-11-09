@@ -10,7 +10,7 @@
  */
 import fc from "fast-check";
 import { startServers } from "./drive.mjs";
-import { belongsTo, casesFor, casesOf, FINDINGS, isCheckedOn } from "./findings.mjs";
+import { belongsTo, casesFor, casesOf, FINDINGS, FIXED, isCheckedOn } from "./findings.mjs";
 import { RULES, seenOf } from "./rules.mjs";
 
 /** @typedef {import("./inputs.mjs").Case} Case */
@@ -140,12 +140,27 @@ async function counterexample(rule, cases, keeps) {
   return { found, why: (await brokenBy(rule, found)) ?? "it broke only while shrinking" };
 }
 
+/**
+ * The first fixed finding of `rule` whose cases break it again.
+ *
+ * @param {Rule} rule
+ */
+async function fixedBreak(rule) {
+  for (const fixed of FIXED.filter((entry) => entry.rule === rule.name)) {
+    const back = await counterexample(rule, casesOf(fixed), (current) => belongsTo(fixed, current));
+    if (back) return { found: back.found, why: `on the cases of the fixed ${fixed.id}, ${back.why}` };
+  }
+  return undefined;
+}
+
 /** @type {string[]} */
 const holding = [];
 let changed = false;
 try {
+  for (const fixed of FIXED)
+    if (!RULES.some((rule) => rule.name === fixed.rule)) throw new Error(`${fixed.id} names no rule: ${fixed.rule}`);
   for (const rule of RULES) {
-    const broken = await counterexample(rule, casesFor(rule.name), (current) => isCheckedOn(rule.name, current));
+    const broken = (await counterexample(rule, casesFor(rule.name), (current) => isCheckedOn(rule.name, current))) ?? (await fixedBreak(rule));
     if (broken) {
       changed = true;
       process.stdout.write(`BROKEN ${rule.name}: ${broken.why}\n${describeCase(broken.found)}\n`);
