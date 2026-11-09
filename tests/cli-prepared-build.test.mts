@@ -148,15 +148,22 @@ describePosix("build --setup-only and build --prepared", () => {
     assert.equal(built.code, 0, built.stderr);
   });
 
-  for (const args of [
-    ["--no-install"],
-    ["--prepared", "--setup-only"],
-    ["--prepared", "--force"],
-  ]) {
+  for (const [args, problem] of [
+    [["--no-install"], /✖ --no-install needs --setup-only\n/],
+    [
+      ["--prepared", "--setup-only"],
+      /✖ Option '--prepared' cannot be used with option '--setup-only'\n/,
+    ],
+    [
+      ["--prepared", "--force"],
+      /✖ Option '--prepared' cannot be used with option '-f, --force'\n/,
+    ],
+  ] as const) {
     it(`refuses build ${args.join(" ")} as a usage error`, async () => {
       const run = await cli.run(["build", ...args], { setUp: projectHome });
 
       assert.equal(run.code, 2);
+      assert.match(run.stderr, problem);
       assert.deepEqual(run.calls, []);
     });
   }
