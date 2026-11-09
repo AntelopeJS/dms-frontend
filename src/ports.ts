@@ -48,15 +48,18 @@ function tryListen(port: number): Promise<Server | undefined> {
  * TCP maximum). We probe ourselves instead of letting the frontend server fall back
  * silently — ajs dms must know the real port, since it is sent to the
  * backend as the manifest's `clientUrl`.
+ *
+ * @returns The reservation, with `isFallback` true when `preferred` was busy.
+ * Port 0 never falls back: the system picks a free port for it.
  */
 export async function reserveFreePort(
   preferred: number,
   range: number = PORT_FALLBACK_RANGE,
-): Promise<ReservedPort> {
+): Promise<ReservedPort & { isFallback: boolean }> {
   const end = Math.min(preferred + range, MAX_TCP_PORT);
   for (let port = preferred; port <= end; port++) {
     const reserved = await reservePort(port);
-    if (reserved) return reserved;
+    if (reserved) return { ...reserved, isFallback: port !== preferred };
   }
   throw new CliError({
     title: `No free port found between ${preferred} and ${end}`,

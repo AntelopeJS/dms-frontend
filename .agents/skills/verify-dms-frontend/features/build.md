@@ -42,7 +42,7 @@ The production path of the CLI: `build` into a workspace, `start` serving it aga
 - `dev-arguments`: no backend and no project, session secrets of 5, 0 and 31 characters, a bad port and url fail before any work.
 - `dev-server`: ready block, loopback only, `x-dms-route-owner` for backend proxies, renderer assets and pages, the `clientUrl` the backend is given, the workspace keyed on the url, the ready report, the warning for a project module the backend does not register, SIGINT exits 130.
 - `dev-ports-and-host`: a busy port moves to the next free one and the warning names both, `HOST=0.0.0.0` opens the LAN.
-- `dev-port-zero`: `-p 0` is not reported as a busy port. Fails today: finding below.
+- `dev-port-zero`: `-p 0` is not reported as a busy port.
 - `dev-cookie-secure`: the session cookie `POST /auth/login` sets on `ajs dms dev` has no `Secure` with `DMS_COOKIE_SECURE` unset or `false`, and has it with `true`.
 - `dev-backend-down`: the cached manifest stands in with a warning, `--offline` and `DMS_OFFLINE` use it without asking, a 401 and a url that never served a manifest fail.
 - `dev-discovery`: `.antelope/dev.json` of the enclosing project (found from a subfolder), the workspace keyed on the project and kept when the backend changes port, `DMS_API_BASE_URL` in `./.env` ends discovery, a stale, malformed or api-less registry fails with its message, the first file found decides.
@@ -81,7 +81,7 @@ The journeys build into a workspace of their own and start `start` and `dev` aga
 
 ## Gotchas
 
-- Known findings, kept as failing journeys: `start-quiet` (AntelopeJS/dms-frontend#278: the Routing block survives `-q`) and `dev-port-zero` (AntelopeJS/dms-frontend#279: `-p 0` prints `Port 0 is busy`). 
+- Known finding, kept as a failing journey: `start-quiet` (AntelopeJS/dms-frontend#278: the Routing block survives `-q`).
 - The build installs from the registry: a package published minutes ago can make the install fail with a 404 until the registry catches up.
 - A build step's Vite warnings are listed in full when piped; the page's `Run with --verbose` hint is the terminal form.
 - Files copied from `public/` keep the mode of their source in the workspace; the check on readable files leaves them out.

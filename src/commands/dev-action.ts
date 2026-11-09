@@ -159,7 +159,7 @@ export async function runDev(options: DevOptions): Promise<void> {
     project,
   });
 
-  if (port !== requestedPort) {
+  if (reserved.isFallback) {
     ui.message("warn", `Port ${requestedPort} is busy, using ${port}`);
   }
   if (manifestFromCache) {
