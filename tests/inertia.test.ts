@@ -84,20 +84,24 @@ describe("Inertia HTTP protocol", () => {
     });
   });
 
-  it("uses native Inertia v3 semantics for internal, fragment, and external redirects", async () => {
+  it("uses native Inertia v3 semantics for internal, fragment, and external redirects", async (context) => {
     const runtime = await server;
     const capture = (location: string) => {
       let result:
         | { status: number; headers: Record<string, string> }
         | undefined;
+      const response = responseOf();
+      context.mock.method(response, "end", () => undefined);
+      context.mock.method(
+        response,
+        "writeHead",
+        (status: number, headers: Record<string, string>) => {
+          result = { status, headers };
+        },
+      );
       runtime.redirectFrontendVisit(
         requestOf({ method: "GET", headers: { "x-inertia": "true" } }),
-        Object.assign(responseOf(), {
-          end: () => undefined,
-          writeHead: (status: number, headers: Record<string, string>) => {
-            result = { status, headers };
-          },
-        }),
+        response,
         location,
       );
       return result;

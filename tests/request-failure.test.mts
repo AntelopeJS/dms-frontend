@@ -84,16 +84,19 @@ describe("requests the frontend server cannot serve", () => {
     assert.notEqual(next.status, 400, "the process is still up and serving");
   });
 
-  it("answers 500 when rendering the error page fails too", async () => {
+  it("answers 500 when rendering the error page fails too", async (context) => {
     const writes: Array<[number, Record<string, string>]> = [];
     let body: string | undefined;
-    const response = Object.assign(responseOf(), {
-      writeHead(status: number, headers: Record<string, string>) {
+    const response = responseOf();
+    context.mock.method(
+      response,
+      "writeHead",
+      (status: number, headers: Record<string, string>) => {
         writes.push([status, headers]);
       },
-      end(content: string) {
-        body = content;
-      },
+    );
+    context.mock.method(response, "end", (content: string) => {
+      body = content;
     });
     const request = Object.defineProperty(
       requestOf({ headers: { accept: "text/html" }, method: "GET" }),
@@ -136,22 +139,19 @@ describe("requests the frontend server cannot serve", () => {
     );
   });
 
-  it("drops the connection when the failed response had already started", async () => {
+  it("drops the connection when the failed response had already started", async (context) => {
     let destroyed = false;
     let headersSent = false;
-    const response = Object.defineProperty(
-      Object.assign(responseOf(), {
-        writeHead() {
-          headersSent = true;
-          throw new Error("render failed mid-response");
-        },
-        destroy() {
-          destroyed = true;
-        },
-      }),
-      "headersSent",
-      { get: () => headersSent },
-    );
+    const response = Object.defineProperty(responseOf(), "headersSent", {
+      get: () => headersSent,
+    });
+    context.mock.method(response, "writeHead", () => {
+      headersSent = true;
+      throw new Error("render failed mid-response");
+    });
+    context.mock.method(response, "destroy", () => {
+      destroyed = true;
+    });
     let reads = 0;
     const request = Object.defineProperty(
       requestOf({ headers: { accept: "application/json" }, method: "GET" }),
