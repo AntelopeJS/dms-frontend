@@ -4,6 +4,8 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-Z5xCjrLHRRgNERwEZfOOjEJQ2swN1swMtXp++o+n38c=
+
 patchedDependencies:
   '@vueuse/core@14.4.0':
     hash: e6a46bb783895532ecc138b0af4baf15f32d0b09343fc75e0af69c2531e22637
@@ -33,14 +35,14 @@ importers:
         version: 2.9.1
     devDependencies:
       '@antelopejs/core':
-        specifier: ^1.21.0
-        version: 1.21.0
+        specifier: ^1.21.2
+        version: 1.21.2
       '@antelopejs/interface-dms':
         specifier: ^0.10.0
         version: 0.10.0(af130a73d9a32f0c2b081b92b91929c9)
       '@antelopejs/tooling-configs':
-        specifier: ^0.5.0
-        version: 0.5.0(@nuxt/eslint-config@1.15.2(@typescript-eslint/utils@8.71.2(eslint@8.57.1)(typescript@6.0.3))(@vue/compiler-sfc@3.5.25)(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)(typescript@6.0.3))(knip@6.34.0)(mongodb-memory-server@11.3.0(bare-buffer@3.7.1)(socks@2.8.7))(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))(pixelmatch@8.0.0)(playwright-core@1.65.0)(sharp@0.35.5(@types/node@24.8.1))
+        specifier: ^0.5.1
+        version: 0.5.1(@nuxt/eslint-config@1.15.2(@typescript-eslint/utils@8.71.2(eslint@8.57.1)(typescript@6.0.3))(@vue/compiler-sfc@3.5.25)(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)(typescript@6.0.3))(knip@6.34.0)(mongodb-memory-server@11.3.0(bare-buffer@3.7.1)(socks@2.8.7))(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))(pixelmatch@8.0.0)(playwright-core@1.65.0)(sharp@0.35.5(@types/node@24.8.1))
       '@iconify/utils':
         specifier: ^3.1.0
         version: 3.1.7
@@ -153,8 +155,8 @@ importers:
 
 packages:
 
-  '@antelopejs/core@1.21.0':
-    resolution: {integrity: sha512-0+qxASgc1sF8MihvGYfrAy6m3XTPcrFJeeIH69ivI0cvtYmj71cjzTeXdKghBZb4ndTMQ2IXeKbK6zxrG2w4Tw==}
+  '@antelopejs/core@1.21.2':
+    resolution: {integrity: sha512-3TaRUOADEv9ZKxXPfTbfU8orzWaBH1gVfpOD6HOiVsH64QKOkvBRHbZ2ATBihR64kgh2N6FoR+rqByJ9IhfIug==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
@@ -209,8 +211,8 @@ packages:
     peerDependencies:
       '@antelopejs/interface-core': '>=0.2.4 <1.0.0'
 
-  '@antelopejs/tooling-configs@0.5.0':
-    resolution: {integrity: sha512-vTZyx0FpSzArjSdb119i+CTGPsYe903/D/JY+0KVUgBjdw/2+LTRt58NUinDtvnf9H18uAlF2xwWJXsSPTv/6A==}
+  '@antelopejs/tooling-configs@0.5.1':
+    resolution: {integrity: sha512-Q1JWAsMIDy8f6KaTFPAakT+ChWDhQCzJjdszFFam/pUFqBVMgY+Lp1I7bc8SwcWL3CMdHBzgUUEId2od2cB7hQ==}
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -1615,6 +1617,9 @@ packages:
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
+
+  '@types/mocha@10.0.10':
+    resolution: {integrity: sha512-xPyYSz1cMPnJQhl0CLMH68j3gprKZaTjG3s5Vi+fDgx+uhG9NOXwbVt52eFS8ECyXhyKcjDLCBEqBExKuiZb7Q==}
 
   '@types/node@24.8.1':
     resolution: {integrity: sha512-alv65KGRadQVfVcG69MuB4IzdYVpRwMG/mq8KWOaoOdyY617P5ivaDiMCGOFDWD2sAn5Q0mR3mRtUOgm99hL9Q==}
@@ -4354,10 +4359,11 @@ packages:
 
 snapshots:
 
-  '@antelopejs/core@1.21.0':
+  '@antelopejs/core@1.21.2':
     dependencies:
       '@antelopejs/interface-core': 0.4.0
       '@clack/prompts': 1.8.1
+      '@types/mocha': 10.0.10
       '@types/proper-lockfile': 4.1.4
       commander: 13.1.0
       inly: 5.0.1
@@ -4419,7 +4425,7 @@ snapshots:
     dependencies:
       '@antelopejs/interface-core': 0.4.0
 
-  '@antelopejs/tooling-configs@0.5.0(@nuxt/eslint-config@1.15.2(@typescript-eslint/utils@8.71.2(eslint@8.57.1)(typescript@6.0.3))(@vue/compiler-sfc@3.5.25)(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)(typescript@6.0.3))(knip@6.34.0)(mongodb-memory-server@11.3.0(bare-buffer@3.7.1)(socks@2.8.7))(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))(pixelmatch@8.0.0)(playwright-core@1.65.0)(sharp@0.35.5(@types/node@24.8.1))':
+  '@antelopejs/tooling-configs@0.5.1(@nuxt/eslint-config@1.15.2(@typescript-eslint/utils@8.71.2(eslint@8.57.1)(typescript@6.0.3))(@vue/compiler-sfc@3.5.25)(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)(typescript@6.0.3))(knip@6.34.0)(mongodb-memory-server@11.3.0(bare-buffer@3.7.1)(socks@2.8.7))(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))(pixelmatch@8.0.0)(playwright-core@1.65.0)(sharp@0.35.5(@types/node@24.8.1))':
     dependencies:
       '@oxlint/plugins': 1.81.0
       dts-bundle-generator: 9.5.1
@@ -5516,6 +5522,8 @@ snapshots:
 
   '@types/json-schema@7.0.15':
     optional: true
+
+  '@types/mocha@10.0.10': {}
 
   '@types/node@24.8.1':
     dependencies:

@@ -60,7 +60,7 @@
   "scripts": {
     "build": "rimraf dist && tsc",
     "prepack": "pnpm run build",
-    "release": "pnpm run lint && pnpm run format:check && pnpm run test && pnpm run test:cli && release-it",
+    "release": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test && pnpm run test:cli && release-it",
     "test": "node --import tsx --test 'tests/!(cli|cli-*).test.{ts,mts}'",
     "test:cli": "pnpm run build && DMS_PREBUILT=1 node --import tsx --test tests/cli.test.ts 'tests/cli-*.test.{ts,mts}'",
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
@@ -91,9 +91,9 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@antelopejs/core": "^1.21.0",
+    "@antelopejs/core": "^1.21.2",
     "@antelopejs/interface-dms": "^0.10.0",
-    "@antelopejs/tooling-configs": "^0.5.0",
+    "@antelopejs/tooling-configs": "^0.5.1",
     "@iconify/utils": "^3.1.0",
     "@iconify/vue": "^5.0.1",
     "@inertiajs/vue3": "^3.7.1",
@@ -143,6 +143,13 @@
   "pnpm": {
     "patchedDependencies": {
       "@vueuse/core@14.4.0": "templates/vue/patches/@vueuse__core@14.4.0.patch"
+    },
+    "packageExtensions": {
+      "@antelopejs/core@1.21": {
+        "dependencies": {
+          "@types/mocha": "^10.0.10"
+        }
+      }
     }
   },
   "antelopeJs": {
