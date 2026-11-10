@@ -17,7 +17,6 @@
     "preserveConstEnums": true,
     "declaration": true,
     "sourceMap": false,
-    "skipLibCheck": true,
     "incremental": true,
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },

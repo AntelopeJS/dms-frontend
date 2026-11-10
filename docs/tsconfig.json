@@ -10,6 +10,7 @@
     "incremental": false,
     "declaration": false,
     "noEmit": true,
+    "skipLibCheck": true,
     "types": ["node", "vite/client"],
     "paths": {
       "@antelopejs/dms-frontend/templates/*": ["../templates/*"],
