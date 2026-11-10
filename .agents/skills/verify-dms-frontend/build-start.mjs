@@ -6,6 +6,7 @@ import { docsPage } from "./cli-docs.mjs";
 import { freePort, holdPort, observe, scratch } from "./cli-run.mjs";
 import { BOOTSTRAP_SECRET, RELAY_SECRET, RENDER_SECRET, SESSION_SECRET, builtWorkspace, serve, snapshot, whileServing } from "./build-server.mjs";
 import { writeFileSync } from "node:fs";
+import { rendererVersion } from "./cli-json.mjs";
 import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
@@ -45,11 +46,11 @@ export const journeys = [
           ctx.equal("SIGINT ends the server with exit code 130", [stopped.code, stopped.signal], [130, null]),
           ctx.holds("the last line says it stopped, and for how long it ran", /^■ Stopped the production server · ran \d+(\.\d+)?(ms|s)$/m.test(server.output().trimEnd().split("\n").at(-1) ?? ""), server.output().slice(-200)),
           ctx.equal("one ready report, POST, with the bootstrap secret in x-dms-bootstrap", [reports.length, reports[0]?.method, reports[0]?.headers["x-dms-bootstrap"], reports[0]?.headers["content-type"]], [1, "POST", BOOTSTRAP_SECRET, "application/json"]),
-          ctx.equal("it carries the version of the renderer", textAt(body, "version"), "0.10.0"),
+          ctx.equal("it carries the version of the renderer", textAt(body, "version"), rendererVersion(ctx)),
           ctx.equal("it lists the modules the build holds, each with its version", listAt(body, "modules").map((module) => [textAt(module, "name"), isText(at(module, "version"))])
               .sort((left, right) => String(left[0]).localeCompare(String(right[0]))), [["@antelopejs/dms-frontend-vue", true], ["playground-frontend", true]]),
           ctx.equal("the body has only modules and version", keysOf(body).sort((left, right) => left.localeCompare(right)), ["modules", "version"]),
-          ctx.holds("the CLI said what it reported", block.includes("ℹ [DMS] Reported 2 modules to the backend (dms-frontend 0.10.0)"), block),
+          ctx.holds("the CLI said what it reported", block.includes(`ℹ [DMS] Reported 2 modules to the backend (dms-frontend ${rendererVersion(ctx)})`), block),
         ]);
       } finally {
         await backend.close();

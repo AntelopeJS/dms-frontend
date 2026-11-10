@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, runCli, runCliOnTerminal, sameText, scratch } from "./cli-run.mjs";
+import { rendererVersion } from "./cli-json.mjs";
 import { parseJson } from "./json.mjs";
 import { EMPTY_LISTING, SECRET_32, put } from "./cli-options-flags.mjs";
 import { standalone } from "./standalone.mjs";
@@ -143,11 +144,11 @@ export const journeys = [
         "help workspaces": await on(["help", "workspaces"]),
         "a failed command": await on(["start"]),
       };
-      const sameRelease = await on(["workspaces"], {}, make("same", "0.10.0"));
+      const sameRelease = await on(["workspaces"], {}, make("same", rendererVersion(ctx)));
       const older = await on(["workspaces"], {}, make("older", "0.9.0"));
       const piped = await runCli(ctx, ["workspaces"], { home: newer, env });
       observe(ctx, "notice and silence", { shown, cleaned, silent, sameRelease, older, piped }, [
-        ctx.holds("shown after the result of a successful command, the last line, with the command to run", shown.stdout.trimEnd().endsWith(`${notice("99.0.0")} 0.10.0) → ajs update dms`) && shown.stdout.startsWith("ℹ No workspaces in"), JSON.stringify(shown.stdout)),
+        ctx.holds("shown after the result of a successful command, the last line, with the command to run", shown.stdout.trimEnd().endsWith(`${notice("99.0.0")} ${rendererVersion(ctx)}) → ajs update dms`) && shown.stdout.startsWith("ℹ No workspaces in"), JSON.stringify(shown.stdout)),
         ctx.equal("it is set apart by one blank line", shown.stdout.split("\n").slice(0, 3).map((line) => line.trim() === ""), [false, true, false]),
         ctx.holds("shown after clean too", cleaned.stdout.includes(notice("99.0.0")), JSON.stringify(cleaned.stdout)),
         ...Object.entries(silent).map(([name, result]) => ctx.holds(`no notice: ${name}`, !result.stdout.includes("is available"), JSON.stringify(result.stdout))),

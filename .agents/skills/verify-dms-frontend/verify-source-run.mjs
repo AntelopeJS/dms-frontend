@@ -1,6 +1,6 @@
 import { readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { versionOf } from "./cli-json.mjs";
+import { rendererVersion, versionOf } from "./cli-json.mjs";
 import { observe, runCli, scratch } from "./cli-run.mjs";
 import { SYNTAX_ERROR_COMPONENT, TYPE_ERROR_COMPONENT, projectFolder, writeModule, writeProject } from "./verify-source-fixtures.mjs";
 import { standalone } from "./standalone.mjs";
@@ -73,7 +73,7 @@ export const journeys = [
         excludedExplicit: await verify(ctx, excluded.project, ["-m", excluded.module]),
         localPackageMalformed: await verify(ctx, good.project, ["-m", good.module, "--local-package", "no-equals-sign"]),
       };
-      const release = versionOf(join(ctx.state.renderer, "package.json"));
+      const release = rendererVersion(ctx);
       const excludedText = `✖ These frontend modules do not run on @antelopejs/dms-frontend ${release}\n  fx-frontend-vue (@PATH@) supports >=0.5.0 <0.6.0\n  → Install a @antelopejs/dms-frontend release in their ranges, or upgrade the modules\n`;
       const header = `ajs dms verify-source  2 modules\nℹ Verifying against @antelopejs/dms ${installedDms(ctx)} (installed in this project)\n`;
       const layerText = "✖ ./frontend-vue is not the DMS core layer\n  --layer is for verifying an unpublished DMS core layer, @antelopejs/dms-frontend-vue, and ./frontend-vue holds fx-frontend-vue. Without it, frontend modules are verified on the core layer of the @antelopejs/dms installed in the project.\n  → Drop -l and pass the folder with -m: ajs dms verify-source -m ./frontend-vue\n";

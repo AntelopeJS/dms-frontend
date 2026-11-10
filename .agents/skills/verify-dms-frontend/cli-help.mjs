@@ -1,5 +1,4 @@
-import { join } from "node:path";
-import { versionOf } from "./cli-json.mjs";
+import { rendererVersion } from "./cli-json.mjs";
 import { environmentRows, docsPage, exampleOutput, flatten, maskVersion } from "./cli-docs.mjs";
 import { observe, runCli, sameText } from "./cli-run.mjs";
 import { standalone } from "./standalone.mjs";
@@ -56,7 +55,7 @@ export const journeys = [
     entryPoint: "ajs dms --version, --help, -h, help [command], and no arguments",
     ...standalone,
     async run(/** @type {Context} */ ctx) {
-      const release = versionOf(join(ctx.state.renderer, "package.json"));
+      const release = rendererVersion(ctx);
       const long = await runCli(ctx, ["--version"]);
       const short = await runCli(ctx, ["-v"]);
       await ctx.verify("--version and -v print the release alone on stdout and exit 0", [
