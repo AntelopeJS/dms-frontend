@@ -8,7 +8,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import {
   DMS_FRONTEND_HOME,
   WORKSPACE_DIR_MODE,
@@ -339,7 +339,7 @@ export function directorySize(dir: string): number {
       continue;
     }
     for (const entry of entries) {
-      const path = join(current, entry.name);
+      const path = `${current}${sep}${entry.name}`;
       if (entry.isDirectory()) {
         pending.push(path);
         continue;
