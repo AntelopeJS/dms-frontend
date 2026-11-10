@@ -6,19 +6,16 @@ import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
 describe("Inertia HTTP protocol", () => {
-  it("does not write a second response after a client disconnect", async () => {
+  it("does not write a second response after a client disconnect", async (context) => {
     const runtime = await server;
     let writeCount = 0;
     let headersSent = false;
-    const response = Object.defineProperty(
-      Object.assign(responseOf(), {
-        writeHead: () => {
-          writeCount += 1;
-        },
-      }),
-      "headersSent",
-      { get: () => headersSent },
-    );
+    const response = Object.defineProperty(responseOf(), "headersSent", {
+      get: () => headersSent,
+    });
+    context.mock.method(response, "writeHead", () => {
+      writeCount += 1;
+    });
     const disconnect = Object.assign(new Error("client disconnected"), {
       code: "ERR_STREAM_PREMATURE_CLOSE",
     });

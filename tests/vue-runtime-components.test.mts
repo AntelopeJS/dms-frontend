@@ -45,7 +45,7 @@ import { inertiaPage } from "./helpers/inertia-page";
 describe("Cookie refs", () => {
   it("shares one browser ref per cookie and writes it to the document", (context) => {
     const cookieJar = { cookie: "dms-shared-pref=%22small%22" };
-    Object.assign(globalThis, { document: cookieJar });
+    Reflect.set(globalThis, "document", cookieJar);
     context.after(() => {
       Reflect.deleteProperty(globalThis, "document");
     });

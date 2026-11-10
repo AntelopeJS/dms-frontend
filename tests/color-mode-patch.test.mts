@@ -151,18 +151,18 @@ let vue: typeof import("vue");
 let vueuse: typeof import("@vueuse/core");
 
 before(async () => {
-  Object.assign(globalThis, {
-    window: dom.window,
-    document: dom.document,
-    Storage: FakeStorage,
-    StorageEvent: FakeStorageEvent,
-  });
+  Reflect.set(globalThis, "window", dom.window);
+  Reflect.set(globalThis, "document", dom.document);
+  Reflect.set(globalThis, "Storage", FakeStorage);
+  Reflect.set(globalThis, "StorageEvent", FakeStorageEvent);
   vue = await import("vue");
   vueuse = await import("@vueuse/core");
 });
 
 after(() => {
-  Object.assign(globalThis, saved);
+  for (const [name, value] of Object.entries(saved)) {
+    Reflect.set(globalThis, name, value);
+  }
 });
 
 const scopes: Array<{ stop(): void }> = [];
