@@ -2,6 +2,7 @@
  * Reads the JSON the CLI and its files hold, without assuming a shape.
  */
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { at, keysOf, listAt, numberAt, parseJson, textAt } from "./json.mjs";
 
 /**
@@ -45,4 +46,15 @@ export function listedWorkspaces(text) {
  */
 export function versionOf(file) {
   return textAt(readJson(file), "version");
+}
+
+/**
+ * @param {import("./control.d.ts").JourneyContext} ctx The journey
+ * @returns {string} The release of the renderer checkout the run serves, as its package.json names it
+ */
+export function rendererVersion(ctx) {
+  const file = join(ctx.state.renderer ?? "", "package.json");
+  const version = versionOf(file);
+  if (version === undefined) throw new Error(`${file} names no version`);
+  return version;
 }

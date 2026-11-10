@@ -1,9 +1,10 @@
 import { listAt, textAt } from "./json.mjs";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { exchange, rawExchange } from "./proxy-http.mjs";
 import { observe, sleep, startSatellite, withSatellite } from "./proxy-satellite.mjs";
+import { rendererVersion } from "./cli-json.mjs";
 import { standalone } from "./standalone.mjs";
 
 const RETRY_FIRST_MIN_MS = 1700;
@@ -48,9 +49,7 @@ export const journeys = [
     ...standalone,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const secret = ctx.state.secrets.DMS_BOOTSTRAP_SECRET;
-      /** @type {unknown} */
-      const manifest = JSON.parse(readFileSync(join(ctx.state.renderer ?? "", "package.json"), "utf8"));
-      const version = textAt(manifest, "version");
+      const version = rendererVersion(ctx);
       /** @type {number[]} */
       const stamps = [];
       await withSatellite(ctx, {

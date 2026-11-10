@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { at, isText, keysOf, listAt, textAt } from "./json.mjs";
-import { listedWorkspaces, readJson } from "./cli-json.mjs";
+import { listedWorkspaces, readJson, rendererVersion } from "./cli-json.mjs";
 import { startCliBackend } from "./cli-backend.mjs";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, runCli, scratch } from "./cli-run.mjs";
@@ -141,11 +141,12 @@ export const journeys = [
         backend.behaviour.manifest.body = { version: 2, modules: [unreadableModule] };
         const unreadable = await runCli(ctx, ["prepare", "-b", backend.url, "--strict"], { home });
         const troubleshooting = docsPage(ctx, "9.troubleshooting.md");
+        const release = rendererVersion(ctx);
         observe(ctx, "supported range", { noRange, refused, refusedLenient, unreadable }, [
-          ctx.holds("a range that is not valid semver is named as unreadable, with its value, and refused", unreadable.code === 1 && unreadable.stderr.includes("✖ These frontend modules do not run on @antelopejs/dms-frontend 0.10.0\n  @fixture/d-frontend-vue (") && unreadable.stderr.includes('declares an unreadable range: "not a range"\n  → Install a @antelopejs/dms-frontend release in their ranges, or upgrade the modules\n') && !unreadable.stderr.includes("supports "), unreadable.stderr),
-          ctx.holds("a module without a declared range is only warned about", noRange.code === 0 && noRange.stderr.includes("▲ No supported @antelopejs/dms-frontend range declared, so not checked against 0.10.0\n  @fixture/b-frontend-vue (") && noRange.stderr.includes('  → Declare one in its package.json, under engines["@antelopejs/dms-frontend"]\n'), noRange.stderr),
-          ctx.holds("a module whose range excludes this release is refused before install", refused.code === 1 && refused.stderr.includes("✖ These frontend modules do not run on @antelopejs/dms-frontend 0.10.0\n  @fixture/c-frontend-vue (") && refused.stderr.includes("supports >=0.5.0 <0.6.0\n  → Install a @antelopejs/dms-frontend release in their ranges, or upgrade the modules\n") && !refused.stderr.includes("Installed"), refused.stderr),
-          ctx.equal("without --strict the same refusal is a failure that exits 0", [refusedLenient.code, refusedLenient.stderr.includes("▲ Prepare failed: These frontend modules do not run on @antelopejs/dms-frontend 0.10.0")], [0, true]),
+          ctx.holds("a range that is not valid semver is named as unreadable, with its value, and refused", unreadable.code === 1 && unreadable.stderr.includes(`✖ These frontend modules do not run on @antelopejs/dms-frontend ${release}\n  @fixture/d-frontend-vue (`) && unreadable.stderr.includes('declares an unreadable range: "not a range"\n  → Install a @antelopejs/dms-frontend release in their ranges, or upgrade the modules\n') && !unreadable.stderr.includes("supports "), unreadable.stderr),
+          ctx.holds("a module without a declared range is only warned about", noRange.code === 0 && noRange.stderr.includes(`▲ No supported @antelopejs/dms-frontend range declared, so not checked against ${release}\n  @fixture/b-frontend-vue (`) && noRange.stderr.includes('  → Declare one in its package.json, under engines["@antelopejs/dms-frontend"]\n'), noRange.stderr),
+          ctx.holds("a module whose range excludes this release is refused before install", refused.code === 1 && refused.stderr.includes(`✖ These frontend modules do not run on @antelopejs/dms-frontend ${release}\n  @fixture/c-frontend-vue (`) && refused.stderr.includes("supports >=0.5.0 <0.6.0\n  → Install a @antelopejs/dms-frontend release in their ranges, or upgrade the modules\n") && !refused.stderr.includes("Installed"), refused.stderr),
+          ctx.equal("without --strict the same refusal is a failure that exits 0", [refusedLenient.code, refusedLenient.stderr.includes(`▲ Prepare failed: These frontend modules do not run on @antelopejs/dms-frontend ${release}`)], [0, true]),
           ctx.holds("the troubleshooting page words it the same way", (exampleOutput(troubleshooting, "x") ?? "") === "" && troubleshooting.includes("→ Install a @antelopejs/dms-frontend release in their ranges, or upgrade the modules"), "page"),
         ]);
       } finally {
