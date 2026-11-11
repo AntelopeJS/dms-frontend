@@ -6,7 +6,7 @@ import { after, describe, it } from "node:test";
 import { readProjectFrontendModules } from "../src/project-modules";
 
 const CACHE_FOLDER = ".antelope/cache";
-const GIT_REMOTE = "git@github.com:fixture/git-module.git";
+const GIT_REMOTE = "git@github.com:Fixture/Git-Module.git";
 
 function writeModule(folder: string, layerName: string): void {
   mkdirSync(join(folder, "frontend-vue"), { recursive: true });
@@ -35,7 +35,7 @@ function writeProject(project: string): void {
     "@fixture/package",
   );
   writeModule(
-    join(project, CACHE_FOLDER, "git_github_com_fixture_git_module_git"),
+    join(project, CACHE_FOLDER, "git_github_com_Fixture_Git_Module_git"),
     "@fixture/git",
   );
   writeFileSync(
