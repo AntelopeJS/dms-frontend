@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.10.2
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.1...v0.10.2)
+
+### 🔥 Performance
+
+- **workspaces:** Build walked paths without normalizing them ([#323](https://github.com/AntelopeJS/dms-frontend/pull/323))
+
+### 🩹 Fixes
+
+- **verify:** Read the renderer release from package.json in the journeys ([#324](https://github.com/AntelopeJS/dms-frontend/pull/324))
+- **modules:** Load the frontend of a module installed from a git source ([#326](https://github.com/AntelopeJS/dms-frontend/pull/326))
+
+### 📦 Build
+
+- **deps:** Move to @antelopejs/tooling-configs 0.5.0 ([#322](https://github.com/AntelopeJS/dms-frontend/pull/322))
+- **deps:** Bump @antelopejs/tooling-configs to 0.5.1 ([#325](https://github.com/AntelopeJS/dms-frontend/pull/325))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.10.1
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.0...v0.10.1)
