@@ -1,5 +1,8 @@
+const HIDDEN_NAME = /^\./;
+
 /**
- * Rolldown's `output.codeSplitting` for the client build.
+ * Rolldown's `output` for the client build: how it splits the code, and the
+ * file names it gives the chunks.
  *
  * By default Rolldown gives every set of dynamic imports that shares a module
  * its own common chunk. The DMS's pages are hundreds of dynamic imports (a
@@ -9,7 +12,7 @@
  * than the single entry file Rollup made, for no byte saved.
  *
  * The `$initial` tag is every module the entry imports statically, directly or
- * not. One group over it puts them in the entry file again, and leaves every
+ * not. One group over it puts them in a single chunk again, and leaves every
  * lazy chunk to Rolldown's own splitting, which a page only loads when it needs
  * it: what an anonymous page loads is still what that page's own routes pull.
  *
@@ -19,10 +22,26 @@
  * uses any of it, and the anonymous pages pay 70 to 115 KB of Brotli for code
  * only the signed-in shell uses.
  *
- * @type {import("vite").Rolldown.CodeSplittingOptions}
+ * What the lazy chunks share still comes out as about two hundred common
+ * chunks, most under 2 KB. `experimentalInlineCommonChunks` copies each one
+ * under 8 KB of source into the chunks that import it, behind a shared
+ * runtime that keeps one instance of each module: half the files on every
+ * page, for 1 to 2% more bytes. It turns on `strictExecutionOrder`, and puts
+ * the entry's code in a chunk of its own, which Rolldown names after the
+ * folder the build runs in, `.dms-frontend`. The server serves no file whose
+ * name starts with a dot, so that chunk and its stylesheet are named `index`.
+ *
+ * @type {import("vite").Rolldown.OutputOptions}
  */
-export const clientCodeSplitting = {
-  groups: [{ name: "entry", tags: ["$initial"] }],
+export const clientOutput = {
+  codeSplitting: {
+    groups: [{ name: "entry", tags: ["$initial"] }],
+    experimentalInlineCommonChunks: { maxSize: 8192 },
+  },
+  chunkFileNames: ({ name }) =>
+    `assets/${HIDDEN_NAME.test(name) ? "index" : "[name]"}-[hash].js`,
+  assetFileNames: ({ names }) =>
+    `assets/${names.some((name) => HIDDEN_NAME.test(name)) ? "index" : "[name]"}-[hash][extname]`,
 };
 
 const MODULE_ENTRY = /[\\/]dms\.frontend\.[cm]?[jt]sx?$/;

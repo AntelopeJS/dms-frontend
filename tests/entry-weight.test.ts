@@ -18,7 +18,7 @@ import {
   readEntryWeight,
   reportEntryWeight,
 } from "../src/entry-weight";
-import { clientCodeSplitting } from "../templates/vue/client-chunking.mjs";
+import { clientOutput } from "../templates/vue/client-chunking.mjs";
 import {
   ENTRY_WEIGHT_FILE,
   recordEntryWeight,
@@ -109,7 +109,7 @@ async function buildFixture(): Promise<string> {
       manifest: true,
       rolldownOptions: {
         input: join(root, "main.ts"),
-        output: { codeSplitting: clientCodeSplitting },
+        output: clientOutput,
       },
     },
   });

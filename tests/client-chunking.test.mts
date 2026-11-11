@@ -4,12 +4,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
 import { build } from "vite";
-import {
-  clientCodeSplitting,
-  onBuildLog,
-} from "../templates/vue/client-chunking.mjs";
+import { clientOutput, onBuildLog } from "../templates/vue/client-chunking.mjs";
 import { isFlag, isObjectLike } from "../src/internal/guards";
-import { readText } from "./helpers/files";
+import { listNames, readText } from "./helpers/files";
 import { isText } from "./helpers/guards";
 
 interface ManifestChunk {
@@ -60,9 +57,10 @@ function write(root: string, path: string, content: string): void {
  * components lazily in turn. The components use an installed, side-effect free
  * package (as the UI libraries are), each another subset of its files.
  */
-function fixture(): string {
-  const root = mkdtempSync(join(tmpdir(), "dms-client-chunking-"));
-  roots.push(root);
+function fixture(folder = "app"): string {
+  const parent = mkdtempSync(join(tmpdir(), "dms-client-chunking-"));
+  roots.push(parent);
+  const root = join(parent, folder);
   write(
     root,
     "node_modules/ui/package.json",
@@ -119,10 +117,16 @@ function fixture(): string {
         `export const load = () => import("../components/${component}");\n`,
     );
   }
+  write(root, "main.css", "body { color: red; }\n");
+  write(
+    root,
+    "index.html",
+    `<!doctype html><script type="module" src="./main.ts"></script>\n`,
+  );
   write(
     root,
     "main.ts",
-    `import shared from "./components/shared";\nimport { registry } from "./registry";\n` +
+    `import "./main.css";\nimport shared from "./components/shared";\nimport { registry } from "./registry";\n` +
       `console.log(shared, registry);\n` +
       `Object.assign(globalThis, {\n  components: import.meta.glob("./components/*.ts"),\n  pages: import.meta.glob("./pages/*.ts"),\n});\n`,
   );
@@ -132,8 +136,7 @@ function fixture(): string {
 /** Files the entry loads before running: the entry and its static imports. */
 async function entryClosure(
   root: string,
-  codeSplitting: typeof clientCodeSplitting | undefined,
-): Promise<{ closure: string[]; files: string[] }> {
+): Promise<{ closure: string[]; files: string[]; emitted: string[] }> {
   await build({
     root,
     configFile: false,
@@ -144,8 +147,8 @@ async function entryClosure(
       manifest: true,
       minify: false,
       rolldownOptions: {
-        input: join(root, "main.ts"),
-        output: codeSplitting === undefined ? {} : { codeSplitting },
+        input: join(root, "index.html"),
+        output: clientOutput,
       },
     },
   });
@@ -166,22 +169,27 @@ async function entryClosure(
   return {
     closure: [...seen].map((key) => manifest.get(key)?.file ?? key),
     files: [...manifest.values()].map((chunk) => chunk.file),
+    emitted: listNames(join(root, "dist", "assets")),
   };
 }
 
 describe("client code splitting", () => {
-  it("keeps the entry's static imports in one file, where Rolldown's own splitting preloads several", async () => {
-    const without = await entryClosure(fixture(), undefined);
-    assert.ok(
-      without.closure.length > 1,
-      `the fixture no longer shows the default's common chunks (${without.closure.length} file)`,
-    );
-    const { closure, files } = await entryClosure(
-      fixture(),
-      clientCodeSplitting,
-    );
-    assert.equal(closure.length, 1, closure.join(", "));
+  it("keeps the entry's static imports in one chunk next to the entry and Rolldown's runtime", async () => {
+    const { closure, files } = await entryClosure(fixture());
+    assert.equal(closure.length, 3, closure.join(", "));
     assert.ok(files.length > closure.length, "components are separate chunks");
+  });
+
+  it("names no file with a leading dot when the build runs in a dot folder", async () => {
+    const { emitted } = await entryClosure(fixture(".dms-frontend"));
+    assert.ok(
+      emitted.some((file) => /^index-.+\.css$/.test(file)),
+      emitted.join(", "),
+    );
+    assert.deepEqual(
+      emitted.filter((file) => file.startsWith(".")),
+      [],
+    );
   });
 });
 
