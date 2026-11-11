@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.3
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.2...v0.10.3)
+
+### 🔥 Performance
+
+- **build:** Inline small common chunks ([#327](https://github.com/AntelopeJS/dms-frontend/pull/327))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.10.2
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.1...v0.10.2)
