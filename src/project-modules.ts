@@ -51,6 +51,7 @@ interface ModuleSource {
   type: string;
   path?: string;
   package?: string;
+  remote?: string;
 }
 
 interface ProjectModule {
@@ -310,25 +311,41 @@ export async function loadProjectConfig(
   };
 }
 
+/** The folder AntelopeJS's git downloader clones a remote into, in its module cache. */
+function gitCloneName(remote: string): string {
+  return remote.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
+function moduleFolderCandidates(
+  projectDir: string,
+  cacheFolder: string,
+  source: ModuleSource,
+): string[] {
+  if (source.type === "local" && source.path)
+    return [resolve(projectDir, source.path)];
+  if (source.type === "git" && source.remote)
+    return [resolve(projectDir, cacheFolder, gitCloneName(source.remote))];
+  if (source.package)
+    return [
+      join(projectDir, "node_modules", source.package),
+      resolve(projectDir, cacheFolder, source.package),
+    ];
+  return [];
+}
+
 /**
- * Where a module's package is: a local source's path, or a package installed
- * in the project's node_modules, else in AntelopeJS's module cache.
+ * Where a module's package is: a local source's path, a git source's clone in
+ * AntelopeJS's module cache, or a package installed in the project's
+ * node_modules, else in that cache.
  */
 function moduleFolder(
   projectDir: string,
   cacheFolder: string,
   source: ModuleSource,
 ): string | undefined {
-  const candidates =
-    source.type === "local" && source.path
-      ? [resolve(projectDir, source.path)]
-      : source.package
-        ? [
-            join(projectDir, "node_modules", source.package),
-            resolve(projectDir, cacheFolder, source.package),
-          ]
-        : [];
-  return candidates.find((folder) => existsSync(join(folder, "package.json")));
+  return moduleFolderCandidates(projectDir, cacheFolder, source).find(
+    (folder) => existsSync(join(folder, "package.json")),
+  );
 }
 
 /** The name and version of the package shipping a frontend module. */
