@@ -119,13 +119,13 @@ function clientChunkingTargetsTheBrowserBundle(): Problem[] {
   return [
     ...expectMatch(
       client,
-      /client:\s*\{\s*build:\s*\{\s*rolldownOptions:\s*\{\s*output:\s*\{\s*codeSplitting: clientCodeSplitting/,
-      "vite.config.ts does not apply clientCodeSplitting to the client environment",
+      /client:\s*\{\s*build:\s*\{\s*rolldownOptions:\s*\{\s*output: clientOutput/,
+      "vite.config.ts does not apply clientOutput to the client environment",
     ),
-    ...(config.match(/codeSplitting/g)?.length === 1
+    ...(config.match(/clientOutput|codeSplitting|FileNames/g)?.length === 2
       ? []
       : [
-          "vite.config.ts mentions codeSplitting outside the client environment",
+          "vite.config.ts sets client output options outside the client environment",
         ]),
   ];
 }

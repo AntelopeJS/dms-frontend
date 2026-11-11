@@ -9,7 +9,7 @@ import {
   normalizePath,
   type Plugin,
 } from "vite";
-import { clientCodeSplitting, onBuildLog } from "./client-chunking.mjs";
+import { clientOutput, onBuildLog } from "./client-chunking.mjs";
 import { recordEntryWeight } from "./entry-weight.mjs";
 import { rejectBackendSources } from "./backend-boundary.mjs";
 import { rejectServerSourcesInClient } from "./client-server-guard.mjs";
@@ -318,7 +318,7 @@ export default defineConfig({
   environments: {
     client: {
       build: {
-        rolldownOptions: { output: { codeSplitting: clientCodeSplitting } },
+        rolldownOptions: { output: clientOutput },
       },
     },
   },

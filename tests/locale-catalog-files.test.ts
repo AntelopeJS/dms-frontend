@@ -17,7 +17,7 @@ import {
   writeFrontendModuleRegistry,
   writeLocaleMessages,
 } from "../src/common";
-import { clientCodeSplitting } from "../templates/vue/client-chunking.mjs";
+import { clientOutput } from "../templates/vue/client-chunking.mjs";
 import { readText } from "./helpers/files";
 import { isFlag, isObjectLike, isText } from "./helpers/guards";
 import { isJsonObject, isJsonValue, jsonAt, readJson } from "./helpers/json";
@@ -177,7 +177,7 @@ describe("generated locale catalogs", () => {
         minify: false,
         rolldownOptions: {
           input: join(workspace, "main.ts"),
-          output: { codeSplitting: clientCodeSplitting },
+          output: clientOutput,
         },
       },
     });
