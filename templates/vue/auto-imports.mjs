@@ -1,5 +1,5 @@
 /** The names `frontend-module.ts` gives every module's sources without an import. */
-export const FRONTEND_MODULE_IMPORTS = [
+const FRONTEND_MODULE_IMPORTS = [
   "$fetch",
   "abortDmsNavigation",
   "clearDmsError",
@@ -47,7 +47,7 @@ export const FRONTEND_MODULE_IMPORTS = [
  * pass a POSIX path, since a Windows backslash there reads as an escape.
  *
  * @param {string} frontendModule The import specifier of `frontend-module.ts`.
- * @returns {(string | Record<string, string[]>)[]}
+ * @returns {["vue", Record<string, string[]>]}
  */
 export function autoImportSources(frontendModule) {
   return ["vue", { [frontendModule]: FRONTEND_MODULE_IMPORTS }];
