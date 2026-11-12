@@ -111,7 +111,7 @@ void describe("running outside a DMS project", () => {
   });
 });
 
-void describe("following the ajs output contract", () => {
+function registerHelpAndUsageTests(): void {
   void it("prints the help on stdout and exits 0 when given no command", async () => {
     for (const args of [[], ["--no-color"], ["--no-update-check"]]) {
       const result = await runCli(args);
@@ -193,6 +193,10 @@ void describe("following the ajs output contract", () => {
     assert.equal(code, 0);
     assert.equal(stderr, "");
   });
+}
+
+void describe("following the ajs output contract", () => {
+  registerHelpAndUsageTests();
 
   void it("accepts the global options of ajs after a command", async () => {
     for (const flag of ["--no-color", "--verbose"]) {

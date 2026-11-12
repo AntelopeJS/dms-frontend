@@ -67,6 +67,54 @@ function check(
   return warnings;
 }
 
+function registerUndeclaredRangeTests(): void {
+  void it("loads a module that declares no range, naming it once", () => {
+    const undeclared = layer("undeclared-module");
+    assert.equal(check([undeclared]).length, 1);
+    assert.deepEqual(check([undeclared]), []);
+  });
+
+  void it("names a module once per workspace, across runs", () => {
+    const workspace = temporaryDir("dms-renderer-range-workspace-");
+    const noticed = join(workspace, ".renderer-range-noticed");
+    const earlier = layer("noticed-by-an-earlier-run");
+    writeFileSync(noticed, `noticed-by-an-earlier-run (${earlier.path})\n`);
+    assert.deepEqual(check([earlier], "0.4.0", workspace), []);
+
+    const added = layer("added-since");
+    assert.equal(check([earlier, added], "0.4.0", workspace).length, 1);
+    assert.deepEqual(readText(noticed).trim().split("\n").sort(), [
+      `added-since (${added.path})`,
+      `noticed-by-an-earlier-run (${earlier.path})`,
+    ]);
+  });
+
+  void it("tells apart two modules that share a package name", () => {
+    const first = declaring("playground-frontend-vue", "<0.4.0");
+    const second = declaring("playground-frontend-vue", "<0.4.0");
+    assert.throws(
+      () => check([first, second]),
+      (err: Error) =>
+        err instanceof CliError &&
+        problemText(err).includes(`playground-frontend-vue (${first.path})`) &&
+        problemText(err).includes(`playground-frontend-vue (${second.path})`),
+    );
+  });
+
+  void it("says where the missing range belongs", () => {
+    const undeclared = layer("undeclared-hint", { node: ">=20" });
+    const [warning] = check([undeclared]);
+    assert.equal(
+      warning,
+      [
+        `No supported ${RENDERER} range declared, so not checked against 0.4.0`,
+        `undeclared-hint (${undeclared.path})`,
+        `→ Declare one in its package.json, under engines["${RENDERER}"]`,
+      ].join("\n"),
+    );
+  });
+}
+
 void describe("renderer range", () => {
   void it("accepts a module whose range allows this release", () => {
     assert.deepEqual(check([declaring("supported", ">=0.3.2 <0.5.0")]), []);
@@ -142,51 +190,7 @@ void describe("renderer range", () => {
     }
   });
 
-  void it("loads a module that declares no range, naming it once", () => {
-    const undeclared = layer("undeclared-module");
-    assert.equal(check([undeclared]).length, 1);
-    assert.deepEqual(check([undeclared]), []);
-  });
-
-  void it("names a module once per workspace, across runs", () => {
-    const workspace = temporaryDir("dms-renderer-range-workspace-");
-    const noticed = join(workspace, ".renderer-range-noticed");
-    const earlier = layer("noticed-by-an-earlier-run");
-    writeFileSync(noticed, `noticed-by-an-earlier-run (${earlier.path})\n`);
-    assert.deepEqual(check([earlier], "0.4.0", workspace), []);
-
-    const added = layer("added-since");
-    assert.equal(check([earlier, added], "0.4.0", workspace).length, 1);
-    assert.deepEqual(readText(noticed).trim().split("\n").sort(), [
-      `added-since (${added.path})`,
-      `noticed-by-an-earlier-run (${earlier.path})`,
-    ]);
-  });
-
-  void it("tells apart two modules that share a package name", () => {
-    const first = declaring("playground-frontend-vue", "<0.4.0");
-    const second = declaring("playground-frontend-vue", "<0.4.0");
-    assert.throws(
-      () => check([first, second]),
-      (err: Error) =>
-        err instanceof CliError &&
-        problemText(err).includes(`playground-frontend-vue (${first.path})`) &&
-        problemText(err).includes(`playground-frontend-vue (${second.path})`),
-    );
-  });
-
-  void it("says where the missing range belongs", () => {
-    const undeclared = layer("undeclared-hint", { node: ">=20" });
-    const [warning] = check([undeclared]);
-    assert.equal(
-      warning,
-      [
-        `No supported ${RENDERER} range declared, so not checked against 0.4.0`,
-        `undeclared-hint (${undeclared.path})`,
-        `→ Declare one in its package.json, under engines["${RENDERER}"]`,
-      ].join("\n"),
-    );
-  });
+  registerUndeclaredRangeTests();
 
   void it("names a module from its source, not from the archive it came in", () => {
     const source = temporaryDir("dms-renderer-range-source-");

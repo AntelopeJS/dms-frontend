@@ -21,6 +21,96 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
+type Runtime = typeof import("../templates/vue/server.mjs");
+
+function registerFailedRenderTests(runtime: () => Runtime): void {
+  void it("answers 500 when rendering the error page fails too", async (context) => {
+    const writes: Array<[number, Record<string, string>]> = [];
+    let body: string | undefined;
+    const response = responseOf();
+    context.mock.method(
+      response,
+      "writeHead",
+      (status: number, headers: Record<string, string>) => {
+        writes.push([status, headers]);
+      },
+    );
+    context.mock.method(response, "end", (content: string) => {
+      body = content;
+    });
+    const request = Object.defineProperty(
+      requestOf({ headers: { accept: "text/html" }, method: "GET" }),
+      "url",
+      {
+        get(): string {
+          throw new Error("unreadable request");
+        },
+      },
+    );
+    await runtime().handleRequestSafely(request, response);
+    assert.deepEqual(writes, [
+      [500, { "content-type": "text/plain; charset=utf-8" }],
+    ]);
+    assert.equal(body, "Internal Server Error");
+  });
+
+  void it("falls back to the client-rendered shell when the server render fails", async (context) => {
+    const errors = context.mock.method(console, "error", () => undefined);
+    const page = runtime().createInertiaPage("/articles", {
+      path: "/articles",
+    });
+    const reads = Object.assign(async () => undefined, {
+      reuseCompletedReads: () => undefined,
+    });
+    const { html, status } = await runtime().renderHtml(
+      page,
+      "/articles",
+      reads,
+      undefined,
+    );
+    assert.equal(status, 500);
+    assert.ok(
+      html.includes(runtime().inertiaAppHtml(page)),
+      "the page document carries the page for the client to render",
+    );
+    assert.ok(
+      errors.mock.calls.some(({ arguments: [message] }) =>
+        String(message).includes("falling back to client rendering"),
+      ),
+      "the operator is told the page was not server-rendered",
+    );
+  });
+
+  void it("drops the connection when the failed response had already started", async (context) => {
+    let destroyed = false;
+    let headersSent = false;
+    const response = Object.defineProperty(responseOf(), "headersSent", {
+      get: () => headersSent,
+    });
+    context.mock.method(response, "writeHead", () => {
+      headersSent = true;
+      throw new Error("render failed mid-response");
+    });
+    context.mock.method(response, "destroy", () => {
+      destroyed = true;
+    });
+    let reads = 0;
+    const request = Object.defineProperty(
+      requestOf({ headers: { accept: "application/json" }, method: "GET" }),
+      "url",
+      {
+        get(): string {
+          reads += 1;
+          if (reads === 1) throw new Error("unreadable request");
+          return "/fixture";
+        },
+      },
+    );
+    await runtime().handleRequestSafely(request, response);
+    assert.equal(destroyed, true);
+  });
+}
+
 void describe("requests the frontend server cannot serve", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-request-failure-"));
   const previousCwd = process.cwd();
@@ -34,7 +124,7 @@ void describe("requests the frontend server cannot serve", () => {
   });
   let frontend: Server | undefined;
   let base = "";
-  let runtime: typeof import("../templates/vue/server.mjs");
+  let runtime: Runtime;
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
@@ -83,88 +173,5 @@ void describe("requests the frontend server cannot serve", () => {
     });
     assert.notEqual(next.status, 400, "the process is still up and serving");
   });
-
-  void it("answers 500 when rendering the error page fails too", async (context) => {
-    const writes: Array<[number, Record<string, string>]> = [];
-    let body: string | undefined;
-    const response = responseOf();
-    context.mock.method(
-      response,
-      "writeHead",
-      (status: number, headers: Record<string, string>) => {
-        writes.push([status, headers]);
-      },
-    );
-    context.mock.method(response, "end", (content: string) => {
-      body = content;
-    });
-    const request = Object.defineProperty(
-      requestOf({ headers: { accept: "text/html" }, method: "GET" }),
-      "url",
-      {
-        get(): string {
-          throw new Error("unreadable request");
-        },
-      },
-    );
-    await runtime.handleRequestSafely(request, response);
-    assert.deepEqual(writes, [
-      [500, { "content-type": "text/plain; charset=utf-8" }],
-    ]);
-    assert.equal(body, "Internal Server Error");
-  });
-
-  void it("falls back to the client-rendered shell when the server render fails", async (context) => {
-    const errors = context.mock.method(console, "error", () => undefined);
-    const page = runtime.createInertiaPage("/articles", { path: "/articles" });
-    const reads = Object.assign(async () => undefined, {
-      reuseCompletedReads: () => undefined,
-    });
-    const { html, status } = await runtime.renderHtml(
-      page,
-      "/articles",
-      reads,
-      undefined,
-    );
-    assert.equal(status, 500);
-    assert.ok(
-      html.includes(runtime.inertiaAppHtml(page)),
-      "the page document carries the page for the client to render",
-    );
-    assert.ok(
-      errors.mock.calls.some(({ arguments: [message] }) =>
-        String(message).includes("falling back to client rendering"),
-      ),
-      "the operator is told the page was not server-rendered",
-    );
-  });
-
-  void it("drops the connection when the failed response had already started", async (context) => {
-    let destroyed = false;
-    let headersSent = false;
-    const response = Object.defineProperty(responseOf(), "headersSent", {
-      get: () => headersSent,
-    });
-    context.mock.method(response, "writeHead", () => {
-      headersSent = true;
-      throw new Error("render failed mid-response");
-    });
-    context.mock.method(response, "destroy", () => {
-      destroyed = true;
-    });
-    let reads = 0;
-    const request = Object.defineProperty(
-      requestOf({ headers: { accept: "application/json" }, method: "GET" }),
-      "url",
-      {
-        get(): string {
-          reads += 1;
-          if (reads === 1) throw new Error("unreadable request");
-          return "/fixture";
-        },
-      },
-    );
-    await runtime.handleRequestSafely(request, response);
-    assert.equal(destroyed, true);
-  });
+  registerFailedRenderTests(() => runtime);
 });

@@ -18,74 +18,7 @@ import {
   registerGlobalMiddleware,
 } from "./fixtures/vue-runtime.mts";
 
-void describe("Vue request runtime", () => {
-  void it("runs the middlewares registered as parallel together, the first result in order winning", async () => {
-    const { app } = application("server", {}, true);
-    const started: string[] = [];
-    let release: () => void = () => {};
-    const gate = new Promise<void>((settle) => (release = settle));
-    await setupFrontendModules([
-      {
-        module: {
-          setup(sdk) {
-            sdk.registerMiddleware(
-              "session",
-              async (to) => {
-                started.push(`session ${to.path}`);
-                await gate;
-              },
-              { global: true, parallel: true },
-            );
-            sdk.registerMiddleware(
-              "flags",
-              async (to) => {
-                started.push(`flags ${to.path}`);
-                await gate;
-                return to.path === "/both" ? "/from-flags" : undefined;
-              },
-              { global: true, parallel: true },
-            );
-            sdk.registerMiddleware(
-              "after",
-              (to) => {
-                started.push(`after ${to.path}`);
-                return to.path === "/both" ? "/from-after" : undefined;
-              },
-              { global: true },
-            );
-          },
-        },
-        options: { public: {} },
-      },
-    ]);
-    const navigation = app.runWithContext(() => navigateDms("/both"));
-    await new Promise((settle) => setTimeout(settle, 0));
-    assert.deepEqual(started, ["session /both", "flags /both"]);
-    release();
-    await navigation;
-    assert.deepEqual(started, [
-      "session /both",
-      "flags /both",
-      "session /from-flags",
-      "flags /from-flags",
-      "after /from-flags",
-    ]);
-  });
-
-  void it("keeps relative middleware redirects out of the browser router during SSR", async (context) => {
-    const { app } = application("server", {}, true);
-    await registerGlobalMiddleware((to) =>
-      to.path === "/requires-onboarding" ? "/onboarding" : undefined,
-    );
-    const visit = context.mock.method(router, "visit", (url: string) => {
-      new URL(url);
-    });
-
-    await app.runWithContext(() => navigateDms("/requires-onboarding"));
-
-    assert.equal(visit.mock.callCount(), 0);
-  });
-
+function registerNavigationTests(): void {
   void it("skips identical compatibility navigation but preserves explicit Inertia refreshes", async (context) => {
     const { app, runtime } = application("first");
     Object.assign(runtime.route, {
@@ -178,7 +111,9 @@ void describe("Vue request runtime", () => {
       app.unmount();
     }
   });
+}
 
+function registerAsyncRemountTests(): void {
   void it("starts a fresh initial load after its pending consumer unmounts", async () => {
     const runtime = createDmsFrontendRuntime();
     const visible = ref(true);
@@ -279,7 +214,9 @@ void describe("Vue request runtime", () => {
       app.unmount();
     }
   });
+}
 
+function registerQueryNavigationTests(): void {
   void it("replaces explicit query objects rather than restoring removed tab keys", async (context) => {
     const { app, runtime } = application("first");
     runtime.route.path = "/dashboard";
@@ -344,7 +281,9 @@ void describe("Vue request runtime", () => {
       },
     ]);
   });
+}
 
+function registerServerNavigationTests(): void {
   void it("asks the server for a query-only navigation it alone can honour", async (context) => {
     const { app, runtime } = application("first");
     Object.assign(runtime.route, { path: "/data", fullPath: "/data" });
@@ -398,4 +337,81 @@ void describe("Vue request runtime", () => {
     );
     assert.deepEqual(seen, ["success /data?tab=b", "finish"]);
   });
+}
+
+void describe("Vue request runtime", () => {
+  void it("runs the middlewares registered as parallel together, the first result in order winning", async () => {
+    const { app } = application("server", {}, true);
+    const started: string[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((settle) => (release = settle));
+    await setupFrontendModules([
+      {
+        module: {
+          setup(sdk) {
+            sdk.registerMiddleware(
+              "session",
+              async (to) => {
+                started.push(`session ${to.path}`);
+                await gate;
+              },
+              { global: true, parallel: true },
+            );
+            sdk.registerMiddleware(
+              "flags",
+              async (to) => {
+                started.push(`flags ${to.path}`);
+                await gate;
+                return to.path === "/both" ? "/from-flags" : undefined;
+              },
+              { global: true, parallel: true },
+            );
+            sdk.registerMiddleware(
+              "after",
+              (to) => {
+                started.push(`after ${to.path}`);
+                return to.path === "/both" ? "/from-after" : undefined;
+              },
+              { global: true },
+            );
+          },
+        },
+        options: { public: {} },
+      },
+    ]);
+    const navigation = app.runWithContext(() => navigateDms("/both"));
+    await new Promise((settle) => setTimeout(settle, 0));
+    assert.deepEqual(started, ["session /both", "flags /both"]);
+    release();
+    await navigation;
+    assert.deepEqual(started, [
+      "session /both",
+      "flags /both",
+      "session /from-flags",
+      "flags /from-flags",
+      "after /from-flags",
+    ]);
+  });
+
+  void it("keeps relative middleware redirects out of the browser router during SSR", async (context) => {
+    const { app } = application("server", {}, true);
+    await registerGlobalMiddleware((to) =>
+      to.path === "/requires-onboarding" ? "/onboarding" : undefined,
+    );
+    const visit = context.mock.method(router, "visit", (url: string) => {
+      new URL(url);
+    });
+
+    await app.runWithContext(() => navigateDms("/requires-onboarding"));
+
+    assert.equal(visit.mock.callCount(), 0);
+  });
+
+  registerNavigationTests();
+
+  registerAsyncRemountTests();
+
+  registerQueryNavigationTests();
+
+  registerServerNavigationTests();
 });

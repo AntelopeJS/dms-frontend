@@ -25,87 +25,7 @@ type NavigateListener = (event: {
   detail: { page: { props: Pick<DmsPageProps, "path" | "shared"> } };
 }) => void;
 
-void describe("Vue request runtime", () => {
-  void it("copies a site layout into the state once, whatever the pages that carry it", () => {
-    const { app, runtime } = application("first");
-    const shared = { isOwner: true, modules: ["first"], quickActions: [] };
-    const state = (key: string) => runtime.sharedState.get(key)?.value;
-    app.runWithContext(() => {
-      hydrateDmsPageProps({ path: "/one", page: {}, shared });
-      useDmsState("dms-modules").value = ["refreshed"];
-      useDmsState("dms-lastRefreshTime").value = 1;
-      hydrateDmsPageProps({ path: "/two", page: {}, shared });
-      hydrateDmsPageProps({ path: "/three", page: {} });
-    });
-    assert.deepEqual(state("dms-modules"), ["refreshed"]);
-    assert.equal(state("dms-lastRefreshTime"), 1);
-    app.runWithContext(() =>
-      hydrateDmsPageProps({
-        path: "/four",
-        page: {},
-        shared: { isOwner: false, modules: ["second"], quickActions: [] },
-      }),
-    );
-    assert.deepEqual(state("dms-modules"), ["second"]);
-    assert.equal(state("dms-isOwner"), false);
-    assert.notEqual(state("dms-lastRefreshTime"), 1);
-  });
-
-  void it("keeps the newest site layout when Back puts an older page back", (context) => {
-    const { app, runtime } = application("first");
-    const listeners = new Map<string, PopstateListener>();
-    const hadWindow = "window" in globalThis;
-    Reflect.set(globalThis, "window", {
-      addEventListener: (type: string, listener: PopstateListener) =>
-        listeners.set(type, listener),
-      removeEventListener: (type: string) => listeners.delete(type),
-    });
-    let onNavigate: NavigateListener | undefined;
-    context.mock.method(
-      router,
-      "on",
-      (type: string, callback: NavigateListener) => {
-        if (type === "navigate") onNavigate = callback;
-        return () => {};
-      },
-    );
-    const replaced: unknown[] = [];
-    context.mock.method(
-      router,
-      "replaceProp",
-      (name: string, value: Parameters<typeof router.replaceProp>[1]) =>
-        replaced.push([name, value]),
-    );
-    try {
-      const older = { isOwner: false, modules: ["older"], quickActions: [] };
-      const newer = { isOwner: false, modules: ["newer"], quickActions: [] };
-      app.runWithContext(() => {
-        keepSharedOverHistory();
-        hydrateDmsPageProps({ path: "/one", page: {}, shared: newer });
-      });
-      listeners.get("popstate")?.({ state: { page: {} } });
-      app.runWithContext(() =>
-        hydrateDmsPageProps({ path: "/zero", page: {}, shared: older }),
-      );
-      onNavigate?.({
-        detail: { page: { props: { path: "/zero", shared: older } } },
-      });
-      assert.deepEqual(runtime.sharedState.get("dms-modules")?.value, [
-        "newer",
-      ]);
-      assert.deepEqual(replaced, [["shared", newer]]);
-      const fresh = { isOwner: true, modules: ["fresh"], quickActions: [] };
-      app.runWithContext(() =>
-        hydrateDmsPageProps({ path: "/two", page: {}, shared: fresh }),
-      );
-      assert.deepEqual(runtime.sharedState.get("dms-modules")?.value, [
-        "fresh",
-      ]);
-    } finally {
-      if (!hadWindow) Reflect.deleteProperty(globalThis, "window");
-    }
-  });
-
+function registerIsolationTests(): void {
   void it("forgets prefetched pages when the session becomes another one", async (context) => {
     const { app } = application("first");
     const flushes = context.mock.method(router, "flushAll", () => {});
@@ -200,7 +120,9 @@ void describe("Vue request runtime", () => {
     assert.equal(first, second);
     assert.equal(second.data.value, 42);
   });
+}
 
+function registerNavigationStateTests(): void {
   void it("replaces shared permission data on navigation and disposes hooks", async () => {
     const { app, runtime } = application("first");
     let calls = 0;
@@ -268,4 +190,90 @@ void describe("Vue request runtime", () => {
       second.runtime.currentError,
     );
   });
+}
+
+void describe("Vue request runtime", () => {
+  void it("copies a site layout into the state once, whatever the pages that carry it", () => {
+    const { app, runtime } = application("first");
+    const shared = { isOwner: true, modules: ["first"], quickActions: [] };
+    const state = (key: string) => runtime.sharedState.get(key)?.value;
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/one", page: {}, shared });
+      useDmsState("dms-modules").value = ["refreshed"];
+      useDmsState("dms-lastRefreshTime").value = 1;
+      hydrateDmsPageProps({ path: "/two", page: {}, shared });
+      hydrateDmsPageProps({ path: "/three", page: {} });
+    });
+    assert.deepEqual(state("dms-modules"), ["refreshed"]);
+    assert.equal(state("dms-lastRefreshTime"), 1);
+    app.runWithContext(() =>
+      hydrateDmsPageProps({
+        path: "/four",
+        page: {},
+        shared: { isOwner: false, modules: ["second"], quickActions: [] },
+      }),
+    );
+    assert.deepEqual(state("dms-modules"), ["second"]);
+    assert.equal(state("dms-isOwner"), false);
+    assert.notEqual(state("dms-lastRefreshTime"), 1);
+  });
+
+  void it("keeps the newest site layout when Back puts an older page back", (context) => {
+    const { app, runtime } = application("first");
+    const listeners = new Map<string, PopstateListener>();
+    const hadWindow = "window" in globalThis;
+    Reflect.set(globalThis, "window", {
+      addEventListener: (type: string, listener: PopstateListener) =>
+        listeners.set(type, listener),
+      removeEventListener: (type: string) => listeners.delete(type),
+    });
+    let onNavigate: NavigateListener | undefined;
+    context.mock.method(
+      router,
+      "on",
+      (type: string, callback: NavigateListener) => {
+        if (type === "navigate") onNavigate = callback;
+        return () => {};
+      },
+    );
+    const replaced: unknown[] = [];
+    context.mock.method(
+      router,
+      "replaceProp",
+      (name: string, value: Parameters<typeof router.replaceProp>[1]) =>
+        replaced.push([name, value]),
+    );
+    try {
+      const older = { isOwner: false, modules: ["older"], quickActions: [] };
+      const newer = { isOwner: false, modules: ["newer"], quickActions: [] };
+      app.runWithContext(() => {
+        keepSharedOverHistory();
+        hydrateDmsPageProps({ path: "/one", page: {}, shared: newer });
+      });
+      listeners.get("popstate")?.({ state: { page: {} } });
+      app.runWithContext(() =>
+        hydrateDmsPageProps({ path: "/zero", page: {}, shared: older }),
+      );
+      onNavigate?.({
+        detail: { page: { props: { path: "/zero", shared: older } } },
+      });
+      assert.deepEqual(runtime.sharedState.get("dms-modules")?.value, [
+        "newer",
+      ]);
+      assert.deepEqual(replaced, [["shared", newer]]);
+      const fresh = { isOwner: true, modules: ["fresh"], quickActions: [] };
+      app.runWithContext(() =>
+        hydrateDmsPageProps({ path: "/two", page: {}, shared: fresh }),
+      );
+      assert.deepEqual(runtime.sharedState.get("dms-modules")?.value, [
+        "fresh",
+      ]);
+    } finally {
+      if (!hadWindow) Reflect.deleteProperty(globalThis, "window");
+    }
+  });
+
+  registerIsolationTests();
+
+  registerNavigationStateTests();
 });

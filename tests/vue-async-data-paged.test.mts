@@ -87,53 +87,7 @@ function pagedBackend(total: number, size: number, prefix = "item") {
 
 const pagedOptions = { nextCursor: (page: Page) => page.next };
 
-void describe("Paged async data", () => {
-  void it("appends each page under one key until there is no next one", async () => {
-    const { app, runtime } = clientApp();
-    const backend = pagedBackend(5, 2);
-    const list = await app.runWithContext(() =>
-      useDmsPagedData<Page, number>("files", backend.handler, pagedOptions),
-    );
-    assert.deepEqual(
-      list.pages.value.flatMap((page) => page.items),
-      ["item0", "item1"],
-    );
-    assert.equal(list.hasMore.value, true);
-
-    const loading = list.loadMore();
-    assert.equal(list.loadingMore.value, true);
-    await loading;
-    await list.loadMore();
-    assert.deepEqual(
-      list.pages.value.flatMap((page) => page.items),
-      ["item0", "item1", "item2", "item3", "item4"],
-    );
-    assert.equal(list.hasMore.value, false);
-    assert.equal(list.loadingMore.value, false);
-    await list.loadMore();
-    assert.deepEqual(backend.reads, [undefined, 2, 4], "no read past the end");
-    assert.deepEqual([...runtime.asyncData.keys()], ["files"]);
-    assert.equal(runtime.asyncData.get("files")?.data.value, list.data.value);
-  });
-
-  void it("reads every page loaded again on a revalidation, and replaces them at once", async () => {
-    const { app } = clientApp();
-    const backend = pagedBackend(6, 2);
-    const list = await app.runWithContext(() =>
-      useDmsPagedData<Page, number>("changes", backend.handler, pagedOptions),
-    );
-    await list.loadMore();
-    backend.reads.length = 0;
-    const shown = list.data.value;
-
-    const refreshing = list.refresh();
-    assert.equal(list.data.value, shown, "the pages stay until all are read");
-    await refreshing;
-    assert.deepEqual(backend.reads, [undefined, 2]);
-    assert.equal(list.pages.value.length, 2);
-    assert.notEqual(list.data.value, shown);
-  });
-
+function registerPagedRevalidationTests(): void {
   void it("drops a page a revalidation overtook", async () => {
     const { app } = clientApp();
     let release!: () => void;
@@ -201,6 +155,56 @@ void describe("Paged async data", () => {
     assert.equal(list.pages.value.length, 1);
     assert.equal(list.key.value, "folder:b");
   });
+}
+
+void describe("Paged async data", () => {
+  void it("appends each page under one key until there is no next one", async () => {
+    const { app, runtime } = clientApp();
+    const backend = pagedBackend(5, 2);
+    const list = await app.runWithContext(() =>
+      useDmsPagedData<Page, number>("files", backend.handler, pagedOptions),
+    );
+    assert.deepEqual(
+      list.pages.value.flatMap((page) => page.items),
+      ["item0", "item1"],
+    );
+    assert.equal(list.hasMore.value, true);
+
+    const loading = list.loadMore();
+    assert.equal(list.loadingMore.value, true);
+    await loading;
+    await list.loadMore();
+    assert.deepEqual(
+      list.pages.value.flatMap((page) => page.items),
+      ["item0", "item1", "item2", "item3", "item4"],
+    );
+    assert.equal(list.hasMore.value, false);
+    assert.equal(list.loadingMore.value, false);
+    await list.loadMore();
+    assert.deepEqual(backend.reads, [undefined, 2, 4], "no read past the end");
+    assert.deepEqual([...runtime.asyncData.keys()], ["files"]);
+    assert.equal(runtime.asyncData.get("files")?.data.value, list.data.value);
+  });
+
+  void it("reads every page loaded again on a revalidation, and replaces them at once", async () => {
+    const { app } = clientApp();
+    const backend = pagedBackend(6, 2);
+    const list = await app.runWithContext(() =>
+      useDmsPagedData<Page, number>("changes", backend.handler, pagedOptions),
+    );
+    await list.loadMore();
+    backend.reads.length = 0;
+    const shown = list.data.value;
+
+    const refreshing = list.refresh();
+    assert.equal(list.data.value, shown, "the pages stay until all are read");
+    await refreshing;
+    assert.deepEqual(backend.reads, [undefined, 2]);
+    assert.equal(list.pages.value.length, 2);
+    assert.notEqual(list.data.value, shown);
+  });
+
+  registerPagedRevalidationTests();
 
   void it("renders the first page on a server, and the browser takes it over", async () => {
     const backend = pagedBackend(3, 2);

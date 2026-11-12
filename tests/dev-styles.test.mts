@@ -14,7 +14,7 @@ function writeFixture(root: string, path: string, content: string): void {
   writeFileSync(destination, content);
 }
 
-void describe("development stylesheets in the served document", () => {
+function registerRenderedStyleTests(): void {
   void it("links every stylesheet the server-side render reached", async () => {
     const root = mkdtempSync(join(tmpdir(), "dms-dev-styles-"));
     writeFixture(root, "package.json", '{"type":"module"}');
@@ -82,6 +82,10 @@ void describe("development stylesheets in the served document", () => {
     );
     assert.doesNotMatch(tags, /ignored\.ts/);
   });
+}
+
+void describe("development stylesheets in the served document", () => {
+  registerRenderedStyleTests();
 
   void it("serves a component's style block compiled, with its package imports resolved", async () => {
     const root = mkdtempSync(

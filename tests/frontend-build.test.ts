@@ -114,38 +114,38 @@ void describe("Module build declarations", () => {
   });
 });
 
-void describe("The generated build declarations loader", () => {
-  function sources() {
-    const billing = temporaryDirectory("dms-build-billing-");
-    const crm = temporaryDirectory("dms-build-crm-");
-    writeFixture(
-      billing,
-      "package.json",
-      '{"name":"@acme/billing-frontend","version":"1.0.0"}',
-    );
-    writeFixture(
-      billing,
-      BUILD_FILE,
-      [
-        'import { defineDmsFrontendBuild } from "#dms/frontend-build";',
-        "",
-        "export default defineDmsFrontendBuild((build) => {",
-        '  build.registerAutoImports(["app/composables", "app/build/types"]);',
-        "});",
-        "",
-      ].join("\n"),
-    );
-    return [
-      {
-        path: billing,
-        name: "@acme/billing-frontend",
-        packageName: "@acme/billing-frontend",
-        priority: 2,
-      },
-      { path: crm, packageName: "@acme/crm-frontend", priority: 1 },
-    ];
-  }
+function sources() {
+  const billing = temporaryDirectory("dms-build-billing-");
+  const crm = temporaryDirectory("dms-build-crm-");
+  writeFixture(
+    billing,
+    "package.json",
+    '{"name":"@acme/billing-frontend","version":"1.0.0"}',
+  );
+  writeFixture(
+    billing,
+    BUILD_FILE,
+    [
+      'import { defineDmsFrontendBuild } from "#dms/frontend-build";',
+      "",
+      "export default defineDmsFrontendBuild((build) => {",
+      '  build.registerAutoImports(["app/composables", "app/build/types"]);',
+      "});",
+      "",
+    ].join("\n"),
+  );
+  return [
+    {
+      path: billing,
+      name: "@acme/billing-frontend",
+      packageName: "@acme/billing-frontend",
+      priority: 2,
+    },
+    { path: crm, packageName: "@acme/crm-frontend", priority: 1 },
+  ];
+}
 
+void describe("The generated build declarations loader", () => {
   void it("lists the modules that have a declaration, under their manifest names", () => {
     const workspace = temporaryDirectory("dms-build-workspace-");
     const layers = sources();

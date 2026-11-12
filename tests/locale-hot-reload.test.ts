@@ -49,6 +49,40 @@ async function eventually(done: () => boolean | Promise<boolean>) {
   assert.fail("the dev server did not pick the regenerated catalogs up");
 }
 
+async function startFixtureServer(
+  workspace: string,
+  layer: ResolvedLayer,
+): Promise<ViteDevServer> {
+  mkdirSync(join(layer.path, "i18n", "locales"), { recursive: true });
+  writeFileSync(
+    join(layer.path, "package.json"),
+    JSON.stringify({ name: layer.packageName }),
+  );
+  writeFileSync(
+    join(layer.path, "i18n", "locales", "app-en-GB.json"),
+    JSON.stringify({ greeting: "Hello" }),
+  );
+  writeFileSync(
+    join(layer.path, "i18n", "locales", "app-fr-FR.json"),
+    JSON.stringify({ greeting: "Bonjour" }),
+  );
+  mkdirSync(workspace);
+  materializeLayers(workspace, [layer]);
+  writeFrontendModuleRegistry(workspace, [layer]);
+  writeFileSync(
+    join(workspace, "server-entry.ts"),
+    'import { loadLocaleMessages } from "./locales.generated";\nexport async function greeting(locale: string) {\n  return (await loadLocaleMessages(locale)).greeting;\n}\n',
+  );
+  const { createServer } = await import("vite");
+  return createServer({
+    root: workspace,
+    configFile: false,
+    logLevel: "silent",
+    appType: "custom",
+    server: { middlewareMode: true, ws: false },
+  });
+}
+
 /**
  * The generated locale module in a real Vite dev server, as `ajs-dms dev`
  * runs it: the browser side is played by a module runner with HMR, which
@@ -78,34 +112,7 @@ void describe("regenerated locale catalogs in the dev server", () => {
   };
 
   before(async () => {
-    mkdirSync(join(layer.path, "i18n", "locales"), { recursive: true });
-    writeFileSync(
-      join(layer.path, "package.json"),
-      JSON.stringify({ name: layer.packageName }),
-    );
-    writeFileSync(
-      join(layer.path, "i18n", "locales", "app-en-GB.json"),
-      JSON.stringify({ greeting: "Hello" }),
-    );
-    writeFileSync(
-      join(layer.path, "i18n", "locales", "app-fr-FR.json"),
-      JSON.stringify({ greeting: "Bonjour" }),
-    );
-    mkdirSync(workspace);
-    materializeLayers(workspace, [layer]);
-    writeFrontendModuleRegistry(workspace, [layer]);
-    writeFileSync(
-      join(workspace, "server-entry.ts"),
-      'import { loadLocaleMessages } from "./locales.generated";\nexport async function greeting(locale: string) {\n  return (await loadLocaleMessages(locale)).greeting;\n}\n',
-    );
-    const { createServer } = await import("vite");
-    server = await createServer({
-      root: workspace,
-      configFile: false,
-      logLevel: "silent",
-      appType: "custom",
-      server: { middlewareMode: true, ws: false },
-    });
+    server = await startFixtureServer(workspace, layer);
   });
 
   after(async () => {

@@ -32,7 +32,7 @@ import {
   mountRuntime,
 } from "./fixtures/vue-async-data.mts";
 
-void describe("Async data in the browser", () => {
+function registerHydrationTests(): void {
   void it("hands a hydrating component the server's data when the server's render had it", async () => {
     const rendered: string[] = [];
     const Selection = defineComponent({
@@ -119,7 +119,9 @@ void describe("Async data in the browser", () => {
     assert.equal(result.data.value, "loaded");
     assert.equal(result.status.value, "success");
   });
+}
 
+function registerRunLifecycleTests(): void {
   void it("fetches server: false data once its hydrated component is mounted", async () => {
     const runtime = createDmsFrontendRuntime(undefined, { other: 1 });
     const rendered: string[] = [];
@@ -218,7 +220,9 @@ void describe("Async data in the browser", () => {
     assert.equal(runtime.asyncData.get("shared-run")?.status.value, "idle");
     app.unmount();
   });
+}
 
+function registerNavigationTests(): void {
   void it("keeps, past a navigation, the most recently shown data no component shows any more", async () => {
     const runtime = createDmsFrontendRuntime();
     const shownKeys = ref<string[]>([]);
@@ -296,6 +300,14 @@ void describe("Async data in the browser", () => {
     assert.equal(runtime.hydratedAsyncData.size, 0);
     assert.equal(runtime.pageLoading.value, false);
   });
+}
+
+void describe("Async data in the browser", () => {
+  registerHydrationTests();
+
+  registerRunLifecycleTests();
+
+  registerNavigationTests();
 
   void it("says whether the browser hydrates: until the page has, and never in a page the server did not render", async () => {
     const hydrated = createDmsFrontendRuntime(undefined, {});
@@ -359,56 +371,56 @@ void describe("Async data in the browser", () => {
   });
 });
 
+/** A backend that answers at once, and records each request on its side. */
+function backend(isServer: boolean) {
+  const requests: string[] = [];
+  const runtime = createDmsFrontendRuntime(
+    async (url: string) => {
+      requests.push(url);
+      return `data:${url}`;
+    },
+    undefined,
+    isServer,
+  );
+  return { runtime, requests };
+}
+
+/**
+ * Renders `root` on a server, then mounts it in a browser hydrating that
+ * render, and returns what each side requested and what the browser's
+ * renders showed.
+ */
+async function renderThenHydrate(
+  root: (rendered: string[]) => Component,
+  expectedHtml: string,
+) {
+  const server = backend(true);
+  const ssr = createSSRApp(root([]));
+  provideDmsFrontendRuntime(ssr, server.runtime);
+  assert.equal(await renderToString(ssr), expectedHtml);
+  await sleep(5);
+  const payload = runtimeModule.serializeDmsPayload(server.runtime);
+
+  const browser = backend(false);
+  runtimeModule.restoreDmsPayload(browser.runtime, payload);
+  const rendered: string[] = [];
+  const app = mountRuntime(browser.runtime, {
+    render: () => h(root(rendered)),
+  });
+  const first = rendered[0];
+  await settle();
+  await nextTick();
+  app.unmount();
+  return {
+    serverRequests: server.requests,
+    payload: payload.data,
+    browserRequests: browser.requests,
+    first,
+    last: rendered.at(-1),
+  };
+}
+
 void describe("A reactive key a render sets", () => {
-  /** A backend that answers at once, and records each request on its side. */
-  function backend(isServer: boolean) {
-    const requests: string[] = [];
-    const runtime = createDmsFrontendRuntime(
-      async (url: string) => {
-        requests.push(url);
-        return `data:${url}`;
-      },
-      undefined,
-      isServer,
-    );
-    return { runtime, requests };
-  }
-
-  /**
-   * Renders `root` on a server, then mounts it in a browser hydrating that
-   * render, and returns what each side requested and what the browser's
-   * renders showed.
-   */
-  async function renderThenHydrate(
-    root: (rendered: string[]) => Component,
-    expectedHtml: string,
-  ) {
-    const server = backend(true);
-    const ssr = createSSRApp(root([]));
-    provideDmsFrontendRuntime(ssr, server.runtime);
-    assert.equal(await renderToString(ssr), expectedHtml);
-    await sleep(5);
-    const payload = runtimeModule.serializeDmsPayload(server.runtime);
-
-    const browser = backend(false);
-    runtimeModule.restoreDmsPayload(browser.runtime, payload);
-    const rendered: string[] = [];
-    const app = mountRuntime(browser.runtime, {
-      render: () => h(root(rendered)),
-    });
-    const first = rendered[0];
-    await settle();
-    await nextTick();
-    app.unmount();
-    return {
-      serverRequests: server.requests,
-      payload: payload.data,
-      browserRequests: browser.requests,
-      first,
-      last: rendered.at(-1),
-    };
-  }
-
   void it("leaves a server: false read whose key its setup sets to the browser, which reads it once mounted", async () => {
     const result = await renderThenHydrate(
       (rendered) =>

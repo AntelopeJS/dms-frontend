@@ -103,36 +103,36 @@ void describe("explaining an unreachable backend", () => {
   });
 });
 
+async function closedBackendUrl(): Promise<string> {
+  const { server, port } = await listenOnFreePort();
+  await closeServer(server);
+  return `http://127.0.0.1:${port}`;
+}
+
+/** A backend answering every request with `status` and `body`. */
+async function withBackend(
+  status: number,
+  body: string,
+  run: (backendUrl: string) => Promise<void>,
+): Promise<void> {
+  const server = createHttpServer((_req, res) => {
+    res.writeHead(status, { "content-type": "application/json" });
+    res.end(body);
+  });
+  await new Promise<void>((settle) =>
+    server.listen({ port: 0, host: "127.0.0.1" }, settle),
+  );
+  const address = addressOf(server);
+  try {
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise((settle) => server.close(settle));
+  }
+}
+
 void describe("telling a skipped prepare from a failed one", () => {
   const STRICT_HINT =
     /\n {2}prepare never fails an install; add --strict to make this an error\.\n$/;
-
-  async function closedBackendUrl(): Promise<string> {
-    const { server, port } = await listenOnFreePort();
-    await closeServer(server);
-    return `http://127.0.0.1:${port}`;
-  }
-
-  /** A backend answering every request with `status` and `body`. */
-  async function withBackend(
-    status: number,
-    body: string,
-    run: (backendUrl: string) => Promise<void>,
-  ): Promise<void> {
-    const server = createHttpServer((_req, res) => {
-      res.writeHead(status, { "content-type": "application/json" });
-      res.end(body);
-    });
-    await new Promise<void>((settle) =>
-      server.listen({ port: 0, host: "127.0.0.1" }, settle),
-    );
-    const address = addressOf(server);
-    try {
-      await run(`http://127.0.0.1:${address.port}`);
-    } finally {
-      await new Promise((settle) => server.close(settle));
-    }
-  }
 
   void it("skips without a backend URL, and needs one with --strict", async () => {
     const skipped = await runCli(["prepare"]);

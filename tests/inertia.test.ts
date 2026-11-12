@@ -5,7 +5,7 @@ import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
-void describe("Inertia HTTP protocol", () => {
+function registerPageTests(): void {
   void it("returns the required page object", async () => {
     const runtime = await server;
     const page = runtime.createInertiaPage("/articles", { path: "/articles" });
@@ -83,7 +83,9 @@ void describe("Inertia HTTP protocol", () => {
       vary: "X-Inertia",
     });
   });
+}
 
+function registerVisitTests(): void {
   void it("uses native Inertia v3 semantics for internal, fragment, and external redirects", async (context) => {
     const runtime = await server;
     const capture = (location: string) => {
@@ -156,6 +158,12 @@ void describe("Inertia HTTP protocol", () => {
       backend.close();
     }
   });
+}
+
+void describe("Inertia HTTP protocol", () => {
+  registerPageTests();
+
+  registerVisitTests();
 
   void it("forces a full visit when the deployed asset version changed", async () => {
     let backendRequests = 0;

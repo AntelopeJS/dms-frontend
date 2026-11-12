@@ -73,22 +73,10 @@ const projectBuild = ["build"];
 const describePosix = process.platform === "win32" ? describe.skip : describe;
 
 let cli: FakePnpmCli;
+let layer: string;
+let backend: { server: Server; url: string };
 
-void describePosix("framing pnpm install and the production build", () => {
-  let layer: string;
-  let backend: { server: Server; url: string };
-
-  before(async () => {
-    cli = new FakePnpmCli("dms-frontend-framed-");
-    layer = join(cli.scratch, "layer");
-    writeLayer(layer);
-    backend = await serveManifest(layer);
-  });
-  after(async () => {
-    await new Promise((settle) => backend.server.close(settle));
-    cli.dispose();
-  });
-
+function registerInstallAndBuildTests(): void {
   void it("installs as one task and keeps pnpm's own output to itself", async () => {
     const run = await cli.run(["prepare", "-b", backend.url]);
 
@@ -186,6 +174,21 @@ void describePosix("framing pnpm install and the production build", () => {
     );
     assert.ok(steps.every((call) => call.env.viteLogLevel === "warn"));
   });
+}
+
+void describePosix("framing pnpm install and the production build", () => {
+  before(async () => {
+    cli = new FakePnpmCli("dms-frontend-framed-");
+    layer = join(cli.scratch, "layer");
+    writeLayer(layer);
+    backend = await serveManifest(layer);
+  });
+  after(async () => {
+    await new Promise((settle) => backend.server.close(settle));
+    cli.dispose();
+  });
+
+  registerInstallAndBuildTests();
 
   void it("keeps only the warnings of a quiet build", async () => {
     const run = await cli.run([...projectBuild, "-q"], {

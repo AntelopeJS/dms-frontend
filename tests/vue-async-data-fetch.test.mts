@@ -22,52 +22,58 @@ import { addressOf } from "./helpers/net";
 
 type FetchOptions = NonNullable<Parameters<typeof ofetch>[1]>;
 
-void describe("useDmsFetch", () => {
-  void it("keeps created fetch defaults and error hooks for raw requests", async (context) => {
-    let requestHeader: string | string[] | undefined;
-    const server = createServer((request, response) => {
-      requestHeader = request.headers["x-fetch-default"];
-      response.writeHead(403);
-      response.end("Forbidden");
+function fetchingRuntime(isServer: boolean) {
+  const requests: Array<{ url: string; options: FetchOptions }> = [];
+  const runtime = createDmsFrontendRuntime(
+    async (url: string, options: FetchOptions = {}) => {
+      requests.push({ url, options });
+      return `data:${url}`;
+    },
+    undefined,
+    isServer,
+  );
+  return { runtime, requests };
+}
+
+function switchingFetcher() {
+  const requests: string[] = [];
+  const answers = new Map<
+    string,
+    { resolve: (value: string) => void; reject: (reason: unknown) => void }
+  >();
+  const fetcher = (url: string) => {
+    requests.push(url);
+    return new Promise<string>((resolve, reject) => {
+      answers.set(url, { resolve, reject });
     });
-    context.after(
-      () =>
-        new Promise<void>((resolve, reject) => {
-          server.close((error) => (error ? reject(error) : resolve()));
+  };
+  return { fetcher, requests, answers };
+}
+
+function followOrders(
+  fetcher: runtimeModule.DmsServerFetch,
+  id: ReturnType<typeof ref<number>>,
+) {
+  const runtime = createDmsFrontendRuntime();
+  let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
+  const app = mountRuntime(runtime, {
+    render: () =>
+      h(
+        defineComponent({
+          setup() {
+            entry = runtimeModule.useDmsFetch<string>(
+              () => `/api/orders/${id.value}`,
+              { $fetch: fetcher },
+            );
+            return () => h("p");
+          },
         }),
-    );
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve),
-    );
-    const statuses: number[] = [];
-    const fetcher = runtimeModule.$fetch.create({
-      headers: { "x-fetch-default": "inherited" },
-      onResponseError({ response }) {
-        statuses.push(response.status);
-      },
-    });
-
-    await assert.rejects(
-      fetcher.raw(`http://127.0.0.1:${addressOf(server).port}/forbidden`),
-      { name: "FetchError", status: 403 },
-    );
-    assert.deepEqual(statuses, [403]);
-    assert.equal(requestHeader, "inherited");
+      ),
   });
+  return { runtime, app, entry: () => entry! };
+}
 
-  function fetchingRuntime(isServer: boolean) {
-    const requests: Array<{ url: string; options: FetchOptions }> = [];
-    const runtime = createDmsFrontendRuntime(
-      async (url: string, options: FetchOptions = {}) => {
-        requests.push({ url, options });
-        return `data:${url}`;
-      },
-      undefined,
-      isServer,
-    );
-    return { runtime, requests };
-  }
-
+function registerTransferTests(): void {
   void it("renders and transfers a server response instead of discarding it (E1)", async () => {
     const { runtime, requests } = fetchingRuntime(true);
     const app = createSSRApp(
@@ -129,7 +135,9 @@ void describe("useDmsFetch", () => {
       ],
     );
   });
+}
 
+function registerReactiveRequestTests(): void {
   void it("follows a URL getter to the key of each URL, showing the previous data meanwhile", async () => {
     const runtime = createDmsFrontendRuntime();
     const id = ref(1);
@@ -233,7 +241,9 @@ void describe("useDmsFetch", () => {
     );
     app.unmount();
   });
+}
 
+function registerNullUrlTests(): void {
   void it("requests nothing while the URL is null, on the server as in the browser", async () => {
     const server = fetchingRuntime(true);
     const Waiting = defineComponent({
@@ -288,45 +298,9 @@ void describe("useDmsFetch", () => {
     assert.equal(browser.requests.length, 1);
     app.unmount();
   });
+}
 
-  function switchingFetcher() {
-    const requests: string[] = [];
-    const answers = new Map<
-      string,
-      { resolve: (value: string) => void; reject: (reason: unknown) => void }
-    >();
-    const fetcher = (url: string) => {
-      requests.push(url);
-      return new Promise<string>((resolve, reject) => {
-        answers.set(url, { resolve, reject });
-      });
-    };
-    return { fetcher, requests, answers };
-  }
-
-  function followOrders(
-    fetcher: runtimeModule.DmsServerFetch,
-    id: ReturnType<typeof ref<number>>,
-  ) {
-    const runtime = createDmsFrontendRuntime();
-    let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
-    const app = mountRuntime(runtime, {
-      render: () =>
-        h(
-          defineComponent({
-            setup() {
-              entry = runtimeModule.useDmsFetch<string>(
-                () => `/api/orders/${id.value}`,
-                { $fetch: fetcher },
-              );
-              return () => h("p");
-            },
-          }),
-        ),
-    });
-    return { runtime, app, entry: () => entry! };
-  }
-
+function registerKeySwitchTests(): void {
   void it("refetches a key whose run a switch away aborted, never showing another key's data as its own", async () => {
     const { fetcher, requests, answers } = switchingFetcher();
     const id = ref(1);
@@ -391,7 +365,9 @@ void describe("useDmsFetch", () => {
     assert.equal(entry().data.value, "edited", "a write reaches the key");
     app.unmount();
   });
+}
 
+function registerKeyingTests(): void {
   void it("transfers its keys without the URL, query or body they request", async () => {
     const { runtime, requests } = fetchingRuntime(true);
     const app = createSSRApp(
@@ -496,4 +472,48 @@ void describe("useDmsFetch", () => {
       [false, false],
     );
   });
+}
+
+void describe("useDmsFetch", () => {
+  void it("keeps created fetch defaults and error hooks for raw requests", async (context) => {
+    let requestHeader: string | string[] | undefined;
+    const server = createServer((request, response) => {
+      requestHeader = request.headers["x-fetch-default"];
+      response.writeHead(403);
+      response.end("Forbidden");
+    });
+    context.after(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        }),
+    );
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const statuses: number[] = [];
+    const fetcher = runtimeModule.$fetch.create({
+      headers: { "x-fetch-default": "inherited" },
+      onResponseError({ response }) {
+        statuses.push(response.status);
+      },
+    });
+
+    await assert.rejects(
+      fetcher.raw(`http://127.0.0.1:${addressOf(server).port}/forbidden`),
+      { name: "FetchError", status: 403 },
+    );
+    assert.deepEqual(statuses, [403]);
+    assert.equal(requestHeader, "inherited");
+  });
+
+  registerTransferTests();
+
+  registerReactiveRequestTests();
+
+  registerNullUrlTests();
+
+  registerKeySwitchTests();
+
+  registerKeyingTests();
 });

@@ -92,6 +92,56 @@ function payload(html: string): Record<string, Revived> {
   return serverPayload(html).data;
 }
 
+function writeAsyncDataWorkspace(workspace: string): void {
+  cpSync("templates/vue", workspace, { recursive: true });
+  writeFileSync(join(workspace, "package.json"), '{"type":"module"}');
+  writeFileSync(join(workspace, "frontend-paths.generated.json"), "{}");
+  writeFileSync(
+    join(workspace, "generated-frontend-modules.json"),
+    '{"modules":[]}',
+  );
+  writeFileSync(
+    join(workspace, "app-configs.generated.ts"),
+    "export const appConfigs = [];\n",
+  );
+  writeFileSync(
+    join(workspace, "locales.generated.ts"),
+    'export const localeMessages={en:{},fr:{}};export const supportedLocales=["en","fr"];export const catalogLocale=(locale)=>locale.slice(0,2);export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
+  );
+  writeFileSync(
+    join(workspace, "ui-stub.ts"),
+    `import {h} from 'vue'; export const useAppConfig=()=>({});export const useToast=()=>({add(){}});export const en={code:"en"};export const fr={code:"fr"};export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
+  );
+  writeFileSync(
+    join(workspace, "frontend-modules.generated.ts"),
+    FIXTURE_MODULES,
+  );
+  writeFileSync(
+    join(workspace, "vite.fixture.config.mjs"),
+    `
+import vue from '@vitejs/plugin-vue';
+export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nuxt/ui/'))return ${JSON.stringify(join(workspace, "ui-stub.ts"))}}},vue()],build:{ssr:'ssr-renderer.ts',outDir:'dist/ssr'}};`,
+  );
+  execFileSync(
+    process.execPath,
+    [
+      resolve("node_modules/vite/bin/vite.js"),
+      "build",
+      "--config",
+      "vite.fixture.config.mjs",
+      "--logLevel",
+      "error",
+    ],
+    { cwd: workspace, stdio: "pipe" },
+  );
+  mkdirSync(join(workspace, "dist/client/.vite"), { recursive: true });
+  writeFileSync(
+    join(workspace, "dist/client/index.html"),
+    "<html><head><title>Antelope DMS</title></head><body>__DMS_APP__</body></html>",
+  );
+  writeFileSync(join(workspace, "dist/client/.vite/manifest.json"), "{}");
+}
+
 void it("hydrates a server render with exactly the data its HTML shows", async (context) => {
   const workspace = mkdtempSync(resolve(".ssr-async-data-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
@@ -109,53 +159,7 @@ void it("hydrates a server render with exactly the data its HTML shows", async (
   });
   let frontend: ReturnType<typeof createServer> | undefined;
   try {
-    cpSync("templates/vue", workspace, { recursive: true });
-    writeFileSync(join(workspace, "package.json"), '{"type":"module"}');
-    writeFileSync(join(workspace, "frontend-paths.generated.json"), "{}");
-    writeFileSync(
-      join(workspace, "generated-frontend-modules.json"),
-      '{"modules":[]}',
-    );
-    writeFileSync(
-      join(workspace, "app-configs.generated.ts"),
-      "export const appConfigs = [];\n",
-    );
-    writeFileSync(
-      join(workspace, "locales.generated.ts"),
-      'export const localeMessages={en:{},fr:{}};export const supportedLocales=["en","fr"];export const catalogLocale=(locale)=>locale.slice(0,2);export const loadLocaleMessages=async()=>({});export const syncLocaleMessages=()=>{};',
-    );
-    writeFileSync(
-      join(workspace, "ui-stub.ts"),
-      `import {h} from 'vue'; export const useAppConfig=()=>({});export const useToast=()=>({add(){}});export const en={code:"en"};export const fr={code:"fr"};export default {install(){},setup(_,{slots}){return()=>h('div',null,slots.default?.())}};`,
-    );
-    writeFileSync(
-      join(workspace, "frontend-modules.generated.ts"),
-      FIXTURE_MODULES,
-    );
-    writeFileSync(
-      join(workspace, "vite.fixture.config.mjs"),
-      `
-import vue from '@vitejs/plugin-vue';
-export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nuxt/ui/'))return ${JSON.stringify(join(workspace, "ui-stub.ts"))}}},vue()],build:{ssr:'ssr-renderer.ts',outDir:'dist/ssr'}};`,
-    );
-    execFileSync(
-      process.execPath,
-      [
-        resolve("node_modules/vite/bin/vite.js"),
-        "build",
-        "--config",
-        "vite.fixture.config.mjs",
-        "--logLevel",
-        "error",
-      ],
-      { cwd: workspace, stdio: "pipe" },
-    );
-    mkdirSync(join(workspace, "dist/client/.vite"), { recursive: true });
-    writeFileSync(
-      join(workspace, "dist/client/index.html"),
-      "<html><head><title>Antelope DMS</title></head><body>__DMS_APP__</body></html>",
-    );
-    writeFileSync(join(workspace, "dist/client/.vite/manifest.json"), "{}");
+    writeAsyncDataWorkspace(workspace);
     await new Promise<void>((done) => backend.listen(0, "127.0.0.1", done));
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;

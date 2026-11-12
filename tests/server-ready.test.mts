@@ -163,6 +163,76 @@ void describe("Frontend server address", () => {
   );
 });
 
+function registerViteStartTests(): void {
+  void it(
+    "reports a Vite that could not start, where it failed, then exits",
+    { timeout: 30_000 },
+    async (context) => {
+      const root = serverDirectory(context, "dms-vite-start-");
+      const config = join(root, "vite.config.ts");
+      writeFileSync(config, "export default {\n  plugins: [,\n  broken(\n};\n");
+
+      const started = startServer(context, 0, true, { cwd: root, isDev: true });
+      const message = await firstMessage(started);
+      assert.deepEqual(message, {
+        type: "dms:start-error",
+        message: "Unexpected token",
+        location: { file: config, line: 4, column: 0, lineText: "};" },
+      });
+      assert.equal(await started.exited, 1);
+      assert.doesNotMatch(started.output(), /\n\s+at /);
+    },
+  );
+
+  void it(
+    "reports where a startup error points only by the numbers it carries",
+    { timeout: 30_000 },
+    async (context) => {
+      const root = serverDirectory(context, "dms-vite-start-");
+      const config = join(root, "vite.config.ts");
+      writeFileSync(
+        config,
+        `const error = new Error("config boom");
+Object.assign(error, { loc: { file: ${JSON.stringify(config)}, line: "1", column: { at: 2 } } });
+throw error;
+`,
+      );
+
+      const started = startServer(context, 0, true, { cwd: root, isDev: true });
+      const message = await firstMessage(started);
+      assert.deepEqual(message, {
+        type: "dms:start-error",
+        message: "config boom",
+        location: { file: config },
+      });
+      assert.equal(await started.exited, 1);
+    },
+  );
+
+  void it(
+    "says why Vite could not start when started on its own",
+    { timeout: 30_000 },
+    async (context) => {
+      const root = serverDirectory(context, "dms-vite-start-");
+      writeFileSync(
+        join(root, "vite.config.ts"),
+        'throw new Error("config boom");\nexport default {};\n',
+      );
+
+      const started = startServer(context, 0, false, {
+        cwd: root,
+        isDev: true,
+      });
+      assert.equal(await started.exited, 1);
+      assert.match(
+        started.output(),
+        /DMS development server failed to start: config boom\n/,
+      );
+      assert.doesNotMatch(started.output(), /\n\s+at |Server ready/);
+    },
+  );
+}
+
 void describe("Frontend server startup", () => {
   void it(
     "reports to the CLI over IPC once it accepts connections",
@@ -235,71 +305,5 @@ void describe("Frontend server startup", () => {
     },
   );
 
-  void it(
-    "reports a Vite that could not start, where it failed, then exits",
-    { timeout: 30_000 },
-    async (context) => {
-      const root = serverDirectory(context, "dms-vite-start-");
-      const config = join(root, "vite.config.ts");
-      writeFileSync(config, "export default {\n  plugins: [,\n  broken(\n};\n");
-
-      const started = startServer(context, 0, true, { cwd: root, isDev: true });
-      const message = await firstMessage(started);
-      assert.deepEqual(message, {
-        type: "dms:start-error",
-        message: "Unexpected token",
-        location: { file: config, line: 4, column: 0, lineText: "};" },
-      });
-      assert.equal(await started.exited, 1);
-      assert.doesNotMatch(started.output(), /\n\s+at /);
-    },
-  );
-
-  void it(
-    "reports where a startup error points only by the numbers it carries",
-    { timeout: 30_000 },
-    async (context) => {
-      const root = serverDirectory(context, "dms-vite-start-");
-      const config = join(root, "vite.config.ts");
-      writeFileSync(
-        config,
-        `const error = new Error("config boom");
-Object.assign(error, { loc: { file: ${JSON.stringify(config)}, line: "1", column: { at: 2 } } });
-throw error;
-`,
-      );
-
-      const started = startServer(context, 0, true, { cwd: root, isDev: true });
-      const message = await firstMessage(started);
-      assert.deepEqual(message, {
-        type: "dms:start-error",
-        message: "config boom",
-        location: { file: config },
-      });
-      assert.equal(await started.exited, 1);
-    },
-  );
-
-  void it(
-    "says why Vite could not start when started on its own",
-    { timeout: 30_000 },
-    async (context) => {
-      const root = serverDirectory(context, "dms-vite-start-");
-      writeFileSync(
-        join(root, "vite.config.ts"),
-        'throw new Error("config boom");\nexport default {};\n',
-      );
-
-      const started = startServer(context, 0, false, {
-        cwd: root,
-        isDev: true,
-      });
-      assert.equal(await started.exited, 1);
-      assert.match(
-        started.output(),
-        /DMS development server failed to start: config boom\n/,
-      );
-      assert.doesNotMatch(started.output(), /\n\s+at |Server ready/);
-    },
-  );
+  registerViteStartTests();
 });

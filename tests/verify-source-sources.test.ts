@@ -95,38 +95,7 @@ function usageProblem(run: () => void) {
   assert.fail("expected a usage error");
 }
 
-void describe("reading the packages verify-source builds", () => {
-  void it("verifies the project's module on the core layer it installs", () => {
-    const root = project({ ...DEMO_PROJECT, ...installedDms() });
-    const { layers, coreLayer } = sources(root, {
-      moduleSources: [join(root, "frontend-vue")],
-    });
-    assert.equal(
-      coreLayer,
-      "@antelopejs/dms 9.9.9 (installed in this project)",
-    );
-    assert.deepEqual(
-      layers.map((layer) => [layer.packageName, layer.path]),
-      [
-        [CORE_LAYER, join(root, INSTALLED_DMS, "frontend-vue")],
-        ["demo-frontend-vue", join(root, "frontend-vue")],
-      ],
-    );
-  });
-
-  void it("resolves @antelopejs/dms the way Node does, from a parent directory", () => {
-    const root = project({ ...DEMO_PROJECT, ...installedDms("0.5.5") });
-    const { layers, coreLayer } = sources(join(root, "frontend-vue"));
-    assert.equal(
-      coreLayer,
-      "@antelopejs/dms 0.5.5 (installed in this project)",
-    );
-    assert.deepEqual(
-      layers.map((layer) => layer.packageName),
-      [CORE_LAYER, "demo-frontend-vue"],
-    );
-  });
-
+function registerCoreLayerTests(): void {
   void it("defaults to the project's frontend-vue module", () => {
     const root = project({ ...DEMO_PROJECT, ...installedDms() });
     assert.deepEqual(
@@ -172,7 +141,9 @@ void describe("reading the packages verify-source builds", () => {
       [CORE_LAYER],
     );
   });
+}
 
+function registerUsageProblemTests(): void {
   void it("asks to install @antelopejs/dms with the project's package manager", () => {
     const root = project(DEMO_PROJECT);
     const problem = usageProblem(() => sources(root));
@@ -263,6 +234,43 @@ void describe("reading the packages verify-source builds", () => {
       }
     }
   });
+}
+
+void describe("reading the packages verify-source builds", () => {
+  void it("verifies the project's module on the core layer it installs", () => {
+    const root = project({ ...DEMO_PROJECT, ...installedDms() });
+    const { layers, coreLayer } = sources(root, {
+      moduleSources: [join(root, "frontend-vue")],
+    });
+    assert.equal(
+      coreLayer,
+      "@antelopejs/dms 9.9.9 (installed in this project)",
+    );
+    assert.deepEqual(
+      layers.map((layer) => [layer.packageName, layer.path]),
+      [
+        [CORE_LAYER, join(root, INSTALLED_DMS, "frontend-vue")],
+        ["demo-frontend-vue", join(root, "frontend-vue")],
+      ],
+    );
+  });
+
+  void it("resolves @antelopejs/dms the way Node does, from a parent directory", () => {
+    const root = project({ ...DEMO_PROJECT, ...installedDms("0.5.5") });
+    const { layers, coreLayer } = sources(join(root, "frontend-vue"));
+    assert.equal(
+      coreLayer,
+      "@antelopejs/dms 0.5.5 (installed in this project)",
+    );
+    assert.deepEqual(
+      layers.map((layer) => layer.packageName),
+      [CORE_LAYER, "demo-frontend-vue"],
+    );
+  });
+
+  registerCoreLayerTests();
+
+  registerUsageProblemTests();
 
   void it("sends a frontend module passed with -l to -m", () => {
     const root = project({ ...DEMO_PROJECT, ...installedDms() });

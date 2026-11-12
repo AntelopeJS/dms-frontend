@@ -150,6 +150,58 @@ void describe("Server render scopes", () => {
   });
 });
 
+function registerPageMetaTests(): void {
+  void it("keeps a page's meta while it stays on screen and drops it for the next page", async () => {
+    await setupFrontendModules([]);
+    const { app, runtime } = application("first");
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared");
+      defineDmsPageMeta({ auth: true });
+      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared?tab=b");
+    });
+    assert.deepEqual(runtime.route.meta, { auth: true });
+    app.runWithContext(() =>
+      hydrateDmsPageProps({ path: "/next", page: {} }, "/next"),
+    );
+    assert.deepEqual(runtime.route.meta, {});
+  });
+
+  void it("shows the error a middleware throws in place of the page", async () => {
+    await registerGlobalMiddleware(async (to) => {
+      await Promise.resolve();
+      if (to.path === "/missing")
+        throw createDmsError({ statusCode: 404, statusMessage: "Not here" });
+    });
+    const { app, runtime } = application("first");
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/missing", page: {} }, "/missing");
+      defineDmsPageMeta({ auth: true });
+    });
+    await runtime.pendingNavigation;
+    const error = runtime.currentError.value;
+    assert.ok(
+      error && "statusCode" in error,
+      "the middleware's error is shown",
+    );
+    assert.equal(error.statusCode, 404);
+    assert.equal(error.message, "Not here");
+  });
+
+  void it("drops a page's meta when an error page replaces it at the same path", async () => {
+    await setupFrontendModules([]);
+    const { app, runtime } = application("first");
+    app.runWithContext(() => {
+      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared");
+      defineDmsPageMeta({ auth: true });
+      hydrateDmsPageProps(
+        { path: "/declared", page: {}, error: { statusCode: 500 } },
+        "/declared",
+      );
+    });
+    assert.deepEqual(runtime.route.meta, {});
+  });
+}
+
 void describe("Page meta", () => {
   const DeclaringPage: DefineComponent = defineComponent({
     setup() {
@@ -243,55 +295,7 @@ void describe("Page meta", () => {
     assert.deepEqual(Object.fromEntries(ids), serverIds);
   });
 
-  void it("keeps a page's meta while it stays on screen and drops it for the next page", async () => {
-    await setupFrontendModules([]);
-    const { app, runtime } = application("first");
-    app.runWithContext(() => {
-      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared");
-      defineDmsPageMeta({ auth: true });
-      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared?tab=b");
-    });
-    assert.deepEqual(runtime.route.meta, { auth: true });
-    app.runWithContext(() =>
-      hydrateDmsPageProps({ path: "/next", page: {} }, "/next"),
-    );
-    assert.deepEqual(runtime.route.meta, {});
-  });
-
-  void it("shows the error a middleware throws in place of the page", async () => {
-    await registerGlobalMiddleware(async (to) => {
-      await Promise.resolve();
-      if (to.path === "/missing")
-        throw createDmsError({ statusCode: 404, statusMessage: "Not here" });
-    });
-    const { app, runtime } = application("first");
-    app.runWithContext(() => {
-      hydrateDmsPageProps({ path: "/missing", page: {} }, "/missing");
-      defineDmsPageMeta({ auth: true });
-    });
-    await runtime.pendingNavigation;
-    const error = runtime.currentError.value;
-    assert.ok(
-      error && "statusCode" in error,
-      "the middleware's error is shown",
-    );
-    assert.equal(error.statusCode, 404);
-    assert.equal(error.message, "Not here");
-  });
-
-  void it("drops a page's meta when an error page replaces it at the same path", async () => {
-    await setupFrontendModules([]);
-    const { app, runtime } = application("first");
-    app.runWithContext(() => {
-      hydrateDmsPageProps({ path: "/declared", page: {} }, "/declared");
-      defineDmsPageMeta({ auth: true });
-      hydrateDmsPageProps(
-        { path: "/declared", page: {}, error: { statusCode: 500 } },
-        "/declared",
-      );
-    });
-    assert.deepEqual(runtime.route.meta, {});
-  });
+  registerPageMetaTests();
 });
 
 void describe("Page loading state", () => {

@@ -10,6 +10,249 @@ import { responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
+async function checkRedirectsAndGuards(base: string): Promise<void> {
+  const [redirectA, redirectB, isolatedHealthy] = await Promise.all([
+    fetch(`${base}/requires-onboarding-a`, {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    }),
+    fetch(`${base}/requires-onboarding-b`, {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    }),
+    fetch(`${base}/healthy`, { headers: { accept: "text/html" } }),
+  ]);
+  assert.equal(redirectA.status, 302);
+  assert.equal(redirectA.headers.get("location"), "/onboarding?source=a");
+  assert.equal(redirectB.status, 302);
+  assert.equal(redirectB.headers.get("location"), "/onboarding?source=b");
+  assert.equal(isolatedHealthy.status, 200);
+  assert.match(await isolatedHealthy.text(), /Healthy request/);
+  for (const [path, location] of [
+    ["/slow-guard-redirect", "/onboarding?source=guard"],
+    ["/slow-guard-page-redirect", "/onboarding?source=page"],
+    ["/slow-guard-both", "/onboarding?source=guard"],
+  ]) {
+    const response = await fetch(`${base}${path}`, {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    assert.equal(response.status, 302, path);
+    assert.equal(response.headers.get("location"), location, path);
+  }
+  const [guardNotFound, guardBroken, guardRedirect] = await Promise.all(
+    ["/guard-not-found", "/guard-broken", "/guard-redirect"].map((path) =>
+      fetch(`${base}${path}`, {
+        headers: { accept: "text/html" },
+        redirect: "manual",
+      }),
+    ),
+  );
+  assert.equal(guardNotFound.status, 404);
+  const guardNotFoundHtml = await guardNotFound.text();
+  assert.match(
+    guardNotFoundHtml,
+    /<main id="error"[^>]*>404: Module not found \/ Module not found<\/main>/,
+  );
+  assert.doesNotMatch(guardNotFoundHtml, /Guarded content/);
+  assert.equal(guardBroken.status, 500);
+  const guardBrokenHtml = await guardBroken.text();
+  assert.match(
+    guardBrokenHtml,
+    /<main id="error"[^>]*>500: no message \/ no status message<\/main>/,
+  );
+  assert.doesNotMatch(
+    guardBrokenHtml,
+    /Guarded content|private middleware detail/,
+  );
+  assert.equal(guardRedirect.status, 302);
+  assert.equal(
+    guardRedirect.headers.get("location"),
+    "/onboarding?source=guard",
+  );
+}
+
+async function checkFillQuery(
+  base: string,
+  backendReads: string[],
+): Promise<void> {
+  backendReads.length = 0;
+  const filled = await fetch(`${base}/fill-query`, {
+    headers: { accept: "text/html" },
+    redirect: "manual",
+  });
+  assert.equal(filled.status, 200);
+  assert.equal(
+    filled.headers.get("content-location"),
+    "/fill-query?workspace=default",
+  );
+  const filledHtml = await filled.text();
+  assert.match(filledHtml, /Fill:default:1/);
+  assert.match(filledHtml, /\/fill-query\?workspace=default/);
+  assert.deepEqual(
+    backendReads.filter((read) => read.startsWith("/fixture/")),
+    ["/fixture/counted"],
+  );
+  assert.deepEqual(
+    backendReads.filter((read) => read.startsWith("/dms/page")),
+    [
+      "/dms/page?path=%2Ffill-query",
+      "/dms/page?path=%2Ffill-query&workspace=default&shared=false",
+    ],
+  );
+  const looping = await fetch(`${base}/fill-query?loop=0`, {
+    headers: { accept: "text/html" },
+    redirect: "manual",
+  });
+  assert.equal(looping.status, 302);
+  assert.equal(looping.headers.get("location"), "/fill-query?loop=3");
+}
+
+async function checkRendering(
+  base: string,
+  unreadCountPath: string,
+): Promise<void> {
+  const asyncRuntimeResponses = await Promise.all([
+    fetch(`${base}/async-runtime-a`, { headers: { accept: "text/html" } }),
+    fetch(`${base}/async-runtime-b`, { headers: { accept: "text/html" } }),
+  ]);
+  const asyncRuntimeHtml = await Promise.all(
+    asyncRuntimeResponses.map((response) => response.text()),
+  );
+  assert.match(asyncRuntimeHtml[0], /Async runtime A:\/async-runtime-a/);
+  assert.doesNotMatch(asyncRuntimeHtml[0], /Async runtime B/);
+  assert.match(asyncRuntimeHtml[1], /Async runtime B:\/async-runtime-b/);
+  assert.doesNotMatch(asyncRuntimeHtml[1], /Async runtime A/);
+  const unexpected = await fetch(`${base}/async-throws`, {
+    headers: { accept: "text/html" },
+  });
+  assert.equal(unexpected.status, 500);
+  const unexpectedHtml = await unexpected.text();
+  assert.match(unexpectedHtml, /500: no message \/ no status message/);
+  assert.doesNotMatch(unexpectedHtml, /private database hostname/);
+  const fetchNotFound = await fetch(`${base}/fetch-not-found`, {
+    headers: { accept: "text/html" },
+  });
+  assert.equal(fetchNotFound.status, 404);
+  const fetchNotFoundHtml = await fetchNotFound.text();
+  assert.match(fetchNotFoundHtml, /404: Not Found \/ Not Found/);
+  assert.doesNotMatch(fetchNotFoundHtml, /10\.0\.0\.5|api\/secret/);
+  const exact = await fetch(`${base}/exact`, {
+    headers: { accept: "text/html" },
+  });
+  assert.equal(exact.status, 200);
+  const exactHtml = await exact.text();
+  assert.match(exactHtml, /Exact registered page:true:catch-all:0/);
+  assert.doesNotMatch(exactHtml, /Registered catch-all page/);
+  const catchAll = await fetch(`${base}/unregistered`, {
+    headers: { accept: "text/html" },
+  });
+  assert.equal(catchAll.status, 200);
+  assert.match(await catchAll.text(), /Registered catch-all page:true/);
+  const [onboardingDocument, nestedDocument, unreadCount] = await Promise.all([
+    fetch(`${base}/onboarding`),
+    fetch(`${base}/modules/parity/nested`),
+    fetch(`${base}${unreadCountPath}`),
+  ]);
+  const productionHtml = await Promise.all(
+    [onboardingDocument, nestedDocument].map(async (response) => {
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type") ?? "", /text\/html/);
+      return response.text();
+    }),
+  );
+  assert.match(productionHtml[0], /Onboarding/);
+  assert.match(productionHtml[1], /Registered catch-all page:true/);
+  assert.equal(unreadCount.status, 200);
+  assert.deepEqual(await unreadCount.json(), { unreadCount: 7 });
+}
+
+async function checkSessions(base: string): Promise<void> {
+  process.env.DMS_SESSION_SECRET = "disposable-ssr-session-secret-at-least-32";
+  const sessionCookie = (id: string, language: string) => {
+    const jar = responseOf();
+    writeSession(jar, {
+      user: { _id: id, language },
+      accountId: `account-${id}`,
+      activeTenantId: `tenant-${id}`,
+      accessToken: "private-access-token",
+      refreshToken: "private-refresh-token",
+      persistent: false,
+    });
+    const [cookie] = [jar.getHeader("set-cookie")].flat().filter(isText);
+    return cookie.split(";", 1)[0];
+  };
+  const sessions = await Promise.all([
+    fetch(`${base}/session`, {
+      headers: { accept: "text/html", cookie: sessionCookie("alice", "fr") },
+    }),
+    fetch(`${base}/session`, {
+      headers: { accept: "text/html", cookie: sessionCookie("bob", "en") },
+    }),
+    fetch(`${base}/session`, { headers: { accept: "text/html" } }),
+  ]);
+  for (const [index, [expected, locale]] of [
+    ["alice:fr:alice", "fr"],
+    ["bob:en:bob", "en"],
+    ["anonymous:en:anonymous", "en"],
+  ].entries()) {
+    assert.equal(sessions[index].status, 200);
+    const html = await sessions[index].text();
+    assert.ok(
+      html.includes(expected),
+      `Session and locale must exist before plugin setup: ${expected}`,
+    );
+    assert.match(html, new RegExp(`lang="${locale}"`));
+    assert.doesNotMatch(html, /private-access-token|private-refresh-token/);
+  }
+  const inertiaSession = await fetch(`${base}/session`, {
+    headers: {
+      cookie: sessionCookie("alice", "fr"),
+      "x-inertia": "true",
+    },
+  });
+  assert.deepEqual((await inertiaSession.json()).props, {
+    path: "/session",
+    page: { componentName: "session" },
+    user: { _id: "alice", language: "fr" },
+    session: {
+      accountId: "account-alice",
+      activeTenantId: "tenant-alice",
+    },
+    errors: {},
+  });
+  const failedSession = await fetch(`${base}/broken`, {
+    headers: {
+      cookie: sessionCookie("bob", "en"),
+      "x-inertia": "true",
+    },
+  });
+  assert.equal(failedSession.status, 503);
+  const failedSessionBody = await failedSession.text();
+  assert.match(failedSessionBody, /account-bob|tenant-bob/);
+  assert.equal(
+    JSON.stringify(JSON.parse(failedSessionBody).props.error),
+    '{"statusCode":503}',
+  );
+  assert.doesNotMatch(failedSessionBody, /DMS backend request failed/);
+  assert.doesNotMatch(
+    failedSessionBody,
+    /private-access-token|private-refresh-token/,
+  );
+  const variants: Record<string, string>[] = [
+    { accept: "text/html" },
+    { "x-inertia": "true" },
+  ];
+  for (const headers of variants) {
+    const suspended = await fetch(`${base}/suspended`, {
+      headers: { ...headers, cookie: sessionCookie("bob", "en") },
+      redirect: "manual",
+    });
+    assert.equal(suspended.status, 302);
+    assert.equal(suspended.headers.get("location"), "/blocked-screen");
+  }
+}
+
 void it("renders setup errors as HTTP errors without corrupting simultaneous successful SSR", async () => {
   const workspace = mkdtempSync(resolve(".ssr-errors-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
@@ -78,234 +321,10 @@ void it("renders setup errors as HTTP errors without corrupting simultaneous suc
       await initialRoute.text(),
       /Initial route:\/initial-route\?tab=public/,
     );
-    const [redirectA, redirectB, isolatedHealthy] = await Promise.all([
-      fetch(`${base}/requires-onboarding-a`, {
-        headers: { accept: "text/html" },
-        redirect: "manual",
-      }),
-      fetch(`${base}/requires-onboarding-b`, {
-        headers: { accept: "text/html" },
-        redirect: "manual",
-      }),
-      fetch(`${base}/healthy`, { headers: { accept: "text/html" } }),
-    ]);
-    assert.equal(redirectA.status, 302);
-    assert.equal(redirectA.headers.get("location"), "/onboarding?source=a");
-    assert.equal(redirectB.status, 302);
-    assert.equal(redirectB.headers.get("location"), "/onboarding?source=b");
-    assert.equal(isolatedHealthy.status, 200);
-    assert.match(await isolatedHealthy.text(), /Healthy request/);
-    for (const [path, location] of [
-      ["/slow-guard-redirect", "/onboarding?source=guard"],
-      ["/slow-guard-page-redirect", "/onboarding?source=page"],
-      ["/slow-guard-both", "/onboarding?source=guard"],
-    ]) {
-      const response = await fetch(`${base}${path}`, {
-        headers: { accept: "text/html" },
-        redirect: "manual",
-      });
-      assert.equal(response.status, 302, path);
-      assert.equal(response.headers.get("location"), location, path);
-    }
-    const [guardNotFound, guardBroken, guardRedirect] = await Promise.all(
-      ["/guard-not-found", "/guard-broken", "/guard-redirect"].map((path) =>
-        fetch(`${base}${path}`, {
-          headers: { accept: "text/html" },
-          redirect: "manual",
-        }),
-      ),
-    );
-    assert.equal(guardNotFound.status, 404);
-    const guardNotFoundHtml = await guardNotFound.text();
-    assert.match(
-      guardNotFoundHtml,
-      /<main id="error"[^>]*>404: Module not found \/ Module not found<\/main>/,
-    );
-    assert.doesNotMatch(guardNotFoundHtml, /Guarded content/);
-    assert.equal(guardBroken.status, 500);
-    const guardBrokenHtml = await guardBroken.text();
-    assert.match(
-      guardBrokenHtml,
-      /<main id="error"[^>]*>500: no message \/ no status message<\/main>/,
-    );
-    assert.doesNotMatch(
-      guardBrokenHtml,
-      /Guarded content|private middleware detail/,
-    );
-    assert.equal(guardRedirect.status, 302);
-    assert.equal(
-      guardRedirect.headers.get("location"),
-      "/onboarding?source=guard",
-    );
-    backendReads.length = 0;
-    const filled = await fetch(`${base}/fill-query`, {
-      headers: { accept: "text/html" },
-      redirect: "manual",
-    });
-    assert.equal(filled.status, 200);
-    assert.equal(
-      filled.headers.get("content-location"),
-      "/fill-query?workspace=default",
-    );
-    const filledHtml = await filled.text();
-    assert.match(filledHtml, /Fill:default:1/);
-    assert.match(filledHtml, /\/fill-query\?workspace=default/);
-    assert.deepEqual(
-      backendReads.filter((read) => read.startsWith("/fixture/")),
-      ["/fixture/counted"],
-    );
-    assert.deepEqual(
-      backendReads.filter((read) => read.startsWith("/dms/page")),
-      [
-        "/dms/page?path=%2Ffill-query",
-        "/dms/page?path=%2Ffill-query&workspace=default&shared=false",
-      ],
-    );
-    const looping = await fetch(`${base}/fill-query?loop=0`, {
-      headers: { accept: "text/html" },
-      redirect: "manual",
-    });
-    assert.equal(looping.status, 302);
-    assert.equal(looping.headers.get("location"), "/fill-query?loop=3");
-    const asyncRuntimeResponses = await Promise.all([
-      fetch(`${base}/async-runtime-a`, { headers: { accept: "text/html" } }),
-      fetch(`${base}/async-runtime-b`, { headers: { accept: "text/html" } }),
-    ]);
-    const asyncRuntimeHtml = await Promise.all(
-      asyncRuntimeResponses.map((response) => response.text()),
-    );
-    assert.match(asyncRuntimeHtml[0], /Async runtime A:\/async-runtime-a/);
-    assert.doesNotMatch(asyncRuntimeHtml[0], /Async runtime B/);
-    assert.match(asyncRuntimeHtml[1], /Async runtime B:\/async-runtime-b/);
-    assert.doesNotMatch(asyncRuntimeHtml[1], /Async runtime A/);
-    const unexpected = await fetch(`${base}/async-throws`, {
-      headers: { accept: "text/html" },
-    });
-    assert.equal(unexpected.status, 500);
-    const unexpectedHtml = await unexpected.text();
-    assert.match(unexpectedHtml, /500: no message \/ no status message/);
-    assert.doesNotMatch(unexpectedHtml, /private database hostname/);
-    const fetchNotFound = await fetch(`${base}/fetch-not-found`, {
-      headers: { accept: "text/html" },
-    });
-    assert.equal(fetchNotFound.status, 404);
-    const fetchNotFoundHtml = await fetchNotFound.text();
-    assert.match(fetchNotFoundHtml, /404: Not Found \/ Not Found/);
-    assert.doesNotMatch(fetchNotFoundHtml, /10\.0\.0\.5|api\/secret/);
-    const exact = await fetch(`${base}/exact`, {
-      headers: { accept: "text/html" },
-    });
-    assert.equal(exact.status, 200);
-    const exactHtml = await exact.text();
-    assert.match(exactHtml, /Exact registered page:true:catch-all:0/);
-    assert.doesNotMatch(exactHtml, /Registered catch-all page/);
-    const catchAll = await fetch(`${base}/unregistered`, {
-      headers: { accept: "text/html" },
-    });
-    assert.equal(catchAll.status, 200);
-    assert.match(await catchAll.text(), /Registered catch-all page:true/);
-    const [onboardingDocument, nestedDocument, unreadCount] = await Promise.all(
-      [
-        fetch(`${base}/onboarding`),
-        fetch(`${base}/modules/parity/nested`),
-        fetch(`${base}${unreadCountPath}`),
-      ],
-    );
-    const productionHtml = await Promise.all(
-      [onboardingDocument, nestedDocument].map(async (response) => {
-        assert.equal(response.status, 200);
-        assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-        return response.text();
-      }),
-    );
-    assert.match(productionHtml[0], /Onboarding/);
-    assert.match(productionHtml[1], /Registered catch-all page:true/);
-    assert.equal(unreadCount.status, 200);
-    assert.deepEqual(await unreadCount.json(), { unreadCount: 7 });
-    process.env.DMS_SESSION_SECRET =
-      "disposable-ssr-session-secret-at-least-32";
-    const sessionCookie = (id: string, language: string) => {
-      const jar = responseOf();
-      writeSession(jar, {
-        user: { _id: id, language },
-        accountId: `account-${id}`,
-        activeTenantId: `tenant-${id}`,
-        accessToken: "private-access-token",
-        refreshToken: "private-refresh-token",
-        persistent: false,
-      });
-      const [cookie] = [jar.getHeader("set-cookie")].flat().filter(isText);
-      return cookie.split(";", 1)[0];
-    };
-    const sessions = await Promise.all([
-      fetch(`${base}/session`, {
-        headers: { accept: "text/html", cookie: sessionCookie("alice", "fr") },
-      }),
-      fetch(`${base}/session`, {
-        headers: { accept: "text/html", cookie: sessionCookie("bob", "en") },
-      }),
-      fetch(`${base}/session`, { headers: { accept: "text/html" } }),
-    ]);
-    for (const [index, [expected, locale]] of [
-      ["alice:fr:alice", "fr"],
-      ["bob:en:bob", "en"],
-      ["anonymous:en:anonymous", "en"],
-    ].entries()) {
-      assert.equal(sessions[index].status, 200);
-      const html = await sessions[index].text();
-      assert.ok(
-        html.includes(expected),
-        `Session and locale must exist before plugin setup: ${expected}`,
-      );
-      assert.match(html, new RegExp(`lang="${locale}"`));
-      assert.doesNotMatch(html, /private-access-token|private-refresh-token/);
-    }
-    const inertiaSession = await fetch(`${base}/session`, {
-      headers: {
-        cookie: sessionCookie("alice", "fr"),
-        "x-inertia": "true",
-      },
-    });
-    assert.deepEqual((await inertiaSession.json()).props, {
-      path: "/session",
-      page: { componentName: "session" },
-      user: { _id: "alice", language: "fr" },
-      session: {
-        accountId: "account-alice",
-        activeTenantId: "tenant-alice",
-      },
-      errors: {},
-    });
-    const failedSession = await fetch(`${base}/broken`, {
-      headers: {
-        cookie: sessionCookie("bob", "en"),
-        "x-inertia": "true",
-      },
-    });
-    assert.equal(failedSession.status, 503);
-    const failedSessionBody = await failedSession.text();
-    assert.match(failedSessionBody, /account-bob|tenant-bob/);
-    assert.equal(
-      JSON.stringify(JSON.parse(failedSessionBody).props.error),
-      '{"statusCode":503}',
-    );
-    assert.doesNotMatch(failedSessionBody, /DMS backend request failed/);
-    assert.doesNotMatch(
-      failedSessionBody,
-      /private-access-token|private-refresh-token/,
-    );
-    const variants: Record<string, string>[] = [
-      { accept: "text/html" },
-      { "x-inertia": "true" },
-    ];
-    for (const headers of variants) {
-      const suspended = await fetch(`${base}/suspended`, {
-        headers: { ...headers, cookie: sessionCookie("bob", "en") },
-        redirect: "manual",
-      });
-      assert.equal(suspended.status, 302);
-      assert.equal(suspended.headers.get("location"), "/blocked-screen");
-    }
+    await checkRedirectsAndGuards(base);
+    await checkFillQuery(base, backendReads);
+    await checkRendering(base, unreadCountPath);
+    await checkSessions(base);
   } finally {
     frontend?.close();
     backend.close();

@@ -14,7 +14,7 @@ import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
 import { jsonAt, readJson } from "./helpers/json";
 
-void describe("Vite frontend generation", () => {
+function registerRegistryOutputTests(): void {
   void it("discovers Vue entries and the stable SDK alias", () => {
     const source = temporaryDirectory("dms-vue-module-");
     const workspace = temporaryDirectory("dms-vue-workspace-");
@@ -92,7 +92,9 @@ void describe("Vite frontend generation", () => {
     assert.deepEqual(jsonAt(declared, "endpoints"), [webhook]);
     assert.deepEqual(jsonAt(declared, "proxies"), []);
   });
+}
 
+function registerProxyAndEndpointTests(): void {
   void it("writes the backend proxies the modules declare, with the module that declared each", () => {
     const source = temporaryDirectory("dms-proxies-module-");
     const workspace = temporaryDirectory("dms-proxies-workspace-");
@@ -135,6 +137,12 @@ void describe("Vite frontend generation", () => {
       ["/api/ok"],
     );
   });
+}
+
+void describe("Vite frontend generation", () => {
+  registerRegistryOutputTests();
+
+  registerProxyAndEndpointTests();
 
   void it("preserves deterministic manifest priority in the module registry", () => {
     const first = temporaryDirectory("dms-module-");

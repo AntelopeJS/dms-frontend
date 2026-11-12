@@ -99,72 +99,7 @@ async function development(root: string, plugins: Plugin[]) {
   }
 }
 
-void describe("The Vite plugins a module registers", () => {
-  void it("run in a production build, in module order", async () => {
-    const seen: string[] = [];
-    const plugins = pluginsOf(
-      declaring(() => [recording("first", seen)]),
-      declaring(() => [recording("second", seen)]),
-    );
-
-    await production(project(), plugins);
-
-    assert.deepEqual(
-      plugins.map(({ name }) => name),
-      ["first", "second"],
-    );
-    assert.ok(seen.some((entry) => entry.startsWith("first:")));
-    assert.ok(seen.some((entry) => entry.endsWith("dep.js")));
-    assert.ok(
-      seen.findIndex((entry) => entry.startsWith("second:")) >
-        seen.findIndex((entry) => entry.startsWith("first:")),
-    );
-  });
-
-  void it("run in a dev server", async () => {
-    const seen: string[] = [];
-
-    await development(
-      project(),
-      pluginsOf(declaring(() => [recording("boundary", seen)])),
-    );
-
-    assert.ok(seen.some((entry) => entry.endsWith("dep.js")));
-  });
-
-  void it("keep a module's calls in order and leave its plugin objects untouched", () => {
-    const original = recording("one", []);
-    const hook = original.resolveId;
-
-    const plugins = pluginsOf(
-      declaring(
-        () => [original],
-        () => [recording("two", [])],
-      ),
-    );
-
-    assert.deepEqual(
-      plugins.map(({ name }) => name),
-      ["one", "two"],
-    );
-    assert.equal(original.resolveId, hook);
-    assert.notEqual(plugins[0], original);
-  });
-
-  void it("add nothing for a module without the hook, or whose factory returns nothing", () => {
-    const none = defineDmsFrontendBuild((declared) => {
-      declared.registerAutoImports(["app/composables"]);
-    });
-
-    assert.deepEqual(
-      pluginsOf(
-        none,
-        declaring(() => undefined),
-      ),
-      [],
-    );
-  });
-
+function registerFailureNamingTests(): void {
   void it("fail a production build naming the module when a hook throws", async () => {
     await assert.rejects(
       production(project(), pluginsOf(declaring(() => [throwing()]))),
@@ -214,7 +149,9 @@ void describe("The Vite plugins a module registers", () => {
       /^Error: Frontend module crm: no boundary configured$/,
     );
   });
+}
 
+function registerPluginListTests(): void {
   void it("refuse anything but an array of plugin objects, naming the module", () => {
     const invalid: unknown[] = [
       {},
@@ -264,7 +201,9 @@ void describe("The Vite plugins a module registers", () => {
       );
     }
   });
+}
 
+function registerHookErrorTests(): void {
   void it("run the hooks of a class instance and name the module when one throws", async () => {
     const seen: string[] = [];
     class Boundary {
@@ -342,6 +281,79 @@ void describe("The Vite plugins a module registers", () => {
       },
     );
   });
+}
+
+void describe("The Vite plugins a module registers", () => {
+  void it("run in a production build, in module order", async () => {
+    const seen: string[] = [];
+    const plugins = pluginsOf(
+      declaring(() => [recording("first", seen)]),
+      declaring(() => [recording("second", seen)]),
+    );
+
+    await production(project(), plugins);
+
+    assert.deepEqual(
+      plugins.map(({ name }) => name),
+      ["first", "second"],
+    );
+    assert.ok(seen.some((entry) => entry.startsWith("first:")));
+    assert.ok(seen.some((entry) => entry.endsWith("dep.js")));
+    assert.ok(
+      seen.findIndex((entry) => entry.startsWith("second:")) >
+        seen.findIndex((entry) => entry.startsWith("first:")),
+    );
+  });
+
+  void it("run in a dev server", async () => {
+    const seen: string[] = [];
+
+    await development(
+      project(),
+      pluginsOf(declaring(() => [recording("boundary", seen)])),
+    );
+
+    assert.ok(seen.some((entry) => entry.endsWith("dep.js")));
+  });
+
+  void it("keep a module's calls in order and leave its plugin objects untouched", () => {
+    const original = recording("one", []);
+    const hook = original.resolveId;
+
+    const plugins = pluginsOf(
+      declaring(
+        () => [original],
+        () => [recording("two", [])],
+      ),
+    );
+
+    assert.deepEqual(
+      plugins.map(({ name }) => name),
+      ["one", "two"],
+    );
+    assert.equal(original.resolveId, hook);
+    assert.notEqual(plugins[0], original);
+  });
+
+  void it("add nothing for a module without the hook, or whose factory returns nothing", () => {
+    const none = defineDmsFrontendBuild((declared) => {
+      declared.registerAutoImports(["app/composables"]);
+    });
+
+    assert.deepEqual(
+      pluginsOf(
+        none,
+        declaring(() => undefined),
+      ),
+      [],
+    );
+  });
+
+  registerFailureNamingTests();
+
+  registerPluginListTests();
+
+  registerHookErrorTests();
 });
 
 void describe("The error a module's plugin hook throws", () => {

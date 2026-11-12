@@ -108,48 +108,7 @@ void describe("Module server routes in development", () => {
   });
 });
 
-void describe("The module testing helper", () => {
-  void it("serves a module's routes as the frontend server does, for its own tests", async () => {
-    const { serveModuleRoutes } =
-      await import("../templates/vue/server/module-testing.mjs");
-    const served = await serveModuleRoutes(
-      [
-        {
-          id: "billing",
-          setup: defineDmsServer((server) => {
-            server.registerRoute("POST", "/api/_billing/:id", (event) => ({
-              id: event.params.id,
-              secret: event.module.privateOptions.secret,
-              endpoints: event.app.authEstablishEndpoints,
-            }));
-          }),
-        },
-      ],
-      {
-        privateOptions: { billing: { secret: "s" } },
-        authEstablishEndpoints: ["/api/billing/finalize"],
-      },
-    );
-    try {
-      const refused = await fetch(`${served.url}/api/_billing/7`, {
-        method: "POST",
-      });
-      assert.equal(refused.status, 403);
-      const response = await fetch(`${served.url}/api/_billing/7`, {
-        method: "POST",
-        headers: { origin: served.url },
-      });
-      assert.deepEqual(await response.json(), {
-        id: "7",
-        secret: "s",
-        endpoints: ["/api/billing/finalize"],
-      });
-      assert.equal((await fetch(`${served.url}/nothing`)).status, 404);
-    } finally {
-      await served.close();
-    }
-  });
-
+function registerSealedCookieTests(): void {
   void it("keeps the dms_* sealed cookies to the module that owns sign-in, and each module's to itself", async () => {
     process.env.DMS_SESSION_SECRET ??=
       "a-test-only-session-secret-of-32-characters";
@@ -214,7 +173,9 @@ void describe("The module testing helper", () => {
       await served.close();
     }
   });
+}
 
+function registerPrivateOptionsTests(): void {
   void it("fills any module's empty private options from DMS_PRIVATE_OPTIONS, the manifest's winning", async () => {
     const { privateOptionsFromJson } =
       await import("../templates/vue/server/module-server.mjs");
@@ -306,4 +267,51 @@ void describe("The module testing helper", () => {
       },
     );
   });
+}
+
+void describe("The module testing helper", () => {
+  void it("serves a module's routes as the frontend server does, for its own tests", async () => {
+    const { serveModuleRoutes } =
+      await import("../templates/vue/server/module-testing.mjs");
+    const served = await serveModuleRoutes(
+      [
+        {
+          id: "billing",
+          setup: defineDmsServer((server) => {
+            server.registerRoute("POST", "/api/_billing/:id", (event) => ({
+              id: event.params.id,
+              secret: event.module.privateOptions.secret,
+              endpoints: event.app.authEstablishEndpoints,
+            }));
+          }),
+        },
+      ],
+      {
+        privateOptions: { billing: { secret: "s" } },
+        authEstablishEndpoints: ["/api/billing/finalize"],
+      },
+    );
+    try {
+      const refused = await fetch(`${served.url}/api/_billing/7`, {
+        method: "POST",
+      });
+      assert.equal(refused.status, 403);
+      const response = await fetch(`${served.url}/api/_billing/7`, {
+        method: "POST",
+        headers: { origin: served.url },
+      });
+      assert.deepEqual(await response.json(), {
+        id: "7",
+        secret: "s",
+        endpoints: ["/api/billing/finalize"],
+      });
+      assert.equal((await fetch(`${served.url}/nothing`)).status, 404);
+    } finally {
+      await served.close();
+    }
+  });
+
+  registerSealedCookieTests();
+
+  registerPrivateOptionsTests();
 });

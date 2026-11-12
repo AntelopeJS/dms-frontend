@@ -71,95 +71,20 @@ function gatedBody(totalBytes: number, release: Promise<void>) {
   });
 }
 
-void describe("the proxy streams large file-storage transfers", () => {
-  const previous = {
-    backend: process.env.DMS_API_BASE_URL,
-    proxies: process.env.DMS_BACKEND_PROXIES,
-  };
-  const logged: string[] = [];
-  const consoleMethods = ["log", "info", "warn", "error"] as const;
-  const originals = consoleMethods.map((name) => console[name]);
-  let requests: BackendRequest[] = [];
-  let firstUploadChunk = signal();
-  let firstDownloadChunk = signal();
-  const backend = createServer((request, response) => {
-    const seen: BackendRequest = {
-      method: request.method,
-      url: request.url,
-      headers: request.headers,
-      bytes: 0,
-      completed: false,
-    };
-    requests.push(seen);
-    if (request.url?.startsWith("/api/relative-redirect")) {
-      response.writeHead(302, {
-        location: RELATIVE_LOCATION,
-        "set-cookie": ["first=1; Path=/; HttpOnly", "second=2; Path=/"],
-      });
-      return response.end();
-    }
-    if (request.url?.startsWith("/api/redirect")) {
-      response.writeHead(302, { location: UNREACHABLE_STORAGE_URL });
-      return response.end();
-    }
-    if (request.method === "GET") {
-      response.writeHead(200, {
-        "content-type": "application/octet-stream",
-        "content-length": String(TRANSFER_BYTES),
-      });
-      response.write(new Uint8Array(CHUNK_BYTES).fill(2));
-      void firstDownloadChunk.promise.then(() =>
-        response.end(new Uint8Array(TRANSFER_BYTES - CHUNK_BYTES).fill(2)),
-      );
-      return;
-    }
-    request.on("data", (chunk: Buffer) => {
-      seen.bytes += chunk.byteLength;
-      firstUploadChunk.settle();
-    });
-    request.on("end", () => {
-      seen.completed = true;
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ received: seen.bytes }));
-    });
-  });
-  let frontendUrl = "";
-  let frontend: Server | undefined;
+type Signal = ReturnType<typeof signal>;
 
-  before(async () => {
-    consoleMethods.forEach((name) => {
-      console[name] = (...values: unknown[]) => {
-        logged.push(values.map((value) => String(value)).join(" "));
-      };
-    });
-    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
-    process.env.DMS_BACKEND_PROXIES = STORAGE_PROXIES;
-    const runtime = await import("../templates/vue/server.mjs");
-    frontend = createServer(runtime.handleRequestSafely);
-    frontendUrl = `http://127.0.0.1:${await listen(frontend)}`;
-  });
+interface Transfers {
+  logged: string[];
+  requests: BackendRequest[];
+  firstUploadChunk: Signal;
+  firstDownloadChunk: Signal;
+  frontendUrl: string;
+}
 
-  afterEach(() => {
-    requests = [];
-    firstUploadChunk = signal();
-    firstDownloadChunk = signal();
-  });
-
-  after(() => {
-    consoleMethods.forEach((name, index) => (console[name] = originals[index]));
-    process.env.DMS_API_BASE_URL = previous.backend;
-    process.env.DMS_BACKEND_PROXIES = previous.proxies;
-    frontend?.close();
-    backend.close();
-    assert.ok(
-      logged.every((line) => !line.includes(TOKEN)),
-      `the token reached the logs:\n${logged.join("\n")}`,
-    );
-  });
-
+function registerBodyTests(transfers: Transfers): void {
   void it("streams an upload to the backend without the cookie or the session", async () => {
     const response = await fetch(
-      `${frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
+      `${transfers.frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
       streamedBody({
         method: "PUT",
         headers: {
@@ -167,12 +92,12 @@ void describe("the proxy streams large file-storage transfers", () => {
           authorization: "Bearer member-token",
           "content-type": "application/octet-stream",
         },
-        body: gatedBody(TRANSFER_BYTES, firstUploadChunk.promise),
+        body: gatedBody(TRANSFER_BYTES, transfers.firstUploadChunk.promise),
       }),
     );
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { received: TRANSFER_BYTES });
-    const [seen] = requests;
+    const [seen] = transfers.requests;
     assert.equal(seen?.url, `/file-storage/upload/key?token=${TOKEN}`);
     assert.equal(seen?.headers.cookie, undefined);
     assert.equal(seen?.headers.authorization, undefined);
@@ -180,7 +105,7 @@ void describe("the proxy streams large file-storage transfers", () => {
 
   void it("streams a download to the client as the backend writes it", async () => {
     const response = await fetch(
-      `${frontendUrl}/file-storage/files/folder%2Fphoto.png?token=${TOKEN}`,
+      `${transfers.frontendUrl}/file-storage/files/folder%2Fphoto.png?token=${TOKEN}`,
       { headers: { cookie: "dms_session=sealed" } },
     );
     assert.equal(response.status, 200);
@@ -194,10 +119,10 @@ void describe("the proxy streams large file-storage transfers", () => {
       const { done, value } = await reader.read();
       if (done) break;
       received += value.byteLength;
-      firstDownloadChunk.settle();
+      transfers.firstDownloadChunk.settle();
     }
     assert.equal(received, TRANSFER_BYTES);
-    const [seen] = requests;
+    const [seen] = transfers.requests;
     assert.equal(
       seen?.url,
       `/file-storage/files/folder%2Fphoto.png?token=${TOKEN}`,
@@ -207,17 +132,17 @@ void describe("the proxy streams large file-storage transfers", () => {
 
   void it("answers 413 to a declared length over the limit, before reaching the backend", async () => {
     const response = await fetch(
-      `${frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
+      `${transfers.frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
       { method: "PUT", body: new Uint8Array(TOO_LARGE_BYTES) },
     );
     assert.equal(response.status, 413);
     await response.arrayBuffer();
-    assert.deepEqual(requests, []);
+    assert.deepEqual(transfers.requests, []);
   });
 
   void it("cuts a chunked body off with 413 once it goes over the limit", async () => {
     const response = await fetch(
-      `${frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
+      `${transfers.frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
       streamedBody({
         method: "PUT",
         body: gatedBody(TOO_LARGE_BYTES, Promise.resolve()),
@@ -225,18 +150,20 @@ void describe("the proxy streams large file-storage transfers", () => {
     );
     assert.equal(response.status, 413);
     await response.arrayBuffer();
-    const [seen] = requests;
+    const [seen] = transfers.requests;
     assert.equal(seen?.completed, false);
     assert.ok((seen?.bytes ?? 0) <= MAX_BODY_BYTES);
   });
+}
 
+function registerRefusalAndRedirectTests(transfers: Transfers): void {
   /**
    * Sends an upload of `TOO_LARGE_BYTES` over a raw socket, the rest of the
    * body only once the answer arrived, as a client does that keeps sending
    * while the server answers: the connection must stay up for it.
    */
   async function uploadPastTheAnswer(headers: string) {
-    const url = new URL(frontendUrl);
+    const url = new URL(transfers.frontendUrl);
     const socket = connect(Number(url.port), url.hostname);
     let answer = "";
     const errors: string[] = [];
@@ -273,11 +200,11 @@ void describe("the proxy streams large file-storage transfers", () => {
       [],
       "the server did not reset the upload",
     );
-    assert.deepEqual(requests, []);
+    assert.deepEqual(transfers.requests, []);
   });
 
   void it("hands a backend redirect to the client instead of following it", async () => {
-    const response = await fetch(`${frontendUrl}/api/redirect`, {
+    const response = await fetch(`${transfers.frontendUrl}/api/redirect`, {
       redirect: "manual",
     });
     assert.equal(response.status, 302);
@@ -286,9 +213,12 @@ void describe("the proxy streams large file-storage transfers", () => {
   });
 
   void it("relays a relative Location and every Set-Cookie unchanged", async () => {
-    const response = await fetch(`${frontendUrl}/api/relative-redirect`, {
-      redirect: "manual",
-    });
+    const response = await fetch(
+      `${transfers.frontendUrl}/api/relative-redirect`,
+      {
+        redirect: "manual",
+      },
+    );
     assert.equal(response.status, 302);
     assert.equal(response.headers.get("location"), RELATIVE_LOCATION);
     assert.deepEqual(response.headers.getSetCookie(), [
@@ -303,7 +233,7 @@ void describe("the proxy streams large file-storage transfers", () => {
     process.env.DMS_API_BASE_URL = "http://127.0.0.1:1";
     try {
       const response = await fetch(
-        `${frontendUrl}/file-storage/files/photo.png?token=${TOKEN}`,
+        `${transfers.frontendUrl}/file-storage/files/photo.png?token=${TOKEN}`,
       );
       assert.equal(response.status, 502);
       await response.arrayBuffer();
@@ -311,9 +241,104 @@ void describe("the proxy streams large file-storage transfers", () => {
       process.env.DMS_API_BASE_URL = backendUrl;
     }
     assert.ok(
-      logged.some((line) => line.includes("DMS backend request failed")),
+      transfers.logged.some((line) =>
+        line.includes("DMS backend request failed"),
+      ),
     );
   });
+}
+
+void describe("the proxy streams large file-storage transfers", () => {
+  const previous = {
+    backend: process.env.DMS_API_BASE_URL,
+    proxies: process.env.DMS_BACKEND_PROXIES,
+  };
+  const consoleMethods = ["log", "info", "warn", "error"] as const;
+  const originals = consoleMethods.map((name) => console[name]);
+  const transfers: Transfers = {
+    logged: [],
+    requests: [],
+    firstUploadChunk: signal(),
+    firstDownloadChunk: signal(),
+    frontendUrl: "",
+  };
+  const backend = createServer((request, response) => {
+    const seen: BackendRequest = {
+      method: request.method,
+      url: request.url,
+      headers: request.headers,
+      bytes: 0,
+      completed: false,
+    };
+    transfers.requests.push(seen);
+    if (request.url?.startsWith("/api/relative-redirect")) {
+      response.writeHead(302, {
+        location: RELATIVE_LOCATION,
+        "set-cookie": ["first=1; Path=/; HttpOnly", "second=2; Path=/"],
+      });
+      return response.end();
+    }
+    if (request.url?.startsWith("/api/redirect")) {
+      response.writeHead(302, { location: UNREACHABLE_STORAGE_URL });
+      return response.end();
+    }
+    if (request.method === "GET") {
+      response.writeHead(200, {
+        "content-type": "application/octet-stream",
+        "content-length": String(TRANSFER_BYTES),
+      });
+      response.write(new Uint8Array(CHUNK_BYTES).fill(2));
+      void transfers.firstDownloadChunk.promise.then(() =>
+        response.end(new Uint8Array(TRANSFER_BYTES - CHUNK_BYTES).fill(2)),
+      );
+      return;
+    }
+    request.on("data", (chunk: Buffer) => {
+      seen.bytes += chunk.byteLength;
+      transfers.firstUploadChunk.settle();
+    });
+    request.on("end", () => {
+      seen.completed = true;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ received: seen.bytes }));
+    });
+  });
+  let frontend: Server | undefined;
+
+  before(async () => {
+    consoleMethods.forEach((name) => {
+      console[name] = (...values: unknown[]) => {
+        transfers.logged.push(values.map((value) => String(value)).join(" "));
+      };
+    });
+    process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
+    process.env.DMS_BACKEND_PROXIES = STORAGE_PROXIES;
+    const runtime = await import("../templates/vue/server.mjs");
+    frontend = createServer(runtime.handleRequestSafely);
+    transfers.frontendUrl = `http://127.0.0.1:${await listen(frontend)}`;
+  });
+
+  afterEach(() => {
+    transfers.requests = [];
+    transfers.firstUploadChunk = signal();
+    transfers.firstDownloadChunk = signal();
+  });
+
+  after(() => {
+    consoleMethods.forEach((name, index) => (console[name] = originals[index]));
+    process.env.DMS_API_BASE_URL = previous.backend;
+    process.env.DMS_BACKEND_PROXIES = previous.proxies;
+    frontend?.close();
+    backend.close();
+    assert.ok(
+      transfers.logged.every((line) => !line.includes(TOKEN)),
+      `the token reached the logs:\n${transfers.logged.join("\n")}`,
+    );
+  });
+
+  registerBodyTests(transfers);
+
+  registerRefusalAndRedirectTests(transfers);
 });
 
 void describe("sendWithinLimit", () => {

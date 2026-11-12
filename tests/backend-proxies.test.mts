@@ -27,38 +27,7 @@ function resolved(
   return { modules, warnings };
 }
 
-void describe("Backend proxy declarations", () => {
-  void it("refuse a pattern that would take the pages or the renderer's paths", () => {
-    for (const pattern of ["/", "/**", "/*/**", "api/**", "/api/../x"])
-      assert.ok(proxyRejection(pattern, undefined), pattern);
-    for (const pattern of ["/assets/**", "/node_modules/x", "/api/_dms/**"])
-      assert.match(
-        proxyRejection(pattern, undefined) ?? "",
-        /renderer's own paths/,
-      );
-    assert.match(
-      // @ts-expect-error auth is "cookie", an off-contract mode a JavaScript module can still register, which must be refused
-      proxyRejection("/api/**", { auth: "cookie" }) ?? "",
-      /auth is not one of "session", "none"/,
-    );
-    assert.equal(proxyRejection("/api/**", { auth: "none" }), undefined);
-    for (const maxBodyBytes of [0, -1, 1.5])
-      assert.match(
-        proxyRejection("/upload/**", { maxBodyBytes }) ?? "",
-        /maxBodyBytes is not a positive whole number/,
-      );
-    assert.match(
-      // @ts-expect-error maxBodyBytes is the string "1024", an off-contract size a JavaScript module can still register, which must be refused
-      proxyRejection("/upload/**", { maxBodyBytes: "1024" }) ?? "",
-      /maxBodyBytes is not a positive whole number/,
-    );
-    assert.equal(
-      proxyRejection("/upload/**", { maxBodyBytes: 1024 }),
-      undefined,
-    );
-    assert.equal(proxyRejection("/media", undefined), undefined);
-  });
-
+function registerResolutionTests(): void {
   void it("keep one owner per pattern, the highest-priority module's, with a warning", () => {
     const { modules, warnings } = resolved([
       {
@@ -138,6 +107,41 @@ void describe("Backend proxy declarations", () => {
       "none",
     );
   });
+}
+
+void describe("Backend proxy declarations", () => {
+  void it("refuse a pattern that would take the pages or the renderer's paths", () => {
+    for (const pattern of ["/", "/**", "/*/**", "api/**", "/api/../x"])
+      assert.ok(proxyRejection(pattern, undefined), pattern);
+    for (const pattern of ["/assets/**", "/node_modules/x", "/api/_dms/**"])
+      assert.match(
+        proxyRejection(pattern, undefined) ?? "",
+        /renderer's own paths/,
+      );
+    assert.match(
+      // @ts-expect-error auth is "cookie", an off-contract mode a JavaScript module can still register, which must be refused
+      proxyRejection("/api/**", { auth: "cookie" }) ?? "",
+      /auth is not one of "session", "none"/,
+    );
+    assert.equal(proxyRejection("/api/**", { auth: "none" }), undefined);
+    for (const maxBodyBytes of [0, -1, 1.5])
+      assert.match(
+        proxyRejection("/upload/**", { maxBodyBytes }) ?? "",
+        /maxBodyBytes is not a positive whole number/,
+      );
+    assert.match(
+      // @ts-expect-error maxBodyBytes is the string "1024", an off-contract size a JavaScript module can still register, which must be refused
+      proxyRejection("/upload/**", { maxBodyBytes: "1024" }) ?? "",
+      /maxBodyBytes is not a positive whole number/,
+    );
+    assert.equal(
+      proxyRejection("/upload/**", { maxBodyBytes: 1024 }),
+      undefined,
+    );
+    assert.equal(proxyRejection("/media", undefined), undefined);
+  });
+
+  registerResolutionTests();
 
   void it("are listed at startup with their owner and their auth", () => {
     const proxies = resolveBackendProxies(

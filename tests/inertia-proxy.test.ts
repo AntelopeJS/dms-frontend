@@ -67,7 +67,7 @@ void describe("proxied mutations", () => {
   });
 });
 
-void describe("public endpoints through the proxy", () => {
+function registerAnonymousHookTest(): void {
   void it("lets a declared public route through anonymously, with its headers", async () => {
     process.env.DMS_SESSION_SECRET =
       "test-secret-with-at-least-thirty-two-characters";
@@ -156,6 +156,10 @@ void describe("public endpoints through the proxy", () => {
       backend.close();
     }
   });
+}
+
+void describe("public endpoints through the proxy", () => {
+  registerAnonymousHookTest();
 
   void it("relays a public endpoint's headers under a proxy without auth", async () => {
     const proxies = process.env.DMS_BACKEND_PROXIES;
@@ -218,7 +222,7 @@ void describe("public endpoints through the proxy", () => {
   });
 });
 
-void describe("Site layout as an Inertia once prop", () => {
+function registerOnceKeyTest(): void {
   void it("sends the site layout once per session, then the page alone", async () => {
     const { sharedOnceKey, SHARED_PROP_TTL_MS } = await pagePropsModule;
     const { visit, close } = await frontendWithBackend();
@@ -289,6 +293,10 @@ void describe("Site layout as an Inertia once prop", () => {
       close();
     }
   });
+}
+
+void describe("Site layout as an Inertia once prop", () => {
+  registerOnceKeyTest();
 
   void it("answers a partial reload with the props it names", async () => {
     const { sharedOnceKey } = await pagePropsModule;

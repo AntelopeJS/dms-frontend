@@ -22,7 +22,7 @@ import {
 } from "../src/server-process";
 import { CliError } from "@antelopejs/core/cli";
 import { memoryUi, problemText } from "./fixtures/memory-ui";
-void describe("CLI output", () => {
+function registerNoticeFormatTests(): void {
   void it("puts the time before a running server's notices", () => {
     const output = memoryUi();
     const at = new Date(2026, 9, 3, 14, 3, 22);
@@ -114,7 +114,9 @@ void describe("CLI output", () => {
       "listen EOTHER",
     );
   });
+}
 
+function registerFailureDetailTests(): void {
   void it("lists a warned failure's details before its fixes, as the core does", () => {
     const error = new UsageError({
       title: "Locale catalogs not regenerated",
@@ -190,7 +192,9 @@ void describe("CLI output", () => {
       "Stopped the build (SIGTERM)",
     );
   });
+}
 
+function registerViteStartTests(): void {
   void it("explains a Vite that could not start, at the source the user edits", () => {
     const workspace = "/home/user/.antelopejs/dms-frontend/abc";
     const mapPath = (line: string) =>
@@ -294,6 +298,14 @@ void describe("CLI output", () => {
     );
     assert.equal(isReady, false);
   });
+}
+
+void describe("CLI output", () => {
+  registerNoticeFormatTests();
+
+  registerFailureDetailTests();
+
+  registerViteStartTests();
 
   void it("shows a workspace from ~, cut to its id on a terminal only", () => {
     const home = "/home/user";

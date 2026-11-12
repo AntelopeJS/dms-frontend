@@ -5,7 +5,7 @@ import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
-void describe("Inertia HTTP protocol", () => {
+function registerClientLifecycleTests(): void {
   void it("does not write a second response after a client disconnect", async (context) => {
     const runtime = await server;
     let writeCount = 0;
@@ -79,7 +79,9 @@ void describe("Inertia HTTP protocol", () => {
       backend.close();
     }
   });
+}
 
+function registerRoutingTests(): void {
   void it("injects the rendered body without expanding replacement patterns", async () => {
     const runtime = await server;
     const patterns = "$& $` $' $$";
@@ -151,6 +153,12 @@ void describe("Inertia HTTP protocol", () => {
       backend.close();
     }
   });
+}
+
+void describe("Inertia HTTP protocol", () => {
+  registerClientLifecycleTests();
+
+  registerRoutingTests();
 
   void it("redirects signed-out protected visits while preserving public routes", async () => {
     const publicRoutes = new Map([

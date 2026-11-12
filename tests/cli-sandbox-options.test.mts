@@ -16,7 +16,7 @@ import {
   closeServer,
 } from "./fixtures/cli-sandbox.mts";
 
-void describe("validating options before any work", () => {
+function registerPortAndUrlTests(): void {
   void it("rejects a port outside 0-65535 in dev and start", async () => {
     for (const port of ["abc", "-1", "70000"]) {
       const dev = await runCli(["dev", "-b", BACKEND_URL, "-p", port]);
@@ -96,7 +96,9 @@ void describe("validating options before any work", () => {
     assert.match(result.stderr, /DMS_BOOTSTRAP_SECRET contains a space\./);
     assert.doesNotMatch(result.stderr, /Error:|contains a line break|abc def/);
   });
+}
 
+function registerStartPortTests(): void {
   void it("stops start on a busy port before spawning the server", async () => {
     const { server, port } = await listenOnFreePort();
     try {
@@ -165,7 +167,9 @@ void describe("validating options before any work", () => {
     assert.equal(result.code, 0);
     assert.equal(result.stdout, `server port ${port}\n`);
   });
+}
 
+function registerReadyReportTest(): void {
   void it("reports the modules the build serves, and warns when the project now gives others", async () => {
     let report: unknown;
     const backend = createHttpServer((request, response) => {
@@ -223,6 +227,14 @@ void describe("validating options before any work", () => {
       backend.close();
     }
   });
+}
+
+void describe("validating options before any work", () => {
+  registerPortAndUrlTests();
+
+  registerStartPortTests();
+
+  registerReadyReportTest();
 
   /** A built workspace whose server prints the NODE_ENV it was given. */
   function nodeEnvWorkspace() {

@@ -26,15 +26,6 @@ const COMMANDS_USE_CORE_OUTPUT = {
   },
 } as const;
 
-/** A `describe` block is not a function anyone splits. */
-const TEST_SUITES = {
-  files: ["tests/**/*.test.ts", "tests/**/*.test.mts"],
-  rules: {
-    "eslint/max-lines": "off",
-    "eslint/max-lines-per-function": "off",
-  },
-} as const;
-
 export default defineConfig({
   extends: [antelopePreset({ importSorting: false })],
   ignorePatterns: [...ANTELOPE_IGNORE_PATTERNS, ...CONSUMER_COMPILED_TEMPLATES],
@@ -42,5 +33,5 @@ export default defineConfig({
     typeAware: true,
     maxWarnings: 0,
   },
-  overrides: [COMMANDS_USE_CORE_OUTPUT, TEST_SUITES],
+  overrides: [COMMANDS_USE_CORE_OUTPUT],
 });

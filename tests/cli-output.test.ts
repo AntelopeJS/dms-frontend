@@ -54,7 +54,7 @@ function secretNotSet(): UsageError {
   throw new Error("expected a UsageError");
 }
 
-void describe("CLI output", () => {
+function registerProblemAndReadyTests(): void {
   void it("prints an error with the core symbols, on stderr only", () => {
     const output = memoryUi();
     output.ui.problem(secretNotSet().problem);
@@ -120,7 +120,9 @@ void describe("CLI output", () => {
       "     Watching 12 layer sources · Ctrl+C to stop",
     ]);
   });
+}
 
+function registerWrapAndQuietTests(): void {
   void it("wraps the ready block to a narrow terminal, each value under itself", () => {
     const output = memoryUi();
     const block = {
@@ -199,7 +201,9 @@ void describe("CLI output", () => {
     ]);
     assert.equal(formatReadyBlock(block, output.ui, false).length, 6);
   });
+}
 
+function registerAddressTests(): void {
   void it("prints the loopback the dev server listens on as localhost, the host the backend is told", () => {
     const local = (address: string) =>
       readyLines({ address, port: 3001 }, [], {}).find(
@@ -280,6 +284,14 @@ void describe("CLI output", () => {
       rmSync(net, { recursive: true, force: true });
     }
   });
+}
+
+void describe("CLI output", () => {
+  registerProblemAndReadyTests();
+
+  registerWrapAndQuietTests();
+
+  registerAddressTests();
 
   void it("shows no network URL for a server bound to one address", () => {
     const lines = readyLines({ address: "127.0.0.1", port: 3321 }, [], {
