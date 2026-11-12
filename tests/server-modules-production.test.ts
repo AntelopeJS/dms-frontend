@@ -24,7 +24,7 @@ import { requestOf } from "./helpers/http-doubles";
 import { streamedBody } from "./helpers/net";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
-describe("Module server routes in the production server", () => {
+void describe("Module server routes in the production server", () => {
   const workspace = realpathSync(mkdtempSync(resolve(".server-modules-")));
   const source = mkdtempSync(join(tmpdir(), "dms-server-fixture-"));
   const backendCalls: BackendCall[] = [];
@@ -100,7 +100,7 @@ describe("Module server routes in the production server", () => {
     rmSync(source, { recursive: true, force: true });
   });
 
-  it("answers a route from the built bundle with its parameters, the module's options and no-store", async () => {
+  void it("answers a route from the built bundle with its parameters, the module's options and no-store", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/hello/ada?q=1`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "no-store");
@@ -114,7 +114,7 @@ describe("Module server routes in the production server", () => {
     });
   });
 
-  it("refuses a state-changing request without the frontend's Origin", async () => {
+  void it("refuses a state-changing request without the frontend's Origin", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/echo`, {
       method: "POST",
       body: "{}",
@@ -126,7 +126,7 @@ describe("Module server routes in the production server", () => {
     });
   });
 
-  it("reads the body and writes a sealed cookie the built-in code decodes", async () => {
+  void it("reads the body and writes a sealed cookie the built-in code decodes", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/echo`, {
       method: "POST",
       headers: { origin: frontendUrl, "content-type": "application/json" },
@@ -149,7 +149,7 @@ describe("Module server routes in the production server", () => {
     );
   });
 
-  it("answers 413 past the route's body limit", async () => {
+  void it("answers 413 past the route's body limit", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/echo`, {
       method: "POST",
       headers: { origin: frontendUrl },
@@ -161,7 +161,7 @@ describe("Module server routes in the production server", () => {
     });
   });
 
-  it("answers 413 for a streamed body past the limit, which declares no length", async () => {
+  void it("answers 413 for a streamed body past the limit, which declares no length", async () => {
     const chunk = new TextEncoder().encode(`"${"x".repeat(100)}"`);
     const response = await fetch(
       `${frontendUrl}/api/_fixture/echo`,
@@ -179,7 +179,7 @@ describe("Module server routes in the production server", () => {
     assert.equal(response.status, 413);
   });
 
-  it("streams a returned Response and keeps every cookie", async () => {
+  void it("streams a returned Response and keeps every cookie", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/stream`);
     assert.equal(response.status, 201);
     assert.equal(response.headers.get("cache-control"), "max-age=5");
@@ -196,7 +196,7 @@ describe("Module server routes in the production server", () => {
     ]);
   });
 
-  it("calls the backend with the client's address, which a module cannot replace", async () => {
+  void it("calls the backend with the client's address, which a module cannot replace", async () => {
     backendCalls.length = 0;
     const response = await fetch(`${frontendUrl}/api/_fixture/backend`, {
       method: "POST",
@@ -218,7 +218,7 @@ describe("Module server routes in the production server", () => {
     assert.equal(call.headers.authorization, "Bearer module-token");
   });
 
-  it("gives a backend URL on the backend's origin, whatever the path names", async () => {
+  void it("gives a backend URL on the backend's origin, whatever the path names", async () => {
     backendCalls.length = 0;
     const response = await fetch(`${frontendUrl}/api/_fixture/raw`);
     assert.deepEqual(await response.json(), {
@@ -228,7 +228,7 @@ describe("Module server routes in the production server", () => {
     assert.equal(backendCalls[0].url, "/api/raw?x=1");
   });
 
-  it("answers a backend refusal with its status and public message", async () => {
+  void it("answers a backend refusal with its status and public message", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/refused`);
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), {
@@ -236,12 +236,12 @@ describe("Module server routes in the production server", () => {
     });
   });
 
-  it("answers 204 for a handler that returns nothing", async () => {
+  void it("answers 204 for a handler that returns nothing", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/empty`);
     assert.equal(response.status, 204);
   });
 
-  it("owns the paths of its routes for every method, the backend never asked", async () => {
+  void it("owns the paths of its routes for every method, the backend never asked", async () => {
     const declared = await fetch(`${frontendUrl}/api/_auth/session`);
     assert.deepEqual(await declared.json(), {
       shadowed: true,
@@ -263,7 +263,7 @@ describe("Module server routes in the production server", () => {
     assert.deepEqual(backendCalls, []);
   });
 
-  it("answers a HEAD with the GET route, without its body", async () => {
+  void it("answers a HEAD with the GET route, without its body", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/hello/ada`, {
       method: "HEAD",
     });
@@ -271,7 +271,7 @@ describe("Module server routes in the production server", () => {
     assert.equal(await response.text(), "");
   });
 
-  it("proxies the prefix the module declares, and nothing outside it", async () => {
+  void it("proxies the prefix the module declares, and nothing outside it", async () => {
     backendCalls.length = 0;
     await (await fetch(`${frontendUrl}/api/items?x=1`)).body?.cancel();
     const outside = await fetch(`${frontendUrl}/dms/page`, {
@@ -286,7 +286,7 @@ describe("Module server routes in the production server", () => {
     );
   });
 
-  it("reports the routes it ignored when it loaded them", () => {
+  void it("reports the routes it ignored when it loaded them", () => {
     assert.ok(
       warnings.some((warning) =>
         /declares route "GET \/assets\/taken\.js", which is ignored/.test(

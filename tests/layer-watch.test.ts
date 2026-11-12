@@ -31,7 +31,7 @@ import {
 
 useIsolatedHome();
 
-describe("derived outputs in the dev layer watcher", () => {
+void describe("derived outputs in the dev layer watcher", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-derived-watch-"));
   const workspace = join(root, "workspace");
   const base = join(root, "sources", "base");
@@ -114,7 +114,7 @@ describe("derived outputs in the dev layer watcher", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("mirrors the public files a layer adds, changes and removes", async () => {
+  void it("mirrors the public files a layer adds, changes and removes", async () => {
     const added = join(baseUi, "public", "images", "new.png");
     await eventually(
       () => {
@@ -138,7 +138,7 @@ describe("derived outputs in the dev layer watcher", () => {
     assert.equal(read(join(publicDir, "logo.svg")), "<svg id='edited' />");
   });
 
-  it("lets the higher-priority module keep a contested public file", async () => {
+  void it("lets the higher-priority module keep a contested public file", async () => {
     const override = join(app, "public", "logo.svg");
     await eventually(
       () => writeFile(override, "<svg id='app' />"),
@@ -151,7 +151,7 @@ describe("derived outputs in the dev layer watcher", () => {
     assert.equal(read(join(publicDir, "logo.svg")), "<svg id='edited' />");
   });
 
-  it("aggregates the shortcut registry a module adds, and drops it once removed", async () => {
+  void it("aggregates the shortcut registry a module adds, and drops it once removed", async () => {
     const registry = join(app, "app", "config", "shortcuts-registry.ts");
     const aggregated = (): string =>
       workspaceFile("shortcuts-aggregated.generated.ts");
@@ -175,7 +175,7 @@ describe("derived outputs in the dev layer watcher", () => {
     assert.match(aggregated(), /\[\.\.\.registry0\]/);
   });
 
-  it("loads the entry a module adds, and stops once it is removed", async () => {
+  void it("loads the entry a module adds, and stops once it is removed", async () => {
     const entry = join(app, "dms.frontend.ts");
     const loader = (): string => workspaceFile("frontend-modules.generated.ts");
     assert.doesNotMatch(loader(), /fixture__app/);
@@ -197,7 +197,7 @@ describe("derived outputs in the dev layer watcher", () => {
     ]);
   });
 
-  it("imports the app config a layer adds, and drops it once removed", async () => {
+  void it("imports the app config a layer adds, and drops it once removed", async () => {
     const appConfigs = (): string => workspaceFile("app-configs.generated.ts");
     const baseConfig = join(baseUi, "app", "app.config.ts");
     const appConfig = join(app, "app", "app.config.ts");
@@ -228,7 +228,7 @@ describe("derived outputs in the dev layer watcher", () => {
     );
   });
 
-  it("serves a public file before the source saved with it that names it", async () => {
+  void it("serves a public file before the source saved with it that names it", async () => {
     const logo = join(app, "public", "branding", "logo-1a2b.png");
     const served = join(publicDir, "branding", "logo-1a2b.png");
     const config = join(
@@ -261,7 +261,7 @@ describe("derived outputs in the dev layer watcher", () => {
     }
   });
 
-  it("says once that a layer directory added or removed needs a restart", async () => {
+  void it("says once that a layer directory added or removed needs a restart", async () => {
     const extra = join(base, "layers", "extra");
     output.clear();
     try {
@@ -335,7 +335,7 @@ describe("derived outputs in the dev layer watcher", () => {
     assert.ok(typePaths().includes("#ui/*"));
   });
 
-  it("writes each output once for changes flushed by several layers together", async () => {
+  void it("writes each output once for changes flushed by several layers together", async () => {
     const contested = join(publicDir, "burst.txt");
     const aggregatedPath = join(workspace, "shortcuts-aggregated.generated.ts");
     const rename = mock.method(fs, "renameSync");
@@ -363,7 +363,7 @@ describe("derived outputs in the dev layer watcher", () => {
     }
   });
 
-  it("regenerates the other outputs when one of them fails", async () => {
+  void it("regenerates the other outputs when one of them fails", async () => {
     const locale = join(baseUi, "i18n", "locales", "ui-en-GB.json");
     output.clear();
     try {
@@ -385,7 +385,7 @@ describe("derived outputs in the dev layer watcher", () => {
     rmSync(join(baseUi, "i18n"), { recursive: true, force: true });
   });
 
-  it("leaves the derived outputs alone when a change affects none", async () => {
+  void it("leaves the derived outputs alone when a change affects none", async () => {
     const markers: Array<[string, string]> = [
       [join(publicDir, "logo.svg"), "marker"],
       [join(workspace, "shortcuts-aggregated.generated.ts"), "// marker\n"],
@@ -416,7 +416,7 @@ describe("derived outputs in the dev layer watcher", () => {
   });
 });
 
-describe("mirrorFiles", () => {
+void describe("mirrorFiles", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-mirror-files-"));
   const sources = join(root, "sources");
   const dest = join(root, "dest");
@@ -428,7 +428,7 @@ describe("mirrorFiles", () => {
     return join(sources, name);
   };
 
-  it("copies what changed and removes what is no longer listed", () => {
+  void it("copies what changed and removes what is no longer listed", () => {
     const files = new Map([
       ["kept.txt", source("kept.txt", "kept")],
       [join("nested", "gone.txt"), source("gone.txt", "gone")],
@@ -443,7 +443,7 @@ describe("mirrorFiles", () => {
     assert.equal(statSync(join(dest, "kept.txt")).mtimeMs, keptAt);
   });
 
-  it("replaces a file by a directory of the same name, and back", () => {
+  void it("replaces a file by a directory of the same name, and back", () => {
     const leaf = source("leaf.txt", "leaf");
     mirrorFiles(new Map([["entry", leaf]]), dest);
     mirrorFiles(new Map([[join("entry", "inner.txt"), leaf]]), dest);
@@ -454,7 +454,7 @@ describe("mirrorFiles", () => {
   });
 });
 
-describe("a quiet dev run's layer watcher", () => {
+void describe("a quiet dev run's layer watcher", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-layer-watch-quiet-"));
   const workspace = join(root, "workspace");
   const base = join(root, "sources", "base");
@@ -493,7 +493,7 @@ describe("a quiet dev run's layer watcher", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("warns about a failure but not that it is over", async () => {
+  void it("warns about a failure but not that it is over", async () => {
     await eventually(
       () => writeFileSync(locale, '{ "form": {'),
       () => notices.includes("is not a valid locale file"),

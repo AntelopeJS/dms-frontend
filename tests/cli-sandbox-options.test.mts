@@ -16,8 +16,8 @@ import {
   closeServer,
 } from "./fixtures/cli-sandbox.mts";
 
-describe("validating options before any work", () => {
-  it("rejects a port outside 0-65535 in dev and start", async () => {
+void describe("validating options before any work", () => {
+  void it("rejects a port outside 0-65535 in dev and start", async () => {
     for (const port of ["abc", "-1", "70000"]) {
       const dev = await runCli(["dev", "-b", BACKEND_URL, "-p", port]);
       assert.equal(dev.code, 2, `dev -p ${port}`);
@@ -35,7 +35,7 @@ describe("validating options before any work", () => {
     }
   });
 
-  it("reports the dev port fallback only once the setup succeeded", async () => {
+  void it("reports the dev port fallback only once the setup succeeded", async () => {
     const { server, port } = await listenOnFreePort();
     try {
       const result = await runCli([
@@ -53,7 +53,7 @@ describe("validating options before any work", () => {
     }
   });
 
-  it("rejects a backend URL without an http or https scheme", async () => {
+  void it("rejects a backend URL without an http or https scheme", async () => {
     for (const command of ["dev", "start", "clean"]) {
       const result = await runCli([command, "-b", "localhost:5010"], {
         env: { DMS_SESSION_SECRET: SESSION_SECRET },
@@ -68,7 +68,7 @@ describe("validating options before any work", () => {
     }
   });
 
-  it("fails prepare for an invalid backend URL without failing the install", async () => {
+  void it("fails prepare for an invalid backend URL without failing the install", async () => {
     const result = await runCli(["prepare", "-b", "localhost:5010"]);
     assert.equal(result.code, 0);
     assert.match(result.stderr, /▲ Prepare failed: Invalid backend URL/);
@@ -83,7 +83,7 @@ describe("validating options before any work", () => {
     assert.match(strict.stderr, /^✖ Invalid backend URL 'localhost:5010'\n/);
   });
 
-  it("names the character that keeps the bootstrap credential out of a header", async () => {
+  void it("names the character that keeps the bootstrap credential out of a header", async () => {
     const result = await runCli(["dev", "-b", BACKEND_URL], {
       env: { DMS_BOOTSTRAP_SECRET: "abc def" },
     });
@@ -97,7 +97,7 @@ describe("validating options before any work", () => {
     assert.doesNotMatch(result.stderr, /Error:|contains a line break|abc def/);
   });
 
-  it("stops start on a busy port before spawning the server", async () => {
+  void it("stops start on a busy port before spawning the server", async () => {
     const { server, port } = await listenOnFreePort();
     try {
       const result = await runCli(
@@ -120,7 +120,7 @@ describe("validating options before any work", () => {
     }
   });
 
-  it("reports a server that could not listen as a failure with a fix", async () => {
+  void it("reports a server that could not listen as a failure with a fix", async () => {
     const dir = PRODUCTION_WORKSPACE;
     const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
       files: {
@@ -141,7 +141,7 @@ describe("validating options before any work", () => {
     assert.doesNotMatch(result.stderr, /server ready|Stopped/);
   });
 
-  it("opens start with the backend, the mode and the build's age", async () => {
+  void it("opens start with the backend, the mode and the build's age", async () => {
     const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
       files: builtWorkspace(),
       env: { DMS_SESSION_SECRET: SESSION_SECRET },
@@ -155,7 +155,7 @@ describe("validating options before any work", () => {
     );
   });
 
-  it("hands a free port over to the production server", async () => {
+  void it("hands a free port over to the production server", async () => {
     const { server, port } = await listenOnFreePort();
     await closeServer(server);
     const result = await runCli(["start", "-b", BACKEND_URL, "-p", `${port}`], {
@@ -166,7 +166,7 @@ describe("validating options before any work", () => {
     assert.equal(result.stdout, `server port ${port}\n`);
   });
 
-  it("reports the modules the build serves, and warns when the project now gives others", async () => {
+  void it("reports the modules the build serves, and warns when the project now gives others", async () => {
     let report: unknown;
     const backend = createHttpServer((request, response) => {
       let body = "";
@@ -233,7 +233,7 @@ describe("validating options before any work", () => {
     };
   }
 
-  it("runs the production server under NODE_ENV=production when it is unset", async () => {
+  void it("runs the production server under NODE_ENV=production when it is unset", async () => {
     const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
       files: nodeEnvWorkspace(),
       env: { DMS_SESSION_SECRET: SESSION_SECRET, NODE_ENV: undefined },
@@ -243,7 +243,7 @@ describe("validating options before any work", () => {
     assert.doesNotMatch(result.stderr, /NODE_ENV/);
   });
 
-  it("keeps a NODE_ENV the project sets, and warns it is not production", async () => {
+  void it("keeps a NODE_ENV the project sets, and warns it is not production", async () => {
     const result = await runCli(["start", "-b", BACKEND_URL, "-p", "0"], {
       files: { ...nodeEnvWorkspace(), ".env": "NODE_ENV=development\n" },
       env: { DMS_SESSION_SECRET: SESSION_SECRET, NODE_ENV: undefined },
@@ -256,7 +256,7 @@ describe("validating options before any work", () => {
     );
   });
 
-  it("reports clean without a target as a usage error", async () => {
+  void it("reports clean without a target as a usage error", async () => {
     const result = await runCli(["clean"]);
     assert.equal(result.code, 2);
     assert.equal(result.stdout, "");
@@ -267,7 +267,7 @@ describe("validating options before any work", () => {
     assert.doesNotMatch(result.stderr, /▲/);
   });
 
-  it("never takes the clean target from the project's .env", async () => {
+  void it("never takes the clean target from the project's .env", async () => {
     const workspace = workspaceDir(BACKEND_URL);
     const result = await runCli(["clean"], {
       files: {
@@ -289,7 +289,7 @@ describe("validating options before any work", () => {
     assert.ok(!existsSync(join(explicit.sandbox, workspace)));
   });
 
-  it("checks verify-source paths before spawning the runner", async () => {
+  void it("checks verify-source paths before spawning the runner", async () => {
     const missing = await runCli(["verify-source", "-l", "./nope"]);
     assert.equal(missing.code, 2);
     assert.equal(missing.stdout, "");

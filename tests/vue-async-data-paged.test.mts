@@ -87,8 +87,8 @@ function pagedBackend(total: number, size: number, prefix = "item") {
 
 const pagedOptions = { nextCursor: (page: Page) => page.next };
 
-describe("Paged async data", () => {
-  it("appends each page under one key until there is no next one", async () => {
+void describe("Paged async data", () => {
+  void it("appends each page under one key until there is no next one", async () => {
     const { app, runtime } = clientApp();
     const backend = pagedBackend(5, 2);
     const list = await app.runWithContext(() =>
@@ -116,7 +116,7 @@ describe("Paged async data", () => {
     assert.equal(runtime.asyncData.get("files")?.data.value, list.data.value);
   });
 
-  it("reads every page loaded again on a revalidation, and replaces them at once", async () => {
+  void it("reads every page loaded again on a revalidation, and replaces them at once", async () => {
     const { app } = clientApp();
     const backend = pagedBackend(6, 2);
     const list = await app.runWithContext(() =>
@@ -134,7 +134,7 @@ describe("Paged async data", () => {
     assert.notEqual(list.data.value, shown);
   });
 
-  it("drops a page a revalidation overtook", async () => {
+  void it("drops a page a revalidation overtook", async () => {
     const { app } = clientApp();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -159,7 +159,7 @@ describe("Paged async data", () => {
     );
   });
 
-  it("keeps the pages loaded and reports a failure of loadMore", async () => {
+  void it("keeps the pages loaded and reports a failure of loadMore", async () => {
     const { app } = clientApp();
     const failure = new Error("offline");
     const list = await app.runWithContext(() =>
@@ -178,7 +178,7 @@ describe("Paged async data", () => {
     assert.equal(list.hasMore.value, true);
   });
 
-  it("starts a new key from its first page", async () => {
+  void it("starts a new key from its first page", async () => {
     const { app } = clientApp();
     const folder = ref("a");
     const backend = pagedBackend(4, 1);
@@ -202,7 +202,7 @@ describe("Paged async data", () => {
     assert.equal(list.key.value, "folder:b");
   });
 
-  it("renders the first page on a server, and the browser takes it over", async () => {
+  void it("renders the first page on a server, and the browser takes it over", async () => {
     const backend = pagedBackend(3, 2);
     let browserList!: ReturnType<typeof useDmsPagedData<Page, number>>;
     const List = defineComponent({
@@ -240,13 +240,13 @@ describe("Paged async data", () => {
   });
 });
 
-describe("Polling", () => {
-  it("follows a reactive interval, and stops at 0 or null", async () => {
+void describe("Polling", () => {
+  void it("follows a reactive interval, and stops at 0 or null", async () => {
     const interval = ref<number | null>(10);
     let calls = 0;
     const Poller = defineComponent({
       setup() {
-        useDmsAsyncData("reactive-poll", async () => ++calls, {
+        void useDmsAsyncData("reactive-poll", async () => ++calls, {
           refreshInterval: interval,
         });
         return () => h("p");
@@ -271,7 +271,7 @@ describe("Polling", () => {
     app.unmount();
   });
 
-  it("polls a call made outside any component or scope, for the application's life", async () => {
+  void it("polls a call made outside any component or scope, for the application's life", async () => {
     const { app, runtime } = clientApp();
     let calls = 0;
     await sleep(0);
@@ -289,7 +289,7 @@ describe("Polling", () => {
     assert.equal(calls, stopped, "the application's scope ends the polling");
   });
 
-  it("stops a getter interval over reactive state outside a component", async () => {
+  void it("stops a getter interval over reactive state outside a component", async () => {
     const { app } = clientApp();
     const installed = ref(false);
     let calls = 0;
@@ -309,8 +309,8 @@ describe("Polling", () => {
   });
 });
 
-describe("useDmsFetch keys", () => {
-  it("follows a reactive key, and requests nothing while it is null", async () => {
+void describe("useDmsFetch keys", () => {
+  void it("follows a reactive key, and requests nothing while it is null", async () => {
     const requests: string[] = [];
     const runtime = createDmsFrontendRuntime(async (url: string) => {
       requests.push(url);
@@ -334,7 +334,7 @@ describe("useDmsFetch keys", () => {
     assert.equal(result.data.value, "/api/items/7@item:7");
   });
 
-  it("gives tests and refreshDmsData the key of a request", async () => {
+  void it("gives tests and refreshDmsData the key of a request", async () => {
     const runtime = createDmsFrontendRuntime(async () => "ok");
     const { app } = clientApp(runtime);
     const result = await app.runWithContext(() =>

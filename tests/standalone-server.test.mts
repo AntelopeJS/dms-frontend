@@ -64,8 +64,8 @@ async function startServer(context: TestContext, backendUrl: string) {
   return { port, output, exited };
 }
 
-describe("the standalone frontend server", () => {
-  it(
+void describe("the standalone frontend server", () => {
+  void it(
     "keeps serving after a backend failure",
     { timeout: 15_000 },
     async (context) => {
@@ -86,7 +86,7 @@ describe("the standalone frontend server", () => {
     },
   );
 
-  it(
+  void it(
     "gives a slow upload the server's own request timeout, not Node's",
     { timeout: 15_000 },
     async (context) => {

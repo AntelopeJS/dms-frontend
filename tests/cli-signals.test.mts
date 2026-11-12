@@ -254,145 +254,211 @@ function signalsProject(): string {
  */
 const describeSignals = process.platform === "win32" ? describe.skip : describe;
 
-describeSignals("stopping the CLI stops the whole child process tree", () => {
-  before(() => {
-    assert.ok(existsSync(CLI), `${CLI} is missing: run pnpm build first`);
-    scratch = mkdtempSync(join(tmpdir(), "dms-frontend-signals-"));
-  });
-  after(() => {
-    for (const pid of seen.filter(isAlive)) process.kill(pid, "SIGKILL");
-    rmSync(scratch, { recursive: true, force: true });
-  });
-
-  it("exits 130 on Ctrl+C in a terminal while the server runs", async () => {
-    const run = await startServer("http://127.0.0.1:9", true);
-    const pids = await run.tree;
-
-    process.kill(-run.pid, "SIGINT");
-
-    assert.deepEqual(await run.exited, { code: 130, signal: null });
-    assert.match(run.output(), /✔ Production server ready in \S+\n/);
-    assert.match(run.output(), /Local: +http:\/\/localhost:1\//);
-    assert.match(
-      run.output(),
-      /■ Stopped the production server · ran \d+(ms|\.\ds)\n/,
-    );
-    await assertTreeGone(pids);
-  });
-
-  it("exits 130 when only the CLI receives SIGINT", async () => {
-    const run = await startServer("http://127.0.0.1:9");
-    const pids = await run.tree;
-
-    process.kill(run.pid, "SIGINT");
-
-    assert.deepEqual(await run.exited, { code: 130, signal: null });
-    assert.match(run.output(), /■ Stopped the production server · ran /);
-    await assertTreeGone(pids);
-  });
-
-  it("prints a due update notice once, under the ready block", async () => {
-    const backendUrl = "http://127.0.0.1:9";
-    const home = mkdtempSync(join(scratch, "home-"));
-    mkdirSync(join(home, ".antelopejs/dms-frontend"), { recursive: true });
-    writeFileSync(
-      join(home, ".antelopejs/dms-frontend/update-check.json"),
-      JSON.stringify({
-        checkedAt: Date.now(),
-        latestVersion: "999.0.0",
-        succeeded: true,
-      }),
-    );
-    const run = startCli({
-      args: ["start", "-b", backendUrl, "-p", "0", "--project", builtProject()],
-      entry: ["--import", TERMINAL_STDERR, CLI],
-      env: {
-        HOME: home,
-        DMS_SESSION_SECRET: SESSION_SECRET,
-        NO_UPDATE_NOTIFIER: "",
-        CI: "",
-        NO_COLOR: "1",
-      },
+void describeSignals(
+  "stopping the CLI stops the whole child process tree",
+  () => {
+    before(() => {
+      assert.ok(existsSync(CLI), `${CLI} is missing: run pnpm build first`);
+      scratch = mkdtempSync(join(tmpdir(), "dms-frontend-signals-"));
     });
-    const notice = `ℹ ajs dms 999.0.0 is available (you have ${OWN_PACKAGE.version}) → ajs update dms\n`;
-    await waitFor(
-      () => (run.output().includes(notice) ? true : undefined),
-      run.output,
-    );
-    const pids = await run.tree;
-
-    process.kill(run.pid, "SIGINT");
-
-    assert.deepEqual(await run.exited, { code: 130, signal: null });
-    assert.ok(
-      run.output().includes(`Ctrl+C to stop\n\n${notice}\n`),
-      run.output(),
-    );
-    assert.equal(run.output().split(notice).length, 2, "printed once");
-    await assertTreeGone(pids);
-  });
-
-  it("shows only the local URL of a quiet run, and no stop line", async () => {
-    const backendUrl = "http://127.0.0.1:9";
-    const run = startCli({
-      args: [
-        "start",
-        "-b",
-        backendUrl,
-        "-p",
-        "0",
-        "-q",
-        "--project",
-        builtProject(),
-      ],
-      env: { DMS_SESSION_SECRET: SESSION_SECRET },
-      ownGroup: true,
+    after(() => {
+      for (const pid of seen.filter(isAlive)) process.kill(pid, "SIGKILL");
+      rmSync(scratch, { recursive: true, force: true });
     });
-    await waitFor(
-      () => (run.output().includes("Local:") ? true : undefined),
-      run.output,
-    );
-    const pids = await run.tree;
 
-    process.kill(-run.pid, "SIGINT");
+    void it("exits 130 on Ctrl+C in a terminal while the server runs", async () => {
+      const run = await startServer("http://127.0.0.1:9", true);
+      const pids = await run.tree;
 
-    assert.deepEqual(await run.exited, { code: 130, signal: null });
-    const lines = run.output().split("\n");
-    assert.deepEqual(
-      lines.filter((line) => !line.startsWith("▲") && !line.startsWith("  →")),
-      ["  ➜  Local: http://localhost:1/", ""],
-    );
-    await assertTreeGone(pids);
-  });
+      process.kill(-run.pid, "SIGINT");
 
-  it("exits 143 on SIGTERM and says which signal stopped it", async () => {
-    const run = await startServer("http://127.0.0.1:9");
-    const pids = await run.tree;
+      assert.deepEqual(await run.exited, { code: 130, signal: null });
+      assert.match(run.output(), /✔ Production server ready in \S+\n/);
+      assert.match(run.output(), /Local: +http:\/\/localhost:1\//);
+      assert.match(
+        run.output(),
+        /■ Stopped the production server · ran \d+(ms|\.\ds)\n/,
+      );
+      await assertTreeGone(pids);
+    });
 
-    process.kill(run.pid, "SIGTERM");
+    void it("exits 130 when only the CLI receives SIGINT", async () => {
+      const run = await startServer("http://127.0.0.1:9");
+      const pids = await run.tree;
 
-    assert.deepEqual(await run.exited, { code: 143, signal: null });
-    assert.match(
-      run.output(),
-      /■ Stopped the production server \(SIGTERM\) · ran /,
-    );
-    await assertTreeGone(pids);
-  });
+      process.kill(run.pid, "SIGINT");
 
-  it("exits 130 on Ctrl+C during the dependency install", async () => {
-    const backend = await serveManifest();
-    try {
+      assert.deepEqual(await run.exited, { code: 130, signal: null });
+      assert.match(run.output(), /■ Stopped the production server · ran /);
+      await assertTreeGone(pids);
+    });
+
+    void it("prints a due update notice once, under the ready block", async () => {
+      const backendUrl = "http://127.0.0.1:9";
+      const home = mkdtempSync(join(scratch, "home-"));
+      mkdirSync(join(home, ".antelopejs/dms-frontend"), { recursive: true });
+      writeFileSync(
+        join(home, ".antelopejs/dms-frontend/update-check.json"),
+        JSON.stringify({
+          checkedAt: Date.now(),
+          latestVersion: "999.0.0",
+          succeeded: true,
+        }),
+      );
       const run = startCli({
         args: [
-          "dev",
+          "start",
           "-b",
-          backend.url,
+          backendUrl,
           "-p",
           "0",
           "--project",
-          signalsProject(),
+          builtProject(),
         ],
-        env: { PATH: hangingPnpm() },
+        entry: ["--import", TERMINAL_STDERR, CLI],
+        env: {
+          HOME: home,
+          DMS_SESSION_SECRET: SESSION_SECRET,
+          NO_UPDATE_NOTIFIER: "",
+          CI: "",
+          NO_COLOR: "1",
+        },
+      });
+      const notice = `ℹ ajs dms 999.0.0 is available (you have ${OWN_PACKAGE.version}) → ajs update dms\n`;
+      await waitFor(
+        () => (run.output().includes(notice) ? true : undefined),
+        run.output,
+      );
+      const pids = await run.tree;
+
+      process.kill(run.pid, "SIGINT");
+
+      assert.deepEqual(await run.exited, { code: 130, signal: null });
+      assert.ok(
+        run.output().includes(`Ctrl+C to stop\n\n${notice}\n`),
+        run.output(),
+      );
+      assert.equal(run.output().split(notice).length, 2, "printed once");
+      await assertTreeGone(pids);
+    });
+
+    void it("shows only the local URL of a quiet run, and no stop line", async () => {
+      const backendUrl = "http://127.0.0.1:9";
+      const run = startCli({
+        args: [
+          "start",
+          "-b",
+          backendUrl,
+          "-p",
+          "0",
+          "-q",
+          "--project",
+          builtProject(),
+        ],
+        env: { DMS_SESSION_SECRET: SESSION_SECRET },
+        ownGroup: true,
+      });
+      await waitFor(
+        () => (run.output().includes("Local:") ? true : undefined),
+        run.output,
+      );
+      const pids = await run.tree;
+
+      process.kill(-run.pid, "SIGINT");
+
+      assert.deepEqual(await run.exited, { code: 130, signal: null });
+      const lines = run.output().split("\n");
+      assert.deepEqual(
+        lines.filter(
+          (line) => !line.startsWith("▲") && !line.startsWith("  →"),
+        ),
+        ["  ➜  Local: http://localhost:1/", ""],
+      );
+      await assertTreeGone(pids);
+    });
+
+    void it("exits 143 on SIGTERM and says which signal stopped it", async () => {
+      const run = await startServer("http://127.0.0.1:9");
+      const pids = await run.tree;
+
+      process.kill(run.pid, "SIGTERM");
+
+      assert.deepEqual(await run.exited, { code: 143, signal: null });
+      assert.match(
+        run.output(),
+        /■ Stopped the production server \(SIGTERM\) · ran /,
+      );
+      await assertTreeGone(pids);
+    });
+
+    void it("exits 130 on Ctrl+C during the dependency install", async () => {
+      const backend = await serveManifest();
+      try {
+        const run = startCli({
+          args: [
+            "dev",
+            "-b",
+            backend.url,
+            "-p",
+            "0",
+            "--project",
+            signalsProject(),
+          ],
+          env: { PATH: hangingPnpm() },
+          ownGroup: true,
+        });
+        const pids = await run.tree;
+
+        process.kill(-run.pid, "SIGINT");
+
+        assert.deepEqual(await run.exited, { code: 130, signal: null });
+        assert.match(
+          run.output(),
+          /– Dependency install stopped(?: \S+)?\n■ Stopped\n/,
+        );
+        assert.doesNotMatch(run.output(), /Setup failed/);
+        await assertTreeGone(pids);
+      } finally {
+        await new Promise((settle) => backend.server.close(settle));
+      }
+    });
+
+    void it("stops a quiet dev run on Ctrl+C without a word", async () => {
+      const backend = await serveManifest();
+      try {
+        const run = startCli({
+          args: [
+            "dev",
+            "-b",
+            backend.url,
+            "-p",
+            "0",
+            "--project",
+            signalsProject(),
+          ],
+          env: { PATH: hangingPnpm(), ANTELOPEJS_QUIET: "1" },
+          ownGroup: true,
+        });
+        const pids = await run.tree;
+
+        process.kill(-run.pid, "SIGINT");
+
+        assert.deepEqual(await run.exited, { code: 130, signal: null });
+        assert.doesNotMatch(run.output(), /ajs dms dev|stopped|Stopped|[✔■–]/);
+        await assertTreeGone(pids);
+      } finally {
+        await new Promise((settle) => backend.server.close(settle));
+      }
+    });
+
+    void it("keeps the interrupted build step and names the stopped build on Ctrl+C", async () => {
+      const run = startCli({
+        args: ["build", "--project", signalsProject()],
+        env: {
+          PATH: hangingPnpm(true),
+          DMS_SESSION_SECRET: SESSION_SECRET,
+          NO_COLOR: "1",
+        },
         ownGroup: true,
       });
       const pids = await run.tree;
@@ -402,78 +468,25 @@ describeSignals("stopping the CLI stops the whole child process tree", () => {
       assert.deepEqual(await run.exited, { code: 130, signal: null });
       assert.match(
         run.output(),
-        /– Dependency install stopped(?: \S+)?\n■ Stopped\n/,
+        /\n– Client bundle stopped(?: \S+)?\n■ Stopped the production build · ran \d+(ms|\.\ds)\n$/,
       );
-      assert.doesNotMatch(run.output(), /Setup failed/);
+      assert.doesNotMatch(run.output(), /failed/);
       await assertTreeGone(pids);
-    } finally {
-      await new Promise((settle) => backend.server.close(settle));
-    }
-  });
+    });
 
-  it("stops a quiet dev run on Ctrl+C without a word", async () => {
-    const backend = await serveManifest();
-    try {
+    void it("kills the tree when the CLI exits for any other reason", async () => {
       const run = startCli({
-        args: [
-          "dev",
-          "-b",
-          backend.url,
-          "-p",
-          "0",
-          "--project",
-          signalsProject(),
+        args: [],
+        entry: [
+          "--import",
+          import.meta.resolve("tsx"),
+          join(FIXTURES, "run-command-cli.ts"),
         ],
-        env: { PATH: hangingPnpm(), ANTELOPEJS_QUIET: "1" },
-        ownGroup: true,
       });
       const pids = await run.tree;
 
-      process.kill(-run.pid, "SIGINT");
-
-      assert.deepEqual(await run.exited, { code: 130, signal: null });
-      assert.doesNotMatch(run.output(), /ajs dms dev|stopped|Stopped|[✔■–]/);
+      assert.deepEqual(await run.exited, { code: 3, signal: null });
       await assertTreeGone(pids);
-    } finally {
-      await new Promise((settle) => backend.server.close(settle));
-    }
-  });
-
-  it("keeps the interrupted build step and names the stopped build on Ctrl+C", async () => {
-    const run = startCli({
-      args: ["build", "--project", signalsProject()],
-      env: {
-        PATH: hangingPnpm(true),
-        DMS_SESSION_SECRET: SESSION_SECRET,
-        NO_COLOR: "1",
-      },
-      ownGroup: true,
     });
-    const pids = await run.tree;
-
-    process.kill(-run.pid, "SIGINT");
-
-    assert.deepEqual(await run.exited, { code: 130, signal: null });
-    assert.match(
-      run.output(),
-      /\n– Client bundle stopped(?: \S+)?\n■ Stopped the production build · ran \d+(ms|\.\ds)\n$/,
-    );
-    assert.doesNotMatch(run.output(), /failed/);
-    await assertTreeGone(pids);
-  });
-
-  it("kills the tree when the CLI exits for any other reason", async () => {
-    const run = startCli({
-      args: [],
-      entry: [
-        "--import",
-        import.meta.resolve("tsx"),
-        join(FIXTURES, "run-command-cli.ts"),
-      ],
-    });
-    const pids = await run.tree;
-
-    assert.deepEqual(await run.exited, { code: 3, signal: null });
-    await assertTreeGone(pids);
-  });
-});
+  },
+);

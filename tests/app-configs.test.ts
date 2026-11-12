@@ -16,7 +16,7 @@ function writeFile(path: string, content: string): void {
   writeFileSync(path, content);
 }
 
-describe("the generated app configs module", () => {
+void describe("the generated app configs module", () => {
   const roots: string[] = [];
   after(() => {
     for (const root of roots) rmSync(root, { recursive: true, force: true });
@@ -47,7 +47,7 @@ describe("the generated app configs module", () => {
 
   const CONFIG = "export default {};\n";
 
-  it("lists every layer's config, highest precedence first", () => {
+  void it("lists every layer's config, highest precedence first", () => {
     const source = generate({
       base: {
         "layers/z-last/app/app.config.ts": CONFIG,
@@ -72,7 +72,7 @@ describe("the generated app configs module", () => {
     );
   });
 
-  it("imports nothing at run time but the configs", () => {
+  void it("imports nothing at run time but the configs", () => {
     const source = generate({ project: { "app/app.config.ts": CONFIG } });
     const imports = source.match(/^import .*$/gm) ?? [];
     assert.deepEqual(
@@ -81,7 +81,7 @@ describe("the generated app configs module", () => {
     );
   });
 
-  it("lists nothing for a module without a TypeScript config", () => {
+  void it("lists nothing for a module without a TypeScript config", () => {
     const source = generate({
       project: {
         "app/components/Card.vue": "<template />\n",
@@ -93,8 +93,8 @@ describe("the generated app configs module", () => {
   });
 });
 
-describe("affectsAppConfigs", () => {
-  it("matches the app configs of a module and of its layers, and the directories on the way", () => {
+void describe("affectsAppConfigs", () => {
+  void it("matches the app configs of a module and of its layers, and the directories on the way", () => {
     for (const path of [
       "app/app.config.ts",
       "app",

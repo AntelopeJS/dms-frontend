@@ -16,7 +16,7 @@ const BUNDLES = [
 /** The fake pnpm is a shell script, like the one cli-signals puts on PATH. */
 const describePosix = process.platform === "win32" ? describe.skip : describe;
 
-describePosix("build --setup-only and build --prepared", () => {
+void describePosix("build --setup-only and build --prepared", () => {
   let cli: FakePnpmCli;
   before(() => {
     cli = new FakePnpmCli("dms-frontend-prepared-");
@@ -32,7 +32,7 @@ describePosix("build --setup-only and build --prepared", () => {
     return run.sandbox;
   }
 
-  it("--setup-only installs the workspace and bundles nothing", async () => {
+  void it("--setup-only installs the workspace and bundles nothing", async () => {
     const run = await cli.run(["build", "--setup-only"], {
       setUp: projectHome,
     });
@@ -48,7 +48,7 @@ describePosix("build --setup-only and build --prepared", () => {
     );
   });
 
-  it("--prepared bundles the workspace without setting it up or reading the project again", async () => {
+  void it("--prepared bundles the workspace without setting it up or reading the project again", async () => {
     const sandbox = await setUp();
     rmSync(join(sandbox, "antelope.config.ts"));
 
@@ -66,7 +66,7 @@ describePosix("build --setup-only and build --prepared", () => {
     assert.match(run.stderr, /\nBuilt the production frontend → /);
   });
 
-  it("--prepared bundles once the module sources moved or changed after the setup", async () => {
+  void it("--prepared bundles once the module sources moved or changed after the setup", async () => {
     const moved = await setUp();
     renameSync(join(moved, "frontend-vue"), join(moved, "moved-away"));
     const edited = await setUp();
@@ -86,7 +86,7 @@ describePosix("build --setup-only and build --prepared", () => {
     }
   });
 
-  it("--prepared points a failed step at the module's own file", async () => {
+  void it("--prepared points a failed step at the module's own file", async () => {
     const sandbox = await setUp();
 
     const run = await cli.run(["build", "--prepared"], {
@@ -102,7 +102,7 @@ describePosix("build --setup-only and build --prepared", () => {
     assert.doesNotMatch(run.stderr, /frontend-modules/);
   });
 
-  it("--prepared refuses a workspace no setup made, exit 3, before any bundle", async () => {
+  void it("--prepared refuses a workspace no setup made, exit 3, before any bundle", async () => {
     const run = await cli.run(["build", "--prepared"], {
       setUp: projectHome,
     });
@@ -115,7 +115,7 @@ describePosix("build --setup-only and build --prepared", () => {
     );
   });
 
-  it("--setup-only --no-install writes the workspace, which --prepared refuses until it is installed", async () => {
+  void it("--setup-only --no-install writes the workspace, which --prepared refuses until it is installed", async () => {
     const written = await cli.run(["build", "--setup-only", "--no-install"], {
       setUp: projectHome,
     });
@@ -136,7 +136,7 @@ describePosix("build --setup-only and build --prepared", () => {
     );
   });
 
-  it("--prepared refuses an installed workspace a --no-install setup rewrote for new dependencies", async () => {
+  void it("--prepared refuses an installed workspace a --no-install setup rewrote for new dependencies", async () => {
     const sandbox = await setUp();
     writeFileSync(
       join(sandbox, "frontend-vue/package.json"),
@@ -153,7 +153,7 @@ describePosix("build --setup-only and build --prepared", () => {
     assert.deepEqual(run.calls, []);
   });
 
-  it("a setup that fails leaves a workspace --prepared refuses", async () => {
+  void it("a setup that fails leaves a workspace --prepared refuses", async () => {
     const sandbox = await setUp();
     const failed = await cli.run(["build", "--setup-only", "--force"], {
       sandbox,
@@ -167,7 +167,7 @@ describePosix("build --setup-only and build --prepared", () => {
     assert.deepEqual(run.calls, []);
   });
 
-  it("names the workspace a --workspace setup made in the step that follows", async () => {
+  void it("names the workspace a --workspace setup made in the step that follows", async () => {
     const run = await cli.run(
       ["build", "--setup-only", "--workspace", "out/web"],
       { setUp: projectHome },
@@ -196,7 +196,7 @@ describePosix("build --setup-only and build --prepared", () => {
       /✖ Option '--prepared' cannot be used with option '-f, --force'\n/,
     ],
   ] as const) {
-    it(`refuses build ${args.join(" ")} as a usage error`, async () => {
+    void it(`refuses build ${args.join(" ")} as a usage error`, async () => {
       const run = await cli.run(["build", ...args], { setUp: projectHome });
 
       assert.equal(run.code, 2);

@@ -26,7 +26,7 @@ async function eventually(done: () => boolean): Promise<void> {
   assert.fail("the email bundle was not rebuilt with the new catalog");
 }
 
-it("rebuilds the email catalogs when they are regenerated during a watch-mode build", async () => {
+void it("rebuilds the email catalogs when they are regenerated during a watch-mode build", async () => {
   const workspace = mkdtempSync(resolve(".email-catalog-watch-"));
   const layer: ResolvedLayer = {
     path: join(workspace, "source"),

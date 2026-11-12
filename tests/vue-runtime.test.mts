@@ -18,8 +18,8 @@ import {
   registerGlobalMiddleware,
 } from "./fixtures/vue-runtime.mts";
 
-describe("Vue request runtime", () => {
-  it("runs the middlewares registered as parallel together, the first result in order winning", async () => {
+void describe("Vue request runtime", () => {
+  void it("runs the middlewares registered as parallel together, the first result in order winning", async () => {
     const { app } = application("server", {}, true);
     const started: string[] = [];
     let release: () => void = () => {};
@@ -72,7 +72,7 @@ describe("Vue request runtime", () => {
     ]);
   });
 
-  it("keeps relative middleware redirects out of the browser router during SSR", async (context) => {
+  void it("keeps relative middleware redirects out of the browser router during SSR", async (context) => {
     const { app } = application("server", {}, true);
     await registerGlobalMiddleware((to) =>
       to.path === "/requires-onboarding" ? "/onboarding" : undefined,
@@ -86,7 +86,7 @@ describe("Vue request runtime", () => {
     assert.equal(visit.mock.callCount(), 0);
   });
 
-  it("skips identical compatibility navigation but preserves explicit Inertia refreshes", async (context) => {
+  void it("skips identical compatibility navigation but preserves explicit Inertia refreshes", async (context) => {
     const { app, runtime } = application("first");
     Object.assign(runtime.route, {
       path: "/dashboard",
@@ -111,7 +111,7 @@ describe("Vue request runtime", () => {
     ]);
   });
 
-  it("rebinds cached async data to mounted consumers and rejects disposed or superseded requests", async () => {
+  void it("rebinds cached async data to mounted consumers and rejects disposed or superseded requests", async () => {
     const runtime = createDmsFrontendRuntime(undefined, { table: "SSR rows" });
     const visible = ref(true);
     const filters = [ref("all"), ref("all")];
@@ -179,7 +179,7 @@ describe("Vue request runtime", () => {
     }
   });
 
-  it("starts a fresh initial load after its pending consumer unmounts", async () => {
+  void it("starts a fresh initial load after its pending consumer unmounts", async () => {
     const runtime = createDmsFrontendRuntime();
     const visible = ref(true);
     const requests: Array<{
@@ -225,7 +225,7 @@ describe("Vue request runtime", () => {
     }
   });
 
-  it("shows keyed data at once when its consumer returns, and reads it again but on hydration", async () => {
+  void it("shows keyed data at once when its consumer returns, and reads it again but on hydration", async () => {
     const runtime = createDmsFrontendRuntime(undefined, { table: "Live" });
     const visible = ref(true);
     let backendValue = "Live";
@@ -280,7 +280,7 @@ describe("Vue request runtime", () => {
     }
   });
 
-  it("replaces explicit query objects rather than restoring removed tab keys", async (context) => {
+  void it("replaces explicit query objects rather than restoring removed tab keys", async (context) => {
     const { app, runtime } = application("first");
     runtime.route.path = "/dashboard";
     runtime.route.query = { tab: "archived", keep: "old" };
@@ -303,7 +303,7 @@ describe("Vue request runtime", () => {
     );
   });
 
-  it("keeps the page mounted when a navigation only changes the query or hash", async (context) => {
+  void it("keeps the page mounted when a navigation only changes the query or hash", async (context) => {
     const { app, runtime } = application("first");
     runtime.route.path = "/data";
     runtime.route.fullPath = "/data";
@@ -345,7 +345,7 @@ describe("Vue request runtime", () => {
     ]);
   });
 
-  it("asks the server for a query-only navigation it alone can honour", async (context) => {
+  void it("asks the server for a query-only navigation it alone can honour", async (context) => {
     const { app, runtime } = application("first");
     Object.assign(runtime.route, { path: "/data", fullPath: "/data" });
     const visits = recordVisits(context);
@@ -370,7 +370,7 @@ describe("Vue request runtime", () => {
     );
   });
 
-  it("keeps the callbacks of a query-only navigation that stays in the browser", async (context) => {
+  void it("keeps the callbacks of a query-only navigation that stays in the browser", async (context) => {
     const { app, runtime } = application("first");
     Object.assign(runtime.route, { path: "/data", fullPath: "/data" });
     recordVisits(context);

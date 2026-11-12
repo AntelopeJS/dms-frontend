@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { parseViteManifest } from "../src/internal/vite-manifest";
 
-describe("parseViteManifest", () => {
-  it("lists the chunks of a manifest, in its order", () => {
+void describe("parseViteManifest", () => {
+  void it("lists the chunks of a manifest, in its order", () => {
     assert.deepEqual(
       parseViteManifest(
         JSON.stringify({
@@ -21,7 +21,7 @@ describe("parseViteManifest", () => {
     assert.deepEqual(parseViteManifest("{}", "manifest"), []);
   });
 
-  it("refuses what is not an object of chunks that name their file", () => {
+  void it("refuses what is not an object of chunks that name their file", () => {
     for (const content of [
       "null",
       "[]",

@@ -136,12 +136,12 @@ async function render(context: TestContext, ...children: Array<() => VNode>) {
   };
 }
 
-describe("a page whose setup fails", () => {
+void describe("a page whose setup fails", () => {
   for (const [kind, component] of [
     ["sync", () => SyncPage],
     ["async", () => AsyncPage],
   ] as const) {
-    it(`fails the page without warnings from its unrendered template (${kind} setup)`, async (context) => {
+    void it(`fails the page without warnings from its unrendered template (${kind} setup)`, async (context) => {
       const { warnings, statusCode } = await render(context, () =>
         h(component()),
       );
@@ -150,7 +150,7 @@ describe("a page whose setup fails", () => {
     });
   }
 
-  it("still renders a page given its parameters", async (context) => {
+  void it("still renders a page given its parameters", async (context) => {
     const warnings: string[] = [];
     context.mock.method(console, "warn", (...args: unknown[]) => {
       warnings.push(args.map(String).join(" "));
@@ -170,13 +170,13 @@ describe("a page whose setup fails", () => {
     assert.deepEqual(warnings, []);
   });
 
-  it("drops the warnings of a component rendered under the failed page", async (context) => {
+  void it("drops the warnings of a component rendered under the failed page", async (context) => {
     const { warnings, statusCode } = await render(context, () => h(ParentPage));
     assert.equal(statusCode, 400);
     assert.deepEqual(warnings, []);
   });
 
-  it("keeps the warnings of the components that did not fail", async (context) => {
+  void it("keeps the warnings of the components that did not fail", async (context) => {
     const { warnings, statusCode } = await render(
       context,
       () => h(SyncPage),
@@ -190,7 +190,7 @@ describe("a page whose setup fails", () => {
     );
   });
 
-  it("leaves Vue's own warnings alone while nothing failed", async (context) => {
+  void it("leaves Vue's own warnings alone while nothing failed", async (context) => {
     const { warnings, error } = await render(context, () => h(Untidy));
     assert.equal(error, null);
     assert.equal(warnings.length, 1);

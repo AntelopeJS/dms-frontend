@@ -20,8 +20,8 @@ function moduleWithLayers(prefix: string, layers: string[]): string {
   return root;
 }
 
-describe("layer aliases", () => {
-  it("derives one alias per layer of a module root", () => {
+void describe("layer aliases", () => {
+  void it("derives one alias per layer of a module root", () => {
     const root = moduleWithLayers("dms-aliases-", ["dms-core", "dms-ui"]);
     assert.deepEqual(frontendLayerAliases(root), {
       "#dms-core": join(root, "layers", "dms-core"),
@@ -36,7 +36,7 @@ describe("layer aliases", () => {
     );
   });
 
-  it("returns nothing for a module that has no layers directory", () => {
+  void it("returns nothing for a module that has no layers directory", () => {
     const flat = temporaryDirectory("dms-flat-module-");
     writeFileSync(join(flat, "dms.frontend.ts"), "export default {};");
     assert.deepEqual(resolveFrontendLayers(flat), []);
@@ -44,14 +44,14 @@ describe("layer aliases", () => {
     assert.deepEqual(frontendLayerTypePaths(flat), {});
   });
 
-  it("returns nothing for a module root that does not exist", () => {
+  void it("returns nothing for a module root that does not exist", () => {
     assert.deepEqual(
       frontendLayerAliases(join(tmpdir(), "dms-absent-module")),
       {},
     );
   });
 
-  it("gives a same-named layer to the last root and keeps its position", () => {
+  void it("gives a same-named layer to the last root and keeps its position", () => {
     const low = moduleWithLayers("dms-low-", ["legacy", "shared"]);
     const high = moduleWithLayers("dms-high-", ["dms-core", "shared"]);
     assert.deepEqual(frontendLayerAliases([low, high]), {
@@ -65,13 +65,13 @@ describe("layer aliases", () => {
     );
   });
 
-  it("ignores a stray file sitting next to the layers", () => {
+  void it("ignores a stray file sitting next to the layers", () => {
     const root = moduleWithLayers("dms-stray-", ["dms-core"]);
     writeFileSync(join(root, "layers", "README.md"), "not a layer");
     assert.deepEqual(Object.keys(frontendLayerAliases(root)), ["#dms-core"]);
   });
 
-  it("emits tsconfig paths, absolute or relative to a base", () => {
+  void it("emits tsconfig paths, absolute or relative to a base", () => {
     const root = moduleWithLayers("dms-paths-", ["dms-ui"]);
     const directory = join(root, "layers", "dms-ui");
     assert.deepEqual(frontendLayerTypePaths(root), {
@@ -83,7 +83,7 @@ describe("layer aliases", () => {
   });
 });
 
-describe("generated workspace type paths", () => {
+void describe("generated workspace type paths", () => {
   const EXPECTED = `{
   "compilerOptions": {
     "paths": {
@@ -116,7 +116,7 @@ describe("generated workspace type paths", () => {
 }
 `;
 
-  it("writes exactly what it wrote before the helper existed", () => {
+  void it("writes exactly what it wrote before the helper existed", () => {
     const workspace = temporaryDirectory("dms-paths-workspace-");
     const modules = join(workspace, "frontend-modules");
     const materialized: [string, string[]][] = [

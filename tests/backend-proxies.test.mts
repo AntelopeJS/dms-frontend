@@ -27,8 +27,8 @@ function resolved(
   return { modules, warnings };
 }
 
-describe("Backend proxy declarations", () => {
-  it("refuse a pattern that would take the pages or the renderer's paths", () => {
+void describe("Backend proxy declarations", () => {
+  void it("refuse a pattern that would take the pages or the renderer's paths", () => {
     for (const pattern of ["/", "/**", "/*/**", "api/**", "/api/../x"])
       assert.ok(proxyRejection(pattern, undefined), pattern);
     for (const pattern of ["/assets/**", "/node_modules/x", "/api/_dms/**"])
@@ -59,7 +59,7 @@ describe("Backend proxy declarations", () => {
     assert.equal(proxyRejection("/media", undefined), undefined);
   });
 
-  it("keep one owner per pattern, the highest-priority module's, with a warning", () => {
+  void it("keep one owner per pattern, the highest-priority module's, with a warning", () => {
     const { modules, warnings } = resolved([
       {
         id: "low",
@@ -89,7 +89,7 @@ describe("Backend proxy declarations", () => {
     ]);
   });
 
-  it("add the backend modules' prefixes from the manifest, the most specific first", () => {
+  void it("add the backend modules' prefixes from the manifest, the most specific first", () => {
     const { modules, warnings } = resolved(
       [{ id: "dms", setup: (s) => s.registerBackendProxy("/api/**") }],
       [
@@ -121,7 +121,7 @@ describe("Backend proxy declarations", () => {
     ]);
   });
 
-  it("rank a literal segment above a wildcard tail, whatever the declaration order", () => {
+  void it("rank a literal segment above a wildcard tail, whatever the declaration order", () => {
     const { modules } = resolved(
       [],
       [
@@ -139,7 +139,7 @@ describe("Backend proxy declarations", () => {
     );
   });
 
-  it("are listed at startup with their owner and their auth", () => {
+  void it("are listed at startup with their owner and their auth", () => {
     const proxies = resolveBackendProxies(
       [{ id: "dms", pattern: "/api/**", options: undefined }],
       [{ module: "@acme/media", path: "/media/**", auth: "none" }],
@@ -153,7 +153,7 @@ describe("Backend proxy declarations", () => {
     assert.match(routingReport([], 0)[1], /no request reaches the backend/);
   });
 
-  it("are left out of a quiet run, as the Local url alone is printed", (t) => {
+  void it("are left out of a quiet run, as the Local url alone is printed", (t) => {
     const log = t.mock.method(console, "log", () => {});
     const lines = routingReport([], 0);
     const printed = (env: NodeJS.ProcessEnv) => {
@@ -171,7 +171,7 @@ describe("Backend proxy declarations", () => {
   });
 });
 
-describe("Request owners", () => {
+void describe("Request owners", () => {
   const { modules } = resolved([
     {
       id: "dms",
@@ -187,7 +187,7 @@ describe("Request owners", () => {
       files.includes(pathname),
     );
 
-  it("are the renderer first, for its own paths and the files it has", () => {
+  void it("are the renderer first, for its own paths and the files it has", () => {
     assert.equal(owner("GET", "/@vite/client").kind, "renderer");
     assert.equal(owner("GET", "/assets/app.js").kind, "renderer");
     assert.equal(owner("GET", "/api/_dms/icons").kind, "renderer");
@@ -196,7 +196,7 @@ describe("Request owners", () => {
     assert.equal(owner("GET", "/robots.txt", ["/robots.txt"]).kind, "renderer");
   });
 
-  it("then the module routes, whatever the method", () => {
+  void it("then the module routes, whatever the method", () => {
     assert.deepEqual(owner("GET", "/robots.txt"), {
       kind: "module",
       id: "dms",
@@ -207,12 +207,12 @@ describe("Request owners", () => {
     });
   });
 
-  it("then the backend proxies, whoever asks", () => {
+  void it("then the backend proxies, whoever asks", () => {
     for (const method of ["GET", "POST", "HEAD"])
       assert.equal(owner(method, "/api/items").kind, "backend");
   });
 
-  it("then the pages, a write to a page path being a 404", () => {
+  void it("then the pages, a write to a page path being a 404", () => {
     assert.equal(owner("GET", "/dms/page").kind, "page");
     assert.equal(owner("HEAD", "/settings").kind, "page");
     assert.equal(owner("POST", "/auth/login").kind, "not-found");

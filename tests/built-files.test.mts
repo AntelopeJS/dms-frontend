@@ -94,8 +94,8 @@ async function listen(server: Server): Promise<number> {
   return address.port;
 }
 
-describe("built files the production server serves", () => {
-  it("serves no path with a dot segment but /.well-known/, whatever the separator", async () => {
+void describe("built files the production server serves", () => {
+  void it("serves no path with a dot segment but /.well-known/, whatever the separator", async () => {
     const { isPublicBuildPath } = await builtFiles;
     for (const path of [
       "index.html",
@@ -118,7 +118,7 @@ describe("built files the production server serves", () => {
       assert.equal(isPublicBuildPath(path), false, path);
   });
 
-  it("keeps the build manifest private while the pages and assets it describes are served", async () => {
+  void it("keeps the build manifest private while the pages and assets it describes are served", async () => {
     const workspace = mkdtempSync(resolve(".built-files-"));
     const previousBackend = process.env.DMS_API_BASE_URL;
     const backend = createServer((request, response) => {

@@ -48,7 +48,7 @@ async function showPage(url: string): Promise<void> {
   });
 }
 
-describe("Route stability", () => {
+void describe("Route stability", () => {
   let app: App;
   let runtime: DmsFrontendRuntime;
   let scope: EffectScope;
@@ -69,7 +69,7 @@ describe("Route stability", () => {
 
   afterEach(() => scope.stop());
 
-  it("keeps the same query and params while the URL does not change", async () => {
+  void it("keeps the same query and params while the URL does not change", async () => {
     const route = inScope(() => useDmsRoute());
     const { query, params, matched } = route;
     let changes = 0;
@@ -90,7 +90,7 @@ describe("Route stability", () => {
     assert.equal(changes, 0);
   });
 
-  it("replaces the query once the query string changes", async () => {
+  void it("replaces the query once the query string changes", async () => {
     const route = inScope(() => useDmsRoute());
     let changes = 0;
     inScope(() =>
@@ -107,7 +107,7 @@ describe("Route stability", () => {
     assert.equal(changes, 1);
   });
 
-  it("replaces the params once the path changes", async () => {
+  void it("replaces the params once the path changes", async () => {
     const route = inScope(() => useDmsRoute("/runs/:id"));
     await showPage("/runs/1");
     await nextTick();
@@ -121,7 +121,7 @@ describe("Route stability", () => {
   });
 });
 
-describe("Navigation to the URL shown", () => {
+void describe("Navigation to the URL shown", () => {
   let app: App;
   let location: URL;
 
@@ -165,7 +165,7 @@ describe("Navigation to the URL shown", () => {
     Reflect.deleteProperty(globalThis, "window");
   });
 
-  it("navigates when the URL moved away from the route", async (context) => {
+  void it("navigates when the URL moved away from the route", async (context) => {
     showUrl("/runs?tab=open&record=r1");
 
     const urls = await navigations(
@@ -176,7 +176,7 @@ describe("Navigation to the URL shown", () => {
     assert.deepEqual(urls, ["replace /runs?tab=open"]);
   });
 
-  it("does not navigate to the URL already shown, however it is spelled", async (context) => {
+  void it("does not navigate to the URL already shown, however it is spelled", async (context) => {
     showUrl("/runs?tab=open&record=r1&q=a+b");
 
     const urls = await navigations(async (dmsRouter) => {
@@ -190,7 +190,7 @@ describe("Navigation to the URL shown", () => {
     assert.deepEqual(urls, []);
   });
 
-  it("navigates to another site at the same path", async (context) => {
+  void it("navigates to another site at the same path", async (context) => {
     const urls = await navigations(
       (dmsRouter) => dmsRouter.push("https://elsewhere.example/runs?tab=open"),
       context,

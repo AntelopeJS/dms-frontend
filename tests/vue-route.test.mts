@@ -71,8 +71,8 @@ async function render(
   return body;
 }
 
-describe("Route of the page", () => {
-  it("keeps the initial URL for a plugin reading it before the app mounts", () => {
+void describe("Route of the page", () => {
+  void it("keeps the initial URL for a plugin reading it before the app mounts", () => {
     const app = createSSRApp({ render: () => null });
     const runtime = createDmsFrontendRuntime();
     provideDmsFrontendRuntime(app, runtime);
@@ -83,7 +83,7 @@ describe("Route of the page", () => {
     assert.equal(seen, "/initial?tab=a");
   });
 
-  it("gives a plugin its own request's URL during a server render", async () => {
+  void it("gives a plugin its own request's URL during a server render", async () => {
     const Page: DefineComponent = defineComponent({
       setup: () => () => h("p", "page"),
     });
@@ -95,7 +95,7 @@ describe("Route of the page", () => {
     assert.deepEqual(seen, ["/first?x=1", "/second?y=2"]);
   });
 
-  it("gives a component its own request's URL after an await, while another request renders", async () => {
+  void it("gives a component its own request's URL after an await, while another request renders", async () => {
     const RouteAfterAwait = defineComponent({
       inheritAttrs: false,
       async setup(_props, { attrs }) {

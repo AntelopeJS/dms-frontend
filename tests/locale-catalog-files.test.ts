@@ -74,7 +74,7 @@ const FRENCH = { greeting: "Bonjour-french-marker" };
  * hundreds of kilobytes once all the modules of an application are merged,
  * against the few dozen messages a page shows.
  */
-describe("generated locale catalogs", () => {
+void describe("generated locale catalogs", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-locale-files-")));
   const workspace = join(root, "workspace");
   const layer: ResolvedLayer = {
@@ -115,7 +115,7 @@ describe("generated locale catalogs", () => {
     return loaded.default;
   }
 
-  it("completes each locale's catalog with the English messages it lacks", async () => {
+  void it("completes each locale's catalog with the English messages it lacks", async () => {
     const french = await generatedMessages("fr");
     assert.deepEqual(french, {
       greeting: FRENCH.greeting,
@@ -127,7 +127,7 @@ describe("generated locale catalogs", () => {
     );
   });
 
-  it("keeps the renderer's own French over a module's English-only wording", async () => {
+  void it("keeps the renderer's own French over a module's English-only wording", async () => {
     const french = await generatedMessages("fr");
     const { createI18n } = await import("vue-i18n");
     const { showNetworkErrors } =
@@ -158,7 +158,7 @@ describe("generated locale catalogs", () => {
     assert.deepEqual(titles, ["Connexion perdue"]);
   });
 
-  it("keeps every catalog out of the client entry, one file per locale", async () => {
+  void it("keeps every catalog out of the client entry, one file per locale", async () => {
     write(
       join(workspace, "main.ts"),
       'import { loadLocaleMessages } from "./locales.generated";\n' +

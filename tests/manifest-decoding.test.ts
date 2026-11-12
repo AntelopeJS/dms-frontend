@@ -33,8 +33,8 @@ async function manifestFailure(answer: Json): Promise<Error | undefined> {
   }
 }
 
-describe("fetchManifest decoding", () => {
-  it("refuses an answer that is not a manifest object, as one without a version", async () => {
+void describe("fetchManifest decoding", () => {
+  void it("refuses an answer that is not a manifest object, as one without a version", async () => {
     for (const body of [null, "abc", 5, true, [], {}]) {
       const failure = await manifestFailure(body);
       assert.ok(failure instanceof ManifestRefusedError, JSON.stringify(body));
@@ -45,13 +45,13 @@ describe("fetchManifest decoding", () => {
     }
   });
 
-  it("refuses a manifest whose version is not a number", async () => {
+  void it("refuses a manifest whose version is not a number", async () => {
     const failure = await manifestFailure({ version: "2", modules: [] });
     assert.ok(failure instanceof ManifestRefusedError);
     assert.match(problemText(failure), /without a protocol version/);
   });
 
-  it("refuses a manifest without a list of modules", async () => {
+  void it("refuses a manifest without a list of modules", async () => {
     const answers: (Json | undefined)[] = [undefined, null, "abc", 5, {}];
     for (const modules of answers) {
       const failure = await manifestFailure({ version: 2, modules });
@@ -63,7 +63,7 @@ describe("fetchManifest decoding", () => {
     }
   });
 
-  it("refuses a module that is not an object, or has no name or priority", async () => {
+  void it("refuses a module that is not an object, or has no name or priority", async () => {
     const badModules: Json[] = [
       null,
       "abc",
@@ -83,7 +83,7 @@ describe("fetchManifest decoding", () => {
     }
   });
 
-  it("refuses a module field of the wrong type instead of passing it on", async () => {
+  void it("refuses a module field of the wrong type instead of passing it on", async () => {
     const badFields: JsonObject[] = [
       { path: 5 },
       { configKey: [] },
@@ -106,7 +106,7 @@ describe("fetchManifest decoding", () => {
     }
   });
 
-  it("refuses a settling flag or origin rewrites of the wrong type", async () => {
+  void it("refuses a settling flag or origin rewrites of the wrong type", async () => {
     const badExtras: JsonObject[] = [
       { settling: "yes" },
       { originRewrites: {} },
@@ -122,7 +122,7 @@ describe("fetchManifest decoding", () => {
     }
   });
 
-  it("keeps every field a well-formed manifest declares", async () => {
+  void it("keeps every field a well-formed manifest declares", async () => {
     const module = {
       ...vueModule,
       path: "/srv/module",
@@ -157,7 +157,7 @@ describe("fetchManifest decoding", () => {
     }
   });
 
-  it("does not take a cache that is not a manifest for the backend's", async () => {
+  void it("does not take a cache that is not a manifest for the backend's", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-manifest-cache-"));
     try {
       writeFileSync(

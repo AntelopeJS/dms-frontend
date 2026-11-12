@@ -116,8 +116,8 @@ async function buildFixture(): Promise<string> {
   return root;
 }
 
-describe("the client entry's weight by module", () => {
-  it("records, from the client build, what each module's sources add to the entry", async () => {
+void describe("the client entry's weight by module", () => {
+  void it("records, from the client build, what each module's sources add to the entry", async () => {
     const root = await buildFixture();
     const recorded: unknown = JSON.parse(
       readText(join(root, "dist", "client", ENTRY_WEIGHT_FILE)),
@@ -149,7 +149,7 @@ describe("the client entry's weight by module", () => {
     assert.ok(Math.abs(weight.brotli - brotli) <= 16, "Brotli of the entry");
   });
 
-  it("warns about a module above the threshold, never about shared code or translations", () => {
+  void it("warns about a module above the threshold, never about shared code or translations", () => {
     const weight = {
       bytes: 900_000,
       brotli: 225_000,
@@ -167,7 +167,7 @@ describe("the client entry's weight by module", () => {
     assert.deepEqual(heavyEntryModules(weight, 0), [], "0 turns it off");
   });
 
-  it("reads the threshold from DMS_ENTRY_WEIGHT_WARNING, in KB of Brotli", () => {
+  void it("reads the threshold from DMS_ENTRY_WEIGHT_WARNING, in KB of Brotli", () => {
     assert.equal(
       entryWeightThreshold({}),
       DEFAULT_ENTRY_WEIGHT_WARNING_KB * 1024,
@@ -183,7 +183,7 @@ describe("the client entry's weight by module", () => {
     );
   });
 
-  it("reports the entry and each module's share, and warns about the heavy one", async () => {
+  void it("reports the entry and each module's share, and warns about the heavy one", async () => {
     const root = await buildFixture();
     const messages: { level: string; text: string; details: string[] }[] = [];
     reportEntryWeight(
@@ -206,7 +206,7 @@ describe("the client entry's weight by module", () => {
     assert.match(warnings[0]?.details.join("\n") ?? "", /defineAsyncComponent/);
   });
 
-  it("reports nothing for a build that recorded no weight", () => {
+  void it("reports nothing for a build that recorded no weight", () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-entry-weight-")));
     roots.push(root);
     const messages: string[] = [];

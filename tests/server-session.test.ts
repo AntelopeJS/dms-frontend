@@ -19,8 +19,8 @@ import {
 } from "../templates/vue/server/auth/session.mjs";
 import { requestOf, responseOf } from "./helpers/http-doubles";
 
-describe("client of a request", () => {
-  it("uses the socket address and never caller-forwarded headers", () => {
+void describe("client of a request", () => {
+  void it("uses the socket address and never caller-forwarded headers", () => {
     assert.equal(
       clientIp(
         requestOf({
@@ -32,7 +32,7 @@ describe("client of a request", () => {
     );
   });
 
-  it("believes only the platform's client IP header, whatever the hops", () => {
+  void it("believes only the platform's client IP header, whatever the hops", () => {
     process.env.DMS_CLIENT_IP_HEADER = "X-Client-IP";
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     try {
@@ -68,7 +68,7 @@ describe("client of a request", () => {
     }
   });
 
-  it("uses the rightmost untrusted address behind configured proxies", () => {
+  void it("uses the rightmost untrusted address behind configured proxies", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "2";
     try {
       assert.equal(
@@ -85,7 +85,7 @@ describe("client of a request", () => {
     }
   });
 
-  it("validates the public origin supplied by a trusted reverse proxy", () => {
+  void it("validates the public origin supplied by a trusted reverse proxy", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     try {
       assert.equal(
@@ -107,8 +107,8 @@ describe("client of a request", () => {
   });
 });
 
-describe("backend messages", () => {
-  it("allows public auth keys without exposing details or stacks", () => {
+void describe("backend messages", () => {
+  void it("allows public auth keys without exposing details or stacks", () => {
     assert.equal(
       publicBackendMessage({
         message: "error.invalid_credentials",
@@ -121,7 +121,7 @@ describe("backend messages", () => {
   });
 });
 
-describe("cookies of instances sharing a host", () => {
+void describe("cookies of instances sharing a host", () => {
   /** Run `action` as the frontend of `backendUrl`, with its own secret. */
   function asInstance<T>(backendUrl: string, secret: string, action: () => T) {
     const previous = process.env.DMS_API_BASE_URL;
@@ -137,7 +137,7 @@ describe("cookies of instances sharing a host", () => {
   const first = ["http://localhost:5010", "a".repeat(32)] as const;
   const second = ["http://localhost:5020", "b".repeat(32)] as const;
 
-  it("names them after the backend, whatever its spelling", () => {
+  void it("names them after the backend, whatever its spelling", () => {
     const name = (backendUrl: string) =>
       asInstance(backendUrl, "a".repeat(32), () =>
         scopedCookieName("dms_session"),
@@ -147,7 +147,7 @@ describe("cookies of instances sharing a host", () => {
     assert.notEqual(name(first[0]), name(second[0]));
   });
 
-  it("keeps one instance's session out of another's", () => {
+  void it("keeps one instance's session out of another's", () => {
     const write = (backendUrl: string, secret: string, accountId: string) =>
       asInstance(backendUrl, secret, () => {
         const response = responseOf();
@@ -171,20 +171,20 @@ describe("cookies of instances sharing a host", () => {
   });
 });
 
-describe("session establishment from a module endpoint", () => {
-  it("keeps the allowlist empty when nothing is declared", () => {
+void describe("session establishment from a module endpoint", () => {
+  void it("keeps the allowlist empty when nothing is declared", () => {
     assert.deepEqual(allowedEstablishEndpoints(undefined), []);
     assert.deepEqual(allowedEstablishEndpoints(""), []);
   });
 
-  it("allows what the modules declared, with no environment variable", () => {
+  void it("allows what the modules declared, with no environment variable", () => {
     assert.deepEqual(
       allowedEstablishEndpoints(undefined, ["/api/saas/register/finalize"]),
       ["/api/saas/register/finalize"],
     );
   });
 
-  it("unions the module declarations with the environment, without duplicates", () => {
+  void it("unions the module declarations with the environment, without duplicates", () => {
     assert.deepEqual(
       allowedEstablishEndpoints(
         "/api/invites/redeem, /api/saas/register/finalize",
@@ -194,7 +194,7 @@ describe("session establishment from a module endpoint", () => {
     );
   });
 
-  it("drops malformed module declarations as it drops malformed environment ones", () => {
+  void it("drops malformed module declarations as it drops malformed environment ones", () => {
     assert.deepEqual(
       allowedEstablishEndpoints("", [
         "/api/ok",
@@ -206,7 +206,7 @@ describe("session establishment from a module endpoint", () => {
     );
   });
 
-  it("reads the endpoints the loader generated into the workspace", () => {
+  void it("reads the endpoints the loader generated into the workspace", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-declared-"));
     try {
       const file = join(workspace, "generated-auth-establish.json");
@@ -222,14 +222,14 @@ describe("session establishment from a module endpoint", () => {
     }
   });
 
-  it("falls back to no declaration when the workspace carries no such file", () => {
+  void it("falls back to no declaration when the workspace carries no such file", () => {
     assert.deepEqual(
       readDeclaredEstablishEndpoints(join(tmpdir(), "dms-absent", "a.json")),
       [],
     );
   });
 
-  it("reads a comma-separated declaration and drops malformed entries", () => {
+  void it("reads a comma-separated declaration and drops malformed entries", () => {
     assert.deepEqual(
       allowedEstablishEndpoints(
         " /api/saas/register/finalize , /api/invites/redeem ,,http://evil/api/x,/auth/login,/api/../secret",

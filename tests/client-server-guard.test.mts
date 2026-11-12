@@ -65,7 +65,7 @@ function builtJavascript(root: string): string {
     .join("\n");
 }
 
-describe("server code in the client bundle", () => {
+void describe("server code in the client bundle", () => {
   const workspaces: string[] = [];
   after(() => {
     for (const root of workspaces)
@@ -78,7 +78,7 @@ describe("server code in the client bundle", () => {
     return created;
   }
 
-  it("rejects a static import of a module's server/ file", async () => {
+  void it("rejects a static import of a module's server/ file", async () => {
     const { root, moduleRoot } = workspace();
     writeFixture(
       root,
@@ -91,7 +91,7 @@ describe("server code in the client bundle", () => {
     );
   });
 
-  it("rejects a static import of a dms.server.ts", async () => {
+  void it("rejects a static import of a dms.server.ts", async () => {
     const { root, moduleRoot } = workspace();
     writeFixture(
       root,
@@ -104,7 +104,7 @@ describe("server code in the client bundle", () => {
     );
   });
 
-  it("builds client code that imports no server code", async () => {
+  void it("builds client code that imports no server code", async () => {
     const { root, moduleRoot } = workspace();
     writeFixture(
       root,
@@ -115,7 +115,7 @@ describe("server code in the client bundle", () => {
     assert.doesNotMatch(builtJavascript(root), new RegExp(SECRET_MARKER));
   });
 
-  it("leaves an SSR build that imports server code alone", async () => {
+  void it("leaves an SSR build that imports server code alone", async () => {
     const { root, moduleRoot } = workspace();
     writeFixture(
       root,
@@ -127,10 +127,10 @@ describe("server code in the client bundle", () => {
   });
 });
 
-describe("isServerSource", () => {
+void describe("isServerSource", () => {
   const moduleRoot = "/workspace/frontend-modules/shop";
 
-  it("matches a module's server entry and its server/ files", () => {
+  void it("matches a module's server entry and its server/ files", () => {
     assert.equal(
       isServerSource(`${moduleRoot}/dms.server.ts`, [moduleRoot]),
       true,
@@ -143,7 +143,7 @@ describe("isServerSource", () => {
     );
   });
 
-  it("leaves client files, packages and other directories alone", () => {
+  void it("leaves client files, packages and other directories alone", () => {
     for (const id of [
       `${moduleRoot}/app/pages/server.vue`,
       `${moduleRoot}/app/servers/list.ts`,

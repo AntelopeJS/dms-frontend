@@ -24,8 +24,8 @@ function proxyWith(auth: "session" | "none") {
   return proxy;
 }
 
-describe("public endpoints", () => {
-  it("matches the declared method and one segment per wildcard", () => {
+void describe("public endpoints", () => {
+  void it("matches the declared method and one segment per wildcard", () => {
     const endpoints = allowedPublicEndpoints("", [WEBHOOK]);
     const matched = matchPublicEndpoint(
       "POST",
@@ -47,7 +47,7 @@ describe("public endpoints", () => {
       assert.equal(matchPublicEndpoint("POST", path, endpoints), undefined);
   });
 
-  it("takes extra endpoints from DMS_PUBLIC_ENDPOINTS", () => {
+  void it("takes extra endpoints from DMS_PUBLIC_ENDPOINTS", () => {
     const endpoints = allowedPublicEndpoints(
       JSON.stringify([{ path: "/api/hooks/stripe", methods: ["post", "put"] }]),
       [],
@@ -56,7 +56,7 @@ describe("public endpoints", () => {
     assert.deepEqual(allowedPublicEndpoints("not json", []), []);
   });
 
-  it("drops a malformed declaration whole", () => {
+  void it("drops a malformed declaration whole", () => {
     for (const entry of [
       null,
       "/api/hooks",
@@ -90,7 +90,7 @@ describe("public endpoints", () => {
       );
   });
 
-  it("matches the path the backend receives, never one a traversal climbs out of", () => {
+  void it("matches the path the backend receives, never one a traversal climbs out of", () => {
     const declaration = JSON.stringify([{ path: "/api/hooks/*" }]);
     const previous = process.env.DMS_PUBLIC_ENDPOINTS;
     process.env.DMS_PUBLIC_ENDPOINTS = declaration;
@@ -131,7 +131,7 @@ describe("public endpoints", () => {
     }
   });
 
-  it("sends nothing of the session through a proxy without auth, and needs no Origin", () => {
+  void it("sends nothing of the session through a proxy without auth, and needs no Origin", () => {
     const access = proxyAccess(
       serverRequestOf({
         method: "POST",
@@ -148,7 +148,7 @@ describe("public endpoints", () => {
     });
   });
 
-  it("reads a literal dot in a path as a dot", () => {
+  void it("reads a literal dot in a path as a dot", () => {
     const endpoints = allowedPublicEndpoints("", [
       { path: "/api/hooks/v1.json" },
     ]);

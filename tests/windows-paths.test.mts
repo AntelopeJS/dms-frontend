@@ -41,8 +41,8 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
   return specifier;
 }
 
-describe("Windows paths inlined into generated code", () => {
-  it("mangles a native Windows path used as an auto-import key", async () => {
+void describe("Windows paths inlined into generated code", () => {
+  void it("mangles a native Windows path used as an auto-import key", async () => {
     const specifier = await injectedSpecifier(WINDOWS_MODULE_PATH);
     assert.notEqual(
       specifier,
@@ -53,14 +53,14 @@ describe("Windows paths inlined into generated code", () => {
     assert.ok(specifier.endsWith("\frontend-module.ts"));
   });
 
-  it("keeps the specifier intact once the key is normalized", async () => {
+  void it("keeps the specifier intact once the key is normalized", async () => {
     const key = WINDOWS_MODULE_PATH.split("\\").join("/");
     const specifier = await injectedSpecifier(key);
     assert.equal(specifier, key);
     assert.doesNotMatch(specifier, /\\/);
   });
 
-  it("leaves POSIX paths and globs untouched", () => {
+  void it("leaves POSIX paths and globs untouched", () => {
     for (const path of [
       "/home/dev/.antelopejs/dms-frontend/a27ff4d5/frontend-module.ts",
       "/home/dev/workspace/frontend-modules/dms__ai/app/**/*.vue",
@@ -71,15 +71,15 @@ describe("Windows paths inlined into generated code", () => {
   });
 });
 
-describe("Windows paths handed to import()", () => {
-  it("refuses a native Windows path as a module specifier", async () => {
+void describe("Windows paths handed to import()", () => {
+  void it("refuses a native Windows path as a module specifier", async () => {
     assert.equal(new URL(WINDOWS_MODULE_PATH).protocol, "c:");
     await assert.rejects(import(WINDOWS_MODULE_PATH), {
       code: "ERR_UNSUPPORTED_ESM_URL_SCHEME",
     });
   });
 
-  it("tells an import() call from the same text in a string", () => {
+  void it("tells an import() call from the same text in a string", () => {
     const code = [
       "await import(rendererPath);",
       "import(url.href);",

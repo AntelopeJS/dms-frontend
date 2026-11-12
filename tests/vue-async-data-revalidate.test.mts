@@ -104,8 +104,8 @@ function toggled(key: string, handler: () => Promise<string>) {
   };
 }
 
-describe("Stale while revalidate", () => {
-  it("shows the data at once on a remount, and reads it again in the background", async () => {
+void describe("Stale while revalidate", () => {
+  void it("shows the data at once on a remount, and reads it again in the background", async () => {
     let calls = 0;
     const answers: Array<ReturnType<typeof deferred<string>>> = [];
     const { visible, shown, root } = toggled("banner", () => {
@@ -131,7 +131,7 @@ describe("Stale while revalidate", () => {
     app.unmount();
   });
 
-  it("spares a caller joining data another one has just read a second read", async () => {
+  void it("spares a caller joining data another one has just read a second read", async () => {
     let calls = 0;
     const second = ref(false);
     const Reader = defineComponent({
@@ -155,7 +155,7 @@ describe("Stale while revalidate", () => {
     app.unmount();
   });
 
-  it("does not hold an awaiting caller for data it already has", async () => {
+  void it("does not hold an awaiting caller for data it already has", async () => {
     const { app } = clientApp();
     const first = await app.runWithContext(() =>
       useDmsAsyncData("held", async () => "first"),
@@ -176,7 +176,7 @@ describe("Stale while revalidate", () => {
     assert.equal(first.data.value, "first");
   });
 
-  it("does not read again while the page the server rendered hydrates", async () => {
+  void it("does not read again while the page the server rendered hydrates", async () => {
     let calls = 0;
     const runtime = createDmsFrontendRuntime(undefined, { hydrated: "server" });
     const { visible, root } = toggled("hydrated", async () => {
@@ -194,8 +194,8 @@ describe("Stale while revalidate", () => {
   });
 });
 
-describe("Async data failures and keys", () => {
-  it("keeps the failure until the next answer, and the data of the last success", async () => {
+void describe("Async data failures and keys", () => {
+  void it("keeps the failure until the next answer, and the data of the last success", async () => {
     const { app } = clientApp();
     const answers: Array<ReturnType<typeof deferred<string>>> = [];
     const entry = app.runWithContext(() =>
@@ -223,7 +223,7 @@ describe("Async data failures and keys", () => {
     assert.equal(entry.data.value, "rows again");
   });
 
-  it("names its key, and hands it to transform", async () => {
+  void it("names its key, and hands it to transform", async () => {
     const { app } = clientApp();
     const seen: unknown[] = [];
     const entry = await app.runWithContext(() =>
@@ -240,7 +240,7 @@ describe("Async data failures and keys", () => {
     assert.deepEqual(seen, [{ key: "named" }]);
   });
 
-  it("hands useDmsFetch's transform the key and the URL the answer is for", async () => {
+  void it("hands useDmsFetch's transform the key and the URL the answer is for", async () => {
     const { app } = clientApp();
     const seen: unknown[] = [];
     const entry = await app.runWithContext(() =>
@@ -257,7 +257,7 @@ describe("Async data failures and keys", () => {
     assert.match(String(entry.key.value), /^\$dmsfetch:/);
   });
 
-  it("tracks the replacement of the whole value only, unless deep", async () => {
+  void it("tracks the replacement of the whole value only, unless deep", async () => {
     const { app } = clientApp();
     const entry = await app.runWithContext(() =>
       useDmsAsyncData("shallow-default", async () => ({ rows: [1] })),
@@ -266,8 +266,8 @@ describe("Async data failures and keys", () => {
   });
 });
 
-describe("Page refresh", () => {
-  it("reads again the data on screen, but what opted out or waits for execute()", async () => {
+void describe("Page refresh", () => {
+  void it("reads again the data on screen, but what opted out or waits for execute()", async () => {
     const calls: string[] = [];
     const handler = (name: string) => async () => {
       calls.push(name);
@@ -275,11 +275,11 @@ describe("Page refresh", () => {
     };
     const Page = defineComponent({
       setup() {
-        useDmsAsyncData("kpi", handler("kpi"));
-        useDmsAsyncData("menu", handler("menu"), {
+        void useDmsAsyncData("kpi", handler("kpi"));
+        void useDmsAsyncData("menu", handler("menu"), {
           refreshOnPageRefresh: false,
         });
-        useDmsAsyncData("dialog", handler("dialog"), { immediate: false });
+        void useDmsAsyncData("dialog", handler("dialog"), { immediate: false });
         return () => h("p");
       },
     });
@@ -295,7 +295,7 @@ describe("Page refresh", () => {
     assert.deepEqual(calls, ["kpi", "menu", "kpi"], "nothing off screen");
   });
 
-  it("loads a dialog's data on execute(), then keeps it in step", async () => {
+  void it("loads a dialog's data on execute(), then keeps it in step", async () => {
     const { app } = clientApp();
     let calls = 0;
     const entry = app.runWithContext(() =>
@@ -309,12 +309,14 @@ describe("Page refresh", () => {
     assert.equal(entry.data.value, 2);
   });
 
-  it("reads again on an interval while shown", async () => {
+  void it("reads again on an interval while shown", async () => {
     let calls = 0;
     const visible = ref(true);
     const Poller = defineComponent({
       setup() {
-        useDmsAsyncData("polled", async () => ++calls, { refreshInterval: 10 });
+        void useDmsAsyncData("polled", async () => ++calls, {
+          refreshInterval: 10,
+        });
         return () => h("p");
       },
     });
@@ -332,8 +334,8 @@ describe("Page refresh", () => {
   });
 });
 
-describe("Async data scope", () => {
-  it("keeps the same key of two scopes apart, and drops the data on a change", async () => {
+void describe("Async data scope", () => {
+  void it("keeps the same key of two scopes apart, and drops the data on a change", async () => {
     const { app, runtime } = clientApp();
     app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-a"));
     const first = await app.runWithContext(() =>
@@ -353,7 +355,7 @@ describe("Async data scope", () => {
     assert.deepEqual([...runtime.asyncData.keys()], ["account-b|plan"]);
   });
 
-  it("finds the data the server transferred under the same scope", async () => {
+  void it("finds the data the server transferred under the same scope", async () => {
     const Plan = defineComponent({
       setup() {
         const { data } = useDmsAsyncData("plan", async () => "server plan");
@@ -383,8 +385,8 @@ describe("Async data scope", () => {
   });
 });
 
-describe("Plugin order", () => {
-  it("sets the scope from a pre plugin before another module's plugin reads", async () => {
+void describe("Plugin order", () => {
+  void it("sets the scope from a pre plugin before another module's plugin reads", async () => {
     const reads: Array<{ data: { value: unknown } }> = [];
     await runtimeModule.setupFrontendModules([
       {
@@ -438,8 +440,8 @@ describe("Plugin order", () => {
   });
 });
 
-describe("Async data a server cannot transfer", () => {
-  it("leaves a call without a key to the browser, rendering its default", async () => {
+void describe("Async data a server cannot transfer", () => {
+  void it("leaves a call without a key to the browser, rendering its default", async () => {
     let calls = 0;
     const warnings: unknown[] = [];
     const originalWarn = console.warn;
@@ -470,7 +472,7 @@ describe("Async data a server cannot transfer", () => {
     }
   });
 
-  it("warns in development about a backend read outside async data", async () => {
+  void it("warns in development about a backend read outside async data", async () => {
     const warnings: unknown[] = [];
     const originalWarn = console.warn;
     console.warn = (...args: Parameters<typeof console.warn>) =>
@@ -516,8 +518,8 @@ describe("Async data a server cannot transfer", () => {
   });
 });
 
-describe("Async data on a later page", () => {
-  it("keeps showing a key loaded on an earlier page, read again, after a navigation", async () => {
+void describe("Async data on a later page", () => {
+  void it("keeps showing a key loaded on an earlier page, read again, after a navigation", async () => {
     let value = "v1";
     let calls = 0;
     const { visible, shown, root } = toggled("A", async () => {

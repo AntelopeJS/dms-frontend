@@ -32,8 +32,8 @@ async function closedBackendUrl(): Promise<string> {
   return baseUrl;
 }
 
-describe("fetchManifest", () => {
-  it("passes clientUrl as a query parameter", async () => {
+void describe("fetchManifest", () => {
+  void it("passes clientUrl as a query parameter", async () => {
     const { server, baseUrl, requests } = await startBackend();
     try {
       const result = await fetchManifest(baseUrl, "http://localhost:3002");
@@ -49,7 +49,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("omits clientUrl when not provided", async () => {
+  void it("omits clientUrl when not provided", async () => {
     const { server, baseUrl, requests } = await startBackend();
     try {
       await fetchManifest(baseUrl);
@@ -59,7 +59,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("drops a trailing slash of the backend url, keeping its path", async () => {
+  void it("drops a trailing slash of the backend url, keeping its path", async () => {
     const { server, baseUrl, requests } = await startBackend();
     try {
       await fetchManifest(`${baseUrl}/`);
@@ -73,7 +73,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("requests and validates Vue manifests", async () => {
+  void it("requests and validates Vue manifests", async () => {
     const previousModules = frontendManifest.modules;
     frontendManifest.modules = [
       {
@@ -92,7 +92,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("does not fall back when the frontend endpoint is missing", async () => {
+  void it("does not fall back when the frontend endpoint is missing", async () => {
     const { server, baseUrl, requests } = await startBackend(404);
     try {
       await assert.rejects(
@@ -119,7 +119,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("fails closed when the backend protocol version is unsupported", async () => {
+  void it("fails closed when the backend protocol version is unsupported", async () => {
     const previousVersion = frontendManifest.version;
     frontendManifest.version = 3;
     const { server, baseUrl } = await startBackend();
@@ -134,7 +134,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("says which side to upgrade for a manifest of another version", () => {
+  void it("says which side to upgrade for a manifest of another version", () => {
     assert.equal(
       problemText(new ManifestRefusedError(describeManifestVersion(3))),
       [
@@ -154,7 +154,7 @@ describe("fetchManifest", () => {
     );
   });
 
-  it("takes the version a manifest states, or none, and nothing else", () => {
+  void it("takes the version a manifest states, or none, and nothing else", () => {
     const call = (argument: string) =>
       typeErrors(
         `import { describeManifestVersion } from "../src/common";\ndescribeManifestVersion(${argument});\n`,
@@ -175,7 +175,7 @@ describe("fetchManifest", () => {
     );
   });
 
-  it("says the backend failed on a 5xx, and where to look", async () => {
+  void it("says the backend failed on a 5xx, and where to look", async () => {
     const { server, baseUrl } = await startBackend(500);
     try {
       await assert.rejects(
@@ -199,7 +199,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("fails closed when the backend includes a mismatched renderer", async () => {
+  void it("fails closed when the backend includes a mismatched renderer", async () => {
     const previousModules = frontendManifest.modules;
     frontendManifest.modules = [
       {
@@ -220,7 +220,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("presents the bootstrap credential when it has one", async () => {
+  void it("presents the bootstrap credential when it has one", async () => {
     const { server, baseUrl, headers } = await startBackend();
     try {
       await fetchManifest(baseUrl, undefined, "the-secret");
@@ -230,7 +230,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("sends no credential header when it has none", async () => {
+  void it("sends no credential header when it has none", async () => {
     const { server, baseUrl, headers } = await startBackend();
     try {
       await fetchManifest(baseUrl);
@@ -240,7 +240,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("reports a refused credential distinctly, naming the fix", async () => {
+  void it("reports a refused credential distinctly, naming the fix", async () => {
     const { server, baseUrl } = await startBackend(401);
     try {
       await assert.rejects(
@@ -256,7 +256,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("reports a forbidden response as a refused credential too", async () => {
+  void it("reports a forbidden response as a refused credential too", async () => {
     const { server, baseUrl } = await startBackend(403);
     try {
       await assert.rejects(
@@ -268,7 +268,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("names a missing credential apart from a refused one", async () => {
+  void it("names a missing credential apart from a refused one", async () => {
     const { server, baseUrl } = await startBackend(401);
     try {
       await assert.rejects(() => fetchManifest(baseUrl), /none was sent/);
@@ -281,7 +281,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("keeps its own query string out of error messages", async () => {
+  void it("keeps its own query string out of error messages", async () => {
     for (const status of [401, 500]) {
       const { server, baseUrl } = await startBackend(status);
       try {
@@ -300,7 +300,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("names the URL and the refused connection instead of 'fetch failed'", async () => {
+  void it("names the URL and the refused connection instead of 'fetch failed'", async () => {
     const backendUrl = await closedBackendUrl();
     await assert.rejects(
       () => fetchManifest(backendUrl),
@@ -320,7 +320,7 @@ describe("fetchManifest", () => {
     );
   });
 
-  it("names an unknown host", async () => {
+  void it("names an unknown host", async () => {
     await assert.rejects(
       () => fetchManifest("http://dms-backend.invalid:5010"),
       (err: Error) => {
@@ -336,7 +336,7 @@ describe("fetchManifest", () => {
     );
   });
 
-  it("rejects a backend URL fetch cannot use, before any request", async () => {
+  void it("rejects a backend URL fetch cannot use, before any request", async () => {
     for (const backendUrl of ["localhost:5010", "http://dms backend:5010"]) {
       await assert.rejects(
         () => fetchManifest(backendUrl),
@@ -355,7 +355,7 @@ describe("fetchManifest", () => {
     }
   });
 
-  it("keeps a backend outage a plain error, so the cache can absorb it", async () => {
+  void it("keeps a backend outage a plain error, so the cache can absorb it", async () => {
     const { server, baseUrl } = await startBackend(500);
     try {
       await assert.rejects(
@@ -368,7 +368,7 @@ describe("fetchManifest", () => {
   });
 });
 
-describe("resolveManifest with a cached manifest", () => {
+void describe("resolveManifest with a cached manifest", () => {
   async function withCachedWorkspace(
     run: (workspace: string) => Promise<void>,
   ): Promise<void> {
@@ -396,7 +396,7 @@ describe("resolveManifest with a cached manifest", () => {
     }
   }
 
-  it("refuses an unsupported protocol version instead of replaying the cache", async () => {
+  void it("refuses an unsupported protocol version instead of replaying the cache", async () => {
     await withCachedWorkspace(async (workspace) => {
       const previousVersion = frontendManifest.version;
       frontendManifest.version = 1;
@@ -413,7 +413,7 @@ describe("resolveManifest with a cached manifest", () => {
     });
   });
 
-  it("refuses a mismatched renderer instead of replaying the cache", async () => {
+  void it("refuses a mismatched renderer instead of replaying the cache", async () => {
     await withCachedWorkspace(async (workspace) => {
       const previousModules = frontendManifest.modules;
       frontendManifest.modules = [
@@ -434,7 +434,7 @@ describe("resolveManifest with a cached manifest", () => {
     });
   });
 
-  it("replays the cache when the backend cannot be reached", async () => {
+  void it("replays the cache when the backend cannot be reached", async () => {
     await withCachedWorkspace(async (workspace) => {
       const resolved = await resolveManifest(
         workspace,
@@ -446,7 +446,7 @@ describe("resolveManifest with a cached manifest", () => {
     });
   });
 
-  it("still replays the cache when the backend fails", async () => {
+  void it("still replays the cache when the backend fails", async () => {
     await withCachedWorkspace(async (workspace) => {
       const resolved = await resolveAgainst(workspace, 503);
       assert.equal(resolved.fromCache, true);
@@ -454,7 +454,7 @@ describe("resolveManifest with a cached manifest", () => {
     });
   });
 
-  it("replays the cache offline without asking the backend", async () => {
+  void it("replays the cache offline without asking the backend", async () => {
     await withCachedWorkspace(async (workspace) => {
       const { server, baseUrl, requests } = await startBackend();
       try {
@@ -467,7 +467,7 @@ describe("resolveManifest with a cached manifest", () => {
     });
   });
 
-  it("leaves the failure as it is when there is no cache to replay", async () => {
+  void it("leaves the failure as it is when there is no cache to replay", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-manifest-cache-"));
     try {
       await assert.rejects(

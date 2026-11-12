@@ -36,7 +36,7 @@ function requestUntilClosed(port: number, path: string) {
   });
 }
 
-describe("the proxy and the client's connection", () => {
+void describe("the proxy and the client's connection", () => {
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backend = createServer((_request, response) => {
     response.writeHead(200, {
@@ -63,7 +63,7 @@ describe("the proxy and the client's connection", () => {
     backend.close();
   });
 
-  it("closes the socket when the client asks for Connection: close", async () => {
+  void it("closes the socket when the client asks for Connection: close", async () => {
     const response = await requestUntilClosed(frontendPort, "/api/items");
     const [head = "", body] = response.split("\r\n\r\n");
     assert.match(head, /^HTTP\/1\.1 200/);

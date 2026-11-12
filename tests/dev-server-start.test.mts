@@ -88,8 +88,8 @@ function hmrHandshake(port: number): Promise<string> {
   });
 }
 
-describe("the development server's Vite instance", () => {
-  it(
+void describe("the development server's Vite instance", () => {
+  void it(
     "answers the HMR websocket on the frontend port",
     { timeout: 30_000 },
     async (context) => {
@@ -101,7 +101,7 @@ describe("the development server's Vite instance", () => {
     },
   );
 
-  it(
+  void it(
     "starts Vite again after a failed start, once for concurrent requests",
     { timeout: 30_000 },
     async (context) => {

@@ -27,7 +27,7 @@ function page(...icons: string[]) {
   });
 }
 
-describe("Icons in a server render", () => {
+void describe("Icons in a server render", () => {
   const queries: unknown[] = [];
 
   before(() => {
@@ -39,19 +39,19 @@ describe("Icons in a server render", () => {
     registerDmsIconCollections([COLLECTION]);
   });
 
-  it("draws an icon of a registered collection, a backend-named one included", async () => {
+  void it("draws an icon of a registered collection, a backend-named one included", async () => {
     assert.match(await renderToString(page("demo-check")), /M1 1h2/);
     assert.match(await renderToString(page("demo:check")), /M1 1h2/);
   });
 
-  it("leaves an icon without data empty, without querying an API", async () => {
+  void it("leaves an icon without data empty, without querying an API", async () => {
     const html = await renderToString(page("demo-missing", "other-icon"));
     assert.doesNotMatch(html, /<path/);
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.deepEqual(queries, []);
   });
 
-  it("hands the browser the data of each icon it drew", async () => {
+  void it("hands the browser the data of each icon it drew", async () => {
     const app = page("demo-check", "demo-missing");
     const drawn = trackDmsIcons(app);
     await renderToString(app);
@@ -62,14 +62,14 @@ describe("Icons in a server render", () => {
     assert.equal(icons["demo-check"].body, CHECK_PATH);
   });
 
-  it("lets the browser draw a handed-over icon in its first render", async () => {
+  void it("lets the browser draw a handed-over icon in its first render", async () => {
     assert.equal(iconLoaded("handed-over"), false);
     addDmsIcons({ "handed-over": { body: CHECK_PATH } });
     assert.equal(iconLoaded("handed-over"), true);
     assert.match(await renderToString(page("handed-over")), /M1 1h2/);
   });
 
-  it("draws each icon once in the page's sprite, every occurrence using it", async () => {
+  void it("draws each icon once in the page's sprite, every occurrence using it", async () => {
     const app = createSSRApp({
       render: () => [
         h(Icon, { icon: "demo-check" }),

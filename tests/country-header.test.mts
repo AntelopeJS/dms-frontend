@@ -23,7 +23,7 @@ function request(headers: Record<string, string>) {
   return requestOf({ headers, remoteAddress: "10.0.0.2" });
 }
 
-describe("client country header", () => {
+void describe("client country header", () => {
   const previous = Object.fromEntries(
     ENVIRONMENT.map((name) => [name, process.env[name]]),
   );
@@ -57,14 +57,14 @@ describe("client country header", () => {
     api.close();
   });
 
-  it("relays CF-IPCountry from a trusted proxy by default", () => {
+  void it("relays CF-IPCountry from a trusted proxy by default", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     assert.deepEqual(clientCountryHeader(request({ "cf-ipcountry": " FR " })), {
       "cf-ipcountry": "FR",
     });
   });
 
-  it("relays the header DMS_COUNTRY_HEADER names instead", () => {
+  void it("relays the header DMS_COUNTRY_HEADER names instead", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     process.env.DMS_COUNTRY_HEADER = "X-Country-Code";
     assert.deepEqual(
@@ -75,14 +75,14 @@ describe("client country header", () => {
     );
   });
 
-  it("relays nothing without a trusted proxy, since any caller can set it", () => {
+  void it("relays nothing without a trusted proxy, since any caller can set it", () => {
     assert.deepEqual(
       clientCountryHeader(request({ "cf-ipcountry": "FR" })),
       {},
     );
   });
 
-  it("relays nothing when DMS_COUNTRY_HEADER is empty or not a header name", () => {
+  void it("relays nothing when DMS_COUNTRY_HEADER is empty or not a header name", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     for (const name of ["", "  ", "bad header", "x-country:"]) {
       process.env.DMS_COUNTRY_HEADER = name;
@@ -93,13 +93,13 @@ describe("client country header", () => {
     }
   });
 
-  it("relays nothing when the request has no value", () => {
+  void it("relays nothing when the request has no value", () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     assert.deepEqual(clientCountryHeader(request({})), {});
     assert.deepEqual(clientCountryHeader(request({ "cf-ipcountry": " " })), {});
   });
 
-  it("sends the country to the backend with the client address", async () => {
+  void it("sends the country to the backend with the client address", async () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     await backend(
       "/api/auth/login",
@@ -115,7 +115,7 @@ describe("client country header", () => {
     assert.equal(received[0]["x-unrelated"], undefined);
   });
 
-  it("never lets the country header replace a header the relay sets", async () => {
+  void it("never lets the country header replace a header the relay sets", async () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     process.env.DMS_COUNTRY_HEADER = "X-Forwarded-For";
     await backend(
@@ -126,7 +126,7 @@ describe("client country header", () => {
     assert.equal(received[0]["x-forwarded-for"], "203.0.113.7");
   });
 
-  it("forwards the country on a proxied API request", async () => {
+  void it("forwards the country on a proxied API request", async () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     const response = await fetch(`${base}/api/items`, {
       headers: { "cf-ipcountry": "FR" },
@@ -137,7 +137,7 @@ describe("client country header", () => {
     assert.equal(received[0]["cf-ipcountry"], "FR");
   });
 
-  it("drops the country on a proxied request without a trusted proxy", async () => {
+  void it("drops the country on a proxied request without a trusted proxy", async () => {
     const response = await fetch(`${base}/api/items`, {
       headers: { "cf-ipcountry": "FR" },
     });

@@ -15,7 +15,7 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
-describe("files the development server serves", () => {
+void describe("files the development server serves", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-dev-server-files-"));
   const previousCwd = process.cwd();
   const previousDev = process.env.DMS_DEV;
@@ -64,7 +64,7 @@ describe("files the development server serves", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("serves Vite's modules without asking the backend first", async () => {
+  void it("serves Vite's modules without asking the backend first", async () => {
     backendPaths.length = 0;
     for (const path of ["/@vite/client", "/probe.ts"]) {
       const response = await fetch(`${base}${path}`);
@@ -78,7 +78,7 @@ describe("files the development server serves", () => {
     assert.deepEqual(backendPaths, []);
   });
 
-  it("serves a file the frontend does not have from a declared backend prefix only", async () => {
+  void it("serves a file the frontend does not have from a declared backend prefix only", async () => {
     backendPaths.length = 0;
     {
       const response = await fetch(`${base}${MEDIA_PATH}`);
@@ -92,7 +92,7 @@ describe("files the development server serves", () => {
     }
   });
 
-  it("never asks the backend for a path no module declares", async () => {
+  void it("never asks the backend for a path no module declares", async () => {
     backendPaths.length = 0;
     const write = await fetch(`${base}${UNREAD_COUNT_PATH}`, {
       method: "POST",

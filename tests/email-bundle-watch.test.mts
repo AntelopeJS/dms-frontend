@@ -60,7 +60,7 @@ async function emailWorkspace(templates: Record<string, string>): Promise<{
   return { workspace, moduleRoot, email };
 }
 
-it("builds the email bundle in development and rebuilds it when a template changes", async () => {
+void it("builds the email bundle in development and rebuilds it when a template changes", async () => {
   const { workspace, moduleRoot, email } = await emailWorkspace({
     "Welcome.vue": "<template><p>Welcome, first edition</p></template>\n",
   });
@@ -85,7 +85,7 @@ it("builds the email bundle in development and rebuilds it when a template chang
   }
 });
 
-it("lets a render in progress finish before a rebuild replaces the bundle", async () => {
+void it("lets a render in progress finish before a rebuild replaces the bundle", async () => {
   const { workspace, moduleRoot, email } = await emailWorkspace({
     "Welcome.vue": `<script setup lang="ts">
 const props = defineProps<{ footer?: boolean }>();

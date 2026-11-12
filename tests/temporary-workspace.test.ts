@@ -24,20 +24,20 @@ function runFixture(mode: string) {
   return { status: result.status, workspace };
 }
 
-describe("createTemporaryWorkspace", () => {
-  it("removes the workspace after a successful run", () => {
+void describe("createTemporaryWorkspace", () => {
+  void it("removes the workspace after a successful run", () => {
     const { status, workspace } = runFixture("succeed");
     assert.equal(status, 0);
     assert.equal(existsSync(workspace), false);
   });
 
-  it("removes the workspace when the run throws", () => {
+  void it("removes the workspace when the run throws", () => {
     const { status, workspace } = runFixture("throw");
     assert.notEqual(status, 0);
     assert.equal(existsSync(workspace), false);
   });
 
-  it("removes the workspace when a promise rejects", () => {
+  void it("removes the workspace when a promise rejects", () => {
     const { status, workspace } = runFixture("reject");
     assert.notEqual(status, 0);
     assert.equal(existsSync(workspace), false);

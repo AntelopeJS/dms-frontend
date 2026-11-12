@@ -54,8 +54,8 @@ function secretNotSet(): UsageError {
   throw new Error("expected a UsageError");
 }
 
-describe("CLI output", () => {
-  it("prints an error with the core symbols, on stderr only", () => {
+void describe("CLI output", () => {
+  void it("prints an error with the core symbols, on stderr only", () => {
     const output = memoryUi();
     output.ui.problem(secretNotSet().problem);
     assert.equal(output.stdout(), "");
@@ -65,7 +65,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("falls back to ASCII symbols", () => {
+  void it("falls back to ASCII symbols", () => {
     const output = memoryUi({ isUnicode: false });
     output.ui.problem(secretNotSet().problem);
     assert.equal(
@@ -74,7 +74,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("colors only the symbols, and only when colors are on", () => {
+  void it("colors only the symbols, and only when colors are on", () => {
     const colored = memoryUi({ isColored: true });
     colored.ui.problem(secretNotSet().problem);
     assert.ok(
@@ -87,7 +87,7 @@ describe("CLI output", () => {
     assert.ok(!plain.stderr().includes(ESC));
   });
 
-  it("prints the ready block with the URLs first, labels aligned", () => {
+  void it("prints the ready block with the URLs first, labels aligned", () => {
     const output = memoryUi();
     const lines = formatReadyBlock(
       {
@@ -121,7 +121,7 @@ describe("CLI output", () => {
     ]);
   });
 
-  it("wraps the ready block to a narrow terminal, each value under itself", () => {
+  void it("wraps the ready block to a narrow terminal, each value under itself", () => {
     const output = memoryUi();
     const block = {
       title: "Dev server ready in 1.5s",
@@ -181,7 +181,7 @@ describe("CLI output", () => {
     ]);
   });
 
-  it("keeps only the local URL of the ready block in a quiet run", () => {
+  void it("keeps only the local URL of the ready block in a quiet run", () => {
     const output = memoryUi();
     const block = {
       title: "Production server ready in 120ms",
@@ -200,7 +200,7 @@ describe("CLI output", () => {
     assert.equal(formatReadyBlock(block, output.ui, false).length, 6);
   });
 
-  it("prints the loopback the dev server listens on as localhost, the host the backend is told", () => {
+  void it("prints the loopback the dev server listens on as localhost, the host the backend is told", () => {
     const local = (address: string) =>
       readyLines({ address, port: 3001 }, [], {}).find(
         (line) => line.label === "Local",
@@ -210,7 +210,7 @@ describe("CLI output", () => {
     assert.equal(local("192.168.1.20"), "http://192.168.1.20:3001/");
   });
 
-  it("lists LAN addresses only, a few at most", () => {
+  void it("lists LAN addresses only, a few at most", () => {
     const ipv4 = (address: string) => [interfaceIpv4(address)];
     const network = readyLines(
       { address: "0.0.0.0", port: 3002 },
@@ -260,7 +260,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("tells a container bridge from one holding the network card", () => {
+  void it("tells a container bridge from one holding the network card", () => {
     const net = mkdtempSync(join(tmpdir(), "dms-sys-class-net-"));
     const link = (name: string, ...entries: string[]) => {
       for (const entry of entries)
@@ -281,7 +281,7 @@ describe("CLI output", () => {
     }
   });
 
-  it("shows no network URL for a server bound to one address", () => {
+  void it("shows no network URL for a server bound to one address", () => {
     const lines = readyLines({ address: "127.0.0.1", port: 3321 }, [], {
       eth0: [interfaceIpv4("192.168.1.20")],
     });
@@ -299,7 +299,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("falls back to ASCII and colors only the arrows and URLs", () => {
+  void it("falls back to ASCII and colors only the arrows and URLs", () => {
     const ascii = memoryUi({ isUnicode: false });
     const block = {
       title: "Production server ready in 0.2s",

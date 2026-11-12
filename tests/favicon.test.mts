@@ -4,8 +4,8 @@ import { withFaviconPlaceholder } from "../templates/vue/server/favicon.mjs";
 
 const PLACEHOLDER = '<link rel="icon" href="data:," />';
 
-describe("the favicon placeholder", () => {
-  it("goes in front of a head that declares no icon", () => {
+void describe("the favicon placeholder", () => {
+  void it("goes in front of a head that declares no icon", () => {
     for (const headTags of [
       "",
       "<title>Orders</title>",
@@ -19,7 +19,7 @@ describe("the favicon placeholder", () => {
       );
   });
 
-  it("stays out of a head that declares its own icon", () => {
+  void it("stays out of a head that declares its own icon", () => {
     for (const headTags of [
       '<title>Orders</title><link rel="icon" href="/favicon.svg">',
       '<link rel="icon" href="/branding/icon-light.svg" media="(prefers-color-scheme: light)"><link rel="icon" href="/branding/icon-dark.svg" media="(prefers-color-scheme: dark)">',

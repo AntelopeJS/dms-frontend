@@ -43,7 +43,7 @@ function manifestOf(modules: ServedModule[]) {
   };
 }
 
-describe("module set", () => {
+void describe("module set", () => {
   let server: Server;
   let backendUrl: string;
   let served: ServedModule[] = [dmsModule];
@@ -75,7 +75,7 @@ describe("module set", () => {
 
   after(() => server.close());
 
-  it("ignores the order of modules but not their sources", () => {
+  void it("ignores the order of modules but not their sources", () => {
     assert.equal(
       moduleSetFingerprint([dmsModule, langModule]),
       moduleSetFingerprint([langModule, dmsModule]),
@@ -86,7 +86,7 @@ describe("module set", () => {
     );
   });
 
-  it("tells apart the endpoints and the backend proxies a module declares", () => {
+  void it("tells apart the endpoints and the backend proxies a module declares", () => {
     const tracker = {
       ...dmsModule,
       publicEndpoints: [{ path: "/api/tracker/beacon" }],
@@ -112,7 +112,7 @@ describe("module set", () => {
     );
   });
 
-  it(
+  void it(
     "calls back once a module declares other public endpoints",
     { timeout: 2000 },
     async () => {
@@ -139,7 +139,7 @@ describe("module set", () => {
     },
   );
 
-  it("calls back once the backend serves another set", async () => {
+  void it("calls back once the backend serves another set", async () => {
     served = [dmsModule];
     let changes = 0;
     const changed = new Promise<void>((resolve) => {
@@ -161,7 +161,7 @@ describe("module set", () => {
     assert.equal(changes, 1);
   });
 
-  it("ignores a set seen on one read only", async () => {
+  void it("ignores a set seen on one read only", async () => {
     served = [dmsModule];
     let changes = 0;
     const stop = followModuleSet({
@@ -178,7 +178,7 @@ describe("module set", () => {
     assert.equal(changes, 0);
   });
 
-  it("waits while the backend says its set is settling", async () => {
+  void it("waits while the backend says its set is settling", async () => {
     served = [];
     settling = true;
     let changes = 0;
@@ -194,7 +194,7 @@ describe("module set", () => {
     assert.equal(changes, 0);
   });
 
-  it("tells each unchanged read, so a restarted backend hears again", async () => {
+  void it("tells each unchanged read, so a restarted backend hears again", async () => {
     served = [dmsModule];
     let unchanged = 0;
     const stop = followModuleSet({
@@ -209,7 +209,7 @@ describe("module set", () => {
     assert.ok(unchanged >= 2);
   });
 
-  it("stops following when asked", async () => {
+  void it("stops following when asked", async () => {
     served = [dmsModule];
     let changes = 0;
     const stop = followModuleSet({
@@ -224,7 +224,7 @@ describe("module set", () => {
     assert.equal(changes, 0);
   });
 
-  it("reports the served modules' versions and its own with the bootstrap credential", async () => {
+  void it("reports the served modules' versions and its own with the bootstrap credential", async () => {
     const isTaken = await reportFrontendReady(
       backendUrl,
       [{ name: dmsModule.name, version: "0.9.8" }, { name: "unversioned" }],
@@ -245,7 +245,7 @@ describe("module set", () => {
     });
   });
 
-  it("does not fail when the backend cannot take the report", async () => {
+  void it("does not fail when the backend cannot take the report", async () => {
     assert.equal(
       await reportFrontendReady("http://127.0.0.1:1", [{ name: "x" }]),
       false,
@@ -253,7 +253,7 @@ describe("module set", () => {
   });
 });
 
-describe("reporting to a backend that is waking", () => {
+void describe("reporting to a backend that is waking", () => {
   const retry = { firstDelayMs: 10, maxDelayMs: 40, timeoutMs: 200 };
   let answers: ((response: import("node:http").ServerResponse) => void)[];
   let reports = 0;
@@ -280,7 +280,7 @@ describe("reporting to a backend that is waking", () => {
     server.close();
   });
 
-  it("reports again until a backend that timed out, then was starting, takes it", async () => {
+  void it("reports again until a backend that timed out, then was starting, takes it", async () => {
     reports = 0;
     answers = [
       (response) => setTimeout(() => response.end(), 500),
@@ -301,7 +301,7 @@ describe("reporting to a backend that is waking", () => {
     assert.equal(reports, 3);
   });
 
-  it("does not report again to a backend that refused the report", async () => {
+  void it("does not report again to a backend that refused the report", async () => {
     reports = 0;
     answers = [
       (response) => {

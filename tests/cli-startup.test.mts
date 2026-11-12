@@ -52,8 +52,8 @@ const COMMAND_MODULES = [
   /[\\/]node_modules[\\/]chokidar[\\/]/,
 ];
 
-describe("CLI startup", () => {
-  it("loads no command implementation for help and version", () => {
+void describe("CLI startup", () => {
+  void it("loads no command implementation for help and version", () => {
     for (const args of [["--help"], ["--version"], ["dev", "--help"]]) {
       const loaded = loadedModules(args);
       for (const pattern of COMMAND_MODULES) {
@@ -66,7 +66,7 @@ describe("CLI startup", () => {
     }
   });
 
-  it("loads the command that runs, without the config loader", () => {
+  void it("loads the command that runs, without the config loader", () => {
     const loaded = loadedModules(["clean", "--all"]);
     assert.deepEqual(
       loaded

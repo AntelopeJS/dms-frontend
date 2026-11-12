@@ -95,8 +95,8 @@ function usageProblem(run: () => void) {
   assert.fail("expected a usage error");
 }
 
-describe("reading the packages verify-source builds", () => {
-  it("verifies the project's module on the core layer it installs", () => {
+void describe("reading the packages verify-source builds", () => {
+  void it("verifies the project's module on the core layer it installs", () => {
     const root = project({ ...DEMO_PROJECT, ...installedDms() });
     const { layers, coreLayer } = sources(root, {
       moduleSources: [join(root, "frontend-vue")],
@@ -114,7 +114,7 @@ describe("reading the packages verify-source builds", () => {
     );
   });
 
-  it("resolves @antelopejs/dms the way Node does, from a parent directory", () => {
+  void it("resolves @antelopejs/dms the way Node does, from a parent directory", () => {
     const root = project({ ...DEMO_PROJECT, ...installedDms("0.5.5") });
     const { layers, coreLayer } = sources(join(root, "frontend-vue"));
     assert.equal(
@@ -127,7 +127,7 @@ describe("reading the packages verify-source builds", () => {
     );
   });
 
-  it("defaults to the project's frontend-vue module", () => {
+  void it("defaults to the project's frontend-vue module", () => {
     const root = project({ ...DEMO_PROJECT, ...installedDms() });
     assert.deepEqual(
       sources(root).layers.map((layer) => layer.packageName),
@@ -135,7 +135,7 @@ describe("reading the packages verify-source builds", () => {
     );
   });
 
-  it("verifies an unpublished core layer passed with -l instead", () => {
+  void it("verifies an unpublished core layer passed with -l instead", () => {
     const root = project({
       ...DEMO_PROJECT,
       ...installedDms(),
@@ -152,7 +152,7 @@ describe("reading the packages verify-source builds", () => {
     );
   });
 
-  it("verifies the core layer alone when -l names it", () => {
+  void it("verifies the core layer alone when -l names it", () => {
     const root = project(frontendPackage("frontend-vue", CORE_LAYER));
     const { layers } = sources(root, {
       layerSource: join(root, "frontend-vue"),
@@ -163,7 +163,7 @@ describe("reading the packages verify-source builds", () => {
     );
   });
 
-  it("takes a core layer passed as a module as the layer", () => {
+  void it("takes a core layer passed as a module as the layer", () => {
     const root = project(frontendPackage("frontend-vue", CORE_LAYER));
     const { layers, coreLayer } = sources(root);
     assert.match(coreLayer, /^the DMS core layer in /);
@@ -173,7 +173,7 @@ describe("reading the packages verify-source builds", () => {
     );
   });
 
-  it("asks to install @antelopejs/dms with the project's package manager", () => {
+  void it("asks to install @antelopejs/dms with the project's package manager", () => {
     const root = project(DEMO_PROJECT);
     const problem = usageProblem(() => sources(root));
     assert.equal(
@@ -198,7 +198,7 @@ describe("reading the packages verify-source builds", () => {
     ]);
   });
 
-  it("names an installed release without a core layer", () => {
+  void it("names an installed release without a core layer", () => {
     const root = project({
       ...DEMO_PROJECT,
       [`${INSTALLED_DMS}/package.json`]: {
@@ -216,7 +216,7 @@ describe("reading the packages verify-source builds", () => {
     ]);
   });
 
-  it("names a --layer package whose name is not text as a package without a name", () => {
+  void it("names a --layer package whose name is not text as a package without a name", () => {
     const root = project({ ...DEMO_PROJECT, ...installedDms() });
     for (const name of [5, { a: 1 }]) {
       const layer = project({
@@ -232,7 +232,7 @@ describe("reading the packages verify-source builds", () => {
     }
   });
 
-  it("refuses an installed @antelopejs/dms whose version is not text, naming the field", () => {
+  void it("refuses an installed @antelopejs/dms whose version is not text, naming the field", () => {
     for (const version of [5, {}, undefined]) {
       for (const withCoreLayer of [true, false]) {
         const files: Record<string, string | JsonFile> = withCoreLayer
@@ -264,7 +264,7 @@ describe("reading the packages verify-source builds", () => {
     }
   });
 
-  it("sends a frontend module passed with -l to -m", () => {
+  void it("sends a frontend module passed with -l to -m", () => {
     const root = project({ ...DEMO_PROJECT, ...installedDms() });
     const module = join(root, "frontend-vue");
     const problem = usageProblem(() =>
@@ -284,7 +284,7 @@ describe("reading the packages verify-source builds", () => {
     ]);
   });
 
-  it("asks for a module when the project has none", () => {
+  void it("asks for a module when the project has none", () => {
     const root = project({ "package.json": { name: "backend" } });
     const problem = usageProblem(() => sources(root));
     assert.equal(problem.title, "No frontend module to verify");
@@ -315,8 +315,8 @@ function optionsFromEnvironment(
   }
 }
 
-describe("reading the options verify-source is started with", () => {
-  it("reads a list of module paths and a record of local packages", () => {
+void describe("reading the options verify-source is started with", () => {
+  void it("reads a list of module paths and a record of local packages", () => {
     const options = optionsFromEnvironment(
       '["/a","/b"]',
       '{"@antelopejs/interface-dms":"/opt/interface-dms"}',
@@ -327,21 +327,21 @@ describe("reading the options verify-source is started with", () => {
     });
   });
 
-  it("refuses module sources that are not a list of paths", () => {
+  void it("refuses module sources that are not a list of paths", () => {
     for (const text of ['{"a":1}', "[1]", '"/a"', "null"]) {
       const problem = usageProblem(() => optionsFromEnvironment(text, "{}"));
       assert.match(problem.title, /DMS_MODULE_SOURCES/, text);
     }
   });
 
-  it("refuses local packages that are not a record of paths", () => {
+  void it("refuses local packages that are not a record of paths", () => {
     for (const text of ['{"a":1}', "[]", '["a"]', '"a=/p"', "null"]) {
       const problem = usageProblem(() => optionsFromEnvironment("[]", text));
       assert.match(problem.title, /DMS_LOCAL_PACKAGES/, text);
     }
   });
 
-  it("ignores a package.json field of the project that is not text", () => {
+  void it("ignores a package.json field of the project that is not text", () => {
     const root = project({
       ...DEMO_PROJECT,
       "package.json": '{"name":"demo","packageManager":5}',

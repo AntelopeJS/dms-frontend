@@ -7,8 +7,8 @@ import {
   viteManifestOf,
 } from "../templates/vue/server/generated-files.mjs";
 
-describe("The module registry the build writes", () => {
-  it("is the list of modules with their ids and options", () => {
+void describe("The module registry the build writes", () => {
+  void it("is the list of modules with their ids and options", () => {
     const registry = {
       modules: [
         { id: "a", options: { homepage: "/start" } },
@@ -19,7 +19,7 @@ describe("The module registry the build writes", () => {
     assert.deepEqual(frontendRegistryOf({ modules: [] }), { modules: [] });
   });
 
-  it("is refused when it is not a list of modules that have an id", () => {
+  void it("is refused when it is not a list of modules that have an id", () => {
     for (const content of [
       null,
       "abc",
@@ -41,8 +41,8 @@ describe("The module registry the build writes", () => {
   });
 });
 
-describe("The server options the build writes", () => {
-  it("are the private options by module id and the variables by secret path", () => {
+void describe("The server options the build writes", () => {
+  void it("are the private options by module id and the variables by secret path", () => {
     const options = {
       modules: { a: { secret: "", nested: { key: "" } } },
       environment: { DMS_HTML_RENDER_SECRET: ["secret"] },
@@ -50,7 +50,7 @@ describe("The server options the build writes", () => {
     assert.deepEqual(serverOptionsOf(options), options);
   });
 
-  it("read an absent part as empty", () => {
+  void it("read an absent part as empty", () => {
     assert.deepEqual(serverOptionsOf({}), { modules: {}, environment: {} });
     assert.deepEqual(serverOptionsOf({ modules: { a: {} } }), {
       modules: { a: {} },
@@ -58,7 +58,7 @@ describe("The server options the build writes", () => {
     });
   });
 
-  it("are refused when a part has the wrong shape", () => {
+  void it("are refused when a part has the wrong shape", () => {
     for (const content of [
       null,
       "abc",
@@ -80,8 +80,8 @@ describe("The server options the build writes", () => {
   });
 });
 
-describe("The client manifest Vite writes", () => {
-  it("is an object of chunks, whose members are kept as they are", () => {
+void describe("The client manifest Vite writes", () => {
+  void it("is an object of chunks, whose members are kept as they are", () => {
     const manifest = {
       "index.html": {
         file: "assets/index.js",
@@ -96,7 +96,7 @@ describe("The client manifest Vite writes", () => {
     assert.deepEqual(viteManifestOf({}), {});
   });
 
-  it("is refused when it is not an object of chunks that name their file", () => {
+  void it("is refused when it is not an object of chunks that name their file", () => {
     for (const content of [
       null,
       "abc",
@@ -116,8 +116,8 @@ describe("The client manifest Vite writes", () => {
   });
 });
 
-describe("The icon collection of an Iconify package", () => {
-  it("is kept as it is when its icons and aliases have the members Iconify gives them", () => {
+void describe("The icon collection of an Iconify package", () => {
+  void it("is kept as it is when its icons and aliases have the members Iconify gives them", () => {
     const collection = {
       prefix: "lucide",
       lastModified: 1700000000,
@@ -133,7 +133,7 @@ describe("The icon collection of an Iconify package", () => {
     });
   });
 
-  it("is refused when it is not an Iconify icon set", () => {
+  void it("is refused when it is not an Iconify icon set", () => {
     for (const content of [
       null,
       "abc",

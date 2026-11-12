@@ -191,13 +191,13 @@ async function outcome({ backend, layer }: Layout, check: Case) {
   }
 }
 
-describe("The backend boundary plugin", () => {
+void describe("The backend boundary plugin", () => {
   for (const check of CASES)
-    it(check.name, async (t) => {
+    void it(check.name, async (t) => {
       assert.equal(await outcome(layout(t), check), check.expected);
     });
 
-  it("names the importer and the backend package", async (t) => {
+  void it("names the importer and the backend package", async (t) => {
     const { layer } = layout(t);
     put(layer, "entry.ts", 'import x from "../src/x.ts";\nexport default x;\n');
     const built = build({
@@ -222,7 +222,7 @@ describe("The backend boundary plugin", () => {
   });
 });
 
-describe("A generated workspace", () => {
+void describe("A generated workspace", () => {
   function layerOf({ layer }: Layout): ResolvedLayer {
     return {
       path: layer,
@@ -231,7 +231,7 @@ describe("A generated workspace", () => {
     };
   }
 
-  it("records the package that ships each module as its backend package", (t) => {
+  void it("records the package that ships each module as its backend package", (t) => {
     const fixture = layout(t);
     const registry = createFrontendModuleRegistry(
       join(fixture.backend, "..", "workspace"),
@@ -291,7 +291,7 @@ describe("A generated workspace", () => {
     }
   }
 
-  it("fails a module that imports the src of the package that ships it", async (t) => {
+  void it("fails a module that imports the src of the package that ships it", async (t) => {
     const fixture = layout(t);
     put(
       fixture.layer,
@@ -304,7 +304,7 @@ describe("A generated workspace", () => {
     );
   });
 
-  it("loads a module that imports that package's built files", async (t) => {
+  void it("loads a module that imports that package's built files", async (t) => {
     const fixture = layout(t);
     put(
       fixture.layer,

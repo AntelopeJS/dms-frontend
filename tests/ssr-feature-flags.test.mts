@@ -23,7 +23,7 @@ function installVueI18n(loadServerFirst: boolean) {
   });
 }
 
-it("installs the external vue-i18n build under NODE_ENV=production once the server is loaded", () => {
+void it("installs the external vue-i18n build under NODE_ENV=production once the server is loaded", () => {
   const withoutServer = installVueI18n(false);
   assert.match(withoutServer.stderr, /__VUE_PROD_DEVTOOLS__ is not defined/);
 

@@ -61,7 +61,7 @@ async function retainedApps(probe: LeakProbe): Promise<number> {
   return probe.rendered - probe.released;
 }
 
-it("releases every server render once it is sent", async () => {
+void it("releases every server render once it is sent", async () => {
   const workspace = mkdtempSync(resolve(".ssr-memory-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
   const previousEnvironment = process.env.NODE_ENV;

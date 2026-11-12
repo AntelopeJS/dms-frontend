@@ -52,11 +52,11 @@ function writeProject(project: string): void {
   );
 }
 
-describe("a module's frontend is found wherever AntelopeJS installs its source", () => {
+void describe("a module's frontend is found wherever AntelopeJS installs its source", () => {
   const project = mkdtempSync(join(tmpdir(), "dms-module-sources-"));
   after(() => rmSync(project, { recursive: true, force: true }));
 
-  it("loads the frontend of a local, a package and a git module", async () => {
+  void it("loads the frontend of a local, a package and a git module", async () => {
     writeProject(project);
 
     const modules = await readProjectFrontendModules({

@@ -38,8 +38,8 @@ function isDmsFailure(value: unknown): value is DmsFailure {
   );
 }
 
-describe("Async data in a server render", () => {
-  it("awaits lazy data before rendering it, so the HTML shows what the payload carries (E2)", async () => {
+void describe("Async data in a server render", () => {
+  void it("awaits lazy data before rendering it, so the HTML shows what the payload carries (E2)", async () => {
     const Lazy = defineComponent({
       setup() {
         const { data, status } = useDmsAsyncData(
@@ -70,7 +70,7 @@ describe("Async data in a server render", () => {
     assert.deepEqual(serializeDmsAsyncData(runtime), { e2: "fresh" });
   });
 
-  it("leaves server: false data to the browser (E4)", async () => {
+  void it("leaves server: false data to the browser (E4)", async () => {
     let calls = 0;
     const Root = defineComponent({
       async setup() {
@@ -92,7 +92,7 @@ describe("Async data in a server render", () => {
     assert.deepEqual(serializeDmsAsyncData(runtime), {});
   });
 
-  it("fetches the keys of one setup in parallel when it does not await them (E6)", async () => {
+  void it("fetches the keys of one setup in parallel when it does not await them (E6)", async () => {
     const started: string[] = [];
     const gates = { a: deferred<string>(), b: deferred<string>() };
     const load = (name: "a" | "b") =>
@@ -117,7 +117,7 @@ describe("Async data in a server render", () => {
     assert.equal(await rendering, "<p>A+B</p>");
   });
 
-  it("still holds a server render for lazy data its setup awaits", async () => {
+  void it("still holds a server render for lazy data its setup awaits", async () => {
     const Root = defineComponent({
       async setup() {
         const { data } = await useDmsAsyncData(
@@ -137,7 +137,7 @@ describe("Async data in a server render", () => {
     assert.equal(await render(), "<p>loaded</p>");
   });
 
-  it("renders the data plugins start before the page, with one request when a plugin refreshes it at once", async () => {
+  void it("renders the data plugins start before the page, with one request when a plugin refreshes it at once", async () => {
     let calls = 0;
     const handler = (ms: number) => async () => {
       const call = ++calls;
@@ -150,7 +150,7 @@ describe("Async data in a server render", () => {
         module: {
           setup(sdk) {
             sdk.registerPlugin(() => {
-              useDmsAsyncData("plugin-lazy", handler(40), { lazy: true });
+              void useDmsAsyncData("plugin-lazy", handler(40), { lazy: true });
             });
             sdk.registerPlugin(async () => {
               const entry = useDmsAsyncData("plugin-refreshed", handler(5), {
@@ -179,7 +179,7 @@ describe("Async data in a server render", () => {
     await setupFrontendModules([]);
   });
 
-  it("gives the components after a non-awaited key the same ids in the browser", async () => {
+  void it("gives the components after a non-awaited key the same ids in the browser", async () => {
     const ids = new Map<string, string>();
     const Child = defineComponent({
       props: { label: { type: String, required: true } },
@@ -191,7 +191,7 @@ describe("Async data in a server render", () => {
     });
     const Parent = defineComponent({
       setup() {
-        useDmsAsyncData("ids", async () => "value");
+        void useDmsAsyncData("ids", async () => "value");
         return () => h(Child, { label: "inside" });
       },
     });
@@ -214,14 +214,14 @@ describe("Async data in a server render", () => {
   });
 });
 
-describe("Server payload", () => {
+void describe("Server payload", () => {
   const serverPayload = async (setup: () => () => ReturnType<typeof h>) => {
     const { runtime, render } = serverRender(defineComponent({ setup }));
     const html = await render();
     return { html, payload: runtimeModule.serializeDmsPayload(runtime) };
   };
 
-  it("transfers a failed server run, so hydration does not run it again (E5)", async () => {
+  void it("transfers a failed server run, so hydration does not run it again (E5)", async () => {
     const { html, payload } = await serverPayload(() => {
       const { status, error } = useDmsAsyncData("e5", async () => {
         throw runtimeModule.createDmsError({
@@ -264,9 +264,9 @@ describe("Server payload", () => {
     assert.deepEqual(failure.data, { message: "orders.not_found" });
   });
 
-  it("keeps the backend's address out of a fetch error it transfers", async () => {
+  void it("keeps the backend's address out of a fetch error it transfers", async () => {
     const { payload } = await serverPayload(() => {
-      useDmsAsyncData("fetch-error", async () => {
+      void useDmsAsyncData("fetch-error", async () => {
         throw Object.assign(
           new Error(
             '[GET] "http://10.0.0.5:5500/api/x": 503 Service Unavailable',
@@ -289,7 +289,7 @@ describe("Server payload", () => {
     });
   });
 
-  it("keeps the body of a backend's 5xx out of the payload, and a 4xx's in", async () => {
+  void it("keeps the body of a backend's 5xx out of the payload, and a 4xx's in", async () => {
     const backendFailure = (statusCode: number, data: Record<string, string>) =>
       Object.assign(new Error(`[GET] "/api/x": ${statusCode}`), {
         name: "FetchError",
@@ -298,10 +298,10 @@ describe("Server payload", () => {
         data,
       });
     const { payload } = await serverPayload(() => {
-      useDmsAsyncData("server-failure", async () => {
+      void useDmsAsyncData("server-failure", async () => {
         throw backendFailure(500, { stack: "at db.query (pg://secret)" });
       });
-      useDmsAsyncData("client-failure", async () => {
+      void useDmsAsyncData("client-failure", async () => {
         throw backendFailure(422, { field: "email" });
       });
       return () => h("p");
@@ -320,10 +320,10 @@ describe("Server payload", () => {
     });
   });
 
-  it("transfers an unexpected failure as its status alone", async (context) => {
+  void it("transfers an unexpected failure as its status alone", async (context) => {
     context.mock.method(console, "error", () => {});
     const { payload } = await serverPayload(() => {
-      useDmsAsyncData("unexpected", async () => {
+      void useDmsAsyncData("unexpected", async () => {
         throw new Error("private database hostname");
       });
       return () => h("p");
@@ -332,7 +332,7 @@ describe("Server payload", () => {
     assert.deepEqual(payload.errors, { unexpected: { statusCode: 500 } });
   });
 
-  it("transfers only the state a key opts into (E5)", async () => {
+  void it("transfers only the state a key opts into (E5)", async () => {
     let browserInit = 0;
     const { payload } = await serverPayload(() => {
       runtimeModule.useDmsState("onboarding", () => ({ done: true }), {

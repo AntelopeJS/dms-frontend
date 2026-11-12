@@ -69,11 +69,11 @@ function writeConfig(project: string): void {
   );
 }
 
-describe("config variable references name only what the provider publishes", () => {
+void describe("config variable references name only what the provider publishes", () => {
   const project = mkdtempSync(join(tmpdir(), "dms-config-var-names-"));
   after(() => rmSync(project, { recursive: true, force: true }));
 
-  it("leaves a reference to an Object.prototype member unresolved, declared or not", async () => {
+  void it("leaves a reference to an Object.prototype member unresolved, declared or not", async () => {
     writeConsumer(project);
     writeProvider(project, ["REAL", "toString", "constructor"]);
     writeConfig(project);

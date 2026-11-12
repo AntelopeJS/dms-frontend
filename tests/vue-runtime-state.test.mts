@@ -25,8 +25,8 @@ type NavigateListener = (event: {
   detail: { page: { props: Pick<DmsPageProps, "path" | "shared"> } };
 }) => void;
 
-describe("Vue request runtime", () => {
-  it("copies a site layout into the state once, whatever the pages that carry it", () => {
+void describe("Vue request runtime", () => {
+  void it("copies a site layout into the state once, whatever the pages that carry it", () => {
     const { app, runtime } = application("first");
     const shared = { isOwner: true, modules: ["first"], quickActions: [] };
     const state = (key: string) => runtime.sharedState.get(key)?.value;
@@ -51,7 +51,7 @@ describe("Vue request runtime", () => {
     assert.notEqual(state("dms-lastRefreshTime"), 1);
   });
 
-  it("keeps the newest site layout when Back puts an older page back", (context) => {
+  void it("keeps the newest site layout when Back puts an older page back", (context) => {
     const { app, runtime } = application("first");
     const listeners = new Map<string, PopstateListener>();
     const hadWindow = "window" in globalThis;
@@ -106,7 +106,7 @@ describe("Vue request runtime", () => {
     }
   });
 
-  it("forgets prefetched pages when the session becomes another one", async (context) => {
+  void it("forgets prefetched pages when the session becomes another one", async (context) => {
     const { app } = application("first");
     const flushes = context.mock.method(router, "flushAll", () => {});
     const sessions = [
@@ -135,7 +135,7 @@ describe("Vue request runtime", () => {
     }
   });
 
-  it("isolates overlapping transport, state, async data and hooks", async () => {
+  void it("isolates overlapping transport, state, async data and hooks", async () => {
     const first = application("first");
     const second = application("second");
     const calls: string[] = [];
@@ -170,7 +170,7 @@ describe("Vue request runtime", () => {
     assert.throws(() => useDmsState("identity"), /outside a Vue application/);
   });
 
-  it("hydrates falsy async data without fetching twice and refreshes explicitly", async () => {
+  void it("hydrates falsy async data without fetching twice and refreshes explicitly", async () => {
     const { app } = application("client", { empty: null });
     let count = 0;
     const load = () =>
@@ -184,7 +184,7 @@ describe("Vue request runtime", () => {
     assert.equal(count, 1);
   });
 
-  it("deduplicates concurrent async data consumers within one request", async () => {
+  void it("deduplicates concurrent async data consumers within one request", async () => {
     const { app } = application("first");
     let count = 0;
     const load = () =>
@@ -201,7 +201,7 @@ describe("Vue request runtime", () => {
     assert.equal(second.data.value, 42);
   });
 
-  it("replaces shared permission data on navigation and disposes hooks", async () => {
+  void it("replaces shared permission data on navigation and disposes hooks", async () => {
     const { app, runtime } = application("first");
     let calls = 0;
     const hooks = app.runWithContext(useDmsRuntimeHooks);
@@ -242,7 +242,7 @@ describe("Vue request runtime", () => {
     });
   });
 
-  it("restores isolated application contexts between asynchronous middleware", async () => {
+  void it("restores isolated application contexts between asynchronous middleware", async () => {
     const first = application("first");
     const second = application("second");
     const capturedErrors = new Map<string, ReturnType<typeof useDmsError>>();

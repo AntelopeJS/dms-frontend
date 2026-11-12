@@ -21,7 +21,7 @@ import { addressOf } from "./helpers/net";
 
 const PAGE_FALLBACK_STATUS = 404;
 
-describe("the dev server's answer to a module Vite cannot transform", () => {
+void describe("the dev server's answer to a module Vite cannot transform", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-vite-errors-"));
   const overlayErrors: Array<ErrorPayload["err"]> = [];
   let vite: ViteDevServer;
@@ -70,25 +70,25 @@ describe("the dev server's answer to a module Vite cannot transform", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("answers 500 with Vite's error instead of falling through to a 404", async () => {
+  void it("answers 500 with Vite's error instead of falling through to a 404", async () => {
     const response = await fetch(`${base}/broken.ts`);
     assert.equal(response.status, 500);
     assert.match(await response.text(), /#dms-demo\/app\/utils\/x/);
   });
 
-  it("hands the error to the client overlay", async () => {
+  void it("hands the error to the client overlay", async () => {
     await fetch(`${base}/broken.ts`);
     const overlayError = overlayErrors.at(-1);
     assert.ok(overlayError);
     assert.match(overlayError.message, /#dms-demo\/app\/utils\/x/);
   });
 
-  it("still serves a module that transforms", async () => {
+  void it("still serves a module that transforms", async () => {
     const response = await fetch(`${base}/ok.ts`);
     assert.equal(response.status, 200);
   });
 
-  it("still passes on a request Vite does not handle", async () => {
+  void it("still passes on a request Vite does not handle", async () => {
     const response = await fetch(`${base}/not-a-module`);
     assert.equal(response.status, PAGE_FALLBACK_STATUS);
   });

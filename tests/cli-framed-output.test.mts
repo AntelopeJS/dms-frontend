@@ -74,7 +74,7 @@ const describePosix = process.platform === "win32" ? describe.skip : describe;
 
 let cli: FakePnpmCli;
 
-describePosix("framing pnpm install and the production build", () => {
+void describePosix("framing pnpm install and the production build", () => {
   let layer: string;
   let backend: { server: Server; url: string };
 
@@ -89,7 +89,7 @@ describePosix("framing pnpm install and the production build", () => {
     cli.dispose();
   });
 
-  it("installs as one task and keeps pnpm's own output to itself", async () => {
+  void it("installs as one task and keeps pnpm's own output to itself", async () => {
     const run = await cli.run(["prepare", "-b", backend.url]);
 
     assert.equal(run.code, 0, run.stderr);
@@ -108,7 +108,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.equal(install.env.updateNotifier, "false");
   });
 
-  it("replays the end of a failed install, with paths at their source", async () => {
+  void it("replays the end of a failed install, with paths at their source", async () => {
     const run = await cli.run(["dev", "-b", backend.url, "-p", "0"], {
       setUp: projectHome,
       scenario: "install-fails",
@@ -127,7 +127,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.match(run.stderr, /Run with --verbose for the full output\.\n$/);
   });
 
-  it("streams everything behind a gutter in a verbose run", async () => {
+  void it("streams everything behind a gutter in a verbose run", async () => {
     const run = await cli.run(
       ["dev", "-b", backend.url, "-p", "0", "--verbose"],
       { setUp: projectHome, scenario: "install-fails" },
@@ -143,7 +143,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.doesNotMatch(run.stderr, /Run with --verbose/);
   });
 
-  it("builds step by step and lists Vite's warnings where logs are read later", async () => {
+  void it("builds step by step and lists Vite's warnings where logs are read later", async () => {
     const run = await cli.run(projectBuild, { setUp: projectHome });
 
     assert.equal(run.code, 0, run.stderr);
@@ -187,7 +187,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.ok(steps.every((call) => call.env.viteLogLevel === "warn"));
   });
 
-  it("keeps only the warnings of a quiet build", async () => {
+  void it("keeps only the warnings of a quiet build", async () => {
     const run = await cli.run([...projectBuild, "-q"], {
       setUp: projectHome,
     });
@@ -202,7 +202,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.doesNotMatch(run.stderr, /Built the production frontend|\n\n/);
   });
 
-  it("keeps only the warnings of a quiet prepare", async () => {
+  void it("keeps only the warnings of a quiet prepare", async () => {
     const run = await cli.run(["-q", "prepare", "-b", backend.url]);
 
     assert.equal(run.code, 0, run.stderr);
@@ -211,7 +211,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.doesNotMatch(run.stderr, /Prepared the workspace/);
   });
 
-  it("says the cached manifest has no layer paths when prepare runs offline", async () => {
+  void it("says the cached manifest has no layer paths when prepare runs offline", async () => {
     const run = await cli.run(
       ["prepare", "-b", OFFLINE_BACKEND, "--offline", "--strict"],
       { setUp: (sandbox) => pathlessDevHome(sandbox, OFFLINE_BACKEND) },
@@ -225,7 +225,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.doesNotMatch(run.stderr, /this run sent none/);
   });
 
-  it("ends a build in ASCII on a dumb terminal", async () => {
+  void it("ends a build in ASCII on a dumb terminal", async () => {
     const run = await cli.run(projectBuild, {
       setUp: projectHome,
       env: { TERM: "dumb" },
@@ -239,7 +239,7 @@ describePosix("framing pnpm install and the production build", () => {
     assert.doesNotMatch(run.stderr, /[^\n -~]/);
   });
 
-  it("reports a Vite error once, at the layer source, without the stack", async () => {
+  void it("reports a Vite error once, at the layer source, without the stack", async () => {
     const run = await cli.run(projectBuild, {
       setUp: projectHome,
       scenario: "ssr-fails",
@@ -255,7 +255,7 @@ describePosix("framing pnpm install and the production build", () => {
   });
 });
 
-describePosix("framing verify-source", () => {
+void describePosix("framing verify-source", () => {
   before(() => {
     cli = new FakePnpmCli("dms-frontend-verify-");
   });
@@ -274,7 +274,7 @@ describePosix("framing verify-source", () => {
     );
   }
 
-  it("reports a failed check once, at the layer source, without a stack", async () => {
+  void it("reports a failed check once, at the layer source, without a stack", async () => {
     const run = await cli.run(["verify-source", "-l", "frontend-vue"], {
       setUp: sourceLayer,
       scenario: "ssr-fails",
@@ -327,7 +327,7 @@ describePosix("framing verify-source", () => {
     );
   }
 
-  it("verifies the project's module on the installed core layer", async () => {
+  void it("verifies the project's module on the installed core layer", async () => {
     const run = await cli.run(["verify-source"], {
       setUp: project,
       scenario: "ssr-fails",
@@ -344,7 +344,7 @@ describePosix("framing verify-source", () => {
     );
   });
 
-  it("keeps only the failure of a quiet run", async () => {
+  void it("keeps only the failure of a quiet run", async () => {
     const run = await cli.run(["verify-source", "-l", "frontend-vue", "-q"], {
       setUp: sourceLayer,
       scenario: "ssr-fails",

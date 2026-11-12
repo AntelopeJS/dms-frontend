@@ -25,8 +25,8 @@ function closeServer(server: Server): Promise<void> {
   });
 }
 
-describe("reserveFreePort", () => {
-  it("reports the port the system picked when asked for port 0", async () => {
+void describe("reserveFreePort", () => {
+  void it("reports the port the system picked when asked for port 0", async () => {
     const reserved = await reserveFreePort(0, 0);
     try {
       assert.notEqual(reserved.port, 0);
@@ -37,7 +37,7 @@ describe("reserveFreePort", () => {
     }
   });
 
-  it("returns the requested port when it is free", async () => {
+  void it("returns the requested port when it is free", async () => {
     const { server, port } = await occupyPort();
     await closeServer(server);
     const reserved = await reserveFreePort(port);
@@ -49,7 +49,7 @@ describe("reserveFreePort", () => {
     }
   });
 
-  it("falls back to a later port when the requested one is busy", async () => {
+  void it("falls back to a later port when the requested one is busy", async () => {
     const { server, port } = await occupyPort();
     try {
       const reserved = await reserveFreePort(port);
@@ -65,7 +65,7 @@ describe("reserveFreePort", () => {
     }
   });
 
-  it("holds the port until release() is called", async () => {
+  void it("holds the port until release() is called", async () => {
     const { server, port } = await occupyPort();
     await closeServer(server);
 
@@ -87,7 +87,7 @@ describe("reserveFreePort", () => {
     }
   });
 
-  it("releases the port while a client is still connected to it", async () => {
+  void it("releases the port while a client is still connected to it", async () => {
     const { server, port } = await occupyPort();
     await closeServer(server);
     const held = await reserveFreePort(port);
@@ -111,7 +111,7 @@ describe("reserveFreePort", () => {
     }
   });
 
-  it("throws when no port is free within the range", async () => {
+  void it("throws when no port is free within the range", async () => {
     const { server, port } = await occupyPort();
     try {
       await assert.rejects(
@@ -123,7 +123,7 @@ describe("reserveFreePort", () => {
     }
   });
 
-  it("clamps the probe range to the TCP maximum", async () => {
+  void it("clamps the probe range to the TCP maximum", async () => {
     try {
       const reserved = await reserveFreePort(65530, 20);
       try {
@@ -138,8 +138,8 @@ describe("reserveFreePort", () => {
   });
 });
 
-describe("reservePort", () => {
-  it("holds the requested port until release() is called", async () => {
+void describe("reservePort", () => {
+  void it("holds the requested port until release() is called", async () => {
     const { server, port } = await occupyPort();
     await closeServer(server);
 
@@ -153,7 +153,7 @@ describe("reservePort", () => {
     await again?.release();
   });
 
-  it("does not move to another port when the requested one is busy", async () => {
+  void it("does not move to another port when the requested one is busy", async () => {
     const { server, port } = await occupyPort();
     try {
       assert.equal(await reservePort(port), undefined);

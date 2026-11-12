@@ -71,7 +71,7 @@ function gatedBody(totalBytes: number, release: Promise<void>) {
   });
 }
 
-describe("the proxy streams large file-storage transfers", () => {
+void describe("the proxy streams large file-storage transfers", () => {
   const previous = {
     backend: process.env.DMS_API_BASE_URL,
     proxies: process.env.DMS_BACKEND_PROXIES,
@@ -157,7 +157,7 @@ describe("the proxy streams large file-storage transfers", () => {
     );
   });
 
-  it("streams an upload to the backend without the cookie or the session", async () => {
+  void it("streams an upload to the backend without the cookie or the session", async () => {
     const response = await fetch(
       `${frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
       streamedBody({
@@ -178,7 +178,7 @@ describe("the proxy streams large file-storage transfers", () => {
     assert.equal(seen?.headers.authorization, undefined);
   });
 
-  it("streams a download to the client as the backend writes it", async () => {
+  void it("streams a download to the client as the backend writes it", async () => {
     const response = await fetch(
       `${frontendUrl}/file-storage/files/folder%2Fphoto.png?token=${TOKEN}`,
       { headers: { cookie: "dms_session=sealed" } },
@@ -205,7 +205,7 @@ describe("the proxy streams large file-storage transfers", () => {
     assert.equal(seen?.headers.cookie, undefined);
   });
 
-  it("answers 413 to a declared length over the limit, before reaching the backend", async () => {
+  void it("answers 413 to a declared length over the limit, before reaching the backend", async () => {
     const response = await fetch(
       `${frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
       { method: "PUT", body: new Uint8Array(TOO_LARGE_BYTES) },
@@ -215,7 +215,7 @@ describe("the proxy streams large file-storage transfers", () => {
     assert.deepEqual(requests, []);
   });
 
-  it("cuts a chunked body off with 413 once it goes over the limit", async () => {
+  void it("cuts a chunked body off with 413 once it goes over the limit", async () => {
     const response = await fetch(
       `${frontendUrl}/file-storage/upload/key?token=${TOKEN}`,
       streamedBody({
@@ -258,7 +258,7 @@ describe("the proxy streams large file-storage transfers", () => {
     return { socket, errors, closed, answer: () => answer };
   }
 
-  it("reads the rest of a refused upload before it closes, so the client gets its 413", async () => {
+  void it("reads the rest of a refused upload before it closes, so the client gets its 413", async () => {
     const declared = await uploadPastTheAnswer(
       `content-length: ${TOO_LARGE_BYTES}\r\n`,
     );
@@ -276,7 +276,7 @@ describe("the proxy streams large file-storage transfers", () => {
     assert.deepEqual(requests, []);
   });
 
-  it("hands a backend redirect to the client instead of following it", async () => {
+  void it("hands a backend redirect to the client instead of following it", async () => {
     const response = await fetch(`${frontendUrl}/api/redirect`, {
       redirect: "manual",
     });
@@ -285,7 +285,7 @@ describe("the proxy streams large file-storage transfers", () => {
     await response.arrayBuffer();
   });
 
-  it("relays a relative Location and every Set-Cookie unchanged", async () => {
+  void it("relays a relative Location and every Set-Cookie unchanged", async () => {
     const response = await fetch(`${frontendUrl}/api/relative-redirect`, {
       redirect: "manual",
     });
@@ -298,7 +298,7 @@ describe("the proxy streams large file-storage transfers", () => {
     await response.arrayBuffer();
   });
 
-  it("keeps the token out of the logs when the backend is down", async () => {
+  void it("keeps the token out of the logs when the backend is down", async () => {
     const backendUrl = process.env.DMS_API_BASE_URL;
     process.env.DMS_API_BASE_URL = "http://127.0.0.1:1";
     try {
@@ -316,8 +316,8 @@ describe("the proxy streams large file-storage transfers", () => {
   });
 });
 
-describe("sendWithinLimit", () => {
-  it("resolves undefined after its 413 when the over-limit body was already read", async () => {
+void describe("sendWithinLimit", () => {
+  void it("resolves undefined after its 413 when the over-limit body was already read", async () => {
     const { sendWithinLimit } =
       await import("../templates/vue/server/proxy-transfers.mjs");
     const body = "0123456789";

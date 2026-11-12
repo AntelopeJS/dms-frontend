@@ -18,8 +18,8 @@ function isFrom(value: unknown): value is { from: string } {
   return isPlainObject(value) && isText(value.from);
 }
 
-describe("Module server routes in development", () => {
-  it("answers with an edited handler on the next request", async () => {
+void describe("Module server routes in development", () => {
+  void it("answers with an edited handler on the next request", async () => {
     const workspace = realpathSync(
       mkdtempSync(resolve(".server-modules-dev-")),
     );
@@ -108,8 +108,8 @@ describe("Module server routes in development", () => {
   });
 });
 
-describe("The module testing helper", () => {
-  it("serves a module's routes as the frontend server does, for its own tests", async () => {
+void describe("The module testing helper", () => {
+  void it("serves a module's routes as the frontend server does, for its own tests", async () => {
     const { serveModuleRoutes } =
       await import("../templates/vue/server/module-testing.mjs");
     const served = await serveModuleRoutes(
@@ -150,7 +150,7 @@ describe("The module testing helper", () => {
     }
   });
 
-  it("keeps the dms_* sealed cookies to the module that owns sign-in, and each module's to itself", async () => {
+  void it("keeps the dms_* sealed cookies to the module that owns sign-in, and each module's to itself", async () => {
     process.env.DMS_SESSION_SECRET ??=
       "a-test-only-session-secret-of-32-characters";
     const { serveModuleRoutes } =
@@ -215,7 +215,7 @@ describe("The module testing helper", () => {
     }
   });
 
-  it("fills any module's empty private options from DMS_PRIVATE_OPTIONS, the manifest's winning", async () => {
+  void it("fills any module's empty private options from DMS_PRIVATE_OPTIONS, the manifest's winning", async () => {
     const { privateOptionsFromJson } =
       await import("../templates/vue/server/module-server.mjs");
     const warnings: string[] = [];
@@ -269,7 +269,7 @@ describe("The module testing helper", () => {
     assert.ok(!warnings[0].includes("secret-in-array"));
   });
 
-  it("takes a secret from the environment only where the manifest has none", async () => {
+  void it("takes a secret from the environment only where the manifest has none", async () => {
     const { privateOptionsWithFallbacks } =
       await import("../templates/vue/server/module-server.mjs");
     const environment = {

@@ -52,8 +52,8 @@ const MAIN_CHUNK = {
   },
 } satisfies BuiltManifest;
 
-describe("The client bundle check", () => {
-  it("accepts a build whose manifest has the DmsKpiCard chunk", () => {
+void describe("The client bundle check", () => {
+  void it("accepts a build whose manifest has the DmsKpiCard chunk", () => {
     const workspace = clientBuild({
       ...MAIN_CHUNK,
       [KPI_CARD_SOURCE]: {
@@ -66,7 +66,7 @@ describe("The client bundle check", () => {
     assert.doesNotThrow(() => checkClientBundle(workspace));
   });
 
-  it("refuses a build whose manifest has no DmsKpiCard chunk", () => {
+  void it("refuses a build whose manifest has no DmsKpiCard chunk", () => {
     const workspace = clientBuild({
       ...MAIN_CHUNK,
       "layers/dms-core/app/components/kpi/KpiTile.vue": {

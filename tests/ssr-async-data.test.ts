@@ -92,7 +92,7 @@ function payload(html: string): Record<string, Revived> {
   return serverPayload(html).data;
 }
 
-it("hydrates a server render with exactly the data its HTML shows", async (context) => {
+void it("hydrates a server render with exactly the data its HTML shows", async (context) => {
   const workspace = mkdtempSync(resolve(".ssr-async-data-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backendCalls: string[] = [];

@@ -14,8 +14,8 @@ import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
 import { jsonAt, readJson } from "./helpers/json";
 
-describe("Vite frontend generation", () => {
-  it("discovers Vue entries and the stable SDK alias", () => {
+void describe("Vite frontend generation", () => {
+  void it("discovers Vue entries and the stable SDK alias", () => {
     const source = temporaryDirectory("dms-vue-module-");
     const workspace = temporaryDirectory("dms-vue-workspace-");
     writeFileSync(join(source, "dms.frontend.ts"), "export default {};");
@@ -32,7 +32,7 @@ describe("Vite frontend generation", () => {
     assert.match(loader, /dms\.frontend\.ts/);
   });
 
-  it("writes the endpoints the modules declared for /auth/establish", () => {
+  void it("writes the endpoints the modules declared for /auth/establish", () => {
     const source = temporaryDirectory("dms-establish-module-");
     const workspace = temporaryDirectory("dms-establish-workspace-");
     writeFrontendModuleRegistry(workspace, [
@@ -59,7 +59,7 @@ describe("Vite frontend generation", () => {
     ]);
   });
 
-  it("writes an empty declaration for a manifest that carries none", () => {
+  void it("writes an empty declaration for a manifest that carries none", () => {
     const source = temporaryDirectory("dms-establish-none-module-");
     const workspace = temporaryDirectory("dms-establish-none-");
     writeFrontendModuleRegistry(workspace, [
@@ -69,7 +69,7 @@ describe("Vite frontend generation", () => {
     assert.deepEqual(jsonAt(declared, "endpoints"), []);
   });
 
-  it("writes the public endpoints the modules declare for the server", () => {
+  void it("writes the public endpoints the modules declare for the server", () => {
     const source = temporaryDirectory("dms-public-module-");
     const workspace = temporaryDirectory("dms-public-workspace-");
     const webhook = {
@@ -93,7 +93,7 @@ describe("Vite frontend generation", () => {
     assert.deepEqual(jsonAt(declared, "proxies"), []);
   });
 
-  it("writes the backend proxies the modules declare, with the module that declared each", () => {
+  void it("writes the backend proxies the modules declare, with the module that declared each", () => {
     const source = temporaryDirectory("dms-proxies-module-");
     const workspace = temporaryDirectory("dms-proxies-workspace-");
     writeFrontendModuleRegistry(workspace, [
@@ -117,7 +117,7 @@ describe("Vite frontend generation", () => {
     ]);
   });
 
-  it("drops malformed declared endpoints instead of materializing them", () => {
+  void it("drops malformed declared endpoints instead of materializing them", () => {
     assert.deepEqual(
       collectAuthEstablishEndpoints([
         {
@@ -136,7 +136,7 @@ describe("Vite frontend generation", () => {
     );
   });
 
-  it("preserves deterministic manifest priority in the module registry", () => {
+  void it("preserves deterministic manifest priority in the module registry", () => {
     const first = temporaryDirectory("dms-module-");
     const second = temporaryDirectory("dms-module-");
     mkdirSync(first, { recursive: true });
@@ -167,7 +167,7 @@ describe("Vite frontend generation", () => {
     });
   });
 
-  it("gives higher-priority modules ownership of generated assets and aliases", () => {
+  void it("gives higher-priority modules ownership of generated assets and aliases", () => {
     const workspace = temporaryDirectory("dms-workspace-");
     const highSource = temporaryDirectory("dms-module-");
     const lowSource = temporaryDirectory("dms-module-");
@@ -204,7 +204,7 @@ describe("Vite frontend generation", () => {
     );
   });
 
-  it("keeps dev-rewritten declaration files, build output and translation catalogs out of Tailwind's source scan", () => {
+  void it("keeps dev-rewritten declaration files, build output and translation catalogs out of Tailwind's source scan", () => {
     const workspace = temporaryDirectory("dms-gitignore-workspace-");
     copyStaticTemplates(workspace);
     const ignored = readText(join(workspace, ".gitignore"))
@@ -221,15 +221,15 @@ describe("Vite frontend generation", () => {
   });
 });
 
-describe("Windows path separators in generated output", () => {
-  it("rewrites a native Windows path onto POSIX separators", () => {
+void describe("Windows path separators in generated output", () => {
+  void it("rewrites a native Windows path onto POSIX separators", () => {
     assert.equal(
       toPosixPath("C:\\workspace\\frontend-modules\\dms__ai", "\\"),
       "C:/workspace/frontend-modules/dms__ai",
     );
   });
 
-  it("leaves a POSIX path alone, backslashes in filenames included", () => {
+  void it("leaves a POSIX path alone, backslashes in filenames included", () => {
     for (const path of [
       "/home/dev/workspace/frontend-modules/dms__ai",
       "/srv/od\\d name/app",
@@ -239,7 +239,7 @@ describe("Windows path separators in generated output", () => {
     }
   });
 
-  it("writes every Tailwind @source as a POSIX glob", () => {
+  void it("writes every Tailwind @source as a POSIX glob", () => {
     const workspace = temporaryDirectory("dms-main-css-");
     writeDmsMainCss(workspace, [
       { path: "/src/ai", packageName: "@dms/ai", priority: 1 },

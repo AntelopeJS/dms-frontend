@@ -104,8 +104,8 @@ function typecheck(workspace: string): string[] {
   return projectTypeErrors(join(workspace, "tsconfig.json"));
 }
 
-describe("generated workspace typecheck", () => {
-  it("reads module sources the module registry only reaches through a glob", () => {
+void describe("generated workspace typecheck", () => {
+  void it("reads module sources the module registry only reaches through a glob", () => {
     const workspace = generatedWorkspace({
       "dms.frontend.ts": "export default { setup() {} };\n",
       "probe.ts": 'export const probe: number = "not a number";\n',
@@ -119,7 +119,7 @@ describe("generated workspace typecheck", () => {
     );
   });
 
-  it("passes a module whose sources typecheck", () => {
+  void it("passes a module whose sources typecheck", () => {
     const workspace = generatedWorkspace({
       "dms.frontend.ts": "export default { setup() {} };\n",
       "probe.ts": "export const probe: number = 1;\n",
@@ -130,7 +130,7 @@ describe("generated workspace typecheck", () => {
     assert.deepEqual(typecheck(workspace), []);
   });
 
-  it("ignores the dev-only files a module ships next to its sources", () => {
+  void it("ignores the dev-only files a module ships next to its sources", () => {
     const workspace = generatedWorkspace({
       "probe.ts": "export const probe: number = 1;\n",
       "tests/unit.test.ts":
@@ -142,7 +142,7 @@ describe("generated workspace typecheck", () => {
     assert.deepEqual(typecheck(workspace), []);
   });
 
-  it("checks the shipped frontend runtime against Vue's public typings", () => {
+  void it("checks the shipped frontend runtime against Vue's public typings", () => {
     const workspace = shippedRuntimeWorkspace({
       "probe.ts":
         'import { useDmsState } from "#dms/frontend-module";\nexport const probe = useDmsState("probe", () => 1);\n',
@@ -151,7 +151,7 @@ describe("generated workspace typecheck", () => {
     assert.deepEqual(typecheck(workspace), []);
   });
 
-  it("checks the shipped frontend runtime against the config modules declare", () => {
+  void it("checks the shipped frontend runtime against the config modules declare", () => {
     const workspace = shippedRuntimeWorkspace({
       "runtime-config.d.ts":
         'declare module "#dms/frontend-module" {\n  interface PublicRuntimeConfig {\n    dms: { baseURL: string };\n  }\n}\n\nexport {};\n',
@@ -160,7 +160,7 @@ describe("generated workspace typecheck", () => {
     assert.deepEqual(typecheck(workspace), []);
   });
 
-  it("checks a module's server entry and server files against Node.js and #dms/server", () => {
+  void it("checks a module's server entry and server files against Node.js and #dms/server", () => {
     const workspace = generatedWorkspace({
       "dms.server.ts":
         'import { defineDmsServer } from "#dms/server";\nimport { digest } from "./server/digest";\n\nexport default defineDmsServer((server) => {\n  server.registerRoute("POST", "/api/_fixture/digest", digest);\n});\n',
@@ -179,7 +179,7 @@ describe("generated workspace typecheck", () => {
     assert.deepEqual(typecheck(workspace), []);
   });
 
-  it("checks the generated app configs against the shipped runtime", () => {
+  void it("checks the generated app configs against the shipped runtime", () => {
     const workspace = shippedRuntimeWorkspace({
       "app/app.config.ts":
         'export default defineDmsAppConfig({\n  branding: { logo: "/logo.svg" },\n  ui: { colors: { primary: "green" } },\n});\n',
@@ -188,7 +188,7 @@ describe("generated workspace typecheck", () => {
     assert.deepEqual(typecheck(workspace), []);
   });
 
-  it("covers Vue single-file components too", () => {
+  void it("covers Vue single-file components too", () => {
     const workspace = generatedWorkspace({ "probe.ts": "export {};\n" });
     const config: unknown = JSON.parse(
       execFileSync(

@@ -126,7 +126,7 @@ function configSource(config: AppConfigSource): string {
  * by `ssrLoadModule`, which is how the generated server renders pages. Both
  * set the modules up from the configs as `main.ts` and `ssr-renderer.ts` do.
  */
-describe("edited layer app configs in the dev server", () => {
+void describe("edited layer app configs in the dev server", () => {
   const root = realpathSync(mkdtempSync(resolve(".app-config-hmr-")));
   const workspace = join(root, "workspace");
   const project: ResolvedLayer = {
@@ -212,7 +212,7 @@ describe("edited layer app configs in the dev server", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("sets the next server render up from the edited config", async () => {
+  void it("sets the next server render up from the edited config", async () => {
     const render = async (): Promise<AppConfig> => {
       const entry: unknown = await server.ssrLoadModule("/server-entry.ts");
       assert.ok(exportsAppConfig(entry), "the entry exports the app config");
@@ -229,7 +229,7 @@ describe("edited layer app configs in the dev server", () => {
     assert.equal((await render()).branding.logo, "/dms.svg");
   });
 
-  it("updates the running app's config in place, without reloading it", async () => {
+  void it("updates the running app's config in place, without reloading it", async () => {
     const { createServerModuleRunner } = await import("vite");
     const runner = createServerModuleRunner(server.environments.ssr, {
       hmr: { logger: false },

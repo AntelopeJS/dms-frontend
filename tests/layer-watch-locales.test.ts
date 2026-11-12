@@ -24,7 +24,7 @@ import { useIsolatedHome } from "./helpers/isolated-home";
 import { eventually, output, warnings, writeFile } from "./helpers/layer-watch";
 useIsolatedHome();
 
-describe("locale catalogs in the dev layer watcher", () => {
+void describe("locale catalogs in the dev layer watcher", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-layer-watch-"));
   const workspace = join(root, "workspace");
   const base = join(root, "sources", "base");
@@ -87,7 +87,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("regenerates the merged catalogs when a layer adds a key", async () => {
+  void it("regenerates the merged catalogs when a layer adds a key", async () => {
     assert.deepEqual(jsonAt(catalog("en"), "form"), {
       title: "Form",
       owner: "app",
@@ -107,7 +107,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     assert.deepEqual(emailLocales(), ["en", "fr"]);
   });
 
-  it("rewrites only the files whose content changed", async () => {
+  void it("rewrites only the files whose content changed", async () => {
     const untouched = [
       join(generated, "en.json"),
       join(generated, "en.ts"),
@@ -135,7 +135,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     assert.deepEqual(untouched.map(mtime), before);
   });
 
-  it("regenerates once for changes flushed by several layers together", async () => {
+  void it("regenerates once for changes flushed by several layers together", async () => {
     const catalogPath = join(generated, "en.json");
     const rename = mock.method(fs, "renameSync");
     try {
@@ -165,7 +165,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     }
   });
 
-  it("adds and removes a locale", async () => {
+  void it("adds and removes a locale", async () => {
     const german = join(baseLocales, "ui-de-DE.json");
     await eventually(
       () =>
@@ -192,7 +192,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     );
   });
 
-  it("keeps the previous catalogs while a locale file does not parse", async () => {
+  void it("keeps the previous catalogs while a locale file does not parse", async () => {
     const file = join(baseLocales, "ui-en-GB.json");
     const isFailure = (warning: string) =>
       warning.includes("is not a valid locale file");
@@ -235,7 +235,7 @@ describe("locale catalogs in the dev layer watcher", () => {
     }
   });
 
-  it("leaves the catalogs alone when a change is not a locale file", async () => {
+  void it("leaves the catalogs alone when a change is not a locale file", async () => {
     writeFileSync(join(generated, "en.json"), '{"form":{"marker":true}}');
     const component = join(
       base,
@@ -265,8 +265,8 @@ describe("locale catalogs in the dev layer watcher", () => {
   });
 });
 
-describe("affectsLocaleMessages", () => {
-  it("matches the locale directories of a module and of its layers", () => {
+void describe("affectsLocaleMessages", () => {
+  void it("matches the locale directories of a module and of its layers", () => {
     for (const path of [
       "i18n/locales/app-en-GB.json",
       "i18n/locales",

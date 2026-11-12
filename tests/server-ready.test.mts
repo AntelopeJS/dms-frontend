@@ -133,19 +133,19 @@ function occupiedPort(context: TestContext): Promise<number> {
   });
 }
 
-describe("Frontend server address", () => {
-  it("listens on the loopback address in development unless HOST says otherwise", () => {
+void describe("Frontend server address", () => {
+  void it("listens on the loopback address in development unless HOST says otherwise", () => {
     assert.equal(listenHost({ DMS_DEV: "true" }), "127.0.0.1");
     assert.equal(listenHost({ DMS_DEV: "true", HOST: "0.0.0.0" }), "0.0.0.0");
     assert.equal(listenHost({ DMS_DEV: "true", HOST: " " }), "127.0.0.1");
   });
 
-  it("listens on every interface in production unless HOST says otherwise", () => {
+  void it("listens on every interface in production unless HOST says otherwise", () => {
     assert.equal(listenHost({}), "0.0.0.0");
     assert.equal(listenHost({ HOST: "10.0.0.2" }), "10.0.0.2");
   });
 
-  it(
+  void it(
     "starts the development server on the loopback address without HOST",
     { timeout: 30_000 },
     async (context) => {
@@ -163,8 +163,8 @@ describe("Frontend server address", () => {
   );
 });
 
-describe("Frontend server startup", () => {
-  it(
+void describe("Frontend server startup", () => {
+  void it(
     "reports to the CLI over IPC once it accepts connections",
     { timeout: 15_000 },
     async (context) => {
@@ -178,7 +178,7 @@ describe("Frontend server startup", () => {
     },
   );
 
-  it(
+  void it(
     "prints its ready line when started on its own",
     { timeout: 15_000 },
     async (context) => {
@@ -196,7 +196,7 @@ describe("Frontend server startup", () => {
     },
   );
 
-  it(
+  void it(
     "reports a port it cannot listen on, then exits",
     { timeout: 15_000 },
     async (context) => {
@@ -218,7 +218,7 @@ describe("Frontend server startup", () => {
     },
   );
 
-  it(
+  void it(
     "says why it cannot listen when started on its own",
     { timeout: 15_000 },
     async (context) => {
@@ -235,7 +235,7 @@ describe("Frontend server startup", () => {
     },
   );
 
-  it(
+  void it(
     "reports a Vite that could not start, where it failed, then exits",
     { timeout: 30_000 },
     async (context) => {
@@ -255,7 +255,7 @@ describe("Frontend server startup", () => {
     },
   );
 
-  it(
+  void it(
     "reports where a startup error points only by the numbers it carries",
     { timeout: 30_000 },
     async (context) => {
@@ -280,7 +280,7 @@ throw error;
     },
   );
 
-  it(
+  void it(
     "says why Vite could not start when started on its own",
     { timeout: 30_000 },
     async (context) => {

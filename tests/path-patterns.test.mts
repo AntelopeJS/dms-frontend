@@ -14,8 +14,8 @@ function resolved(setup: DmsServerSetup, manifestPaths: string[] = []) {
   return { modules, warnings };
 }
 
-describe("Path patterns with a * before the last segment", () => {
-  it("are refused as backend proxies, with a warning naming the pattern and the allowed forms", () => {
+void describe("Path patterns with a * before the last segment", () => {
+  void it("are refused as backend proxies, with a warning naming the pattern and the allowed forms", () => {
     const { modules, warnings } = resolved(
       (server) => {
         server.registerBackendProxy("/mid/*/leaf");
@@ -35,7 +35,7 @@ describe("Path patterns with a * before the last segment", () => {
     ]);
   });
 
-  it("are refused as route rules, with a warning naming the pattern and the allowed forms", () => {
+  void it("are refused as route rules, with a warning naming the pattern and the allowed forms", () => {
     const { modules, warnings } = resolved((server) =>
       server.registerRouteRules({
         "/reports/*/print": { ssr: false },
@@ -51,7 +51,7 @@ describe("Path patterns with a * before the last segment", () => {
     ]);
   });
 
-  it("are refused as sign-in exemptions, with a warning naming the pattern and the allowed forms", () => {
+  void it("are refused as sign-in exemptions, with a warning naming the pattern and the allowed forms", () => {
     const { modules, warnings } = resolved((server) =>
       server.registerAuth({ signInExempt: ["/auth/**", "/share/*/view"] }),
     );
@@ -61,7 +61,7 @@ describe("Path patterns with a * before the last segment", () => {
     ]);
   });
 
-  it("leave /x, /x/* and /x/** sign-in exemptions as narrow as they read", () => {
+  void it("leave /x, /x/* and /x/** sign-in exemptions as narrow as they read", () => {
     const { modules, warnings } = resolved((server) =>
       server.registerAuth({
         signInExempt: ["/auth", "/share/*", "/public/**"],

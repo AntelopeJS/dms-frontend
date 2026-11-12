@@ -10,7 +10,7 @@ import { responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
-it("renders setup errors as HTTP errors without corrupting simultaneous successful SSR", async () => {
+void it("renders setup errors as HTTP errors without corrupting simultaneous successful SSR", async () => {
   const workspace = mkdtempSync(resolve(".ssr-errors-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
   const previousSecret = process.env.DMS_SESSION_SECRET;

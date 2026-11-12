@@ -99,8 +99,8 @@ async function development(root: string, plugins: Plugin[]) {
   }
 }
 
-describe("The Vite plugins a module registers", () => {
-  it("run in a production build, in module order", async () => {
+void describe("The Vite plugins a module registers", () => {
+  void it("run in a production build, in module order", async () => {
     const seen: string[] = [];
     const plugins = pluginsOf(
       declaring(() => [recording("first", seen)]),
@@ -121,7 +121,7 @@ describe("The Vite plugins a module registers", () => {
     );
   });
 
-  it("run in a dev server", async () => {
+  void it("run in a dev server", async () => {
     const seen: string[] = [];
 
     await development(
@@ -132,7 +132,7 @@ describe("The Vite plugins a module registers", () => {
     assert.ok(seen.some((entry) => entry.endsWith("dep.js")));
   });
 
-  it("keep a module's calls in order and leave its plugin objects untouched", () => {
+  void it("keep a module's calls in order and leave its plugin objects untouched", () => {
     const original = recording("one", []);
     const hook = original.resolveId;
 
@@ -151,7 +151,7 @@ describe("The Vite plugins a module registers", () => {
     assert.notEqual(plugins[0], original);
   });
 
-  it("add nothing for a module without the hook, or whose factory returns nothing", () => {
+  void it("add nothing for a module without the hook, or whose factory returns nothing", () => {
     const none = defineDmsFrontendBuild((declared) => {
       declared.registerAutoImports(["app/composables"]);
     });
@@ -165,7 +165,7 @@ describe("The Vite plugins a module registers", () => {
     );
   });
 
-  it("fail a production build naming the module when a hook throws", async () => {
+  void it("fail a production build naming the module when a hook throws", async () => {
     await assert.rejects(
       production(project(), pluginsOf(declaring(() => [throwing()]))),
       (error: Error) => {
@@ -178,14 +178,14 @@ describe("The Vite plugins a module registers", () => {
     );
   });
 
-  it("fail a dev server request naming the module when a hook throws", async () => {
+  void it("fail a dev server request naming the module when a hook throws", async () => {
     await assert.rejects(
       development(project(), pluginsOf(declaring(() => [throwing()]))),
       /Frontend module @acme\/billing-frontend: .*forbidden import/s,
     );
   });
 
-  it("name the module when an async hook given as an object rejects", async () => {
+  void it("name the module when an async hook given as an object rejects", async () => {
     const plugin: Plugin = {
       name: "slow",
       load: {
@@ -202,7 +202,7 @@ describe("The Vite plugins a module registers", () => {
     );
   });
 
-  it("name the module by its id when the registry gives it no name", () => {
+  void it("name the module by its id when the registry gives it no name", () => {
     assert.throws(
       () =>
         pluginsOf(
@@ -215,7 +215,7 @@ describe("The Vite plugins a module registers", () => {
     );
   });
 
-  it("refuse anything but an array of plugin objects, naming the module", () => {
+  void it("refuse anything but an array of plugin objects, naming the module", () => {
     const invalid: unknown[] = [
       {},
       "plugin",
@@ -234,7 +234,7 @@ describe("The Vite plugins a module registers", () => {
     }
   });
 
-  it("skip false, null and undefined entries and flatten nested arrays, as Vite does", () => {
+  void it("skip false, null and undefined entries and flatten nested arrays, as Vite does", () => {
     const plugins = pluginsOf(
       declaring(() => [
         false,
@@ -250,7 +250,7 @@ describe("The Vite plugins a module registers", () => {
     );
   });
 
-  it("refuse a Promise, as the configuration is built synchronously", () => {
+  void it("refuse a Promise, as the configuration is built synchronously", () => {
     const promised: unknown[] = [
       Promise.resolve([recording("late", [])]),
       [Promise.resolve(recording("late", []))],
@@ -265,7 +265,7 @@ describe("The Vite plugins a module registers", () => {
     }
   });
 
-  it("run the hooks of a class instance and name the module when one throws", async () => {
+  void it("run the hooks of a class instance and name the module when one throws", async () => {
     const seen: string[] = [];
     class Boundary {
       readonly name = "class-boundary";
@@ -284,7 +284,7 @@ describe("The Vite plugins a module registers", () => {
     assert.ok(seen.some((id) => id.endsWith("dep.js")));
   });
 
-  it("name the module when the function configureServer returns throws", async () => {
+  void it("name the module when the function configureServer returns throws", async () => {
     const plugin: Plugin = {
       name: "after-server",
       configureServer() {
@@ -300,7 +300,7 @@ describe("The Vite plugins a module registers", () => {
     );
   });
 
-  it("name the module when the function configurePreviewServer returns throws", async () => {
+  void it("name the module when the function configurePreviewServer returns throws", async () => {
     const plugin: Plugin = {
       name: "after-preview",
       configurePreviewServer: () => async () => {
@@ -318,7 +318,7 @@ describe("The Vite plugins a module registers", () => {
     );
   });
 
-  it("name the module when a hook throws a frozen error, keeping the original as its cause", async () => {
+  void it("name the module when a hook throws a frozen error, keeping the original as its cause", async () => {
     const frozen = Object.freeze(new Error("frozen refusal"));
     const plugin: Plugin = {
       name: "frozen",
@@ -344,8 +344,8 @@ describe("The Vite plugins a module registers", () => {
   });
 });
 
-describe("The error a module's plugin hook throws", () => {
-  it("keeps the diagnostic fields, the stack frames and the original as its cause", () => {
+void describe("The error a module's plugin hook throws", () => {
+  void it("keeps the diagnostic fields, the stack frames and the original as its cause", () => {
     const diagnostics = {
       id: "/src/entry.ts",
       loc: { file: "/src/entry.ts", line: 3, column: 7 },
@@ -391,10 +391,10 @@ describe("The error a module's plugin hook throws", () => {
   });
 });
 
-describe("The Vite plugins of a module laid out in the workspace", () => {
+void describe("The Vite plugins of a module laid out in the workspace", () => {
   const PROBE = "__dmsVitePluginsProbe";
 
-  it("reach the config Vite loads, through the generated declarations", async () => {
+  void it("reach the config Vite loads, through the generated declarations", async () => {
     const module = temporaryDirectory("dms-vite-plugins-module-");
     const layers = [
       {

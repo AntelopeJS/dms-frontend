@@ -14,8 +14,8 @@ function isFlow(value: unknown): value is Flow {
   return isPlainObject(value) && value.kind === "flow" && isNumber(value.step);
 }
 
-describe("Sealed cookies read through a guard", () => {
-  it("hand the module only a value its guard accepts", async () => {
+void describe("Sealed cookies read through a guard", () => {
+  void it("hand the module only a value its guard accepts", async () => {
     process.env.DMS_SESSION_SECRET ??=
       "a-test-only-session-secret-of-32-characters";
     const { serveModuleRoutes } =

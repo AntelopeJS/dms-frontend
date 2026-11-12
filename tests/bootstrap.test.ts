@@ -70,8 +70,8 @@ const validHandshake: DevHandshake = {
   updatedAt: "2026-08-06T10:00:00Z",
 };
 
-describe("readDevBootstrapCredential", () => {
-  it("reads the credential a live backend published", () => {
+void describe("readDevBootstrapCredential", () => {
+  void it("reads the credential a live backend published", () => {
     const { root } = makeProject(validHandshake);
     assert.equal(
       readDevBootstrapCredential(root, { isPidAlive: alive }),
@@ -79,7 +79,7 @@ describe("readDevBootstrapCredential", () => {
     );
   });
 
-  it("ignores the orphan a crashed backend left behind", () => {
+  void it("ignores the orphan a crashed backend left behind", () => {
     const { root } = makeProject(validHandshake);
     assert.equal(
       readDevBootstrapCredential(root, { isPidAlive: dead }),
@@ -87,7 +87,7 @@ describe("readDevBootstrapCredential", () => {
     );
   });
 
-  it("ignores an unparseable file", () => {
+  void it("ignores an unparseable file", () => {
     const { root } = makeProject("{ not json");
     assert.equal(
       readDevBootstrapCredential(root, { isPidAlive: alive }),
@@ -95,7 +95,7 @@ describe("readDevBootstrapCredential", () => {
     );
   });
 
-  it("ignores a file with no credential in it", () => {
+  void it("ignores a file with no credential in it", () => {
     const { root } = makeProject(JSON.stringify({ pid: process.pid }));
     assert.equal(
       readDevBootstrapCredential(root, { isPidAlive: alive }),
@@ -103,7 +103,7 @@ describe("readDevBootstrapCredential", () => {
     );
   });
 
-  it("ignores an empty credential", () => {
+  void it("ignores an empty credential", () => {
     const { root } = makeProject({ pid: process.pid, bootstrapSecret: "" });
     assert.equal(
       readDevBootstrapCredential(root, { isPidAlive: alive }),
@@ -111,7 +111,7 @@ describe("readDevBootstrapCredential", () => {
     );
   });
 
-  it("returns nothing when no backend published one", () => {
+  void it("returns nothing when no backend published one", () => {
     const { root } = makeProject();
     assert.equal(
       readDevBootstrapCredential(root, { isPidAlive: alive }),
@@ -120,17 +120,17 @@ describe("readDevBootstrapCredential", () => {
   });
 });
 
-describe("normalizeBootstrapSecret", () => {
-  it("trims a credential that kept its trailing newline", () => {
+void describe("normalizeBootstrapSecret", () => {
+  void it("trims a credential that kept its trailing newline", () => {
     assert.equal(normalizeBootstrapSecret("  secret\n"), "secret");
   });
 
-  it("treats a blank value as no credential at all", () => {
+  void it("treats a blank value as no credential at all", () => {
     assert.equal(normalizeBootstrapSecret("   "), undefined);
     assert.equal(normalizeBootstrapSecret(undefined), undefined);
   });
 
-  it("names the character that keeps a credential out of a header", () => {
+  void it("names the character that keeps a credential out of a header", () => {
     const cases: Array<[string, string]> = [
       ["bad\rvalue", "a line break"],
       ["abc def", "a space"],
@@ -155,7 +155,7 @@ describe("normalizeBootstrapSecret", () => {
     }
   });
 
-  it("names where the credential came from", () => {
+  void it("names where the credential came from", () => {
     assert.throws(
       () =>
         normalizeBootstrapSecret("bad\rvalue", "/proj/.antelope/dms-dev.json"),
@@ -171,8 +171,8 @@ describe("normalizeBootstrapSecret", () => {
   });
 });
 
-describe("resolveBootstrapSecret", () => {
-  it("prefers an explicit credential over any local handshake", () => {
+void describe("resolveBootstrapSecret", () => {
+  void it("prefers an explicit credential over any local handshake", () => {
     const { nested } = makeProject(validHandshake);
     assert.equal(
       resolveBootstrapSecret("explicit", BACKEND_URL, {
@@ -183,7 +183,7 @@ describe("resolveBootstrapSecret", () => {
     );
   });
 
-  it("walks up from a nested directory to the project that published it", () => {
+  void it("walks up from a nested directory to the project that published it", () => {
     const { nested } = makeProject(validHandshake);
     assert.equal(
       resolveBootstrapSecret(undefined, BACKEND_URL, {
@@ -194,7 +194,7 @@ describe("resolveBootstrapSecret", () => {
     );
   });
 
-  it("presents the discovered credential to the backend that published it, however the URL is spelled", () => {
+  void it("presents the discovered credential to the backend that published it, however the URL is spelled", () => {
     const { root } = makeProject(validHandshake);
     assert.equal(
       resolveBootstrapSecret(undefined, `http://127.0.0.1:${BACKEND_PORT}/`, {
@@ -205,7 +205,7 @@ describe("resolveBootstrapSecret", () => {
     );
   });
 
-  it("never sends a local credential to a backend that did not publish it", () => {
+  void it("never sends a local credential to a backend that did not publish it", () => {
     const { root } = makeProject(validHandshake);
     assert.equal(
       resolveBootstrapSecret(undefined, "https://staging.example.com", {
@@ -216,7 +216,7 @@ describe("resolveBootstrapSecret", () => {
     );
   });
 
-  it("withholds it from another instance of the same host on a different port", () => {
+  void it("withholds it from another instance of the same host on a different port", () => {
     const { root } = makeProject(validHandshake);
     assert.equal(
       resolveBootstrapSecret(undefined, "http://localhost:5020", {
@@ -227,7 +227,7 @@ describe("resolveBootstrapSecret", () => {
     );
   });
 
-  it("ignores a handshake whose backend is no longer running", () => {
+  void it("ignores a handshake whose backend is no longer running", () => {
     const { root } = makeProject(validHandshake);
     assert.equal(
       resolveBootstrapSecret(undefined, BACKEND_URL, {
@@ -238,7 +238,7 @@ describe("resolveBootstrapSecret", () => {
     );
   });
 
-  it("returns nothing outside any antelope project", () => {
+  void it("returns nothing outside any antelope project", () => {
     const outside = mkdtempSync(join(tmpdir(), "dms-no-project-"));
     cleanupDirs.push(outside);
     assert.equal(
@@ -250,7 +250,7 @@ describe("resolveBootstrapSecret", () => {
     );
   });
 
-  it("holds a malformed published credential to the same standard", () => {
+  void it("holds a malformed published credential to the same standard", () => {
     const { root } = makeProject({
       pid: process.pid,
       bootstrapSecret: "has a space",
@@ -265,7 +265,7 @@ describe("resolveBootstrapSecret", () => {
     );
   });
 
-  it("does not treat a bare .antelope build directory as the project root", () => {
+  void it("does not treat a bare .antelope build directory as the project root", () => {
     const { root } = makeProject(validHandshake);
     const inner = join(root, "packages", "inner");
     mkdirSync(join(inner, ".antelope", "build"), { recursive: true });

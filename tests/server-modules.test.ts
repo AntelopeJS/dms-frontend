@@ -16,12 +16,12 @@ import {
   handler,
 } from "./fixtures/server-modules";
 
-describe("Module server declarations", () => {
-  it("serve nothing for a deployment whose modules declare nothing", () => {
+void describe("Module server declarations", () => {
+  void it("serve nothing for a deployment whose modules declare nothing", () => {
     assert.deepEqual(resolved([]), { routes: [], warnings: [] });
   });
 
-  it("match a declared route with its parameters, decoded, and ignore a trailing slash", () => {
+  void it("match a declared route with its parameters, decoded, and ignore a trailing slash", () => {
     const { routes, warnings } = resolved([
       {
         id: "auth",
@@ -48,7 +48,7 @@ describe("Module server declarations", () => {
     );
   });
 
-  it("register one handler for several methods", () => {
+  void it("register one handler for several methods", () => {
     const { routes } = resolved([
       {
         id: "auth",
@@ -67,7 +67,7 @@ describe("Module server declarations", () => {
     );
   });
 
-  it("ignore a malformed declaration with a warning naming the module", () => {
+  void it("ignore a malformed declaration with a warning naming the module", () => {
     const { routes, warnings } = resolved([
       {
         id: "billing",
@@ -98,7 +98,7 @@ describe("Module server declarations", () => {
       );
   });
 
-  it("refuse the renderer's own paths", () => {
+  void it("refuse the renderer's own paths", () => {
     const { routes, warnings } = resolved([
       {
         id: "greedy",
@@ -114,7 +114,7 @@ describe("Module server declarations", () => {
     assert.match(warnings[0], /are the renderer's own paths/);
   });
 
-  it("let the higher-priority module keep a contested route, and say so", () => {
+  void it("let the higher-priority module keep a contested route, and say so", () => {
     const { routes, warnings } = resolved([
       {
         id: "saas",
@@ -134,7 +134,7 @@ describe("Module server declarations", () => {
     ]);
   });
 
-  it("settle a priority tie by module id, and say so", () => {
+  void it("settle a priority tie by module id, and say so", () => {
     const { routes, warnings } = resolved([
       {
         id: "zeta",
@@ -149,7 +149,7 @@ describe("Module server declarations", () => {
     assert.match(warnings[0], /same priority, the first module id wins/);
   });
 
-  it("try a literal route before another route's parameter", () => {
+  void it("try a literal route before another route's parameter", () => {
     const { routes } = resolved([
       {
         id: "high",
@@ -171,7 +171,7 @@ describe("Module server declarations", () => {
     );
   });
 
-  it("warn when two modules' different routes can match the same request", () => {
+  void it("warn when two modules' different routes can match the same request", () => {
     const { routes, warnings } = resolved([
       {
         id: "oauth",
@@ -200,7 +200,7 @@ describe("Module server declarations", () => {
     );
   });
 
-  it("warn on overlapping parameter routes settled by priority", () => {
+  void it("warn on overlapping parameter routes settled by priority", () => {
     const { warnings } = resolved([
       {
         id: "low",
@@ -219,7 +219,7 @@ describe("Module server declarations", () => {
     );
   });
 
-  it("stay quiet on routes that cannot match the same request", () => {
+  void it("stay quiet on routes that cannot match the same request", () => {
     const { warnings } = resolved([
       {
         id: "one",
@@ -247,7 +247,7 @@ describe("Module server declarations", () => {
     assert.deepEqual(warnings, []);
   });
 
-  it("warn on a route whose first segment is a parameter", () => {
+  void it("warn on a route whose first segment is a parameter", () => {
     const { routes, warnings } = resolved([
       { id: "pages", setup: (s) => s.registerRoute("GET", "/:slug", handler) },
     ]);
@@ -259,7 +259,7 @@ describe("Module server declarations", () => {
     ]);
   });
 
-  it("warn when a route hides the backend's namespace, unless it says it means to", () => {
+  void it("warn when a route hides the backend's namespace, unless it says it means to", () => {
     const { warnings } = resolved([
       {
         id: "dms",
@@ -279,7 +279,7 @@ describe("Module server declarations", () => {
     );
   });
 
-  it("warn when a route answers a public endpoint a backend module declared", () => {
+  void it("warn when a route answers a public endpoint a backend module declared", () => {
     const { warnings } = resolved(
       [
         {
@@ -296,7 +296,7 @@ describe("Module server declarations", () => {
     assert.match(warnings[0], /a public endpoint a backend module declared/);
   });
 
-  it("ignore a module whose setup throws, and keep the others", () => {
+  void it("ignore a module whose setup throws, and keep the others", () => {
     const { routes, warnings } = resolved([
       {
         id: "broken",
@@ -320,8 +320,8 @@ describe("Module server declarations", () => {
   });
 });
 
-describe("The generated server modules loader", () => {
-  it("lists the modules that have a server entry, with their priority, and types #dms/server", () => {
+void describe("The generated server modules loader", () => {
+  void it("lists the modules that have a server entry, with their priority, and types #dms/server", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-server-workspace-"));
     const auth = mkdtempSync(join(tmpdir(), "dms-server-auth-"));
     const crm = mkdtempSync(join(tmpdir(), "dms-server-crm-"));

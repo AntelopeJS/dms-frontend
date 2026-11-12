@@ -48,8 +48,8 @@ function resolved(
   return { rules, warnings };
 }
 
-describe("Route rule declarations", () => {
-  it("merge from the least to the most specific pattern", () => {
+void describe("Route rule declarations", () => {
+  void it("merge from the least to the most specific pattern", () => {
     const { rules, warnings } = resolved([
       {
         id: "site",
@@ -83,7 +83,7 @@ describe("Route rule declarations", () => {
     assert.deepEqual(routeRuleFor(rules, "/dashboard"), { headers: {} });
   });
 
-  it("let a literal segment override a wildcard tail, whatever the declaration order", () => {
+  void it("let a literal segment override a wildcard tail, whatever the declaration order", () => {
     const { rules, warnings } = resolved([
       {
         id: "site",
@@ -100,7 +100,7 @@ describe("Route rule declarations", () => {
     });
   });
 
-  it("keep the higher-priority module's rule for one pattern, and say so", () => {
+  void it("keep the higher-priority module's rule for one pattern, and say so", () => {
     const { rules, warnings } = resolved([
       {
         id: "low",
@@ -122,7 +122,7 @@ describe("Route rule declarations", () => {
     ]);
   });
 
-  it("ignore a malformed rule with a warning", () => {
+  void it("ignore a malformed rule with a warning", () => {
     const { rules, warnings } = resolved([
       {
         id: "site",
@@ -144,7 +144,7 @@ describe("Route rule declarations", () => {
     assert.match(warnings[2], /the server sets "cache-control" itself/);
   });
 
-  it("ignore a header value that would split the answer", () => {
+  void it("ignore a header value that would split the answer", () => {
     const { rules, warnings } = resolved([
       {
         id: "site",
@@ -168,11 +168,11 @@ describe("Route rule declarations", () => {
   });
 });
 
-describe("Route rule headers", () => {
+void describe("Route rule headers", () => {
   const rule = { cache: PUBLIC_CACHE, headers: { "x-section": "legal" } };
   const anonymous = requestOf({ method: "GET" });
 
-  it("make a cookie-less visit to a public page publicly cacheable", () => {
+  void it("make a cookie-less visit to a public page publicly cacheable", () => {
     assert.deepEqual(
       ruleHeaders(rule, anonymous, { publicAccess: true }, 200),
       {
@@ -183,7 +183,7 @@ describe("Route rule headers", () => {
     );
   });
 
-  it("keep everything else private", () => {
+  void it("keep everything else private", () => {
     const privateCases: [IncomingMessage, unknown, number][] = [
       [
         requestOf({ method: "GET", headers: { cookie: "dms_locale=fr" } }),
@@ -225,7 +225,7 @@ export function registerDmsIconCollections() {}
 export function isDmsFrontendPage() { return false; }
 `;
 
-describe("Route rules in the production server", () => {
+void describe("Route rules in the production server", () => {
   const workspace = realpathSync(mkdtempSync(resolve(".server-route-rules-")));
   const source = mkdtempSync(join(tmpdir(), "dms-rules-fixture-"));
   let backend: Server | undefined;
@@ -300,7 +300,7 @@ describe("Route rules in the production server", () => {
       headers: { accept: "text/html", ...headers },
     });
 
-  it("serves a cookie-less public page with the rule's cache and headers, document and Inertia alike", async () => {
+  void it("serves a cookie-less public page with the rule's cache and headers, document and Inertia alike", async () => {
     const variants: Record<string, string>[] = [{}, { "x-inertia": "true" }];
     for (const headers of variants) {
       const response = await visit("/legal/terms", headers);
@@ -314,19 +314,19 @@ describe("Route rules in the production server", () => {
     }
   });
 
-  it("keeps the same page private for a visitor with any cookie", async () => {
+  void it("keeps the same page private for a visitor with any cookie", async () => {
     const response = await visit("/legal/terms", { cookie: "dms_locale=fr" });
     assert.equal(response.headers.get("cache-control"), "private, no-cache");
     assert.equal(response.headers.get("x-section"), "legal");
   });
 
-  it("keeps pages without a rule as they were", async () => {
+  void it("keeps pages without a rule as they were", async () => {
     const response = await visit("/dashboard");
     assert.equal(response.headers.get("cache-control"), "private, no-cache");
     assert.match(await response.text(), /server rendered/);
   });
 
-  it("gives an ssr: false page the client-rendered shell", async () => {
+  void it("gives an ssr: false page the client-rendered shell", async () => {
     const html = await (await visit("/builder/flows")).text();
     assert.doesNotMatch(html, /server rendered/);
     assert.match(html, /<script data-page="app" type="application\/json">/);

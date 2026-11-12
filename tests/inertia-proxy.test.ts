@@ -14,8 +14,8 @@ import {
   sessionCookie,
 } from "./fixtures/inertia";
 
-describe("proxied mutations", () => {
-  it("protects proxied mutations and preserves backend validation errors", async () => {
+void describe("proxied mutations", () => {
+  void it("protects proxied mutations and preserves backend validation errors", async () => {
     const backend = createServer((_request, response) => {
       response.writeHead(422, {
         "content-type": "application/json",
@@ -67,8 +67,8 @@ describe("proxied mutations", () => {
   });
 });
 
-describe("public endpoints through the proxy", () => {
-  it("lets a declared public route through anonymously, with its headers", async () => {
+void describe("public endpoints through the proxy", () => {
+  void it("lets a declared public route through anonymously, with its headers", async () => {
     process.env.DMS_SESSION_SECRET =
       "test-secret-with-at-least-thirty-two-characters";
     process.env.DMS_PUBLIC_ENDPOINTS = JSON.stringify([
@@ -157,7 +157,7 @@ describe("public endpoints through the proxy", () => {
     }
   });
 
-  it("relays a public endpoint's headers under a proxy without auth", async () => {
+  void it("relays a public endpoint's headers under a proxy without auth", async () => {
     const proxies = process.env.DMS_BACKEND_PROXIES;
     process.env.DMS_BACKEND_PROXIES = JSON.stringify([
       { path: "/api/**", auth: "none" },
@@ -218,8 +218,8 @@ describe("public endpoints through the proxy", () => {
   });
 });
 
-describe("Site layout as an Inertia once prop", () => {
-  it("sends the site layout once per session, then the page alone", async () => {
+void describe("Site layout as an Inertia once prop", () => {
+  void it("sends the site layout once per session, then the page alone", async () => {
     const { sharedOnceKey, SHARED_PROP_TTL_MS } = await pagePropsModule;
     const { visit, close } = await frontendWithBackend();
     const anonymous = sharedOnceKey(undefined);
@@ -290,7 +290,7 @@ describe("Site layout as an Inertia once prop", () => {
     }
   });
 
-  it("answers a partial reload with the props it names", async () => {
+  void it("answers a partial reload with the props it names", async () => {
     const { sharedOnceKey } = await pagePropsModule;
     const { visit, close } = await frontendWithBackend();
     const held = sharedOnceKey(undefined);
@@ -358,7 +358,7 @@ describe("Site layout as an Inertia once prop", () => {
     }
   });
 
-  it("asks the backend for the page with the query of the visit", async () => {
+  void it("asks the backend for the page with the query of the visit", async () => {
     const { sharedOnceKey } = await pagePropsModule;
     const { visit, close } = await frontendWithBackend();
     try {
