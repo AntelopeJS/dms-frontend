@@ -7,7 +7,7 @@ import { runInNewContext } from "node:vm";
 import { it } from "node:test";
 import { build, createServer, normalizePath } from "vite";
 import { readText } from "./helpers/files";
-import { isText } from "./helpers/guards";
+import { isFunction, isText } from "./helpers/guards";
 import { isFlag, isObjectLike } from "../src/internal/guards";
 
 function templateSource(): string {
@@ -128,11 +128,19 @@ void it("optimizes a module's CommonJS dependency discovered after startup", asy
     const optimizedUrl = transformed.code.match(/from "([^"?]+\.js)/)?.[1];
     assert.ok(optimizedUrl);
     await server.transformRequest(optimizedUrl);
-    // oxlint-disable-next-line typescript/no-unsafe-assignment -- the module is a dependency Vite pre-bundled, imported by a URL computed from `optimizedUrl`, so it is untyped; the next line asserts what it exports.
-    const optimizedModule = await import(
+    const optimizedModule: unknown = await import(
       pathToFileURL(join(root, optimizedUrl)).href
     );
-    assert.equal(optimizedModule.default.multiply(6), 42);
+    assert.ok(
+      isObjectLike(optimizedModule) &&
+        "default" in optimizedModule &&
+        isObjectLike(optimizedModule.default) &&
+        "multiply" in optimizedModule.default &&
+        isFunction(optimizedModule.default.multiply),
+      "the prebundle exports the dependency's multiply",
+    );
+    const product: unknown = optimizedModule.default.multiply(6);
+    assert.equal(product, 42);
     await build({
       root,
       configFile: false,

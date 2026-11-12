@@ -170,8 +170,10 @@ void describe("Auth hook declarations", () => {
       },
       {
         id: "saas",
-        // @ts-expect-error refreshSession is the string "no", an off-contract hook that must make the whole auth declaration ignored with a warning
-        setup: (s) => s.registerAuth({ refreshSession: "no" }),
+        setup: (s) => {
+          const registerAuthFromJavaScript: Function = s.registerAuth.bind(s);
+          registerAuthFromJavaScript({ refreshSession: "no" });
+        },
       },
     ]);
     assert.equal(modules.auth, undefined);

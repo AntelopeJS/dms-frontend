@@ -22,11 +22,12 @@ let productionSsrRenderer;
  * @returns {Promise<typeof import("../ssr-renderer.ts")>}
  */
 export async function ssrRenderer(devServer) {
-  /** @type {typeof import("../ssr-renderer.ts")} */
-  // oxlint-disable-next-line typescript/no-unsafe-assignment -- `ssrLoadModule` types every module `Record<string, any>` and the production import takes a URL computed at run time; both load this template's own `ssr-renderer.ts`, the type named above.
-  const renderer = devServer
-    ? await devServer.ssrLoadModule("/ssr-renderer.ts")
-    : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_URL.href));
+  // SAFETY: both load this template's own `ssr-renderer.ts`, the development server from its source and the production import from its build; `ssrLoadModule` types every module `Record<string, any>` and the built URL is computed at run time.
+  const renderer = /** @type {typeof import("../ssr-renderer.ts")} */ (
+    devServer
+      ? await devServer.ssrLoadModule("/ssr-renderer.ts")
+      : await (productionSsrRenderer ??= import(BUILT_SSR_RENDERER_URL.href))
+  );
   await icons.provideIconCollections(renderer);
   return renderer;
 }

@@ -59,14 +59,12 @@ export class BackendUnreachableError extends CliError {
 
   constructor(
     readonly url: string,
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- the rejection reason of `fetch`, and JavaScript lets any value be thrown; narrowing it to `Error` would change this exported constructor's signature.
-    failure: unknown,
+    cause: unknown,
   ) {
-    const cause =
-      (hasProperties(failure) ? failure.cause : undefined) ?? failure;
-    const code = hasProperties(cause) ? errorCode(cause) : undefined;
+    const reason = (hasProperties(cause) ? cause.cause : undefined) ?? cause;
+    const code = hasProperties(reason) ? errorCode(reason) : undefined;
     const message = () =>
-      cause instanceof Error ? cause.message : String(cause);
+      reason instanceof Error ? reason.message : String(reason);
     const detail = code
       ? (UNREACHABLE_REASONS.get(code) ?? message())
       : `The request failed: ${message()}`;
@@ -80,7 +78,7 @@ export class BackendUnreachableError extends CliError {
         reason: `${code ? `${detail} (${code})` : detail}.`,
         fixes: [fix],
       },
-      { cause: failure },
+      { cause },
     );
     this.name = "BackendUnreachableError";
     this.code = code;

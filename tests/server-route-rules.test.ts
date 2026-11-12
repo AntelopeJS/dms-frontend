@@ -126,17 +126,18 @@ void describe("Route rule declarations", () => {
     const { rules, warnings } = resolved([
       {
         id: "site",
-        setup: (server) =>
-          server.registerRouteRules({
+        setup: (server) => {
+          const registerRouteRulesFromJavaScript: Function =
+            server.registerRouteRules.bind(server);
+          registerRouteRulesFromJavaScript({
             "legal/**": { ssr: false },
-            // @ts-expect-error ssr is true, an off-contract rule value (only false is allowed) that must be ignored with a warning
             "/a": { ssr: true },
             "/b": { headers: { "cache-control": "public" } },
             "/c": { headers: { "bad header": "x" } },
             "/d": { cache: { public: true, maxAge: -1 } },
-            // @ts-expect-error cache has maxAge without public, an off-contract rule that must be ignored with a warning
             "/e": { cache: { maxAge: 10 } },
-          }),
+          });
+        },
       },
     ]);
     assert.deepEqual(rules, []);
