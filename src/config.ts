@@ -117,6 +117,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["sfc-global-types.mjs", "sfc-global-types.mjs"],
   ["icon-api.mjs", "icon-api.mjs"],
   ["icon-scan.mjs", "icon-scan.mjs"],
+  ["auto-imports.mjs", "auto-imports.mjs"],
   ["ui-kbd.mjs", "ui-kbd.mjs"],
   ["ui-lazy-icons.mjs", "ui-lazy-icons.mjs"],
   ["email-renderer.ts", "email-renderer.ts"],

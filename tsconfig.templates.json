@@ -13,5 +13,9 @@
     "types": ["node", "vite/client"],
     "checkJs": true
   },
-  "include": ["./templates/vue/**/*.mjs"]
+  "include": [
+    "./templates/*.mjs",
+    "./templates/*.d.mts",
+    "./templates/vue/**/*.mjs"
+  ]
 }

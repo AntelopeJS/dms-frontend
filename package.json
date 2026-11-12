@@ -44,6 +44,10 @@
       "types": "./dist/common.d.ts",
       "default": "./dist/common.js"
     },
+    "./eslint-globals": {
+      "types": "./templates/eslint-globals.types.d.mts",
+      "default": "./templates/eslint-globals.mjs"
+    },
     "./dist/*.js": {
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
@@ -71,6 +75,7 @@
     "knip": "knip --dependencies",
     "knip:all": "knip",
     "docs:reference": "tsx scripts/docs-reference.ts",
+    "eslint-globals": "tsx scripts/eslint-globals.ts",
     "docs:reference:check": "tsx scripts/docs-reference.ts --check",
     "source-checks": "tsx scripts/source-checks.ts",
     "prepare": "if [ -e .git ] && command -v git >/dev/null 2>&1 && command -v lefthook >/dev/null 2>&1 && GIT_DIR=.git GIT_WORK_TREE=. git rev-parse --git-dir >/dev/null 2>&1; then GIT_DIR=.git GIT_WORK_TREE=. lefthook install; fi",
@@ -109,6 +114,7 @@
     "knip": "^6.34.0",
     "lefthook": "^2.2.2",
     "mongodb-memory-server": "^11.3.0",
+    "nuxt-ui-auto-imports": "npm:@nuxt/ui@4.10.0",
     "ofetch": "^1.5.1",
     "oxfmt": "^0.66.0",
     "oxlint": "1.81.0",

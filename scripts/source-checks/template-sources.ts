@@ -135,7 +135,7 @@ function windowsPathsAreNormalized(): Problem[] {
   return [
     ...expectMatch(
       config,
-      /\[normalizePath\(resolve\(import\.meta\.dirname, "frontend-module\.ts"\)\)\]/,
+      /autoImportSources\(\s*normalizePath\(resolve\(import\.meta\.dirname, "frontend-module\.ts"\)\),?\s*\)/,
       "vite.config.ts does not normalize the frontend-module auto-import key",
     ),
     ...expectMatch(

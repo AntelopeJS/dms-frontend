@@ -18,6 +18,7 @@ import { uiKbd } from "./ui-kbd.mjs";
 import { uiLazyIcons } from "./ui-lazy-icons.mjs";
 import { uiRequestState } from "./ui-request-state.mjs";
 import { autoImportDirectories, vitePlugins } from "./frontend-build-loader.ts";
+import { autoImportSources } from "./auto-imports.mjs";
 import { frontendBuilds } from "./frontend-builds.generated.ts";
 import { orderHeadForFirstPaint } from "./head-order.mjs";
 import { iconScanGlobs } from "./icon-scan.mjs";
@@ -218,56 +219,9 @@ export default defineConfig({
       autoImport: {
         dirs: importDirectories,
         dirsScanOptions: { types: true },
-        imports: [
-          "vue",
-          {
-            // This key is inlined verbatim as the module specifier of the
-            // import the auto-importer prepends to each file. A native Windows
-            // path would land inside a single-quoted JavaScript string with its
-            // backslashes intact, where `\U`, `\M` and `\f` are read as escape
-            // sequences: the specifier the bundler then resolves is a mangled
-            // path that cannot exist. Keep it POSIX.
-            [normalizePath(resolve(import.meta.dirname, "frontend-module.ts"))]:
-              [
-                "$fetch",
-                "abortDmsNavigation",
-                "clearDmsError",
-                "createDmsError",
-                "dmsRequestKey",
-                "defineDmsAppConfig",
-                "defineDmsPlugin",
-                "defineDmsMiddleware",
-                "defineDmsPageMeta",
-                "navigateDms",
-                "preloadDmsComponents",
-                "refreshDmsData",
-                "refreshDmsPageData",
-                "setDmsAsyncDataScope",
-                "showDmsError",
-                "useDmsAsyncData",
-                "useDmsData",
-                "useDmsCookie",
-                "useDmsFetch",
-                "useHead",
-                "useI18n",
-                "useDmsError",
-                "useDmsPagedData",
-                "useDmsPageLoading",
-                "isDmsHydrating",
-                "useDmsApp",
-                "useDmsRoute",
-                "useDmsRouter",
-                "useDmsRuntimeConfig",
-                "useSeoMeta",
-                "useDmsState",
-                "useDmsAppConfig",
-                "DmsClientOnly",
-                "DmsLink",
-                "useDmsUserSession",
-                "provideDmsKbdPlatform",
-              ],
-          },
-        ],
+        imports: autoImportSources(
+          normalizePath(resolve(import.meta.dirname, "frontend-module.ts")),
+        ),
         dts: "auto-imports.d.ts",
         vueTemplate: true,
       },
