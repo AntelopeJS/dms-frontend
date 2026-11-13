@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { materializeLayers, writeFrontendModuleRegistry } from "../src/common";
 import { isObjectLike } from "../src/internal/guards";
 import { listNames, readBytes, readText } from "./helpers/files";
-import { isText } from "./helpers/guards";
+import { isFunction, isText } from "./helpers/guards";
 import { copyEmailRendererFiles } from "./helpers/templates";
 
 interface LocaleMessages {
@@ -143,10 +143,16 @@ async function expectDeployedRenders(output: string): Promise<void> {
     germanPath,
     "invalid JSON: must not be read by an English or French render",
   );
-  // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the build output, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
-  const { renderEmail } = await import(
+  const emailRenderer: unknown = await import(
     pathToFileURL(join(output, "email-renderer.js")).href
   );
+  assert.ok(
+    isObjectLike(emailRenderer) &&
+      "renderEmail" in emailRenderer &&
+      isFunction(emailRenderer.renderEmail),
+    "the build exports renderEmail",
+  );
+  const { renderEmail } = emailRenderer;
   const render = async (
     translationKey: string,
     locale?: string,

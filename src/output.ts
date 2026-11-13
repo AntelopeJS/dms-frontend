@@ -224,16 +224,13 @@ export type Failure =
   | { kind: "thrown"; text: string };
 
 /**
- * Sorts a thrown value. A value that is no Error is worded by its `String()`
- * form, read here, at the catch that reports it.
+ * Sorts the value a failure threw. A value that is no Error is worded by its
+ * `String()` form, read here, at the catch that reports it.
  */
-export function classifyFailure(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- every caller passes a catch binding, and JavaScript lets any value be thrown; this sorts it into a `Failure`.
-  thrown: unknown,
-): Failure {
-  if (thrown instanceof CliError) return { kind: "cli", error: thrown };
-  if (thrown instanceof Error) return { kind: "error", error: thrown };
-  return { kind: "thrown", text: String(thrown) };
+export function classifyFailure(cause: unknown): Failure {
+  if (cause instanceof CliError) return { kind: "cli", error: cause };
+  if (cause instanceof Error) return { kind: "error", error: cause };
+  return { kind: "thrown", text: String(cause) };
 }
 
 /**

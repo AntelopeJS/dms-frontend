@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import AutoImport from "unplugin-auto-import/vite";
 import { normalizePath } from "vite";
 import { dynamicImports } from "../scripts/source-checks/dynamic-imports";
-import { isCallable, isText } from "./helpers/guards";
+import { isCallable, isFunction, isObjectLike, isText } from "./helpers/guards";
 
 const WINDOWS_MODULE_PATH =
   "C:\\Users\\Mwesto\\.antelopejs\\dms-frontend\\a27ff4d5\\frontend-module.ts";
@@ -24,16 +24,19 @@ async function injectedSpecifier(moduleKey: string): Promise<string> {
     }),
   ].flat();
   const transform = plugin.transform;
-  const handler = isCallable(transform) ? transform : transform?.handler;
-  assert.ok(handler, "the auto-importer exposes a transform hook");
-  // SAFETY: unplugin-auto-import's transform handler never reads `this`, and unplugin's filter wrapper above it only reads `this.meta?.viteVersion`, so the stand-in needs no member of Rollup's plugin context.
-  const result = await handler.call(
-    { error: () => {}, warn: () => {} } as never,
+  const handler: unknown = isCallable(transform)
+    ? transform
+    : transform?.handler;
+  assert.ok(isFunction(handler), "the auto-importer exposes a transform hook");
+  const result: unknown = await handler.call(
+    { error: () => {}, warn: () => {} },
     "const session = useDmsUserSession();",
     "/workspace/frontend-modules/dms__ai/app/plugins/ai.client.ts",
   );
-  const code = isText(result) ? result : result?.code;
-  const emitted = isText(code) ? code : String(code ?? "");
+  const objectCode =
+    isObjectLike(result) && "code" in result ? result.code : undefined;
+  const code = isText(result) ? result : objectCode;
+  const emitted = isText(code) ? code : "";
   const literal = emitted.match(/from\s+('[^']*'|"[^"]*")/)?.[1];
   assert.ok(literal, `no import was injected into:\n${emitted}`);
   const specifier: unknown = runInNewContext(literal);

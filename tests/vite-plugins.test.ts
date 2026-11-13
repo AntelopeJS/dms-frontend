@@ -2,7 +2,13 @@ import * as assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { build, createServer, loadConfigFromFile, type Plugin } from "vite";
+import {
+  build,
+  createServer,
+  loadConfigFromFile,
+  type Plugin,
+  type PluginOption,
+} from "vite";
 import {
   copyStaticTemplates,
   writeFrontendModuleRegistry,
@@ -14,6 +20,7 @@ import {
 } from "../templates/vue/frontend-build";
 import { vitePlugins } from "../templates/vue/frontend-build-loader";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
+import { isFunction } from "./helpers/guards";
 
 type Registered = Parameters<DmsFrontendBuild["registerVitePlugins"]>[0];
 
@@ -34,6 +41,10 @@ function pluginsOf(...setups: ReturnType<typeof declaring>[]): Plugin[] {
     setups.map((setup, index) => ({ id: MODULES[index].id, setup })),
   );
 }
+
+/** {@link declaring} and {@link pluginsOf} as a JavaScript module calls them, with no check on what a registration returns. */
+const declaringFromJavaScript: Function = declaring;
+const pluginsOfFromJavaScript: Function = pluginsOf;
 
 function project(): string {
   const root = temporaryDirectory("dms-vite-plugins-");
@@ -69,7 +80,7 @@ function throwing(): Plugin {
   };
 }
 
-function production(root: string, plugins: Plugin[]) {
+function production(root: string, plugins: PluginOption[]) {
   return build({
     root,
     configFile: false,
@@ -163,11 +174,9 @@ function registerPluginListTests(): void {
     ];
 
     for (const value of invalid) {
-      assert.throws(
-        // @ts-expect-error the registration returns a value that is not a plugin list on purpose, to reach the runtime validation
-        () => pluginsOf(declaring(() => value)),
-        /Frontend module @acme\/billing-frontend registered Vite plugins that are not valid/,
-      );
+      assert.throws(() => {
+        pluginsOfFromJavaScript(declaringFromJavaScript(() => value));
+      }, /Frontend module @acme\/billing-frontend registered Vite plugins that are not valid/);
     }
   });
 
@@ -194,11 +203,9 @@ function registerPluginListTests(): void {
     ];
 
     for (const value of promised) {
-      assert.throws(
-        // SAFETY: the value is wrong on purpose, to reach the runtime validation.
-        () => pluginsOf(declaring((() => value) as Registered)),
-        /Frontend module @acme\/billing-frontend registered Vite plugins as a Promise.*synchronously/,
-      );
+      assert.throws(() => {
+        pluginsOfFromJavaScript(declaringFromJavaScript(() => value));
+      }, /Frontend module @acme\/billing-frontend registered Vite plugins as a Promise.*synchronously/);
     }
   });
 }
@@ -247,14 +254,14 @@ function registerHookErrorTests(): void {
       },
     };
     const [wrapped] = pluginsOf(declaring(() => [plugin]));
-    // SAFETY: the hook above is a plain function taking no argument.
-    const configure =
-      wrapped.configurePreviewServer as () => () => Promise<void>;
+    const configure: unknown = wrapped.configurePreviewServer;
+    assert.ok(isFunction(configure), "the hook stays a function");
+    const post: unknown = configure();
+    assert.ok(isFunction(post), "the hook returns its post hook");
 
-    await assert.rejects(
-      configure()(),
-      /Frontend module @acme\/billing-frontend: preview post hook refused/,
-    );
+    await assert.rejects(async () => {
+      await post();
+    }, /Frontend module @acme\/billing-frontend: preview post hook refused/);
   });
 
   void it("name the module when a hook throws a frozen error, keeping the original as its cause", async () => {
@@ -375,31 +382,36 @@ void describe("The error a module's plugin hook throws", () => {
       },
     };
     const [wrapped] = pluginsOf(declaring(() => [plugin]));
-    // SAFETY: the hook above is a plain function taking no argument.
-    const resolveId = wrapped.resolveId as () => never;
+    const resolveId: unknown = wrapped.resolveId;
+    assert.ok(isFunction(resolveId), "the hook stays a function");
 
-    assert.throws(resolveId, (error: Error & typeof diagnostics) => {
-      assert.equal(
-        error.message,
-        "Frontend module @acme/billing-frontend: refused import",
-      );
-      assert.equal(error.cause, original);
-      assert.deepEqual(
-        {
-          id: error.id,
-          loc: error.loc,
-          frame: error.frame,
-          plugin: error.plugin,
-          pluginCode: error.pluginCode,
-          hook: error.hook,
-          code: error.code,
-        },
-        diagnostics,
-      );
-      assert.ok(error.stack?.startsWith("Error: Frontend module"));
-      assert.ok(error.stack?.includes(original.stack?.split("\n")[1] ?? "?"));
-      return true;
-    });
+    assert.throws(
+      () => {
+        resolveId();
+      },
+      (error: Error & typeof diagnostics) => {
+        assert.equal(
+          error.message,
+          "Frontend module @acme/billing-frontend: refused import",
+        );
+        assert.equal(error.cause, original);
+        assert.deepEqual(
+          {
+            id: error.id,
+            loc: error.loc,
+            frame: error.frame,
+            plugin: error.plugin,
+            pluginCode: error.pluginCode,
+            hook: error.hook,
+            code: error.code,
+          },
+          diagnostics,
+        );
+        assert.ok(error.stack?.startsWith("Error: Frontend module"));
+        assert.ok(error.stack?.includes(original.stack?.split("\n")[1] ?? "?"));
+        return true;
+      },
+    );
   });
 });
 
@@ -456,8 +468,8 @@ void describe("The Vite plugins of a module laid out in the workspace", () => {
       );
       assert.ok(loaded);
 
-      // SAFETY: the probe config above exports `vitePlugins(...)`, an array of plugins.
-      await production(project(), loaded.config.plugins as Plugin[]);
+      assert.ok(loaded.config.plugins, "the probe config lists plugins");
+      await production(project(), loaded.config.plugins);
 
       assert.ok(seen.some((id) => id.endsWith("dep.js")));
     } finally {

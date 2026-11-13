@@ -10,6 +10,7 @@ import { reportRouting } from "../templates/vue/server/cli-report.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
 import { requestOwner } from "../templates/vue/server/request-routing.mjs";
 import type { DmsServerSetup } from "../templates/vue/server-module";
+import { isText } from "./helpers/guards";
 
 const handler = () => null;
 
@@ -118,22 +119,23 @@ void describe("Backend proxy declarations", () => {
         proxyRejection(pattern, undefined) ?? "",
         /renderer's own paths/,
       );
-    assert.match(
-      // @ts-expect-error auth is "cookie", an off-contract mode a JavaScript module can still register, which must be refused
-      proxyRejection("/api/**", { auth: "cookie" }) ?? "",
-      /auth is not one of "session", "none"/,
-    );
+    const proxyRejectionFromJavaScript: Function = proxyRejection;
+    const cookieAuth: unknown = proxyRejectionFromJavaScript("/api/**", {
+      auth: "cookie",
+    });
+    assert.ok(isText(cookieAuth), "an off-contract auth mode is refused");
+    assert.match(cookieAuth, /auth is not one of "session", "none"/);
     assert.equal(proxyRejection("/api/**", { auth: "none" }), undefined);
     for (const maxBodyBytes of [0, -1, 1.5])
       assert.match(
         proxyRejection("/upload/**", { maxBodyBytes }) ?? "",
         /maxBodyBytes is not a positive whole number/,
       );
-    assert.match(
-      // @ts-expect-error maxBodyBytes is the string "1024", an off-contract size a JavaScript module can still register, which must be refused
-      proxyRejection("/upload/**", { maxBodyBytes: "1024" }) ?? "",
-      /maxBodyBytes is not a positive whole number/,
-    );
+    const textSize: unknown = proxyRejectionFromJavaScript("/upload/**", {
+      maxBodyBytes: "1024",
+    });
+    assert.ok(isText(textSize), "a size given as text is refused");
+    assert.match(textSize, /maxBodyBytes is not a positive whole number/);
     assert.equal(
       proxyRejection("/upload/**", { maxBodyBytes: 1024 }),
       undefined,

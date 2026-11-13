@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { it } from "node:test";
-import { pathToFileURL } from "node:url";
+import { templateModule } from "./helpers/template-copy";
 
 type EmailTemplate = Pick<
   typeof import("../templates/vue/server/email.mjs"),
@@ -53,10 +53,7 @@ async function emailWorkspace(templates: Record<string, string>): Promise<{
   for (const [name, source] of Object.entries(templates)) {
     writeFileSync(join(moduleRoot, "emails", name), source);
   }
-  // SAFETY: `cpSync` above puts a verbatim copy of `templates/vue` in `workspace`, so `server/email.mjs` is the file `EmailTemplate` picks from.
-  const email = (await import(
-    pathToFileURL(join(workspace, "server", "email.mjs")).href
-  )) as EmailTemplate;
+  const email = await templateModule(workspace, "server/email.mjs");
   return { workspace, moduleRoot, email };
 }
 

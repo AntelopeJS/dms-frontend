@@ -11,7 +11,7 @@ import {
 } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
 import { ensure } from "./internal/ensure";
-import { isText } from "./internal/guards";
+import { isObjectLike, isText } from "./internal/guards";
 import { parseViteManifest } from "./internal/vite-manifest";
 import {
   assertLayersSupportRenderer,
@@ -69,6 +69,10 @@ async function checkServerModulesBundle(workspace: string): Promise<string> {
     "The server modules bundle exports none",
   );
   return `${pluralize(serverModules.length, "server module")}, ${formatSize(Buffer.byteLength(javascript))} JS`;
+}
+
+function isFunction(value: unknown): value is Function {
+  return typeof value === "function";
 }
 
 interface EmailCase {
@@ -196,8 +200,16 @@ async function checkEmailContracts(workspace: string): Promise<string> {
     `The e-mail bundle is ${formatSize(emailBuildSize)} of JavaScript`,
     `The limit is ${limit}.`,
   );
-  // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the build directory, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
-  const { renderEmail } = await import(join(emailRoot, "email-renderer.js"));
+  const emailRenderer: unknown = await import(
+    join(emailRoot, "email-renderer.js")
+  );
+  ensure(
+    isObjectLike(emailRenderer) &&
+      "renderEmail" in emailRenderer &&
+      isFunction(emailRenderer.renderEmail),
+    "The e-mail bundle exports no renderEmail function",
+  );
+  const { renderEmail } = emailRenderer;
   for (const emailCase of EMAIL_CASES) {
     const html: unknown = await renderEmail(emailCase.name, emailCase.props);
     ensure(

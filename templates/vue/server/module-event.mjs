@@ -295,14 +295,14 @@ function isResponse(value) {
 }
 
 /**
- * @param {any} result What a handler answered: any value, of which only
+ * @param {unknown} result What a handler answered: any value, of which only
  *   `isResponse` looks
  * @returns {Response}
  */
 function asResponse(result) {
   if (isResponse(result))
-    // oxlint-disable-next-line typescript/no-unsafe-return -- `isResponse` also accepts a `Response` of another realm by its members (`status`, `headers.get`, `body`), so it cannot be a `value is Response` predicate without claiming members it does not check.
-    return result;
+    // SAFETY: `isResponse` accepts a `Response` of this realm or of another one (another copy of undici) by its `status`, `headers.get` and `body`; an answer that only mimics those members is read as a `Response` too, as it was before this assertion.
+    return /** @type {Response} */ (result);
   if (result === undefined || result === null)
     return new Response(null, { status: 204 });
   return Response.json(result);

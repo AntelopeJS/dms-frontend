@@ -3,7 +3,6 @@ import { cpSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
 import {
   type DmsServerSetup,
   defineDmsServer,
@@ -13,6 +12,7 @@ import { isText } from "../src/internal/guards";
 import { isPlainObject } from "../src/internal/plain-object";
 import { writeFixture, listen, close } from "./fixtures/server-modules";
 import { jsonAt, responseJson } from "./helpers/json";
+import { templateModule } from "./helpers/template-copy";
 
 function isFrom(value: unknown): value is { from: string } {
   return isPlainObject(value) && isText(value.from);
@@ -71,13 +71,10 @@ void describe("Module server routes in development", () => {
         },
       });
       const devServer = vite;
-      // SAFETY: `workspace` is the unchanged copy of `templates/vue` made by the `cpSync` above, so `server/module-server.mjs` is the file this type names.
-      const { handleModuleRoute, loadServerModules } = (await import(
-        pathToFileURL(join(workspace, "server", "module-server.mjs")).href
-      )) as Pick<
-        typeof import("../templates/vue/server/module-server.mjs"),
-        "handleModuleRoute" | "loadServerModules"
-      >;
+      const { handleModuleRoute, loadServerModules } = await templateModule(
+        workspace,
+        "server/module-server.mjs",
+      );
       frontend = createServer(async (request, response) => {
         assert.ok(isServerRequest(request), "Node sets the request URL");
         void handleModuleRoute(

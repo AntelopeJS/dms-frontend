@@ -14,6 +14,9 @@ import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
 import { jsonAt, readJson } from "./helpers/json";
 
+/** {@link writeFrontendModuleRegistry} as a JavaScript module's registration reaches it, unchecked. */
+const writeRegistryFromJavaScript: Function = writeFrontendModuleRegistry;
+
 function registerRegistryOutputTests(): void {
   void it("discovers Vue entries and the stable SDK alias", () => {
     const source = temporaryDirectory("dms-vue-module-");
@@ -76,12 +79,11 @@ function registerRegistryOutputTests(): void {
       path: "/api/mailing/events/*/*",
       headers: ["x-mailing-webhook-secret"],
     };
-    writeFrontendModuleRegistry(workspace, [
+    writeRegistryFromJavaScript(workspace, [
       {
         path: source,
         packageName: "@dms/mailing",
         priority: 0,
-        // @ts-expect-error a public endpoint declared as a string, off-contract input the registry writer must drop from generated-public-endpoints.json
         publicEndpoints: [webhook, "not-an-object"],
       },
       { path: source, packageName: "@dms/legacy", priority: 1 },
@@ -98,17 +100,13 @@ function registerProxyAndEndpointTests(): void {
   void it("writes the backend proxies the modules declare, with the module that declared each", () => {
     const source = temporaryDirectory("dms-proxies-module-");
     const workspace = temporaryDirectory("dms-proxies-workspace-");
-    writeFrontendModuleRegistry(workspace, [
+    writeRegistryFromJavaScript(workspace, [
       {
         path: source,
         name: "@dms/media",
         packageName: "@dms/media",
         priority: 0,
-        backendProxies: [
-          { path: "/media/**", auth: "none" },
-          // @ts-expect-error a backend proxy declared as a string, off-contract input the registry writer must drop from generated-public-endpoints.json
-          "not-an-object",
-        ],
+        backendProxies: [{ path: "/media/**", auth: "none" }, "not-an-object"],
       },
     ]);
     const declared = readJson(

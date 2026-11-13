@@ -9,7 +9,7 @@ import {
   type ResolvedLayer,
   writeFrontendModuleRegistry,
 } from "../src/common";
-import { isText } from "./helpers/guards";
+import { isFunction, isObjectLike, isText } from "./helpers/guards";
 import { copyEmailRendererFiles } from "./helpers/templates";
 
 function writeFile(path: string, content: string): void {
@@ -75,10 +75,16 @@ const branding = useDmsAppConfig().branding as Record<string, any>;
       { cwd: workspace, stdio: "pipe" },
     );
 
-    // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the workspace, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
-    const { renderEmail } = await import(
+    const emailRenderer: unknown = await import(
       pathToFileURL(join(workspace, "dist", "server", "email-renderer.js")).href
     );
+    assert.ok(
+      isObjectLike(emailRenderer) &&
+        "renderEmail" in emailRenderer &&
+        isFunction(emailRenderer.renderEmail),
+      "the build exports renderEmail",
+    );
+    const { renderEmail } = emailRenderer;
     const html: unknown = await renderEmail("Branding", {});
     assert.ok(isText(html), "the email renders to text");
     assert.match(html, /<p>DMS mail\|\/project-email\.png\|\/dms\.svg<\/p>/);

@@ -14,7 +14,7 @@ import { defineDmsFrontendBuild } from "../templates/vue/frontend-build";
 import { autoImportDirectories } from "../templates/vue/frontend-build-loader";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
-import { isObjectLike } from "./helpers/guards";
+import { isFunction, isObjectLike } from "./helpers/guards";
 
 const BUILD_FILE = "dms.frontend.build.ts";
 
@@ -98,8 +98,14 @@ void describe("Module build declarations", () => {
     const unimport = createRequire(
       require.resolve("unplugin-auto-import/package.json"),
     ).resolve("unimport");
-    // oxlint-disable-next-line typescript/no-unsafe-assignment -- `unimport` is no dependency of this package, so its path is resolved from unplugin-auto-import's install and the import has no declaration.
-    const { scanDirExports } = await import(unimport);
+    const unimportModule: unknown = await import(unimport);
+    assert.ok(
+      isObjectLike(unimportModule) &&
+        "scanDirExports" in unimportModule &&
+        isFunction(unimportModule.scanDirExports),
+      "unimport exports scanDirExports",
+    );
+    const { scanDirExports } = unimportModule;
 
     const exports: unknown = await scanDirExports(dirs, { cwd: module });
 

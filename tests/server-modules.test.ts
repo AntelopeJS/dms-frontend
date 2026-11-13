@@ -22,13 +22,13 @@ function registerRouteDeclarationTests(): void {
       {
         id: "billing",
         setup: (server) => {
-          // @ts-expect-error FETCH is not an HTTP method the contract names, an off-contract route that must be ignored with a warning
-          server.registerRoute("FETCH", "/api/_billing/a", handler);
+          const registerRouteFromJavaScript: Function =
+            server.registerRoute.bind(server);
+          registerRouteFromJavaScript("FETCH", "/api/_billing/a", handler);
           server.registerRoute("GET", "api/_billing/b", handler);
           server.registerRoute("GET", "/api/_billing/../c", handler);
           server.registerRoute("GET", "/api/_billing/:id/:id", handler);
-          // @ts-expect-error the handler is the string "nope", an off-contract route that must be ignored with a warning
-          server.registerRoute("GET", "/api/_billing/d", "nope");
+          registerRouteFromJavaScript("GET", "/api/_billing/d", "nope");
           server.registerRoute("GET", "/api/_billing/e", handler, {
             bodyLimit: -1,
           });
