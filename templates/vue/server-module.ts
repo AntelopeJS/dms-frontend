@@ -203,11 +203,11 @@ export interface DmsServerAuth {
   /**
    * Renews a session: one the backend refused (a 401 to a signed-in page
    * visit, which is then retried once), and one written more than 5 minutes
-   * ago, before a request uses it, except a request that changes state on a
-   * route of this module, which gets the session as sealed. Writes it with
-   * `event.session.write` and returns it, or clears it and returns
-   * `undefined`; the request then runs signed out. A session the backend
-   * revoked is cleared this way.
+   * ago, before a request uses it. Writes it with `event.session.write` and
+   * returns it, or clears it and returns `undefined`; the request then runs
+   * signed out, except a request that changes state on a route of this
+   * module, a sign-out for instance, which runs with the session as sealed.
+   * A session the backend revoked is cleared this way.
    */
   refreshSession?(
     event: DmsServerEvent,
