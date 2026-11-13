@@ -9,6 +9,8 @@ import { isBoolean, isNumber, isRecord, isString } from "../type-guards.mjs";
 export const SESSION_COOKIE = "dms_session";
 const REQUEST_SESSION = Symbol("dms-request-session");
 const MAX_AGE = 60 * 60 * 24 * 30;
+/** How far ahead of this instance's clock another instance may stamp a session. */
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 /**
  * The session a module writes: the `DmsSession` of `#dms/server`.
@@ -100,6 +102,7 @@ function decode(name, value) {
       "aes-256-gcm",
       key(),
       payload.subarray(0, 12),
+      { authTagLength: 16 },
     );
     decipher.setAuthTag(payload.subarray(12, 28));
     decipher.setAAD(Buffer.from(name));
@@ -116,16 +119,21 @@ function decode(name, value) {
 
 /**
  * @param {unknown} value
- * @returns {value is Session} Whether `value` is what `writeSession` seals
+ * @returns {value is Session & { updatedAt: number }} Whether `value` is what
+ *   `writeSession` seals
  */
 function isSession(value) {
-  if (!isRecord(value) || !isBoolean(value.persistent)) return false;
+  if (
+    !isRecord(value) ||
+    !isBoolean(value.persistent) ||
+    !isNumber(value.updatedAt)
+  )
+    return false;
   const { user } = value;
   return (
     ["accessToken", "refreshToken", "accountId", "activeTenantId"].every(
       (field) => !Object.hasOwn(value, field) || isString(value[field]),
     ) &&
-    (!Object.hasOwn(value, "updatedAt") || isNumber(value.updatedAt)) &&
     (!Object.hasOwn(value, "user") ||
       (isRecord(user) &&
         (!Object.hasOwn(user, "language") || isString(user.language))))
@@ -155,6 +163,21 @@ function lifetime(session) {
 }
 
 /**
+ * The cookie a `Set-Cookie` line sets: its name and path, which a browser
+ * keeps one value for.
+ *
+ * @param {string} line
+ */
+function cookieIdentity(line) {
+  const path = /;\s*Path=([^;]*)/i.exec(line)?.[1] ?? "/";
+  return `${line.slice(0, line.indexOf("="))}\n${path}`;
+}
+
+/**
+ * Adds a `Set-Cookie` line, in place of any line the response already holds
+ * for the same cookie: the last write of a cookie in a request is the one the
+ * browser keeps, whatever order it reads the lines in.
+ *
  * @param {import("node:http").ServerResponse} response
  * @param {string} name
  * @param {string} value
@@ -162,12 +185,14 @@ function lifetime(session) {
  */
 function appendCookie(response, name, value, cookieAttributes) {
   const cookie = `${scopedCookieName(name)}=${value}; ${cookieAttributes}`;
-  const current = response.getHeader("set-cookie");
+  const identity = cookieIdentity(cookie);
+  const current = [response.getHeader("set-cookie") ?? []]
+    .flat()
+    .map(String)
+    .filter((line) => cookieIdentity(line) !== identity);
   response.setHeader(
     "set-cookie",
-    current
-      ? [cookie, ...(Array.isArray(current) ? current : [String(current)])]
-      : cookie,
+    current.length ? [cookie, ...current] : cookie,
   );
 }
 
@@ -194,7 +219,9 @@ function appendSealedCookie(response, name, value, cookieAttributes) {
 export function readSession(request) {
   if (REQUEST_SESSION in request) return request[REQUEST_SESSION];
   const sealed = readSealedCookie(request, SESSION_COOKIE);
-  return isSession(sealed) ? sealed : undefined;
+  if (!isSession(sealed)) return undefined;
+  const age = Date.now() - sealed.updatedAt;
+  return age <= MAX_AGE * 1000 && age >= -CLOCK_SKEW_MS ? sealed : undefined;
 }
 
 /**
@@ -206,10 +233,18 @@ export function setRequestSession(request, session) {
 }
 
 /**
+ * Seals `session` into the session cookie, stamped with `updatedAt`. It opens
+ * for 30 days from that stamp, whatever the browser keeps.
+ *
  * @param {import("node:http").ServerResponse} response
  * @param {Session} session
  */
 export function writeSession(response, session) {
+  if (!isBoolean(session.persistent))
+    throw new TypeError(
+      "A session needs persistent: true to outlive the browser, or false to end with it",
+    );
+  session.updatedAt = Date.now();
   appendSealedCookie(
     response,
     SESSION_COOKIE,

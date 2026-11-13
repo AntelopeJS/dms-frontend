@@ -5,8 +5,9 @@ import { resolve } from "node:path";
 import { it } from "node:test";
 import { writeSession } from "../templates/vue/server/auth/session.mjs";
 import { writeSsrErrorsWorkspace } from "./fixtures/ssr-errors-workspace";
-import { isText } from "./helpers/guards";
+import { isNumber, isText } from "./helpers/guards";
 import { responseOf } from "./helpers/http-doubles";
+import { jsonAt, responseJson } from "./helpers/json";
 import { addressOf } from "./helpers/net";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
@@ -211,13 +212,17 @@ async function checkSessions(base: string): Promise<void> {
       "x-inertia": "true",
     },
   });
-  assert.deepEqual((await inertiaSession.json()).props, {
+  const props = jsonAt(await responseJson(inertiaSession), "props");
+  const updatedAt = jsonAt(props, "session", "updatedAt");
+  assert.ok(isNumber(updatedAt));
+  assert.deepEqual(props, {
     path: "/session",
     page: { componentName: "session" },
     user: { _id: "alice", language: "fr" },
     session: {
       accountId: "account-alice",
       activeTenantId: "tenant-alice",
+      updatedAt,
     },
     errors: {},
   });

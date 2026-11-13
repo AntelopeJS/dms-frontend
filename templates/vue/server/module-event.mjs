@@ -163,10 +163,7 @@ function sessionAccess(request, response, view) {
   return {
     read: () => readSession(request),
     view: () => view?.(readSession(request)) ?? {},
-    write(session) {
-      session.updatedAt = Date.now();
-      writeSession(response, session);
-    },
+    write: (session) => writeSession(response, session),
     clear: () => clearSession(response),
     useForRequest: (session) => setRequestSession(request, session),
   };

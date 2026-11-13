@@ -46,6 +46,7 @@ import { routeRuleFor, ruleHeaders } from "./server/route-rules.mjs";
 import {
   handleModuleRoute,
   loadServerModules,
+  reconfirmSession,
 } from "./server/module-server.mjs";
 import {
   redirectSignedOutPrivatePage,
@@ -454,6 +455,7 @@ export async function handleRequest(request, response) {
   if (devServer) response.setHeader("x-dms-route-owner", ownerLabel(owner));
   if (owner.kind === "renderer")
     return serveRendererFile(devServer, request, response, pathname);
+  await reconfirmSession(request, response, owner, pathname, modules);
   if (owner.kind === "module")
     return handleModuleRoute(request, response, pathname, modules);
   /** @param {string} path */

@@ -17,6 +17,7 @@ import {
   scopedCookieName,
   writeSession,
 } from "../templates/vue/server/auth/session.mjs";
+import { isNumber } from "./helpers/guards";
 import { requestOf, responseOf } from "./helpers/http-doubles";
 
 void describe("client of a request", () => {
@@ -180,9 +181,12 @@ void describe("cookies of instances sharing a host", () => {
         const cookie = String(response.getHeader("set-cookie")).split(";")[0];
         return readSession(requestOf({ headers: { cookie } }));
       });
-    assert.deepEqual(sealed("token"), {
+    const opened = sealed("token");
+    assert.ok(isNumber(opened?.updatedAt));
+    assert.deepEqual(opened, {
       accessToken: "token",
       persistent: true,
+      updatedAt: opened?.updatedAt,
     });
     assert.equal(sealed(7), undefined);
   });

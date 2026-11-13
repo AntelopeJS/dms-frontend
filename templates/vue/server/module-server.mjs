@@ -341,6 +341,25 @@ export async function loadServerModules(devServer) {
 }
 
 /**
+ * Has the module that owns sign-in reconfirm the request's session before
+ * anything answers it (see `serverAuth.reconfirm`), naming the module whose
+ * route answers the request's method, if any.
+ *
+ * @param {import("./request-target.mjs").ServerRequest} request The Node request
+ * @param {import("node:http").ServerResponse} response The Node response
+ * @param {import("./request-routing.mjs").RequestOwner} owner Who answers the request
+ * @param {string} pathname The request's normalized path
+ * @param {ServerModules} modules What `loadServerModules` or `createServerModules` returned
+ */
+export function reconfirmSession(request, response, owner, pathname, modules) {
+  const answering =
+    owner.kind === "module"
+      ? matchModuleRoute(modules.routes, request.method, pathname)
+      : undefined;
+  return modules.serverAuth.reconfirm(request, response, answering?.route.id);
+}
+
+/**
  * Answers `request` with the module route it reaches, if any. A path a
  * module route serves is the module's for every method: another method is
  * answered `405`.

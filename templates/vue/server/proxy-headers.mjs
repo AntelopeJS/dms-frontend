@@ -35,7 +35,9 @@ function varyWithEncoding(vary) {
  * `encoding`, the proxy compresses the body itself: its length is no longer
  * known, and a strong validator no longer names these bytes. A `Location` on
  * the backend's origin becomes the same path on the frontend's when
- * `isProxiedPath` says the frontend proxies it (see `relayedLocation`).
+ * `isProxiedPath` says the frontend proxies it (see `relayedLocation`). The
+ * cookies the frontend already set on `response`, a renewed session for
+ * instance, go out with the backend's.
  *
  * @param {import("node:http").ServerResponse} response
  * @param {Pick<Response, "status" | "headers" | "url">} upstream
@@ -56,7 +58,10 @@ export function writeProxyHeaders(
     .map((name) => name.trim().toLowerCase());
   for (const name of [...HOP_BY_HOP_HEADERS, ...named]) delete headers[name];
   delete headers["set-cookie"];
-  const cookies = upstream.headers.getSetCookie?.() ?? [];
+  const cookies = [response.getHeader("set-cookie") ?? []]
+    .flat()
+    .map(String)
+    .concat(upstream.headers.getSetCookie?.() ?? []);
   if (cookies.length) Object.assign(headers, { "set-cookie": cookies });
   if (headers.location && upstream.url)
     headers.location = relayedLocation(

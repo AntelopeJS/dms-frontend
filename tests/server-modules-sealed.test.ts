@@ -205,3 +205,102 @@ void describe("Sealed cookies of modules with similar ids", () => {
     }
   });
 });
+
+void describe("Sealed cookies replayed under another name", () => {
+  void it("open as nothing, whichever names they swap", async () => {
+    process.env.DMS_SESSION_SECRET ??=
+      "a-test-only-session-secret-of-32-characters";
+    const { serveModuleRoutes } =
+      await import("../templates/vue/server/module-testing.mjs");
+    const { scopedCookieName, SESSION_COOKIE } =
+      await import("../templates/vue/server/auth/session.mjs");
+    const anything = (value: unknown): value is unknown => value !== undefined;
+    const served = await serveModuleRoutes([
+      {
+        id: "auth",
+        setup: defineDmsServer((server) => {
+          server.registerAuth({});
+          server.registerRoute("GET", "/api/_auth/write", (event) => {
+            event.session.write({ refreshToken: "owner", persistent: true });
+            event.cookies.writeSealed("dms_account", {
+              refreshToken: "owner",
+              persistent: true,
+              updatedAt: Date.now(),
+            });
+            return null;
+          });
+          server.registerRoute("GET", "/api/_auth/session", (event) => ({
+            session: event.session.read() ?? null,
+          }));
+        }),
+      },
+      {
+        id: "shop",
+        setup: defineDmsServer((server) => {
+          server.registerRoute("GET", "/api/_shop/write", (event) => {
+            event.cookies.writeSealed("first", { name: "first" });
+            return null;
+          });
+          server.registerRoute("GET", "/api/_shop/read/:name", (event) => ({
+            value:
+              event.cookies.readSealed(event.params.name, anything) ?? null,
+          }));
+        }),
+      },
+    ]);
+    const sealedBy = async (path: string) => {
+      const response = await fetch(`${served.url}${path}`);
+      return new Map(
+        response.headers.getSetCookie().map((line) => {
+          const pair = line.split(";", 1)[0] ?? "";
+          return [
+            pair.slice(0, pair.indexOf("=")),
+            pair.slice(pair.indexOf("=") + 1),
+          ];
+        }),
+      );
+    };
+    const read = async (path: string, name: string, value = "") =>
+      responseJson(
+        await fetch(`${served.url}${path}`, {
+          headers: { cookie: `${scopedCookieName(name)}=${value}` },
+        }),
+      );
+    try {
+      const owner = await sealedBy("/api/_auth/write");
+      const session = owner.get(scopedCookieName(SESSION_COOKIE));
+      const account = owner.get(scopedCookieName("dms_account"));
+      const first = (await sealedBy("/api/_shop/write")).get(
+        scopedCookieName("shop.first"),
+      );
+      assert.ok(session && account && first);
+
+      assert.deepEqual(
+        await read("/api/_shop/read/first", "shop.first", session),
+        {
+          value: null,
+        },
+      );
+      assert.deepEqual(
+        await read("/api/_shop/read/second", "shop.second", first),
+        {
+          value: null,
+        },
+      );
+      assert.deepEqual(
+        await read("/api/_auth/session", SESSION_COOKIE, account),
+        {
+          session: null,
+        },
+      );
+      assert.deepEqual(
+        await read("/api/_shop/read/first", "shop.first", first),
+        {
+          value: { name: "first" },
+        },
+      );
+    } finally {
+      await served.close();
+    }
+  });
+});
