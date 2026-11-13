@@ -44,19 +44,25 @@ function close(server: Server): Promise<void> {
   });
 }
 
+/** A module of the workspace: its package name, priority and `dms.server.ts` source. */
+export interface ServerModuleSource {
+  packageName: string;
+  priority?: number;
+  entry: string;
+}
+
 /**
- * Builds a workspace whose one module, `@acme/auth-frontend`, has `entry` as
- * its `dms.server.ts`, and serves it in production in front of `backend`,
- * with cookies that are not `Secure`.
+ * Builds a workspace of `modules`, each with its `dms.server.ts`, and serves
+ * it in production in front of `backend`, with cookies that are not `Secure`.
  *
  * @param prefix The workspace directory's name prefix, in the current directory
- * @param entry The module's `dms.server.ts` source
+ * @param modules The workspace's modules
  * @param backend Answers the frontend's backend calls
  * @param secret `DMS_SESSION_SECRET` while the servers run
  */
 export async function startAuthServer(
   prefix: string,
-  entry: string,
+  modules: readonly ServerModuleSource[],
   backend: RequestListener,
   secret: string,
 ): Promise<AuthServer> {
@@ -66,18 +72,28 @@ export async function startAuthServer(
     DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE,
   };
   const workspace = realpathSync(mkdtempSync(resolve(prefix)));
-  const source = mkdtempSync(join(tmpdir(), "dms-auth-fixture-"));
+  const sources = modules.map(() =>
+    mkdtempSync(join(tmpdir(), "dms-auth-fixture-")),
+  );
   const backendServer = createServer(backend);
   process.env.DMS_API_BASE_URL = await listen(backendServer);
   process.env.DMS_SESSION_SECRET = secret;
   process.env.DMS_COOKIE_SECURE = "false";
 
-  writeFile(source, "dms.server.ts", entry);
   copyStaticTemplates(workspace);
   writeFile(workspace, "package.json", '{"type":"module"}');
-  const layers = [{ path: source, packageName: "@acme/auth-frontend" }];
+  const layers = modules.map(({ packageName, priority }, index) => ({
+    path: sources[index],
+    packageName,
+    priority,
+  }));
+  modules.forEach(({ entry }, index) =>
+    writeFile(sources[index], "dms.server.ts", entry),
+  );
   const registry = createFrontendModuleRegistry(workspace, layers);
-  cpSync(source, registry.modules[0].root, { recursive: true });
+  sources.forEach((source, index) =>
+    cpSync(source, registry.modules[index].root, { recursive: true }),
+  );
   writeFrontendModuleRegistry(workspace, layers);
   const { build } = await import("vite");
   await build({
@@ -96,7 +112,8 @@ export async function startAuthServer(
         if (value === undefined) delete process.env[name];
         else process.env[name] = value;
       rmSync(workspace, { recursive: true, force: true });
-      rmSync(source, { recursive: true, force: true });
+      for (const source of sources)
+        rmSync(source, { recursive: true, force: true });
     },
   };
 }

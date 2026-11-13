@@ -318,7 +318,7 @@ void describe("Auth hooks in the production server", () => {
   before(async () => {
     server = await startAuthServer(
       ".server-auth-hooks-",
-      FIXTURE_ENTRY,
+      [{ packageName: "@acme/auth-frontend", entry: FIXTURE_ENTRY }],
       (request, response) => {
         const authorization = request.headers.authorization ?? "";
         const signedIn = authorization.startsWith("Bearer renewed-");

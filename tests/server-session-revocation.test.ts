@@ -48,6 +48,16 @@ export default defineDmsServer((server) => {
 });
 `;
 
+const OTHER_ENTRY = `
+import { defineDmsServer } from "#dms/server";
+
+export default defineDmsServer((server) => {
+  const read = (event) => ({ read: event.session.read()?.refreshToken ?? null });
+  server.registerRoute("PUT", "/api/_fixture/session", read);
+  server.registerRoute("POST", "/api/_other/note", read);
+});
+`;
+
 interface BackendCall {
   path: string;
   authorization: string | undefined;
@@ -74,15 +84,48 @@ function answerBackend(
   );
 }
 
+/** The session cookie of `session`, written at `start`, with the clock then set `age` later. */
+function aged(t: TestContext, session: DmsSession, age: number): string {
+  t.mock.timers.reset();
+  const start = Date.now();
+  t.mock.timers.enable({ apis: ["Date"], now: start });
+  const jar = responseOf();
+  sessions.writeSession(jar, session);
+  t.mock.timers.setTime(start + age);
+  return String(jar.getHeader("set-cookie")).split(";", 1)[0] ?? "";
+}
+
+/** Whether `response` expires the cookie `name`. */
+function clears(response: Response, name: string): boolean {
+  return response.headers
+    .getSetCookie()
+    .some((line) => line.startsWith(`${name}=;`));
+}
+
+function sessionName(): string {
+  return sessions.scopedCookieName(sessions.SESSION_COOKIE);
+}
+
+/** Sends a request with `cookie` alone to the server at `url()`, following no redirect. */
+function sender(url: () => string) {
+  return (path: string, cookie: string, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers);
+    headers.set("cookie", cookie);
+    return fetch(`${url()}${path}`, { redirect: "manual", ...init, headers });
+  };
+}
+
 void describe("Revoking a session on the production server", () => {
   const calls: BackendCall[] = [];
   let server: AuthServer | undefined;
-  const sessionName = () => sessions.scopedCookieName(sessions.SESSION_COOKIE);
 
   before(async () => {
     server = await startAuthServer(
       ".server-session-revocation-",
-      FIXTURE_ENTRY,
+      [
+        { packageName: "@acme/auth-frontend", entry: FIXTURE_ENTRY },
+        { packageName: "@acme/other", priority: 10, entry: OTHER_ENTRY },
+      ],
       (request, response) => answerBackend(calls, request, response),
       SESSION_SECRET,
     );
@@ -90,31 +133,7 @@ void describe("Revoking a session on the production server", () => {
 
   after(() => server?.close());
 
-  /** The session cookie of `session`, written at `start`, with the clock then set `age` later. */
-  const aged = (t: TestContext, session: DmsSession, age: number) => {
-    t.mock.timers.reset();
-    const start = Date.now();
-    t.mock.timers.enable({ apis: ["Date"], now: start });
-    const jar = responseOf();
-    sessions.writeSession(jar, session);
-    t.mock.timers.setTime(start + age);
-    return String(jar.getHeader("set-cookie")).split(";", 1)[0] ?? "";
-  };
-
-  const send = (path: string, cookie: string, init: RequestInit = {}) => {
-    const headers = new Headers(init.headers);
-    headers.set("cookie", cookie);
-    return fetch(`${server?.url}${path}`, {
-      redirect: "manual",
-      ...init,
-      headers,
-    });
-  };
-
-  const clears = (response: Response, name: string) =>
-    response.headers
-      .getSetCookie()
-      .some((line) => line.startsWith(`${name}=;`));
+  const send = sender(() => server?.url ?? "");
 
   void it("signs out on the backend a session whose renewal fails", async (t) => {
     const cookie = aged(
@@ -158,6 +177,44 @@ void describe("Revoking a session on the production server", () => {
     assert.equal(proxied.status, 401);
     assert.deepEqual(calls, [{ path: "/api/items", authorization: undefined }]);
     assert.ok(clears(proxied, sessionName()));
+  });
+
+  void it("reconfirms what other modules and the backend answer, whatever the method", async (t) => {
+    const write = (path: string, cookie: string, method: string) =>
+      send(path, cookie, { method, headers: { origin: server?.url ?? "" } });
+    const unreachable = aged(
+      t,
+      { accessToken: "stale", refreshToken: "unreachable", persistent: false },
+      STALE,
+    );
+    for (const [path, method] of [
+      ["/api/_other/note", "POST"],
+      ["/api/_fixture/session", "PUT"],
+    ])
+      assert.deepEqual(
+        await responseJson(await write(path, unreachable, method)),
+        {
+          read: null,
+        },
+      );
+
+    const revoked = aged(
+      t,
+      {
+        accessToken: "renewed-before-sign-out",
+        refreshToken: "revoked",
+        persistent: false,
+      },
+      STALE,
+    );
+    calls.length = 0;
+    const proxied = await write("/api/items", revoked, "POST");
+    assert.deepEqual(calls, [{ path: "/api/items", authorization: undefined }]);
+    assert.ok(clears(proxied, sessionName()));
+    const head = await send("/api/_fixture/session", revoked, {
+      method: "HEAD",
+    });
+    assert.ok(clears(head, sessionName()));
   });
 
   void it("trusts a renewal that lands after the sign-out for five minutes at most", async (t) => {
