@@ -146,6 +146,29 @@ void describe("materializeLayers through symlinks and dot-named folders", () => 
     assert.equal(existsSync(join(copy, "tmp", "workspace")), false);
   });
 
+  void it("skips a symlink in a nested folder back to a folder above it", () => {
+    const layer = writeLayer(
+      join(temporaryDirectory("materialize-link-nested-"), "module"),
+    );
+    mkdirSync(join(layer.path, "app", "sub"));
+    writeFileSync(join(layer.path, "app", "sub", "part.vue"), "<template />\n");
+    symlinkSync(
+      join(layer.path, "app"),
+      join(layer.path, "app", "sub", "loop"),
+      "junction",
+    );
+    const workspace = temporaryDirectory("materialize-link-nested-workspace-");
+
+    materializeLayers(workspace, [layer]);
+
+    const copy = getLayerWorkspacePath(workspace, layer);
+    assert.ok(
+      existsSync(join(copy, "app", "sub", "part.vue")),
+      "sub is copied",
+    );
+    assert.equal(existsSync(join(copy, "app", "sub", "loop")), false);
+  });
+
   void it("leaves out the blocklisted entries of a folder named like ..b", () => {
     const layer = writeLayer(
       join(temporaryDirectory("materialize-dotdot-"), "module"),
