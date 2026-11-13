@@ -2,10 +2,12 @@ import * as assert from "node:assert/strict";
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { describe, it, mock } from "node:test";
 import {
+  clearSealedCookie,
   clearSession,
   readSession,
   SESSION_COOKIE,
   scopedCookieName,
+  writeSealedCookie,
   writeSession,
 } from "../templates/vue/server/auth/session.mjs";
 import { writeProxyHeaders } from "../templates/vue/server/proxy-headers.mjs";
@@ -143,6 +145,17 @@ void describe("a session cookie written during a request", () => {
     assert.deepEqual(lines, [
       `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`,
     ]);
+  });
+
+  void it("keeps a write and a clear of one name at two paths", () => {
+    process.env.DMS_SESSION_SECRET = SECRET;
+    const response = responseOf();
+    writeSealedCookie(response, "shop.flow", { step: 1 }, 60, "/");
+    clearSealedCookie(response, "shop.flow", "/x");
+    const paths = [response.getHeader("set-cookie") ?? []]
+      .flat()
+      .map((line) => /Path=([^;]*)/.exec(String(line))?.[1]);
+    assert.deepEqual(paths, ["/x", "/"]);
   });
 
   void it("goes out with the cookies of a proxied backend answer", () => {
