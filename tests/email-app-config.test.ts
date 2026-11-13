@@ -120,6 +120,9 @@ void it("auto-imports into layer emails built where verify-source works when TEM
   try {
     assert.match(await renderBrandingEmail(resolve(...segments)), BRANDING);
   } finally {
-    if (createdTop) rmSync(top, { recursive: true, force: true });
+    rmSync(createdTop ? top : resolve(...segments), {
+      recursive: true,
+      force: true,
+    });
   }
 });

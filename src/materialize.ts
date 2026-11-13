@@ -3,6 +3,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -168,6 +169,9 @@ export function materializeLayers(
  * local dev needs and can rightfully use to exclude runtime-relevant
  * files (fixtures, generated manifests, env samples, …). The blocklist
  * is the single source of truth shared with the dev-mode watcher.
+ * The copy goes entry by entry, so a workspace inside the layer's own
+ * `.cache` is skipped by the blocklist instead of rejected by `cpSync` as a
+ * copy into itself.
  *
  * After copying, we sanitize the layer's `package.json` to strip the
  * pnpm lifecycle scripts (`postinstall`, `prepare`, etc.) that are
@@ -178,11 +182,16 @@ export function materializeLayers(
  * dependencies are omitted because the generated host owns its toolchain.
  */
 function copyLayerSource(src: string, dest: string): void {
-  cpSync(src, dest, {
-    recursive: true,
-    dereference: true,
-    filter: (srcPath) => !isBlocklistedCopyPath(src, srcPath),
-  });
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src)) {
+    const srcEntry = join(src, entry);
+    if (isBlocklistedCopyPath(src, srcEntry)) continue;
+    cpSync(srcEntry, join(dest, entry), {
+      recursive: true,
+      dereference: true,
+      filter: (srcPath) => !isBlocklistedCopyPath(src, srcPath),
+    });
+  }
 
   sanitizeLayerPackage(join(dest, "package.json"));
   sanitizeBuildDeclaration(join(dest, FRONTEND_BUILD_ENTRY));
