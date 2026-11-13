@@ -177,7 +177,9 @@ function sessionAccess(request, response, view) {
  * sign-in (`registerAuth`) names its own, the `dms_*` ones included; any other
  * module's are prefixed with its id and a dot, which no name of the owner's
  * holds, so no module reads or overwrites another's, nor the owner's session
- * and account cookies.
+ * and account cookies. The id keeps `[A-Za-z0-9_.-]` and percent-encodes every
+ * other UTF-8 byte, `%` included, so two ids never share a prefix; a cookie
+ * name holds no dot, so the last dot ends the id.
  *
  * @param {unknown} name
  * @param {string} moduleId
@@ -191,7 +193,11 @@ function moduleCookieName(name, moduleId, authOwner) {
       `The ${RESERVED_COOKIE_PREFIX}* cookies belong to the module that owns sign-in` +
         `${authOwner ? ` (${authOwner})` : ""}: choose another name than ${checked}`,
     );
-  return `${String(moduleId).replaceAll(/[^A-Za-z0-9_-]/g, "-")}.${checked}`;
+  const prefix = encodeURIComponent(moduleId).replaceAll(
+    /[!'()*~]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `${prefix}.${checked}`;
 }
 
 /**
