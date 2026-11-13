@@ -161,6 +161,21 @@ function lifetime(session) {
 }
 
 /**
+ * The cookie a `Set-Cookie` line sets: its name and path, which a browser
+ * keeps one value for.
+ *
+ * @param {string} line
+ */
+function cookieIdentity(line) {
+  const path = /;\s*Path=([^;]*)/i.exec(line)?.[1] ?? "/";
+  return `${line.slice(0, line.indexOf("="))}\n${path}`;
+}
+
+/**
+ * Adds a `Set-Cookie` line, in place of any line the response already holds
+ * for the same cookie: the last write of a cookie in a request is the one the
+ * browser keeps, whatever order it reads the lines in.
+ *
  * @param {import("node:http").ServerResponse} response
  * @param {string} name
  * @param {string} value
@@ -168,12 +183,14 @@ function lifetime(session) {
  */
 function appendCookie(response, name, value, cookieAttributes) {
   const cookie = `${scopedCookieName(name)}=${value}; ${cookieAttributes}`;
-  const current = response.getHeader("set-cookie");
+  const identity = cookieIdentity(cookie);
+  const current = [response.getHeader("set-cookie") ?? []]
+    .flat()
+    .map(String)
+    .filter((line) => cookieIdentity(line) !== identity);
   response.setHeader(
     "set-cookie",
-    current
-      ? [cookie, ...(Array.isArray(current) ? current : [String(current)])]
-      : cookie,
+    current.length ? [cookie, ...current] : cookie,
   );
 }
 
