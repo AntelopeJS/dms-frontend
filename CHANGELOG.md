@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.10.4
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.3...v0.10.4)
+
+### 🚀 Enhancements
+
+- **eslint:** Publish the auto-imported names as ESLint globals ([#331](https://github.com/AntelopeJS/dms-frontend/pull/331))
+
+### 🩹 Fixes
+
+- **tests:** Void the node:test calls of the ESLint globals test ([#333](https://github.com/AntelopeJS/dms-frontend/pull/333))
+
+### 💅 Refactors
+
+- **tests:** Void the node:test calls the runner owns ([#328](https://github.com/AntelopeJS/dms-frontend/pull/328))
+- **tests:** Split long test suites under the preset's size limits ([#329](https://github.com/AntelopeJS/dms-frontend/pull/329))
+- Fix the code the type suppressions hid ([#330](https://github.com/AntelopeJS/dms-frontend/pull/330))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.10.3
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.2...v0.10.3)
