@@ -59,6 +59,10 @@ function registerIsolationTests(): void {
     const first = application("first");
     const second = application("second");
     const calls: string[] = [];
+    let secondChanged!: () => void;
+    const secondHasChanged = new Promise<void>(
+      (settle) => (secondChanged = settle),
+    );
     const pending = [first, second].map(({ app }, index) =>
       app.runWithContext(() => {
         useDmsState("identity", () => index);
@@ -71,7 +75,9 @@ function registerIsolationTests(): void {
         });
         return useDmsAsyncData("same-key", async () => {
           await request.execute();
+          if (index === 0) await secondHasChanged;
           await hooks.callHook("changed");
+          if (index === 1) secondChanged();
           return request.data.value;
         });
       }),

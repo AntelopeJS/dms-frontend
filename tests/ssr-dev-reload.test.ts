@@ -15,7 +15,6 @@ import { loadServerRenderer } from "./helpers/ssr-renderer";
 const TIMEOUT_MS = 15_000;
 
 interface ReloadProbe {
-  setups: number;
   plugins: string[];
 }
 
@@ -25,7 +24,7 @@ async function eventually(done: () => boolean | Promise<boolean>) {
     if (await done()) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  assert.fail("the dev server did not evaluate the server renderer again");
+  assert.fail("the dev server did not render the edited component");
 }
 
 /**
@@ -44,7 +43,6 @@ const probe = globalThis.__dmsDevReload;
 const load = () => import("./Page.vue");
 export default {
   setup(sdk) {
-    if (${JSON.stringify(owner)} === "high") probe.setups += 1;
     sdk.registerPage("page", defineAsyncComponent(async () => (await load()).default), load);
     sdk.registerPlugin(() => { probe.plugins.push(${JSON.stringify(owner)}); });
   },
@@ -55,7 +53,7 @@ export default {
 
 void it("serves an edited component on the next server render in development", async () => {
   const workspace = realpathSync(mkdtempSync(resolve(".ssr-dev-reload-")));
-  const probe: ReloadProbe = { setups: 0, plugins: [] };
+  const probe: ReloadProbe = { plugins: [] };
   let server: ViteDevServer | undefined;
   try {
     cpSync("templates/vue", workspace, { recursive: true });
@@ -117,16 +115,12 @@ void it("serves an edited component on the next server render in development", a
       };
     };
     const edit = async (text: string) => {
-      const setups = probe.setups;
       await new Promise((settle) => setTimeout(settle, 100));
       writeFileSync(
         join(workspace, "frontend-modules", "high", "Page.vue"),
         `<template><p>${text}</p></template>\n`,
       );
-      await eventually(async () => {
-        await devServer.ssrLoadModule("/ssr-renderer.ts");
-        return probe.setups > setups;
-      });
+      await eventually(async () => (await render()).page === text);
     };
 
     assert.deepEqual(await render(), {

@@ -26,6 +26,15 @@ type Runtime = ReturnType<typeof createDmsFrontendRuntime>;
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Waits until `reached` holds, however slow the machine, and fails after 5 s. */
+async function until(reached: () => boolean, message: () => string) {
+  const deadline = Date.now() + 5_000;
+  while (!reached()) {
+    assert.ok(Date.now() < deadline, message());
+    await sleep(5);
+  }
+}
+
 function clientApp(runtime: Runtime = createDmsFrontendRuntime()) {
   const app = createSSRApp({ render: () => null });
   provideDmsFrontendRuntime(app, runtime);
@@ -245,7 +254,7 @@ void describe("Paged async data", () => {
 });
 
 void describe("Polling", () => {
-  void it("follows a reactive interval, and stops at 0 or null", async () => {
+  void it("follows a reactive interval, and stops at 0 or null", async (context) => {
     const interval = ref<number | null>(10);
     let calls = 0;
     const Poller = defineComponent({
@@ -257,8 +266,11 @@ void describe("Polling", () => {
       },
     });
     const app = mountRuntime(createDmsFrontendRuntime(), Poller);
-    await sleep(45);
-    assert.ok(calls >= 3, `read ${calls} times`);
+    context.after(() => app.unmount());
+    await until(
+      () => calls >= 3,
+      () => `read ${calls} times`,
+    );
     interval.value = 0;
     await nextTick();
     const stopped = calls;
@@ -270,13 +282,15 @@ void describe("Polling", () => {
     assert.equal(calls, stopped, "no read at null");
     interval.value = 10;
     await nextTick();
-    await sleep(35);
-    assert.ok(calls > stopped, "polls again");
-    app.unmount();
+    await until(
+      () => calls > stopped,
+      () => "polls again",
+    );
   });
 
-  void it("polls a call made outside any component or scope, for the application's life", async () => {
+  void it("polls a call made outside any component or scope, for the application's life", async (context) => {
     const { app, runtime } = clientApp();
+    context.after(() => runtime.scope.stop());
     let calls = 0;
     await sleep(0);
     const status = app.runWithContext(() =>
@@ -285,16 +299,19 @@ void describe("Polling", () => {
       }),
     );
     await status;
-    await sleep(45);
-    assert.ok(calls >= 3, `read ${calls} times`);
+    await until(
+      () => calls >= 3,
+      () => `read ${calls} times`,
+    );
     runtime.scope.stop();
     const stopped = calls;
     await sleep(30);
     assert.equal(calls, stopped, "the application's scope ends the polling");
   });
 
-  void it("stops a getter interval over reactive state outside a component", async () => {
-    const { app } = clientApp();
+  void it("stops a getter interval over reactive state outside a component", async (context) => {
+    const { app, runtime } = clientApp();
+    context.after(() => runtime.scope.stop());
     const installed = ref(false);
     let calls = 0;
     const check = app.runWithContext(() =>
@@ -303,8 +320,10 @@ void describe("Polling", () => {
       }),
     );
     await check;
-    await sleep(35);
-    assert.ok(calls >= 2, `read ${calls} times`);
+    await until(
+      () => calls >= 2,
+      () => `read ${calls} times`,
+    );
     installed.value = true;
     await nextTick();
     const stopped = calls;

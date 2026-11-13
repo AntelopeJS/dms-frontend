@@ -26,7 +26,7 @@ function projectRoot(viteConfig: string): string {
 
 function removeRoot(root: string): void {
   assert.equal(existsSync(join(root, ".vite")), false, "Vite wrote no cache");
-  rmSync(root, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5 });
 }
 
 async function listen(server: Server): Promise<string> {
