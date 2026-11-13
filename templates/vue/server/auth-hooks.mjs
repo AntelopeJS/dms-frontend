@@ -139,9 +139,10 @@ export function serverAuth(provider, context) {
     /** Renews the request's session after the backend refused it. */
     refresh,
     /**
-     * Renews the request's session when it was written longer ago than
-     * `SESSION_RECONFIRM_AFTER_MS`. A renewal that fails runs the request
-     * signed out; without a `refreshSession` hook the session stays.
+     * Renews the request's session when its `updatedAt` is further than
+     * `SESSION_RECONFIRM_AFTER_MS` from now, in the past or, from an instance
+     * whose clock runs ahead, in the future. A renewal that throws runs the
+     * request signed out; without a `refreshSession` hook the session stays.
      *
      * @param {import("./request-target.mjs").ServerRequest} request
      * @param {import("node:http").ServerResponse} response
@@ -150,7 +151,8 @@ export function serverAuth(provider, context) {
       const session = readSession(request);
       if (
         !session ||
-        Date.now() - (session.updatedAt ?? 0) <= SESSION_RECONFIRM_AFTER_MS
+        Math.abs(Date.now() - (session.updatedAt ?? 0)) <=
+          SESSION_RECONFIRM_AFTER_MS
       )
         return;
       await refresh(request, response).catch(() =>
