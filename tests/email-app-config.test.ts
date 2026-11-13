@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve, win32 } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
 import {
@@ -9,6 +15,7 @@ import {
   type ResolvedLayer,
   writeFrontendModuleRegistry,
 } from "../src/common";
+import { temporaryWorkspaceParent } from "../src/temporary-workspace";
 import { isFunction, isObjectLike, isText } from "./helpers/guards";
 import { copyEmailRendererFiles } from "./helpers/templates";
 
@@ -17,8 +24,10 @@ function writeFile(path: string, content: string): void {
   writeFileSync(path, content);
 }
 
-void it("gives emails the layers' app configs, module by module, after each module's email config", async () => {
-  const workspace = mkdtempSync(resolve(".email-app-config-"));
+/** Builds a layer e-mail that reads the app configs in a workspace under `parent`, and renders it. */
+async function renderBrandingEmail(parent: string): Promise<string> {
+  mkdirSync(parent, { recursive: true });
+  const workspace = mkdtempSync(join(parent, ".email-app-config-"));
   try {
     const project: ResolvedLayer = {
       path: join(workspace, "sources", "project"),
@@ -87,8 +96,30 @@ const branding = useDmsAppConfig().branding as Record<string, any>;
     const { renderEmail } = emailRenderer;
     const html: unknown = await renderEmail("Branding", {});
     assert.ok(isText(html), "the email renders to text");
-    assert.match(html, /<p>DMS mail\|\/project-email\.png\|\/dms\.svg<\/p>/);
+    return html;
   } finally {
     rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+const BRANDING = /<p>DMS mail\|\/project-email\.png\|\/dms\.svg<\/p>/;
+
+void it("gives emails the layers' app configs, module by module, after each module's email config", async () => {
+  assert.match(await renderBrandingEmail(resolve(".")), BRANDING);
+});
+
+void it("auto-imports into layer emails built where verify-source works when TEMP is on another drive", async () => {
+  const segments = win32
+    .relative(
+      "D:\\site",
+      temporaryWorkspaceParent("D:\\site", "C:\\Temp", win32),
+    )
+    .split(win32.sep);
+  const top = resolve(segments[0] ?? ".");
+  const createdTop = !existsSync(top);
+  try {
+    assert.match(await renderBrandingEmail(resolve(...segments)), BRANDING);
+  } finally {
+    if (createdTop) rmSync(top, { recursive: true, force: true });
   }
 });
