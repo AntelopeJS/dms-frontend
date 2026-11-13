@@ -7,8 +7,9 @@ type PathApi = typeof nativePath.win32;
 /**
  * Where a workspace built from the sources in `projectDir` goes: the OS
  * temporary directory, unless that is on another drive, in which case
- * `node_modules/.cache/dms-frontend` of the project. On Windows, a workspace
- * on another drive than the sources it builds loses their auto-imports.
+ * `.cache/dms-frontend` of the project. On Windows, a workspace on another
+ * drive than the sources it builds loses their auto-imports, and so does a
+ * workspace under `node_modules`, which the auto-importers skip.
  *
  * @internal
  */
@@ -21,9 +22,7 @@ export function temporaryWorkspaceParent(
   const sameDrive =
     path.parse(project).root.toLowerCase() ===
     path.parse(path.resolve(temporary)).root.toLowerCase();
-  return sameDrive
-    ? temporary
-    : path.join(project, "node_modules", ".cache", "dms-frontend");
+  return sameDrive ? temporary : path.join(project, ".cache", "dms-frontend");
 }
 
 /**

@@ -71,7 +71,7 @@ void describe("temporaryWorkspaceParent", () => {
   void it("moves to the project's cache when the temporary directory is on another drive", () => {
     assert.equal(
       temporaryWorkspaceParent("D:\\work\\site", "C:\\Temp", win32),
-      "D:\\work\\site\\node_modules\\.cache\\dms-frontend",
+      "D:\\work\\site\\.cache\\dms-frontend",
     );
   });
 });
