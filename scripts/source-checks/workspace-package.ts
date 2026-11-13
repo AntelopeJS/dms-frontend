@@ -93,28 +93,41 @@ function everyPatchedDependencyIsPinned(): Problem[] {
   );
 }
 
-function vueuseMatchesTheInstalledPatchTarget(): Problem[] {
+function installedVersion(name: string): string {
   const installed: unknown = JSON.parse(
-    readFileSync(
-      join(ROOT, "node_modules", "@vueuse", "core", "package.json"),
-      "utf8",
-    ),
+    readFileSync(join(ROOT, "node_modules", name, "package.json"), "utf8"),
   );
   if (!hasVersion(installed))
-    throw new Error("The installed @vueuse/core has no version");
+    throw new Error(`The installed ${name} has no version`);
+  return installed.version;
+}
+
+/** `pnpm eslint-globals` lists the composables of the installed @nuxt/ui, installed as `nuxt-ui-auto-imports` so that no test fixture resolves it, and it must be the one the workspace runs. */
+function nuxtUiMatchesTheWorkspace(): Problem[] {
+  const installed = installedVersion("nuxt-ui-auto-imports");
+  const pinned = workspaceManifest().dependencies["@nuxt/ui"];
+  return pinned === installed
+    ? []
+    : [
+        `templates/vue/package.json pins @nuxt/ui ${pinned}, the installed version is ${installed}`,
+      ];
+}
+
+function vueuseMatchesTheInstalledPatchTarget(): Problem[] {
+  const installed = installedVersion("@vueuse/core");
   const pinned = workspaceManifest().dependencies["@vueuse/core"];
   return [
-    ...(pinned === installed.version
+    ...(pinned === installed
       ? []
       : [
-          `templates/vue/package.json pins @vueuse/core ${pinned}, the installed version is ${installed.version}`,
+          `templates/vue/package.json pins @vueuse/core ${pinned}, the installed version is ${installed}`,
         ]),
     ...expectMatch(
       templateText("pnpm-workspace.yaml"),
       new RegExp(
-        `"@vueuse/core@${installed.version}": patches/@vueuse__core@${installed.version}\\.patch`,
+        `"@vueuse/core@${installed}": patches/@vueuse__core@${installed}\\.patch`,
       ),
-      `templates/vue/pnpm-workspace.yaml does not patch @vueuse/core@${installed.version}`,
+      `templates/vue/pnpm-workspace.yaml does not patch @vueuse/core@${installed}`,
     ),
   ];
 }
@@ -141,6 +154,10 @@ export const WORKSPACE_PACKAGE_CHECKS: SourceCheck[] = [
   {
     name: "the @vueuse/core patch targets the installed version",
     run: vueuseMatchesTheInstalledPatchTarget,
+  },
+  {
+    name: "the installed @nuxt/ui is the workspace's",
+    run: nuxtUiMatchesTheWorkspace,
   },
   {
     name: "the workspace build script runs the CLI's build steps in order",

@@ -135,8 +135,8 @@ function windowsPathsAreNormalized(): Problem[] {
   return [
     ...expectMatch(
       config,
-      /\[normalizePath\(resolve\(import\.meta\.dirname, "frontend-module\.ts"\)\)\]/,
-      "vite.config.ts does not normalize the frontend-module auto-import key",
+      /\bimports: autoImportSources\(\s*normalizePath\(resolve\(import\.meta\.dirname, "frontend-module\.ts"\)\),?\s*\),\n/,
+      "vite.config.ts does not set the auto-importer's imports to autoImportSources with a normalized frontend-module key",
     ),
     ...expectMatch(
       templateText("vite.email.config.ts"),
