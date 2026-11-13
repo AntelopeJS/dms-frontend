@@ -26,6 +26,7 @@ jobs:
       docs-typescript-project: docs/tsconfig.json
       renovate-sync: false
       test-job: true
+      windows: true
 
   cli:
     runs-on: ubuntu-latest

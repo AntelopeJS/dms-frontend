@@ -244,7 +244,10 @@ async function verifySources(): Promise<VerificationResult> {
   writeHeader("verify-source", [pluralize(layers.length, "module")]);
   getProcessUi().message("info", `Verifying against ${coreLayer}`);
   assertLayersSupportRenderer(layers);
-  const workspace = createTemporaryWorkspace("dms-frontend-real-source-");
+  const workspace = createTemporaryWorkspace(
+    "dms-frontend-real-source-",
+    options.projectDir,
+  );
   const isVerbose = isVerboseRun();
   const context: VerificationContext = {
     workspace,
