@@ -2,11 +2,13 @@ import * as assert from "node:assert/strict";
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { describe, it, mock } from "node:test";
 import {
+  clearSession,
   readSession,
   SESSION_COOKIE,
   scopedCookieName,
   writeSession,
 } from "../templates/vue/server/auth/session.mjs";
+import { writeProxyHeaders } from "../templates/vue/server/proxy-headers.mjs";
 import { requestOf, responseOf } from "./helpers/http-doubles";
 
 const SECRET = "a-test-only-session-secret-of-32-characters";
@@ -124,5 +126,42 @@ void describe("sealed session integrity", () => {
       warnings.mock.calls.map(({ arguments: [warning] }) => String(warning)),
       [],
     );
+  });
+});
+
+void describe("a session cookie written during a request", () => {
+  void it("goes out once, as its last write leaves it", () => {
+    process.env.DMS_SESSION_SECRET = SECRET;
+    const response = responseOf();
+    writeSession(response, { accessToken: "renewed", persistent: true });
+    clearSession(response);
+    const name = scopedCookieName(SESSION_COOKIE);
+    const lines = [response.getHeader("set-cookie") ?? []]
+      .flat()
+      .map(String)
+      .filter((line) => line.startsWith(`${name}=`));
+    assert.deepEqual(lines, [
+      `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`,
+    ]);
+  });
+
+  void it("goes out with the cookies of a proxied backend answer", () => {
+    process.env.DMS_SESSION_SECRET = SECRET;
+    const response = responseOf();
+    writeSession(response, { accessToken: "renewed", persistent: true });
+    const renewed = String(response.getHeader("set-cookie"));
+    writeProxyHeaders(
+      response,
+      {
+        status: 200,
+        headers: new Headers([["set-cookie", "csrf=1; Path=/"]]),
+        url: "http://backend.test/api/items",
+      },
+      undefined,
+    );
+    assert.deepEqual(response.getHeader("set-cookie"), [
+      renewed,
+      "csrf=1; Path=/",
+    ]);
   });
 });
