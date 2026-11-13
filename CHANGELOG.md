@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.6
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.5...v0.10.6)
+
+### 🩹 Fixes
+
+- **modules:** Keep apart the sealed cookies of modules whose ids differ only by punctuation ([#334](https://github.com/AntelopeJS/dms-frontend/pull/334))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.10.5
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.4...v0.10.5)
