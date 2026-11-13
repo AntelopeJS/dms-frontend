@@ -89,7 +89,7 @@ async function cookieChecks(ctx, server, send) {
   const written = await send("POST", "/api/_acme/cookie");
   const setCookie = [written.headers["set-cookie"]].flat();
   const value = /^[^=]+=([^;]+);/.exec(setCookie[0])?.[1] ?? "";
-  const name = `-acme-shop.prefs_${scope}`;
+  const name = `%40acme%2Fshop.prefs_${scope}`;
   const readBack = await send("GET", "/api/_acme/cookie", { cookie: `${name}=${value}` });
   const renamed = await send("GET", "/api/_acme/cookie", { cookie: `prefs_${scope}=${value}` });
   const foreign = await send("GET", "/api/_zeta/cookie", { cookie: `${name}=${value}` });
@@ -106,8 +106,8 @@ async function cookieChecks(ctx, server, send) {
     ctx.equal("the module reads it back through its guard", bodyJson(readBack), { prefs: { theme: "dark" }, rejected: null }),
     ctx.equal("a cookie stored under the bare name is not read", bodyJson(renamed), { prefs: null, rejected: null }),
     ctx.equal("another module cannot read it", bodyJson(foreign), { prefs: null }),
-    ctx.equal("each character of the module id outside A-Za-z0-9_- becomes a hyphen, the underscore and hyphen stay", [myShop.headers["set-cookie"]].flat()[0].replace(/=[^;]+;/, "=VALUE;"), `-acme-my_shop-x-y.prefs_${scope}=VALUE; Path=/; HttpOnly; SameSite=Lax; Secure`),
-    ctx.equal("another module writes its own name", [zeta.headers["set-cookie"]].flat()[0].replace(/=[^;]+;/, "=VALUE;"), `zeta-other.prefs_${scope}=VALUE; Path=/; HttpOnly; SameSite=Lax; Secure`),
+    ctx.equal("the module id keeps A-Za-z0-9_.- and percent-encodes every other character", [myShop.headers["set-cookie"]].flat()[0].replace(/=[^;]+;/, "=VALUE;"), `%40acme%2Fmy_shop-x.y.prefs_${scope}=VALUE; Path=/; HttpOnly; SameSite=Lax; Secure`),
+    ctx.equal("another module writes its own name", [zeta.headers["set-cookie"]].flat()[0].replace(/=[^;]+;/, "=VALUE;"), `zeta%2Fother.prefs_${scope}=VALUE; Path=/; HttpOnly; SameSite=Lax; Secure`),
     ctx.equal("clear expires it", [cleared.headers["set-cookie"]].flat()[0], `${name}=; Path=/x; HttpOnly; SameSite=Lax; Max-Age=0; Secure`),
     ctx.equal("a dms_* name from a module that does not own sign-in, the session cookie's name and an invalid name each fail the route", [reserved1.status, reserved2.status, invalidName.status], [502, 502, 502]),
     ctx.equal("each failure names the reason in the server log", ["The dms_* cookies belong to the module that owns sign-in (antelopejs__dms-frontend-vue): choose another name than dms_flag", "The dms_session cookie is the session's: use event.session", "Invalid cookie name: bad name"].map((text) => after.includes(text)), [true, true, true]),
