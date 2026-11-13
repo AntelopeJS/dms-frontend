@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { getProcessUi } from "@antelopejs/core/cli";
 import {
   AUTH_ESTABLISH_FILE,
@@ -157,7 +157,42 @@ export function materializeLayers(
   for (const layer of layers) {
     if (!layer.packageName) continue;
     const dest = getLayerWorkspacePath(workspaceDir, layer);
-    copyLayerSource(layer.path, dest);
+    copyLayerSource(layer.path, dest, workspaceDir);
+  }
+}
+
+/** Whether `path` is `directory` or lies inside it. */
+function isWithin(directory: string, path: string): boolean {
+  const rel = relative(directory, path);
+  return !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+/**
+ * Copies the entries of `from`, a directory of the layer at `root`, into
+ * `to`. A directory that holds the workspace is walked rather than handed to
+ * `cpSync`, which rejects a copy into its own source before any filter runs.
+ */
+function copyLayerEntries(
+  root: string,
+  from: string,
+  to: string,
+  workspaceDir: string,
+): void {
+  mkdirSync(to, { recursive: true });
+  for (const entry of readdirSync(from)) {
+    const source = join(from, entry);
+    const target = join(to, entry);
+    if (isBlocklistedCopyPath(root, source) || isWithin(workspaceDir, source))
+      continue;
+    if (isWithin(source, workspaceDir)) {
+      copyLayerEntries(root, source, target, workspaceDir);
+      continue;
+    }
+    cpSync(source, target, {
+      recursive: true,
+      dereference: true,
+      filter: (srcPath) => !isBlocklistedCopyPath(root, srcPath),
+    });
   }
 }
 
@@ -169,9 +204,8 @@ export function materializeLayers(
  * local dev needs and can rightfully use to exclude runtime-relevant
  * files (fixtures, generated manifests, env samples, …). The blocklist
  * is the single source of truth shared with the dev-mode watcher.
- * The copy goes entry by entry, so a workspace inside the layer's own
- * `.cache` is skipped by the blocklist instead of rejected by `cpSync` as a
- * copy into itself.
+ * The workspace itself is left out too: verify-source can build it inside
+ * the layer it copies.
  *
  * After copying, we sanitize the layer's `package.json` to strip the
  * pnpm lifecycle scripts (`postinstall`, `prepare`, etc.) that are
@@ -181,17 +215,12 @@ export function materializeLayers(
  * from inside the copied module. Development
  * dependencies are omitted because the generated host owns its toolchain.
  */
-function copyLayerSource(src: string, dest: string): void {
-  mkdirSync(dest, { recursive: true });
-  for (const entry of readdirSync(src)) {
-    const srcEntry = join(src, entry);
-    if (isBlocklistedCopyPath(src, srcEntry)) continue;
-    cpSync(srcEntry, join(dest, entry), {
-      recursive: true,
-      dereference: true,
-      filter: (srcPath) => !isBlocklistedCopyPath(src, srcPath),
-    });
-  }
+function copyLayerSource(
+  src: string,
+  dest: string,
+  workspaceDir: string,
+): void {
+  copyLayerEntries(src, src, dest, workspaceDir);
 
   sanitizeLayerPackage(join(dest, "package.json"));
   sanitizeBuildDeclaration(join(dest, FRONTEND_BUILD_ENTRY));

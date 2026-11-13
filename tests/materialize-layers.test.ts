@@ -8,36 +8,52 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { it } from "node:test";
+import { describe, it } from "node:test";
 import {
   getLayerWorkspacePath,
   materializeLayers,
   type ResolvedLayer,
 } from "../src/common";
 
-void it("copies a layer into a workspace built inside that layer's own .cache", () => {
-  const root = mkdtempSync(join(tmpdir(), "materialize-nested-"));
-  try {
-    const layer: ResolvedLayer = {
-      path: join(root, "module"),
-      packageName: "@fixture/module",
-      priority: 10,
-    };
-    mkdirSync(join(layer.path, "app"), { recursive: true });
-    writeFileSync(
-      join(layer.path, "package.json"),
-      JSON.stringify({ name: layer.packageName }),
-    );
-    writeFileSync(join(layer.path, "app", "page.vue"), "<template />\n");
-    const workspace = join(layer.path, ".cache", "dms-frontend", "workspace");
-    mkdirSync(workspace, { recursive: true });
+const WORKSPACES_INSIDE_THE_LAYER = [
+  [".cache", "dms-frontend", "workspace"],
+  ["playground", ".cache", "dms-frontend", "workspace"],
+  ["tmp", "workspace"],
+];
 
-    materializeLayers(workspace, [layer]);
+void describe("materializeLayers with the workspace inside the layer", () => {
+  for (const segments of WORKSPACES_INSIDE_THE_LAYER) {
+    void it(`copies the layer but not the workspace at ${segments.join("/")}`, () => {
+      const root = mkdtempSync(join(tmpdir(), "materialize-nested-"));
+      try {
+        const layer: ResolvedLayer = {
+          path: join(root, "module"),
+          packageName: "@fixture/module",
+          priority: 10,
+        };
+        mkdirSync(join(layer.path, "app"), { recursive: true });
+        mkdirSync(join(layer.path, "playground"), { recursive: true });
+        writeFileSync(
+          join(layer.path, "package.json"),
+          JSON.stringify({ name: layer.packageName }),
+        );
+        writeFileSync(join(layer.path, "app", "page.vue"), "<template />\n");
+        writeFileSync(join(layer.path, "playground", "notes.md"), "notes\n");
+        const workspace = join(layer.path, ...segments);
+        mkdirSync(workspace, { recursive: true });
 
-    const copy = getLayerWorkspacePath(workspace, layer);
-    assert.ok(existsSync(join(copy, "app", "page.vue")), "the layer is copied");
-    assert.equal(existsSync(join(copy, ".cache")), false);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+        materializeLayers(workspace, [layer]);
+
+        const copy = getLayerWorkspacePath(workspace, layer);
+        assert.ok(existsSync(join(copy, "app", "page.vue")), "app is copied");
+        assert.ok(
+          existsSync(join(copy, "playground", "notes.md")),
+          "the workspace's siblings are copied",
+        );
+        assert.equal(existsSync(join(copy, ...segments)), false);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
   }
 });
