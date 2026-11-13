@@ -4,6 +4,7 @@ import {
   createHash,
   randomBytes,
 } from "node:crypto";
+import { isBoolean, isNumber, isRecord, isString } from "../type-guards.mjs";
 
 export const SESSION_COOKIE = "dms_session";
 const REQUEST_SESSION = Symbol("dms-request-session");
@@ -66,12 +67,17 @@ function key() {
 }
 
 /**
+ * Seals `value` for the cookie `name` alone: the name is the AES-GCM
+ * additional authenticated data, so the value opens under no other cookie.
+ *
+ * @param {string} name The cookie's name in the jar
  * @param {unknown} value A session, or the value of a module's sealed cookie
  * @returns {string}
  */
-function encode(value) {
+function encode(name, value) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key(), iv);
+  cipher.setAAD(Buffer.from(name));
   const encrypted = Buffer.concat([
     cipher.update(JSON.stringify(value)),
     cipher.final(),
@@ -82,11 +88,12 @@ function encode(value) {
 }
 
 /**
+ * @param {string} name The cookie's name in the jar
  * @param {string} value The cookie's value
- * @returns {any} What was sealed, as the JSON it was written from, `undefined`
- *   when it does not open
+ * @returns {unknown} What was sealed for `name`, as the JSON it was written
+ *   from, `undefined` when it does not open
  */
-function decode(value) {
+function decode(name, value) {
   try {
     const payload = Buffer.from(value, "base64url");
     const decipher = createDecipheriv(
@@ -95,6 +102,7 @@ function decode(value) {
       payload.subarray(0, 12),
     );
     decipher.setAuthTag(payload.subarray(12, 28));
+    decipher.setAAD(Buffer.from(name));
     return JSON.parse(
       Buffer.concat([
         decipher.update(payload.subarray(28)),
@@ -107,16 +115,21 @@ function decode(value) {
 }
 
 /**
- * @param {import("node:http").IncomingMessage} request
- * @param {string} name
- * @returns {string | undefined}
+ * @param {unknown} value
+ * @returns {value is Session} Whether `value` is what `writeSession` seals
  */
-function cookieValue(request, name) {
-  const scoped = scopedCookieName(name);
-  const cookies = request.headers.cookie?.split(";") ?? [];
-  return cookies
-    .map((part) => part.trim().split("="))
-    .find(([key]) => key === scoped)?.[1];
+function isSession(value) {
+  if (!isRecord(value) || !isBoolean(value.persistent)) return false;
+  const { user } = value;
+  return (
+    ["accessToken", "refreshToken", "accountId", "activeTenantId"].every(
+      (field) => !Object.hasOwn(value, field) || isString(value[field]),
+    ) &&
+    (!Object.hasOwn(value, "updatedAt") || isNumber(value.updatedAt)) &&
+    (!Object.hasOwn(value, "user") ||
+      (isRecord(user) &&
+        (!Object.hasOwn(user, "language") || isString(user.language))))
+  );
 }
 
 /**
@@ -159,15 +172,29 @@ function appendCookie(response, name, value, cookieAttributes) {
 }
 
 /**
+ * @param {import("node:http").ServerResponse} response
+ * @param {string} name
+ * @param {unknown} value
+ * @param {string} cookieAttributes
+ */
+function appendSealedCookie(response, name, value, cookieAttributes) {
+  appendCookie(
+    response,
+    name,
+    encode(scopedCookieName(name), value),
+    cookieAttributes,
+  );
+}
+
+/**
  * @param {SessionRequest} request
  * @returns {Session | undefined} The session set for the request, else the one
  *   the cookie seals, `undefined` when there is none
  */
 export function readSession(request) {
   if (REQUEST_SESSION in request) return request[REQUEST_SESSION];
-  const value = cookieValue(request, SESSION_COOKIE);
-  // oxlint-disable-next-line typescript/no-unsafe-return -- `decode` returns the JSON this server sealed under `SESSION_COOKIE`, untyped because `JSON.parse` is; the AES-GCM tag rejects any cookie it did not write.
-  return value ? decode(value) : undefined;
+  const sealed = readSealedCookie(request, SESSION_COOKIE);
+  return isSession(sealed) ? sealed : undefined;
 }
 
 /**
@@ -183,10 +210,10 @@ export function setRequestSession(request, session) {
  * @param {Session} session
  */
 export function writeSession(response, session) {
-  appendCookie(
+  appendSealedCookie(
     response,
     SESSION_COOKIE,
-    encode(session),
+    session,
     attributes(lifetime(session)),
   );
 }
@@ -203,8 +230,12 @@ export function clearSession(response) {
  *   `undefined` when there is none or it does not open
  */
 export function readSealedCookie(request, name) {
-  const value = cookieValue(request, name);
-  return value ? decode(value) : undefined;
+  const scoped = scopedCookieName(name);
+  const cookies = request.headers.cookie?.split(";") ?? [];
+  const value = cookies
+    .map((part) => part.trim().split("="))
+    .find(([key]) => key === scoped)?.[1];
+  return value ? decode(scoped, value) : undefined;
 }
 
 /**
@@ -215,7 +246,7 @@ export function readSealedCookie(request, name) {
  * @param {string} [path]
  */
 export function writeSealedCookie(response, name, value, maxAge, path = "/") {
-  appendCookie(response, name, encode(value), attributes(maxAge, path));
+  appendSealedCookie(response, name, value, attributes(maxAge, path));
 }
 
 /**
