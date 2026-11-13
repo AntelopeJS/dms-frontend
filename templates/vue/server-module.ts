@@ -84,8 +84,10 @@ export interface DmsServerEvent {
      */
     view(): DmsPublicSession;
     /**
-     * Writes the session cookie, stamped with `updatedAt`. It lasts 30 days
-     * when `persistent` is true and ends with the browser when it is false.
+     * Writes the session cookie, stamped with `updatedAt`. The browser keeps it
+     * 30 days when `persistent` is true and until it closes when it is false;
+     * the server opens it for 30 days from the stamp either way. A session
+     * without a boolean `persistent` throws.
      */
     write(session: DmsSession): void;
     clear(): void;
@@ -199,9 +201,11 @@ export interface DmsServerAuth {
    */
   signInExempt?: readonly string[];
   /**
-   * Renews a session the backend refused (a 401 to a signed-in page visit,
-   * which is then retried once): writes it with `event.session.write` and
-   * returns it, or clears it and returns `undefined`.
+   * Renews a session: one the backend refused (a 401 to a signed-in page
+   * visit, which is then retried once), and one written more than 5 minutes
+   * ago, before a request uses it. Writes it with `event.session.write` and
+   * returns it, or clears it and returns `undefined`; the request then runs
+   * signed out. A session the backend revoked is cleared this way.
    */
   refreshSession?(
     event: DmsServerEvent,
