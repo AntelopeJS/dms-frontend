@@ -9,10 +9,10 @@
   "tsIgnore": 0,
   "safety": 13,
   "config": {
-    "eslint/max-lines for tests/**/*.test.mts": 1,
-    "eslint/max-lines for tests/**/*.test.ts": 1,
-    "eslint/max-lines-per-function for tests/**/*.test.mts": 1,
-    "eslint/max-lines-per-function for tests/**/*.test.ts": 1,
+    "eslint/max-lines for tests/**/*.test.mts": 0,
+    "eslint/max-lines for tests/**/*.test.ts": 0,
+    "eslint/max-lines-per-function for tests/**/*.test.mts": 0,
+    "eslint/max-lines-per-function for tests/**/*.test.ts": 0,
     "typescript/no-floating-promises for tests/**/*.test.mts": 0,
     "typescript/no-floating-promises for tests/**/*.test.ts": 0
   },

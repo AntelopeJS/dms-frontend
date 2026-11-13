@@ -24,38 +24,7 @@ function proxyWith(auth: "session" | "none") {
   return proxy;
 }
 
-void describe("public endpoints", () => {
-  void it("matches the declared method and one segment per wildcard", () => {
-    const endpoints = allowedPublicEndpoints("", [WEBHOOK]);
-    const matched = matchPublicEndpoint(
-      "POST",
-      "/api/mailing/events/resend/acme",
-      endpoints,
-    );
-    assert.equal(matched?.path, WEBHOOK.path);
-    assert.deepEqual(matched?.headers, ["x-mailing-webhook-secret"]);
-    assert.equal(
-      matchPublicEndpoint("GET", "/api/mailing/events/resend/acme", endpoints),
-      undefined,
-    );
-    for (const path of [
-      "/api/mailing/events/resend",
-      "/api/mailing/events/resend/acme/more",
-      "/api/mailing/events",
-      "/api/mailing/settings",
-    ])
-      assert.equal(matchPublicEndpoint("POST", path, endpoints), undefined);
-  });
-
-  void it("takes extra endpoints from DMS_PUBLIC_ENDPOINTS", () => {
-    const endpoints = allowedPublicEndpoints(
-      JSON.stringify([{ path: "/api/hooks/stripe", methods: ["post", "put"] }]),
-      [],
-    );
-    assert.ok(matchPublicEndpoint("PUT", "/api/hooks/stripe", endpoints));
-    assert.deepEqual(allowedPublicEndpoints("not json", []), []);
-  });
-
+function registerRejectionTests(): void {
   void it("drops a malformed declaration whole", () => {
     for (const entry of [
       null,
@@ -130,6 +99,41 @@ void describe("public endpoints", () => {
       else process.env.DMS_PUBLIC_ENDPOINTS = previous;
     }
   });
+}
+
+void describe("public endpoints", () => {
+  void it("matches the declared method and one segment per wildcard", () => {
+    const endpoints = allowedPublicEndpoints("", [WEBHOOK]);
+    const matched = matchPublicEndpoint(
+      "POST",
+      "/api/mailing/events/resend/acme",
+      endpoints,
+    );
+    assert.equal(matched?.path, WEBHOOK.path);
+    assert.deepEqual(matched?.headers, ["x-mailing-webhook-secret"]);
+    assert.equal(
+      matchPublicEndpoint("GET", "/api/mailing/events/resend/acme", endpoints),
+      undefined,
+    );
+    for (const path of [
+      "/api/mailing/events/resend",
+      "/api/mailing/events/resend/acme/more",
+      "/api/mailing/events",
+      "/api/mailing/settings",
+    ])
+      assert.equal(matchPublicEndpoint("POST", path, endpoints), undefined);
+  });
+
+  void it("takes extra endpoints from DMS_PUBLIC_ENDPOINTS", () => {
+    const endpoints = allowedPublicEndpoints(
+      JSON.stringify([{ path: "/api/hooks/stripe", methods: ["post", "put"] }]),
+      [],
+    );
+    assert.ok(matchPublicEndpoint("PUT", "/api/hooks/stripe", endpoints));
+    assert.deepEqual(allowedPublicEndpoints("not json", []), []);
+  });
+
+  registerRejectionTests();
 
   void it("sends nothing of the session through a proxy without auth, and needs no Origin", () => {
     const access = proxyAccess(

@@ -69,6 +69,28 @@ const ENGLISH = {
 };
 const FRENCH = { greeting: "Bonjour-french-marker" };
 
+function writeCatalogFixture(workspace: string, layer: ResolvedLayer): void {
+  write(
+    join(layer.path, "package.json"),
+    JSON.stringify({ name: layer.packageName }),
+  );
+  write(
+    join(layer.path, "i18n", "locales", "app-en-GB.json"),
+    JSON.stringify(ENGLISH),
+  );
+  write(
+    join(layer.path, "i18n", "locales", "app-fr-FR.json"),
+    JSON.stringify(FRENCH),
+  );
+  mkdirSync(workspace);
+  materializeLayers(workspace, [layer]);
+  writeFrontendModuleRegistry(workspace, [layer]);
+  writeLocaleMessages(
+    workspace,
+    createFrontendModuleRegistry(workspace, [layer]),
+  );
+}
+
 /**
  * The catalogs the application loads: every module's messages, which weigh
  * hundreds of kilobytes once all the modules of an application are merged,
@@ -83,25 +105,7 @@ void describe("generated locale catalogs", () => {
   };
 
   before(() => {
-    write(
-      join(layer.path, "package.json"),
-      JSON.stringify({ name: layer.packageName }),
-    );
-    write(
-      join(layer.path, "i18n", "locales", "app-en-GB.json"),
-      JSON.stringify(ENGLISH),
-    );
-    write(
-      join(layer.path, "i18n", "locales", "app-fr-FR.json"),
-      JSON.stringify(FRENCH),
-    );
-    mkdirSync(workspace);
-    materializeLayers(workspace, [layer]);
-    writeFrontendModuleRegistry(workspace, [layer]);
-    writeLocaleMessages(
-      workspace,
-      createFrontendModuleRegistry(workspace, [layer]),
-    );
+    writeCatalogFixture(workspace, layer);
   });
 
   after(() => rmSync(root, { recursive: true, force: true }));

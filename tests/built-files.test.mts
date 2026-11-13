@@ -94,6 +94,38 @@ async function listen(server: Server): Promise<number> {
   return address.port;
 }
 
+function fetcher(base: string) {
+  return (path: string, headers: Record<string, string> = {}) =>
+    fetch(`${base}${path}`, {
+      headers: { accept: "text/html", ...headers },
+      redirect: "manual",
+    });
+}
+
+async function expectPrivateBuildPaths(
+  get: ReturnType<typeof fetcher>,
+): Promise<void> {
+  for (const [path, headers] of [
+    ["/.vite/manifest.json", {}],
+    ["/.vite/manifest.json", { "accept-encoding": "br, gzip" }],
+    ["/.vite/manifest.json", { "accept-encoding": "gzip" }],
+    ["/.vite/manifest.json.br", {}],
+    ["/.vite/manifest.json.gz", {}],
+    ["/%2Evite/manifest.json", {}],
+    ["/%2evite%2fmanifest.json", {}],
+    ["/assets/..%2F.vite/manifest.json", {}],
+    ["/assets/..%2F..%2Fserver.mjs", {}],
+    ["/assets/%2e%2e/.vite/manifest.json", {}],
+    ["/assets/.hidden.js", {}],
+    ["/.hidden.txt", {}],
+  ] as const) {
+    const response = await get(path, headers);
+    const body = await response.text();
+    assert.equal(response.status, 404, `${path} ${JSON.stringify(headers)}`);
+    assert.doesNotMatch(body, /ArticleList\.vue|isDynamicEntry|hidden/, path);
+  }
+}
+
 void describe("built files the production server serves", () => {
   void it("serves no path with a dot segment but /.well-known/, whatever the separator", async () => {
     const { isPublicBuildPath } = await builtFiles;
@@ -140,42 +172,12 @@ void describe("built files the production server serves", () => {
       process.env.DMS_API_BASE_URL = `http://127.0.0.1:${await listen(backend)}`;
       frontend = createServer(await requestHandlerOf(workspace));
       const base = `http://127.0.0.1:${await listen(frontend)}`;
-      const get = (path: string, headers: Record<string, string> = {}) =>
-        fetch(`${base}${path}`, {
-          headers: { accept: "text/html", ...headers },
-          redirect: "manual",
-        });
+      const get = fetcher(base);
 
       const missing = await get("/missing-file.json");
       assert.equal(missing.status, 404);
       await missing.body?.cancel();
-      for (const [path, headers] of [
-        ["/.vite/manifest.json", {}],
-        ["/.vite/manifest.json", { "accept-encoding": "br, gzip" }],
-        ["/.vite/manifest.json", { "accept-encoding": "gzip" }],
-        ["/.vite/manifest.json.br", {}],
-        ["/.vite/manifest.json.gz", {}],
-        ["/%2Evite/manifest.json", {}],
-        ["/%2evite%2fmanifest.json", {}],
-        ["/assets/..%2F.vite/manifest.json", {}],
-        ["/assets/..%2F..%2Fserver.mjs", {}],
-        ["/assets/%2e%2e/.vite/manifest.json", {}],
-        ["/assets/.hidden.js", {}],
-        ["/.hidden.txt", {}],
-      ] as const) {
-        const response = await get(path, headers);
-        const body = await response.text();
-        assert.equal(
-          response.status,
-          404,
-          `${path} ${JSON.stringify(headers)}`,
-        );
-        assert.doesNotMatch(
-          body,
-          /ArticleList\.vue|isDynamicEntry|hidden/,
-          path,
-        );
-      }
+      await expectPrivateBuildPaths(get);
 
       const entry = await get("/assets/main-a1b2.js");
       assert.equal(entry.status, 200);

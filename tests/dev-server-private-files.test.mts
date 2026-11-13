@@ -25,6 +25,65 @@ function writeFixture(root: string, path: string, content: string): void {
   writeFileSync(destination, content);
 }
 
+function writePrivateFixtures(root: string): void {
+  writeFixture(
+    root,
+    "vite.config.mjs",
+    "export default { logLevel: 'silent', server: { watch: null, ws: false } };",
+  );
+  writeFixture(
+    root,
+    "generated-server-options.json",
+    JSON.stringify({ modules: { shop: { apiKey: SECRET } } }),
+  );
+  writeFixture(
+    root,
+    ".manifest-cache.json",
+    JSON.stringify({ manifest: { privateOptions: SECRET } }),
+  );
+  writeFixture(
+    root,
+    "frontend-modules/shop/dms.server.ts",
+    `export const secret = "${SECRET}";\n`,
+  );
+  writeFixture(
+    root,
+    "frontend-modules/shop/server/token.ts",
+    `export const token = "${SECRET}";\n`,
+  );
+  writeFixture(
+    root,
+    "frontend-modules/shop/layers/base/server/sign.ts",
+    `export const sign = "${SECRET}";\n`,
+  );
+  writeFixture(
+    root,
+    "frontend-modules/shop/layers/base/app/util.ts",
+    "export const util = 1;\n",
+  );
+}
+
+const PRIVATE_PATHS = [
+  "/generated-server-options.json",
+  "/generated-server-options.json?raw",
+  "/generated-server-options.json?import",
+  "/generated-server-options.json?url",
+  "/generated-server-options.json?import&raw",
+  "/generated-server-options%2Ejson",
+  "/.manifest-cache.json",
+  "/.manifest-cache.json?raw",
+  "/.manifest-cache.json?import",
+  "/frontend-modules/shop/dms.server.ts",
+  "/frontend-modules/shop/dms.server.ts?raw",
+  "/frontend-modules/shop/server/token.ts",
+  "/frontend-modules/shop/server/token.ts?import",
+  "/frontend-modules/shop/layers/base/server/sign.ts",
+  "/frontend-modules/shop/layers/base/server/sign.ts?raw",
+  "/frontend-modules/shop/layers/base/server/sign.ts?import&raw",
+  "/frontend-modules/shop/layers/base/../base/server/sign.ts",
+  "/@id/frontend-modules/shop/server/token.ts",
+];
+
 void describe("private files the development server refuses", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-dev-private-files-"));
   const previousCwd = process.cwd();
@@ -39,41 +98,7 @@ void describe("private files the development server refuses", () => {
 
   before(async () => {
     process.env.DMS_API_BASE_URL = await listen(backend);
-    writeFixture(
-      root,
-      "vite.config.mjs",
-      "export default { logLevel: 'silent', server: { watch: null, ws: false } };",
-    );
-    writeFixture(
-      root,
-      "generated-server-options.json",
-      JSON.stringify({ modules: { shop: { apiKey: SECRET } } }),
-    );
-    writeFixture(
-      root,
-      ".manifest-cache.json",
-      JSON.stringify({ manifest: { privateOptions: SECRET } }),
-    );
-    writeFixture(
-      root,
-      "frontend-modules/shop/dms.server.ts",
-      `export const secret = "${SECRET}";\n`,
-    );
-    writeFixture(
-      root,
-      "frontend-modules/shop/server/token.ts",
-      `export const token = "${SECRET}";\n`,
-    );
-    writeFixture(
-      root,
-      "frontend-modules/shop/layers/base/server/sign.ts",
-      `export const sign = "${SECRET}";\n`,
-    );
-    writeFixture(
-      root,
-      "frontend-modules/shop/layers/base/app/util.ts",
-      "export const util = 1;\n",
-    );
+    writePrivateFixtures(root);
     process.env.DMS_DEV = "true";
     process.chdir(root);
     const runtime = await import("../templates/vue/server.mjs");
@@ -90,28 +115,7 @@ void describe("private files the development server refuses", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  const privatePaths = [
-    "/generated-server-options.json",
-    "/generated-server-options.json?raw",
-    "/generated-server-options.json?import",
-    "/generated-server-options.json?url",
-    "/generated-server-options.json?import&raw",
-    "/generated-server-options%2Ejson",
-    "/.manifest-cache.json",
-    "/.manifest-cache.json?raw",
-    "/.manifest-cache.json?import",
-    "/frontend-modules/shop/dms.server.ts",
-    "/frontend-modules/shop/dms.server.ts?raw",
-    "/frontend-modules/shop/server/token.ts",
-    "/frontend-modules/shop/server/token.ts?import",
-    "/frontend-modules/shop/layers/base/server/sign.ts",
-    "/frontend-modules/shop/layers/base/server/sign.ts?raw",
-    "/frontend-modules/shop/layers/base/server/sign.ts?import&raw",
-    "/frontend-modules/shop/layers/base/../base/server/sign.ts",
-    "/@id/frontend-modules/shop/server/token.ts",
-  ];
-
-  for (const path of privatePaths)
+  for (const path of PRIVATE_PATHS)
     void it(`refuses ${path}`, async () => {
       const response = await fetch(`${base}${path}`);
       const body = await response.text();

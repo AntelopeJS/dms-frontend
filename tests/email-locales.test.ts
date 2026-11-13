@@ -36,109 +36,169 @@ function isBuiltManifest(
   );
 }
 
-void it("keeps large locale catalogs out of email code without pruning dynamic translations", async (context) => {
-  const workspace = mkdtempSync(resolve(".email-locales-"));
-  try {
-    const layers = ["base", "override", "unrelated"].map((name, index) => {
-      const path = join(workspace, "sources", name);
-      mkdirSync(join(path, "i18n/locales"), { recursive: true });
-      writeFileSync(
-        join(path, "package.json"),
-        JSON.stringify({ name: `@fixture/${name}`, type: "module" }),
-      );
-      return { path, packageName: `@fixture/${name}`, priority: index };
-    });
-    const writeLocale = (
-      index: number,
-      locale: string,
-      value: LocaleMessages,
-    ) =>
-      writeFileSync(
-        join(
-          layers[index].path,
-          "i18n/locales",
-          `${index === 1 ? "fixture-" : ""}${locale}.json`,
-        ),
-        JSON.stringify(value),
-      );
-    writeLocale(0, "en-GB", {
-      subject: "Base English",
-      fallback: "English fallback",
-      dynamic: { chosen: "Dynamic English" },
-    });
-    writeLocale(0, "fr-FR", {
-      subject: "Base French",
-      dynamic: { chosen: "Dynamic French" },
-    });
-    writeLocale(1, "en-GB", {
-      subject: "Override English",
-      dynamic: { chosen: "Lower priority English" },
-    });
-    writeLocale(1, "fr-FR", {
-      subject: "Override French",
-      dynamic: { chosen: "Lower priority French" },
-    });
-    const unrelated = Object.fromEntries(
-      Array.from({ length: 3000 }, (_, index) => [
-        `key${index}`,
-        `UNRELATED_APPLICATION_TRANSLATION_${index}_${"x".repeat(100)}`,
-      ]),
-    );
-    writeLocale(2, "en-GB", {
-      unrelated,
-      arbitrary: "Arbitrary English",
-      dynamic: { chosen: "Dynamic English" },
-    });
-    writeLocale(2, "fr-FR", {
-      unrelated,
-      arbitrary: "Arbitrary French",
-      dynamic: { chosen: "Dynamic French" },
-    });
-    writeLocale(2, "de-DE", { arbitrary: "Arbitrary German" });
-    writeLocale(2, "it-IT", { arbitrary: "Arbitrary Italian" });
-    writeLocale(2, "nl-NL", { arbitrary: "Arbitrary Dutch" });
+function writeFixtureLayers(workspace: string) {
+  const layers = ["base", "override", "unrelated"].map((name, index) => {
+    const path = join(workspace, "sources", name);
+    mkdirSync(join(path, "i18n/locales"), { recursive: true });
     writeFileSync(
-      join(layers[0].path, "dms.email.ts"),
-      'export const serverEmailTemplates = import.meta.glob("./EmailFixture.vue");',
+      join(path, "package.json"),
+      JSON.stringify({ name: `@fixture/${name}`, type: "module" }),
     );
+    return { path, packageName: `@fixture/${name}`, priority: index };
+  });
+  const writeLocale = (index: number, locale: string, value: LocaleMessages) =>
     writeFileSync(
-      join(layers[0].path, "EmailFixture.vue"),
-      `<script setup lang="ts">
+      join(
+        layers[index].path,
+        "i18n/locales",
+        `${index === 1 ? "fixture-" : ""}${locale}.json`,
+      ),
+      JSON.stringify(value),
+    );
+  writeLocale(0, "en-GB", {
+    subject: "Base English",
+    fallback: "English fallback",
+    dynamic: { chosen: "Dynamic English" },
+  });
+  writeLocale(0, "fr-FR", {
+    subject: "Base French",
+    dynamic: { chosen: "Dynamic French" },
+  });
+  writeLocale(1, "en-GB", {
+    subject: "Override English",
+    dynamic: { chosen: "Lower priority English" },
+  });
+  writeLocale(1, "fr-FR", {
+    subject: "Override French",
+    dynamic: { chosen: "Lower priority French" },
+  });
+  const unrelated = Object.fromEntries(
+    Array.from({ length: 3000 }, (_, index) => [
+      `key${index}`,
+      `UNRELATED_APPLICATION_TRANSLATION_${index}_${"x".repeat(100)}`,
+    ]),
+  );
+  writeLocale(2, "en-GB", {
+    unrelated,
+    arbitrary: "Arbitrary English",
+    dynamic: { chosen: "Dynamic English" },
+  });
+  writeLocale(2, "fr-FR", {
+    unrelated,
+    arbitrary: "Arbitrary French",
+    dynamic: { chosen: "Dynamic French" },
+  });
+  writeLocale(2, "de-DE", { arbitrary: "Arbitrary German" });
+  writeLocale(2, "it-IT", { arbitrary: "Arbitrary Italian" });
+  writeLocale(2, "nl-NL", { arbitrary: "Arbitrary Dutch" });
+  writeFileSync(
+    join(layers[0].path, "dms.email.ts"),
+    'export const serverEmailTemplates = import.meta.glob("./EmailFixture.vue");',
+  );
+  writeFileSync(
+    join(layers[0].path, "EmailFixture.vue"),
+    `<script setup lang="ts">
 import { useI18n } from "vue-i18n";
 defineProps<{ translationKey: string }>();
 const { t } = useI18n();
 </script>
 <template><EContainer style="padding:20px 0"><ESection><p>{{ t('subject') }}|{{ t('fallback') }}|{{ t(translationKey) }}</p></ESection></EContainer></template>`,
+  );
+  return layers;
+}
+
+async function expectGeneratedCatalogs(workspace: string): Promise<void> {
+  for (const [locale, subject, dynamic] of [
+    ["en", "Override English", "Dynamic English"],
+    ["fr", "Override French", "Dynamic French"],
+  ]) {
+    const loaded: unknown = await import(
+      pathToFileURL(join(workspace, "locales.generated", `${locale}.ts`)).href
     );
+    assert.ok(
+      isObjectLike(loaded) &&
+        "default" in loaded &&
+        isLocaleMessages(loaded.default),
+      `the ${locale} messages are a catalog`,
+    );
+    const browserMessages = loaded.default;
+    assert.equal(browserMessages.subject, subject);
+    assert.ok(isLocaleMessages(browserMessages.dynamic));
+    assert.equal(browserMessages.dynamic.chosen, dynamic);
+    assert.equal(browserMessages.fallback, "English fallback");
+    const { fallback, ...own } = browserMessages;
+    assert.deepEqual(
+      JSON.parse(
+        readText(join(workspace, "locales.generated", `${locale}.json`)),
+      ),
+      locale === "en" ? { ...own, fallback } : own,
+    );
+  }
+}
+
+async function expectDeployedRenders(output: string): Promise<void> {
+  const germanPath = join(output, "locales/de.json");
+  const german = readBytes(germanPath);
+  writeFileSync(
+    germanPath,
+    "invalid JSON: must not be read by an English or French render",
+  );
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the build output, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
+  const { renderEmail } = await import(
+    pathToFileURL(join(output, "email-renderer.js")).href
+  );
+  const render = async (
+    translationKey: string,
+    locale?: string,
+  ): Promise<string> => {
+    const html: unknown = await renderEmail(
+      "EmailFixture",
+      { translationKey },
+      locale === undefined ? undefined : { locale },
+    );
+    assert.ok(isText(html), "the email renders to text");
+    return html;
+  };
+  const layout = await render("arbitrary");
+  assert.match(
+    layout,
+    /<table[^>]*align="center"[^>]*width="100%"[^>]*style="max-width:37\.5em;padding:20px 0;"[^>]*><tbody><tr[^>]*><td><table/,
+  );
+  assert.match(
+    await render("dynamic.chosen", "fr-FR"),
+    /Override French\|English fallback\|Dynamic French/,
+  );
+  assert.match(
+    await render("arbitrary", "en"),
+    /Override English\|English fallback\|Arbitrary English/,
+  );
+  writeFileSync(germanPath, german);
+  assert.match(
+    await render("arbitrary", "de"),
+    /Override English\|English fallback\|Arbitrary German/,
+  );
+  assert.match(
+    await render("arbitrary", "es"),
+    /Override English\|English fallback\|Arbitrary English/,
+  );
+  assert.match(
+    await render("unrelated.key2999", "fr"),
+    /UNRELATED_APPLICATION_TRANSLATION_2999/,
+  );
+  writeFileSync(join(output, "locales/it.json"), "invalid JSON");
+  await assert.rejects(() => render("arbitrary", "it"), SyntaxError);
+  rmSync(join(output, "locales/nl.json"));
+  await assert.rejects(() => render("arbitrary", "nl"), { code: "ENOENT" });
+}
+
+void it("keeps large locale catalogs out of email code without pruning dynamic translations", async (context) => {
+  const workspace = mkdtempSync(resolve(".email-locales-"));
+  try {
+    const layers = writeFixtureLayers(workspace);
     writeFileSync(join(workspace, "package.json"), '{"type":"module"}');
     materializeLayers(workspace, layers);
     writeFrontendModuleRegistry(workspace, layers);
-    for (const [locale, subject, dynamic] of [
-      ["en", "Override English", "Dynamic English"],
-      ["fr", "Override French", "Dynamic French"],
-    ]) {
-      const loaded: unknown = await import(
-        pathToFileURL(join(workspace, "locales.generated", `${locale}.ts`)).href
-      );
-      assert.ok(
-        isObjectLike(loaded) &&
-          "default" in loaded &&
-          isLocaleMessages(loaded.default),
-        `the ${locale} messages are a catalog`,
-      );
-      const browserMessages = loaded.default;
-      assert.equal(browserMessages.subject, subject);
-      assert.ok(isLocaleMessages(browserMessages.dynamic));
-      assert.equal(browserMessages.dynamic.chosen, dynamic);
-      assert.equal(browserMessages.fallback, "English fallback");
-      const { fallback, ...own } = browserMessages;
-      assert.deepEqual(
-        JSON.parse(
-          readText(join(workspace, "locales.generated", `${locale}.json`)),
-        ),
-        locale === "en" ? { ...own, fallback } : own,
-      );
-    }
+    await expectGeneratedCatalogs(workspace);
     copyEmailRendererFiles(workspace);
     execFileSync(
       process.execPath,
@@ -183,58 +243,7 @@ const { t } = useI18n();
     context.diagnostic(
       `Email JavaScript: ${Buffer.byteLength(javascript)} bytes; complete locale data: ${dataBytes} bytes`,
     );
-    const germanPath = join(output, "locales/de.json");
-    const german = readBytes(germanPath);
-    writeFileSync(
-      germanPath,
-      "invalid JSON: must not be read by an English or French render",
-    );
-    // oxlint-disable-next-line typescript/no-unsafe-assignment -- the path is computed from the build output, so the import is untyped; `renderEmail` is the built export of `templates/vue/email-renderer.ts`, and its result is read as `unknown` below.
-    const { renderEmail } = await import(
-      pathToFileURL(join(output, "email-renderer.js")).href
-    );
-    const render = async (
-      translationKey: string,
-      locale?: string,
-    ): Promise<string> => {
-      const html: unknown = await renderEmail(
-        "EmailFixture",
-        { translationKey },
-        locale === undefined ? undefined : { locale },
-      );
-      assert.ok(isText(html), "the email renders to text");
-      return html;
-    };
-    const layout = await render("arbitrary");
-    assert.match(
-      layout,
-      /<table[^>]*align="center"[^>]*width="100%"[^>]*style="max-width:37\.5em;padding:20px 0;"[^>]*><tbody><tr[^>]*><td><table/,
-    );
-    assert.match(
-      await render("dynamic.chosen", "fr-FR"),
-      /Override French\|English fallback\|Dynamic French/,
-    );
-    assert.match(
-      await render("arbitrary", "en"),
-      /Override English\|English fallback\|Arbitrary English/,
-    );
-    writeFileSync(germanPath, german);
-    assert.match(
-      await render("arbitrary", "de"),
-      /Override English\|English fallback\|Arbitrary German/,
-    );
-    assert.match(
-      await render("arbitrary", "es"),
-      /Override English\|English fallback\|Arbitrary English/,
-    );
-    assert.match(
-      await render("unrelated.key2999", "fr"),
-      /UNRELATED_APPLICATION_TRANSLATION_2999/,
-    );
-    writeFileSync(join(output, "locales/it.json"), "invalid JSON");
-    await assert.rejects(() => render("arbitrary", "it"), SyntaxError);
-    rmSync(join(output, "locales/nl.json"));
-    await assert.rejects(() => render("arbitrary", "nl"), { code: "ENOENT" });
+    await expectDeployedRenders(output);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }

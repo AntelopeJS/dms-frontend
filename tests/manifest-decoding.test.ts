@@ -33,7 +33,7 @@ async function manifestFailure(answer: Json): Promise<Error | undefined> {
   }
 }
 
-void describe("fetchManifest decoding", () => {
+function registerRefusalTests(): void {
   void it("refuses an answer that is not a manifest object, as one without a version", async () => {
     for (const body of [null, "abc", 5, true, [], {}]) {
       const failure = await manifestFailure(body);
@@ -121,6 +121,10 @@ void describe("fetchManifest decoding", () => {
       assert.ok(failure instanceof ManifestRefusedError, JSON.stringify(extra));
     }
   });
+}
+
+void describe("fetchManifest decoding", () => {
+  registerRefusalTests();
 
   void it("keeps every field a well-formed manifest declares", async () => {
     const module = {

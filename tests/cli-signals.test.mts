@@ -254,6 +254,157 @@ function signalsProject(): string {
  */
 const describeSignals = process.platform === "win32" ? describe.skip : describe;
 
+function registerServerStopTests(): void {
+  void it("exits 130 on Ctrl+C in a terminal while the server runs", async () => {
+    const run = await startServer("http://127.0.0.1:9", true);
+    const pids = await run.tree;
+
+    process.kill(-run.pid, "SIGINT");
+
+    assert.deepEqual(await run.exited, { code: 130, signal: null });
+    assert.match(run.output(), /✔ Production server ready in \S+\n/);
+    assert.match(run.output(), /Local: +http:\/\/localhost:1\//);
+    assert.match(
+      run.output(),
+      /■ Stopped the production server · ran \d+(ms|\.\ds)\n/,
+    );
+    await assertTreeGone(pids);
+  });
+
+  void it("exits 130 when only the CLI receives SIGINT", async () => {
+    const run = await startServer("http://127.0.0.1:9");
+    const pids = await run.tree;
+
+    process.kill(run.pid, "SIGINT");
+
+    assert.deepEqual(await run.exited, { code: 130, signal: null });
+    assert.match(run.output(), /■ Stopped the production server · ran /);
+    await assertTreeGone(pids);
+  });
+
+  void it("prints a due update notice once, under the ready block", async () => {
+    const backendUrl = "http://127.0.0.1:9";
+    const home = mkdtempSync(join(scratch, "home-"));
+    mkdirSync(join(home, ".antelopejs/dms-frontend"), { recursive: true });
+    writeFileSync(
+      join(home, ".antelopejs/dms-frontend/update-check.json"),
+      JSON.stringify({
+        checkedAt: Date.now(),
+        latestVersion: "999.0.0",
+        succeeded: true,
+      }),
+    );
+    const run = startCli({
+      args: ["start", "-b", backendUrl, "-p", "0", "--project", builtProject()],
+      entry: ["--import", TERMINAL_STDERR, CLI],
+      env: {
+        HOME: home,
+        DMS_SESSION_SECRET: SESSION_SECRET,
+        NO_UPDATE_NOTIFIER: "",
+        CI: "",
+        NO_COLOR: "1",
+      },
+    });
+    const notice = `ℹ ajs dms 999.0.0 is available (you have ${OWN_PACKAGE.version}) → ajs update dms\n`;
+    await waitFor(
+      () => (run.output().includes(notice) ? true : undefined),
+      run.output,
+    );
+    const pids = await run.tree;
+
+    process.kill(run.pid, "SIGINT");
+
+    assert.deepEqual(await run.exited, { code: 130, signal: null });
+    assert.ok(
+      run.output().includes(`Ctrl+C to stop\n\n${notice}\n`),
+      run.output(),
+    );
+    assert.equal(run.output().split(notice).length, 2, "printed once");
+    await assertTreeGone(pids);
+  });
+}
+
+function registerQuietAndInstallTests(): void {
+  void it("shows only the local URL of a quiet run, and no stop line", async () => {
+    const backendUrl = "http://127.0.0.1:9";
+    const run = startCli({
+      args: [
+        "start",
+        "-b",
+        backendUrl,
+        "-p",
+        "0",
+        "-q",
+        "--project",
+        builtProject(),
+      ],
+      env: { DMS_SESSION_SECRET: SESSION_SECRET },
+      ownGroup: true,
+    });
+    await waitFor(
+      () => (run.output().includes("Local:") ? true : undefined),
+      run.output,
+    );
+    const pids = await run.tree;
+
+    process.kill(-run.pid, "SIGINT");
+
+    assert.deepEqual(await run.exited, { code: 130, signal: null });
+    const lines = run.output().split("\n");
+    assert.deepEqual(
+      lines.filter((line) => !line.startsWith("▲") && !line.startsWith("  →")),
+      ["  ➜  Local: http://localhost:1/", ""],
+    );
+    await assertTreeGone(pids);
+  });
+
+  void it("exits 143 on SIGTERM and says which signal stopped it", async () => {
+    const run = await startServer("http://127.0.0.1:9");
+    const pids = await run.tree;
+
+    process.kill(run.pid, "SIGTERM");
+
+    assert.deepEqual(await run.exited, { code: 143, signal: null });
+    assert.match(
+      run.output(),
+      /■ Stopped the production server \(SIGTERM\) · ran /,
+    );
+    await assertTreeGone(pids);
+  });
+
+  void it("exits 130 on Ctrl+C during the dependency install", async () => {
+    const backend = await serveManifest();
+    try {
+      const run = startCli({
+        args: [
+          "dev",
+          "-b",
+          backend.url,
+          "-p",
+          "0",
+          "--project",
+          signalsProject(),
+        ],
+        env: { PATH: hangingPnpm() },
+        ownGroup: true,
+      });
+      const pids = await run.tree;
+
+      process.kill(-run.pid, "SIGINT");
+
+      assert.deepEqual(await run.exited, { code: 130, signal: null });
+      assert.match(
+        run.output(),
+        /– Dependency install stopped(?: \S+)?\n■ Stopped\n/,
+      );
+      assert.doesNotMatch(run.output(), /Setup failed/);
+      await assertTreeGone(pids);
+    } finally {
+      await new Promise((settle) => backend.server.close(settle));
+    }
+  });
+}
+
 void describeSignals(
   "stopping the CLI stops the whole child process tree",
   () => {
@@ -266,162 +417,9 @@ void describeSignals(
       rmSync(scratch, { recursive: true, force: true });
     });
 
-    void it("exits 130 on Ctrl+C in a terminal while the server runs", async () => {
-      const run = await startServer("http://127.0.0.1:9", true);
-      const pids = await run.tree;
+    registerServerStopTests();
 
-      process.kill(-run.pid, "SIGINT");
-
-      assert.deepEqual(await run.exited, { code: 130, signal: null });
-      assert.match(run.output(), /✔ Production server ready in \S+\n/);
-      assert.match(run.output(), /Local: +http:\/\/localhost:1\//);
-      assert.match(
-        run.output(),
-        /■ Stopped the production server · ran \d+(ms|\.\ds)\n/,
-      );
-      await assertTreeGone(pids);
-    });
-
-    void it("exits 130 when only the CLI receives SIGINT", async () => {
-      const run = await startServer("http://127.0.0.1:9");
-      const pids = await run.tree;
-
-      process.kill(run.pid, "SIGINT");
-
-      assert.deepEqual(await run.exited, { code: 130, signal: null });
-      assert.match(run.output(), /■ Stopped the production server · ran /);
-      await assertTreeGone(pids);
-    });
-
-    void it("prints a due update notice once, under the ready block", async () => {
-      const backendUrl = "http://127.0.0.1:9";
-      const home = mkdtempSync(join(scratch, "home-"));
-      mkdirSync(join(home, ".antelopejs/dms-frontend"), { recursive: true });
-      writeFileSync(
-        join(home, ".antelopejs/dms-frontend/update-check.json"),
-        JSON.stringify({
-          checkedAt: Date.now(),
-          latestVersion: "999.0.0",
-          succeeded: true,
-        }),
-      );
-      const run = startCli({
-        args: [
-          "start",
-          "-b",
-          backendUrl,
-          "-p",
-          "0",
-          "--project",
-          builtProject(),
-        ],
-        entry: ["--import", TERMINAL_STDERR, CLI],
-        env: {
-          HOME: home,
-          DMS_SESSION_SECRET: SESSION_SECRET,
-          NO_UPDATE_NOTIFIER: "",
-          CI: "",
-          NO_COLOR: "1",
-        },
-      });
-      const notice = `ℹ ajs dms 999.0.0 is available (you have ${OWN_PACKAGE.version}) → ajs update dms\n`;
-      await waitFor(
-        () => (run.output().includes(notice) ? true : undefined),
-        run.output,
-      );
-      const pids = await run.tree;
-
-      process.kill(run.pid, "SIGINT");
-
-      assert.deepEqual(await run.exited, { code: 130, signal: null });
-      assert.ok(
-        run.output().includes(`Ctrl+C to stop\n\n${notice}\n`),
-        run.output(),
-      );
-      assert.equal(run.output().split(notice).length, 2, "printed once");
-      await assertTreeGone(pids);
-    });
-
-    void it("shows only the local URL of a quiet run, and no stop line", async () => {
-      const backendUrl = "http://127.0.0.1:9";
-      const run = startCli({
-        args: [
-          "start",
-          "-b",
-          backendUrl,
-          "-p",
-          "0",
-          "-q",
-          "--project",
-          builtProject(),
-        ],
-        env: { DMS_SESSION_SECRET: SESSION_SECRET },
-        ownGroup: true,
-      });
-      await waitFor(
-        () => (run.output().includes("Local:") ? true : undefined),
-        run.output,
-      );
-      const pids = await run.tree;
-
-      process.kill(-run.pid, "SIGINT");
-
-      assert.deepEqual(await run.exited, { code: 130, signal: null });
-      const lines = run.output().split("\n");
-      assert.deepEqual(
-        lines.filter(
-          (line) => !line.startsWith("▲") && !line.startsWith("  →"),
-        ),
-        ["  ➜  Local: http://localhost:1/", ""],
-      );
-      await assertTreeGone(pids);
-    });
-
-    void it("exits 143 on SIGTERM and says which signal stopped it", async () => {
-      const run = await startServer("http://127.0.0.1:9");
-      const pids = await run.tree;
-
-      process.kill(run.pid, "SIGTERM");
-
-      assert.deepEqual(await run.exited, { code: 143, signal: null });
-      assert.match(
-        run.output(),
-        /■ Stopped the production server \(SIGTERM\) · ran /,
-      );
-      await assertTreeGone(pids);
-    });
-
-    void it("exits 130 on Ctrl+C during the dependency install", async () => {
-      const backend = await serveManifest();
-      try {
-        const run = startCli({
-          args: [
-            "dev",
-            "-b",
-            backend.url,
-            "-p",
-            "0",
-            "--project",
-            signalsProject(),
-          ],
-          env: { PATH: hangingPnpm() },
-          ownGroup: true,
-        });
-        const pids = await run.tree;
-
-        process.kill(-run.pid, "SIGINT");
-
-        assert.deepEqual(await run.exited, { code: 130, signal: null });
-        assert.match(
-          run.output(),
-          /– Dependency install stopped(?: \S+)?\n■ Stopped\n/,
-        );
-        assert.doesNotMatch(run.output(), /Setup failed/);
-        await assertTreeGone(pids);
-      } finally {
-        await new Promise((settle) => backend.server.close(settle));
-      }
-    });
+    registerQuietAndInstallTests();
 
     void it("stops a quiet dev run on Ctrl+C without a word", async () => {
       const backend = await serveManifest();

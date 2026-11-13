@@ -119,6 +119,63 @@ function configSource(config: AppConfigSource): string {
   return `export default ${JSON.stringify(config)};\n`;
 }
 
+async function startAppConfigServer(
+  workspace: string,
+  layers: ResolvedLayer[],
+  [project, dms]: [ResolvedLayer, ResolvedLayer],
+  probe: HotReloadProbe,
+): Promise<ViteDevServer> {
+  for (const layer of layers)
+    writeFile(
+      join(layer.path, "package.json"),
+      JSON.stringify({ name: layer.packageName }),
+    );
+  writeFile(
+    join(project.path, "app", "app.config.ts"),
+    configSource({ branding: { name: "Project" } }),
+  );
+  writeFile(
+    join(dms.path, "layers", "dms-layout", "app", "app.config.ts"),
+    configSource({
+      branding: { name: "DMS", logo: "/dms.svg" },
+      ui: { colors: { primary: "dms", neutral: "neutral" } },
+    }),
+  );
+  mkdirSync(workspace);
+  materializeLayers(workspace, layers);
+  writeFrontendModuleRegistry(workspace, layers);
+  for (const file of RUNTIME_FILES)
+    cpSync(join("templates", "vue", file), join(workspace, file), {
+      recursive: true,
+    });
+  writeFileSync(
+    join(workspace, "server-entry.ts"),
+    'import { appConfigs } from "./app-configs.generated";\nimport { setupFrontendModules, useDmsAppConfig } from "./frontend-module";\nawait setupFrontendModules([], appConfigs);\nexport const appConfig = useDmsAppConfig();\n',
+  );
+  writeFileSync(
+    join(workspace, "client-entry.ts"),
+    'import { appConfigs, syncAppConfigs } from "./app-configs.generated";\nimport { setupFrontendModules, updateDmsAppConfig, useDmsAppConfig } from "./frontend-module";\nglobalThis.__dmsAppConfigHmr.evaluations += 1;\nawait setupFrontendModules([{ options: { public: {} }, module: { setup() { useDmsAppConfig().addedBySetup = true; } } }], appConfigs);\nsyncAppConfigs(updateDmsAppConfig);\nexport const appConfig = useDmsAppConfig();\n',
+  );
+  Reflect.set(globalThis, "__dmsAppConfigHmr", probe);
+  const { createServer } = await import("vite");
+  return createServer({
+    root: workspace,
+    configFile: false,
+    logLevel: "silent",
+    appType: "custom",
+    optimizeDeps: { noDiscovery: true },
+    server: { middlewareMode: true, ws: false },
+    resolve: {
+      alias: Object.fromEntries(
+        layers.map((layer) => [
+          `@frontend/${getLayerSafeName(layer)}`,
+          getLayerWorkspacePath(workspace, layer),
+        ]),
+      ),
+    },
+  });
+}
+
 /**
  * The generated app configs module in a real Vite dev server, as `ajs-dms dev`
  * runs it: the browser side is played by a module runner with HMR, which
@@ -155,55 +212,12 @@ void describe("edited layer app configs in the dev server", () => {
   };
 
   before(async () => {
-    for (const layer of layers)
-      writeFile(
-        join(layer.path, "package.json"),
-        JSON.stringify({ name: layer.packageName }),
-      );
-    writeFile(
-      join(project.path, "app", "app.config.ts"),
-      configSource({ branding: { name: "Project" } }),
+    server = await startAppConfigServer(
+      workspace,
+      layers,
+      [project, dms],
+      probe,
     );
-    writeFile(
-      join(dms.path, "layers", "dms-layout", "app", "app.config.ts"),
-      configSource({
-        branding: { name: "DMS", logo: "/dms.svg" },
-        ui: { colors: { primary: "dms", neutral: "neutral" } },
-      }),
-    );
-    mkdirSync(workspace);
-    materializeLayers(workspace, layers);
-    writeFrontendModuleRegistry(workspace, layers);
-    for (const file of RUNTIME_FILES)
-      cpSync(join("templates", "vue", file), join(workspace, file), {
-        recursive: true,
-      });
-    writeFileSync(
-      join(workspace, "server-entry.ts"),
-      'import { appConfigs } from "./app-configs.generated";\nimport { setupFrontendModules, useDmsAppConfig } from "./frontend-module";\nawait setupFrontendModules([], appConfigs);\nexport const appConfig = useDmsAppConfig();\n',
-    );
-    writeFileSync(
-      join(workspace, "client-entry.ts"),
-      'import { appConfigs, syncAppConfigs } from "./app-configs.generated";\nimport { setupFrontendModules, updateDmsAppConfig, useDmsAppConfig } from "./frontend-module";\nglobalThis.__dmsAppConfigHmr.evaluations += 1;\nawait setupFrontendModules([{ options: { public: {} }, module: { setup() { useDmsAppConfig().addedBySetup = true; } } }], appConfigs);\nsyncAppConfigs(updateDmsAppConfig);\nexport const appConfig = useDmsAppConfig();\n',
-    );
-    Reflect.set(globalThis, "__dmsAppConfigHmr", probe);
-    const { createServer } = await import("vite");
-    server = await createServer({
-      root: workspace,
-      configFile: false,
-      logLevel: "silent",
-      appType: "custom",
-      optimizeDeps: { noDiscovery: true },
-      server: { middlewareMode: true, ws: false },
-      resolve: {
-        alias: Object.fromEntries(
-          layers.map((layer) => [
-            `@frontend/${getLayerSafeName(layer)}`,
-            getLayerWorkspacePath(workspace, layer),
-          ]),
-        ),
-      },
-    });
   });
 
   after(async () => {

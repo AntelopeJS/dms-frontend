@@ -38,60 +38,7 @@ function isDmsFailure(value: unknown): value is DmsFailure {
   );
 }
 
-void describe("Async data in a server render", () => {
-  void it("awaits lazy data before rendering it, so the HTML shows what the payload carries (E2)", async () => {
-    const Lazy = defineComponent({
-      setup() {
-        const { data, status } = useDmsAsyncData(
-          "e2",
-          async () => {
-            await sleep(1);
-            return "fresh";
-          },
-          { lazy: true },
-        );
-        return () => h("p", `${status.value}:${String(data.value)}`);
-      },
-    });
-    const Slow = defineComponent({
-      async setup() {
-        await sleep(30);
-        return () => h("p", "slow sibling");
-      },
-    });
-    const { runtime, render } = serverRender({
-      render: () => h("div", [h(Lazy), h(Slow)]),
-    });
-
-    assert.equal(
-      await render(),
-      "<div><p>success:fresh</p><p>slow sibling</p></div>",
-    );
-    assert.deepEqual(serializeDmsAsyncData(runtime), { e2: "fresh" });
-  });
-
-  void it("leaves server: false data to the browser (E4)", async () => {
-    let calls = 0;
-    const Root = defineComponent({
-      async setup() {
-        const { data, status } = await useDmsAsyncData(
-          "e4",
-          async () => {
-            calls++;
-            return "server ran it";
-          },
-          { server: false, default: () => "default" },
-        );
-        return () => h("p", `${status.value}:${String(data.value)}`);
-      },
-    });
-    const { runtime, render } = serverRender(Root);
-
-    assert.equal(await render(), "<p>idle:default</p>");
-    assert.equal(calls, 0);
-    assert.deepEqual(serializeDmsAsyncData(runtime), {});
-  });
-
+function registerParallelRenderTests(): void {
   void it("fetches the keys of one setup in parallel when it does not await them (E6)", async () => {
     const started: string[] = [];
     const gates = { a: deferred<string>(), b: deferred<string>() };
@@ -178,6 +125,63 @@ void describe("Async data in a server render", () => {
     });
     await setupFrontendModules([]);
   });
+}
+
+void describe("Async data in a server render", () => {
+  void it("awaits lazy data before rendering it, so the HTML shows what the payload carries (E2)", async () => {
+    const Lazy = defineComponent({
+      setup() {
+        const { data, status } = useDmsAsyncData(
+          "e2",
+          async () => {
+            await sleep(1);
+            return "fresh";
+          },
+          { lazy: true },
+        );
+        return () => h("p", `${status.value}:${String(data.value)}`);
+      },
+    });
+    const Slow = defineComponent({
+      async setup() {
+        await sleep(30);
+        return () => h("p", "slow sibling");
+      },
+    });
+    const { runtime, render } = serverRender({
+      render: () => h("div", [h(Lazy), h(Slow)]),
+    });
+
+    assert.equal(
+      await render(),
+      "<div><p>success:fresh</p><p>slow sibling</p></div>",
+    );
+    assert.deepEqual(serializeDmsAsyncData(runtime), { e2: "fresh" });
+  });
+
+  void it("leaves server: false data to the browser (E4)", async () => {
+    let calls = 0;
+    const Root = defineComponent({
+      async setup() {
+        const { data, status } = await useDmsAsyncData(
+          "e4",
+          async () => {
+            calls++;
+            return "server ran it";
+          },
+          { server: false, default: () => "default" },
+        );
+        return () => h("p", `${status.value}:${String(data.value)}`);
+      },
+    });
+    const { runtime, render } = serverRender(Root);
+
+    assert.equal(await render(), "<p>idle:default</p>");
+    assert.equal(calls, 0);
+    assert.deepEqual(serializeDmsAsyncData(runtime), {});
+  });
+
+  registerParallelRenderTests();
 
   void it("gives the components after a non-awaited key the same ids in the browser", async () => {
     const ids = new Map<string, string>();
@@ -214,56 +218,13 @@ void describe("Async data in a server render", () => {
   });
 });
 
-void describe("Server payload", () => {
-  const serverPayload = async (setup: () => () => ReturnType<typeof h>) => {
-    const { runtime, render } = serverRender(defineComponent({ setup }));
-    const html = await render();
-    return { html, payload: runtimeModule.serializeDmsPayload(runtime) };
-  };
+const serverPayload = async (setup: () => () => ReturnType<typeof h>) => {
+  const { runtime, render } = serverRender(defineComponent({ setup }));
+  const html = await render();
+  return { html, payload: runtimeModule.serializeDmsPayload(runtime) };
+};
 
-  void it("transfers a failed server run, so hydration does not run it again (E5)", async () => {
-    const { html, payload } = await serverPayload(() => {
-      const { status, error } = useDmsAsyncData("e5", async () => {
-        throw runtimeModule.createDmsError({
-          statusCode: 404,
-          statusMessage: "Not Found",
-          message: "No such order",
-          data: { message: "orders.not_found" },
-        });
-      });
-      return () =>
-        h(
-          "p",
-          `${status.value}:${isDmsFailure(error.value) ? error.value.statusCode : undefined}`,
-        );
-    });
-    assert.equal(html, "<p>error:404</p>");
-    assert.deepEqual(payload.errors, {
-      e5: {
-        statusCode: 404,
-        statusMessage: "Not Found",
-        message: "No such order",
-        data: { message: "orders.not_found" },
-      },
-    });
-
-    const runtime = createDmsFrontendRuntime();
-    runtimeModule.restoreDmsPayload(runtime, payload);
-    let calls = 0;
-    const { app } = clientApp(runtime);
-    const entry = await app.runWithContext(() =>
-      useDmsAsyncData("e5", async () => ++calls, { default: () => 0 }),
-    );
-
-    assert.equal(calls, 0);
-    assert.equal(entry.status.value, "error");
-    assert.equal(entry.data.value, 0, "the default the server rendered");
-    const failure = entry.error.value;
-    assert.ok(isDmsFailure(failure));
-    assert.equal(failure.statusCode, 404);
-    assert.deepEqual(failure.data, { message: "orders.not_found" });
-  });
-
+function registerFailureTransferTests(): void {
   void it("keeps the backend's address out of a fetch error it transfers", async () => {
     const { payload } = await serverPayload(() => {
       void useDmsAsyncData("fetch-error", async () => {
@@ -319,6 +280,53 @@ void describe("Server payload", () => {
       data: { field: "email" },
     });
   });
+}
+
+void describe("Server payload", () => {
+  void it("transfers a failed server run, so hydration does not run it again (E5)", async () => {
+    const { html, payload } = await serverPayload(() => {
+      const { status, error } = useDmsAsyncData("e5", async () => {
+        throw runtimeModule.createDmsError({
+          statusCode: 404,
+          statusMessage: "Not Found",
+          message: "No such order",
+          data: { message: "orders.not_found" },
+        });
+      });
+      return () =>
+        h(
+          "p",
+          `${status.value}:${isDmsFailure(error.value) ? error.value.statusCode : undefined}`,
+        );
+    });
+    assert.equal(html, "<p>error:404</p>");
+    assert.deepEqual(payload.errors, {
+      e5: {
+        statusCode: 404,
+        statusMessage: "Not Found",
+        message: "No such order",
+        data: { message: "orders.not_found" },
+      },
+    });
+
+    const runtime = createDmsFrontendRuntime();
+    runtimeModule.restoreDmsPayload(runtime, payload);
+    let calls = 0;
+    const { app } = clientApp(runtime);
+    const entry = await app.runWithContext(() =>
+      useDmsAsyncData("e5", async () => ++calls, { default: () => 0 }),
+    );
+
+    assert.equal(calls, 0);
+    assert.equal(entry.status.value, "error");
+    assert.equal(entry.data.value, 0, "the default the server rendered");
+    const failure = entry.error.value;
+    assert.ok(isDmsFailure(failure));
+    assert.equal(failure.statusCode, 404);
+    assert.deepEqual(failure.data, { message: "orders.not_found" });
+  });
+
+  registerFailureTransferTests();
 
   void it("transfers an unexpected failure as its status alone", async (context) => {
     context.mock.method(console, "error", () => {});

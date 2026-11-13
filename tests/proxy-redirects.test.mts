@@ -29,94 +29,36 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
-void describe("backend redirects", () => {
-  const previous = Object.fromEntries(
-    ENVIRONMENT.map((name) => [name, process.env[name]]),
-  );
-  let thirdPartyCalls = 0;
-  const thirdParty = createServer((_request, response) => {
-    thirdPartyCalls += 1;
-    response.writeHead(200, {
-      "content-type": "text/html",
-      "set-cookie": "NID=tracking; Path=/",
-    });
-    response.end("<p>third party</p>");
-  });
-  let thirdPartyUrl = "";
-  let backendUrl = "";
-  const backend = createServer((request, response) => {
-    const url = new URL(request.url ?? "/", "http://backend.local");
-    const status = Number(url.searchParams.get("status") ?? 302);
-    const location = {
-      "/api/maps": `${thirdPartyUrl}/maps/place?q=1`,
-      "/api/public/hook": `${thirdPartyUrl}/maps/place?q=1`,
-      "/api/internal": `${backendUrl}/api/target?from=internal#top`,
-      "/api/relative": "target?from=relative",
-      "/api/climbing": `${backendUrl}//elsewhere.test/x`,
-      "/api/unproxied": `${backendUrl}${UNPROXIED_URL}`,
-      "/api/to-icons": `${backendUrl}${url.searchParams.get("to")}`,
-    }[url.pathname];
-    if (location) {
-      response.writeHead(status, { location, "set-cookie": BACKEND_COOKIE });
-      response.end();
-      return;
-    }
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(`{"reached":"${url.pathname}"}`);
-  });
-  let frontend: Server | undefined;
-  let frontendUrl = "";
+interface RedirectState {
+  thirdPartyCalls: number;
+  thirdPartyUrl: string;
+  backendUrl: string;
+  frontendUrl: string;
+}
 
-  before(async () => {
-    thirdPartyUrl = await listen(thirdParty);
-    backendUrl = await listen(backend);
-    process.env.DMS_API_BASE_URL = backendUrl;
-    process.env.DMS_PUBLIC_ENDPOINTS = JSON.stringify([
-      { path: "/api/public/hook" },
-    ]);
-    process.env.DMS_SESSION_SECRET ??=
-      "a-test-only-session-secret-of-32-characters";
-    const runtime = await import("../templates/vue/server.mjs");
-    frontend = createServer(runtime.handleRequestSafely);
-    frontendUrl = await listen(frontend);
-  });
+type Visit = (path: string, init?: RequestInit) => Promise<Response>;
 
-  beforeEach(() => {
-    thirdPartyCalls = 0;
-  });
-
-  after(() => {
-    for (const name of ENVIRONMENT)
-      if (previous[name] === undefined) delete process.env[name];
-      else process.env[name] = previous[name];
-    frontend?.closeAllConnections();
-    frontend?.close();
-    backend.close();
-    thirdParty.close();
-  });
-
-  /** What the browser gets for `path`, without following a redirect. */
-  function visit(path: string, init: RequestInit = {}) {
-    return fetch(`${frontendUrl}${path}`, { redirect: "manual", ...init });
-  }
-
+function registerProxiedRedirectTests(
+  state: RedirectState,
+  visit: Visit,
+): void {
   void describe("through a backend proxy", () => {
     for (const status of REDIRECT_STATUSES) {
       void it(`relays a ${status} to another site as the backend sent it`, async () => {
         const method = status === 307 ? "POST" : "GET";
         const response = await visit(`/api/maps?status=${status}`, {
           method,
-          headers: { origin: frontendUrl },
+          headers: { origin: state.frontendUrl },
           body: method === "POST" ? "{}" : undefined,
         });
         assert.equal(response.status, status);
         assert.equal(
           response.headers.get("location"),
-          `${thirdPartyUrl}/maps/place?q=1`,
+          `${state.thirdPartyUrl}/maps/place?q=1`,
         );
         assert.deepEqual(response.headers.getSetCookie(), [BACKEND_COOKIE]);
         assert.doesNotMatch(await response.text(), /third party/);
-        assert.equal(thirdPartyCalls, 0);
+        assert.equal(state.thirdPartyCalls, 0);
       });
 
       void it(`relays a ${status} on the backend's origin as a path on the frontend's`, async () => {
@@ -134,9 +76,11 @@ void describe("backend redirects", () => {
       const response = await visit("/api/relative");
       assert.equal(response.status, 302);
       assert.equal(
-        new URL(response.headers.get("location") ?? "", `${frontendUrl}/api/x`)
-          .href,
-        `${frontendUrl}/api/target?from=relative`,
+        new URL(
+          response.headers.get("location") ?? "",
+          `${state.frontendUrl}/api/x`,
+        ).href,
+        `${state.frontendUrl}/api/target?from=relative`,
       );
     });
 
@@ -145,7 +89,7 @@ void describe("backend redirects", () => {
       assert.equal(response.status, 302);
       assert.equal(
         response.headers.get("location"),
-        `${backendUrl}${UNPROXIED_URL}`,
+        `${state.backendUrl}${UNPROXIED_URL}`,
       );
     });
 
@@ -155,7 +99,10 @@ void describe("backend redirects", () => {
           `/api/to-icons?to=${encodeURIComponent(path)}`,
         );
         assert.equal(response.status, 302);
-        assert.equal(response.headers.get("location"), `${backendUrl}${path}`);
+        assert.equal(
+          response.headers.get("location"),
+          `${state.backendUrl}${path}`,
+        );
       }
     });
 
@@ -163,9 +110,9 @@ void describe("backend redirects", () => {
       const response = await visit("/api/climbing");
       const location = new URL(
         response.headers.get("location") ?? "",
-        frontendUrl,
+        state.frontendUrl,
       );
-      assert.equal(location.origin, backendUrl);
+      assert.equal(location.origin, state.backendUrl);
       assert.equal(location.pathname, "//elsewhere.test/x");
     });
 
@@ -176,20 +123,9 @@ void describe("backend redirects", () => {
       assert.deepEqual(await response.json(), { reached: "/api/target" });
     });
   });
+}
 
-  void it("relays a public endpoint's redirect without following it", async () => {
-    const response = await visit("/api/public/hook?status=307", {
-      method: "POST",
-      body: "{}",
-    });
-    assert.equal(response.status, 307);
-    assert.equal(
-      response.headers.get("location"),
-      `${thirdPartyUrl}/maps/place?q=1`,
-    );
-    assert.equal(thirdPartyCalls, 0);
-  });
-
+function registerModuleRouteTests(state: RedirectState): void {
   void describe("from a module route", () => {
     let served:
       | Awaited<
@@ -229,7 +165,7 @@ void describe("backend redirects", () => {
                 () =>
                   new Response(null, {
                     status: 302,
-                    headers: { location: `${backendUrl}/api/target` },
+                    headers: { location: `${state.backendUrl}/api/target` },
                   }),
               );
             },
@@ -255,7 +191,7 @@ void describe("backend redirects", () => {
       } finally {
         console.error = originalError;
       }
-      assert.equal(thirdPartyCalls, 0);
+      assert.equal(state.thirdPartyCalls, 0);
     });
 
     void it("relays a backend redirect a route returns, on the frontend's origin", async () => {
@@ -277,7 +213,7 @@ void describe("backend redirects", () => {
       assert.equal(response.status, 302);
       assert.equal(
         response.headers.get("location"),
-        `${backendUrl}${UNPROXIED_URL}`,
+        `${state.backendUrl}${UNPROXIED_URL}`,
       );
     });
 
@@ -295,10 +231,104 @@ void describe("backend redirects", () => {
       });
       assert.equal(
         response.headers.get("location"),
-        `${backendUrl}/api/target`,
+        `${state.backendUrl}/api/target`,
       );
     });
   });
+}
+
+void describe("backend redirects", () => {
+  const previous = Object.fromEntries(
+    ENVIRONMENT.map((name) => [name, process.env[name]]),
+  );
+  const state: RedirectState = {
+    thirdPartyCalls: 0,
+    thirdPartyUrl: "",
+    backendUrl: "",
+    frontendUrl: "",
+  };
+  const thirdParty = createServer((_request, response) => {
+    state.thirdPartyCalls += 1;
+    response.writeHead(200, {
+      "content-type": "text/html",
+      "set-cookie": "NID=tracking; Path=/",
+    });
+    response.end("<p>third party</p>");
+  });
+  const backend = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://backend.local");
+    const status = Number(url.searchParams.get("status") ?? 302);
+    const location = {
+      "/api/maps": `${state.thirdPartyUrl}/maps/place?q=1`,
+      "/api/public/hook": `${state.thirdPartyUrl}/maps/place?q=1`,
+      "/api/internal": `${state.backendUrl}/api/target?from=internal#top`,
+      "/api/relative": "target?from=relative",
+      "/api/climbing": `${state.backendUrl}//elsewhere.test/x`,
+      "/api/unproxied": `${state.backendUrl}${UNPROXIED_URL}`,
+      "/api/to-icons": `${state.backendUrl}${url.searchParams.get("to")}`,
+    }[url.pathname];
+    if (location) {
+      response.writeHead(status, { location, "set-cookie": BACKEND_COOKIE });
+      response.end();
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(`{"reached":"${url.pathname}"}`);
+  });
+  let frontend: Server | undefined;
+
+  before(async () => {
+    state.thirdPartyUrl = await listen(thirdParty);
+    state.backendUrl = await listen(backend);
+    process.env.DMS_API_BASE_URL = state.backendUrl;
+    process.env.DMS_PUBLIC_ENDPOINTS = JSON.stringify([
+      { path: "/api/public/hook" },
+    ]);
+    process.env.DMS_SESSION_SECRET ??=
+      "a-test-only-session-secret-of-32-characters";
+    const runtime = await import("../templates/vue/server.mjs");
+    frontend = createServer(runtime.handleRequestSafely);
+    state.frontendUrl = await listen(frontend);
+  });
+
+  beforeEach(() => {
+    state.thirdPartyCalls = 0;
+  });
+
+  after(() => {
+    for (const name of ENVIRONMENT)
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    frontend?.closeAllConnections();
+    frontend?.close();
+    backend.close();
+    thirdParty.close();
+  });
+
+  /** What the browser gets for `path`, without following a redirect. */
+  function visit(path: string, init: RequestInit = {}) {
+    return fetch(`${state.frontendUrl}${path}`, {
+      redirect: "manual",
+      ...init,
+    });
+  }
+
+  registerProxiedRedirectTests(state, visit);
+
+  void it("relays a public endpoint's redirect without following it", async () => {
+    const response = await visit("/api/public/hook?status=307", {
+      method: "POST",
+      body: "{}",
+    });
+    assert.equal(response.status, 307);
+    assert.equal(
+      response.headers.get("location"),
+      `${state.thirdPartyUrl}/maps/place?q=1`,
+    );
+    assert.equal(state.thirdPartyCalls, 0);
+  });
+
+  registerModuleRouteTests(state);
 });
 
 void describe("relayedLocation", () => {

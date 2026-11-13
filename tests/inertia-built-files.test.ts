@@ -17,7 +17,7 @@ import {
   frontendWithBackend,
 } from "./fixtures/inertia";
 
-void describe("Inertia HTTP protocol", () => {
+function registerAssetAndIconTests(): void {
   void it("serves a built asset without asking the backend first", async () => {
     const backendPaths: string[] = [];
     const backend = createServer((request, response) => {
@@ -122,7 +122,9 @@ void describe("Inertia HTTP protocol", () => {
       });
     }
   });
+}
 
+function registerBackendFailureTests(): void {
   void it("renders sanitized backend failures through Inertia for HTML and X-Inertia visits", async () => {
     await writeSsrRendererFixture();
     const backend = createServer((_request, response) => {
@@ -184,6 +186,12 @@ void describe("Inertia HTTP protocol", () => {
       });
     }
   });
+}
+
+void describe("Inertia HTTP protocol", () => {
+  registerAssetAndIconTests();
+
+  registerBackendFailureTests();
 
   void it("redirects a typed access refusal to the page a frontend module registered", async () => {
     process.env.DMS_SESSION_SECRET =

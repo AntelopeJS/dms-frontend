@@ -13,25 +13,21 @@ const BUNDLES = [
   "build:server",
 ].map((script) => ["--silent", "run", script]);
 
+let cli: FakePnpmCli;
+
+/** A project whose workspace `--setup-only` set up and installed. */
+async function setUp(): Promise<string> {
+  const run = await cli.run(["build", "--setup-only"], {
+    setUp: projectHome,
+  });
+  assert.equal(run.code, 0, run.stderr);
+  return run.sandbox;
+}
+
 /** The fake pnpm is a shell script, like the one cli-signals puts on PATH. */
 const describePosix = process.platform === "win32" ? describe.skip : describe;
 
-void describePosix("build --setup-only and build --prepared", () => {
-  let cli: FakePnpmCli;
-  before(() => {
-    cli = new FakePnpmCli("dms-frontend-prepared-");
-  });
-  after(() => cli.dispose());
-
-  /** A project whose workspace `--setup-only` set up and installed. */
-  async function setUp(): Promise<string> {
-    const run = await cli.run(["build", "--setup-only"], {
-      setUp: projectHome,
-    });
-    assert.equal(run.code, 0, run.stderr);
-    return run.sandbox;
-  }
-
+function registerSetupAndPreparedTests(): void {
   void it("--setup-only installs the workspace and bundles nothing", async () => {
     const run = await cli.run(["build", "--setup-only"], {
       setUp: projectHome,
@@ -135,6 +131,15 @@ void describePosix("build --setup-only and build --prepared", () => {
       /Its dependencies are not installed, or changed since they were\./,
     );
   });
+}
+
+void describePosix("build --setup-only and build --prepared", () => {
+  before(() => {
+    cli = new FakePnpmCli("dms-frontend-prepared-");
+  });
+  after(() => cli.dispose());
+
+  registerSetupAndPreparedTests();
 
   void it("--prepared refuses an installed workspace a --no-install setup rewrote for new dependencies", async () => {
     const sandbox = await setUp();

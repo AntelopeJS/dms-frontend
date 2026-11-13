@@ -107,7 +107,7 @@ afterEach(() => {
   warn.mock.restore();
 });
 
-void describe("Component prefix", () => {
+function registerPrefixResolutionTests(): void {
   void it("is put in front of every component a module registers", async () => {
     assert.equal(
       await rendered(resolveDmsComponent("BillingBadge")),
@@ -184,6 +184,10 @@ void describe("Component prefix", () => {
       /"AcmeBanner" from module "@acme\/low" is ignored: module "@acme\/high"/,
     );
   });
+}
+
+void describe("Component prefix", () => {
+  registerPrefixResolutionTests();
 
   void it("lets a module replace another's component without a warning", async () => {
     await setupFrontendModules([

@@ -12,6 +12,59 @@ const SCRIPT_BROTLI = Buffer.from("brotli bytes");
 const SCRIPT_GZIP = Buffer.from("gzip bytes");
 const ONE_DAY_MS = 86_400_000;
 
+function registerEncodingTests(base: () => string): void {
+  void it("tags each encoding of a built asset apart", async () => {
+    const brotli = await fetch(`${base()}/assets/app-abc123.js`, {
+      headers: { "accept-encoding": "br" },
+    });
+    assert.equal(brotli.headers.get("content-encoding"), "br");
+    assert.equal(
+      brotli.headers.get("cache-control"),
+      "public, max-age=31536000, immutable",
+    );
+    assert.equal(brotli.headers.get("content-type"), "text/javascript");
+    await brotli.body?.cancel();
+    const identity = await fetch(`${base()}/assets/app-abc123.js`, {
+      headers: { "accept-encoding": "identity" },
+    });
+    assert.equal(identity.headers.get("content-encoding"), null);
+    assert.equal(await identity.text(), SCRIPT);
+    assert.notEqual(brotli.headers.get("etag"), identity.headers.get("etag"));
+
+    const crossed = await fetch(`${base()}/assets/app-abc123.js`, {
+      headers: {
+        "accept-encoding": "identity",
+        "if-none-match": brotli.headers.get("etag")!,
+      },
+    });
+    assert.equal(crossed.status, 200);
+    await crossed.body?.cancel();
+  });
+
+  void it("sends the precompressed copy the client wants most, never one it refused with q=0", async () => {
+    const answers = [
+      ["app-abc123.js", "br;q=0, gzip", "gzip"],
+      ["app-abc123.js", "gzip;q=0", null],
+      ["app-abc123.js", "br;q=0.5, gzip", "gzip"],
+      ["app-abc123.js", "*;q=0, gzip", "gzip"],
+      ["app-abc123.js", "br, gzip, identity;q=0", "br"],
+      ["app-abc123.js", "identity, br;q=0.5, gzip;q=0.5", null],
+      ["style-def456.css", "br, gzip;q=0.5", "gzip"],
+    ] as const;
+    for (const [path, accepted, encoding] of answers) {
+      const response = await fetch(`${base()}/assets/${path}`, {
+        method: "HEAD",
+        headers: { "accept-encoding": accepted },
+      });
+      assert.equal(
+        response.headers.get("content-encoding"),
+        encoding,
+        `${path} with Accept-Encoding: ${accepted}`,
+      );
+    }
+  });
+}
+
 void describe("the files of the build", () => {
   let root = "";
   let server: Server | undefined;
@@ -97,56 +150,7 @@ void describe("the files of the build", () => {
     assert.deepEqual(Buffer.from(await changed.arrayBuffer()), FONT);
   });
 
-  void it("tags each encoding of a built asset apart", async () => {
-    const brotli = await fetch(`${base}/assets/app-abc123.js`, {
-      headers: { "accept-encoding": "br" },
-    });
-    assert.equal(brotli.headers.get("content-encoding"), "br");
-    assert.equal(
-      brotli.headers.get("cache-control"),
-      "public, max-age=31536000, immutable",
-    );
-    assert.equal(brotli.headers.get("content-type"), "text/javascript");
-    await brotli.body?.cancel();
-    const identity = await fetch(`${base}/assets/app-abc123.js`, {
-      headers: { "accept-encoding": "identity" },
-    });
-    assert.equal(identity.headers.get("content-encoding"), null);
-    assert.equal(await identity.text(), SCRIPT);
-    assert.notEqual(brotli.headers.get("etag"), identity.headers.get("etag"));
-
-    const crossed = await fetch(`${base}/assets/app-abc123.js`, {
-      headers: {
-        "accept-encoding": "identity",
-        "if-none-match": brotli.headers.get("etag")!,
-      },
-    });
-    assert.equal(crossed.status, 200);
-    await crossed.body?.cancel();
-  });
-
-  void it("sends the precompressed copy the client wants most, never one it refused with q=0", async () => {
-    const answers = [
-      ["app-abc123.js", "br;q=0, gzip", "gzip"],
-      ["app-abc123.js", "gzip;q=0", null],
-      ["app-abc123.js", "br;q=0.5, gzip", "gzip"],
-      ["app-abc123.js", "*;q=0, gzip", "gzip"],
-      ["app-abc123.js", "br, gzip, identity;q=0", "br"],
-      ["app-abc123.js", "identity, br;q=0.5, gzip;q=0.5", null],
-      ["style-def456.css", "br, gzip;q=0.5", "gzip"],
-    ] as const;
-    for (const [path, accepted, encoding] of answers) {
-      const response = await fetch(`${base}/assets/${path}`, {
-        method: "HEAD",
-        headers: { "accept-encoding": accepted },
-      });
-      assert.equal(
-        response.headers.get("content-encoding"),
-        encoding,
-        `${path} with Accept-Encoding: ${accepted}`,
-      );
-    }
-  });
+  registerEncodingTests(() => base);
 
   void it("answers a HEAD request without a body", async () => {
     const head = await fetch(`${base}/fonts/Face.woff2`, { method: "HEAD" });

@@ -24,6 +24,212 @@ import { requestOf } from "./helpers/http-doubles";
 import { streamedBody } from "./helpers/net";
 import { requestHandlerOf } from "./helpers/workspace-server";
 
+function registerRouteTests(frontendUrl: () => string): void {
+  void it("answers a route from the built bundle with its parameters, the module's options and no-store", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/hello/ada?q=1`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), {
+      name: "ada",
+      module: "acme__fixture-frontend",
+      options: { greeting: "hi" },
+      relaySecret: "relay-from-manifest",
+      origin: frontendUrl(),
+      query: "1",
+    });
+  });
+
+  void it("refuses a state-changing request without the frontend's Origin", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/echo`, {
+      method: "POST",
+      body: "{}",
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), {
+      error: "Forbidden",
+      reason: "missing or untrusted Origin header",
+    });
+  });
+
+  void it("reads the body and writes a sealed cookie the built-in code decodes", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/echo`, {
+      method: "POST",
+      headers: { origin: frontendUrl(), "content-type": "application/json" },
+      body: '{"a":1}',
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { a: 1 });
+    const [cookie] = response.headers.getSetCookie();
+    assert.match(
+      cookie,
+      /^acme__fixture-frontend\.fixture_flow_[0-9a-f]{12}=[^;]+; Path=\/auth\/fixture; HttpOnly; SameSite=Lax; Max-Age=60$/,
+    );
+    const pair = cookie.split(";", 1)[0];
+    assert.deepEqual(
+      readSealedCookie(
+        requestOf({ headers: { cookie: pair } }),
+        "acme__fixture-frontend.fixture_flow",
+      ),
+      { input: { a: 1 } },
+    );
+  });
+
+  void it("answers 413 past the route's body limit", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/echo`, {
+      method: "POST",
+      headers: { origin: frontendUrl() },
+      body: JSON.stringify({ text: "x".repeat(100) }),
+    });
+    assert.equal(response.status, 413);
+    assert.deepEqual(await response.json(), {
+      message: "Request body too large",
+    });
+  });
+
+  void it("answers 413 for a streamed body past the limit, which declares no length", async () => {
+    const chunk = new TextEncoder().encode(`"${"x".repeat(100)}"`);
+    const response = await fetch(
+      `${frontendUrl()}/api/_fixture/echo`,
+      streamedBody({
+        method: "POST",
+        headers: { origin: frontendUrl() },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(chunk);
+            controller.close();
+          },
+        }),
+      }),
+    );
+    assert.equal(response.status, 413);
+  });
+
+  void it("streams a returned Response and keeps every cookie", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/stream`);
+    assert.equal(response.status, 201);
+    assert.equal(response.headers.get("cache-control"), "max-age=5");
+    assert.equal(await response.text(), "one two three");
+    const cookies = response.headers.getSetCookie();
+    assert.equal(cookies.length, 3);
+    assert.match(
+      cookies[0],
+      /^acme__fixture-frontend\.fixture_seen_[0-9a-f]{12}=/,
+    );
+    assert.deepEqual(cookies.slice(1), [
+      "plain_a=1; Path=/",
+      "plain_b=2; Path=/",
+    ]);
+  });
+}
+
+function registerBackendTests(
+  frontendUrl: () => string,
+  backendUrl: () => string,
+  backendCalls: BackendCall[],
+  warnings: string[],
+): void {
+  void it("calls the backend with the client's address, which a module cannot replace", async () => {
+    backendCalls.length = 0;
+    const response = await fetch(`${frontendUrl()}/api/_fixture/backend`, {
+      method: "POST",
+      headers: {
+        origin: frontendUrl(),
+        "x-realtime-connection": "connection-7",
+        "x-time-zone": "Europe/Brussels",
+        "x-custom": "dropped",
+      },
+    });
+    assert.deepEqual(await response.json(), { from: "backend" });
+    const [call] = backendCalls;
+    assert.equal(call.url, "/api/echo");
+    assert.equal(call.headers["x-forwarded-for"], "127.0.0.1");
+    assert.equal(call.headers["x-realtime-connection"], "connection-7");
+    assert.equal(call.headers["x-time-zone"], undefined);
+    assert.equal(call.headers["x-custom"], undefined);
+    assert.equal(call.headers["x-fixture"], "yes");
+    assert.equal(call.headers.authorization, "Bearer module-token");
+  });
+
+  void it("gives a backend URL on the backend's origin, whatever the path names", async () => {
+    backendCalls.length = 0;
+    const response = await fetch(`${frontendUrl()}/api/_fixture/raw`);
+    assert.deepEqual(await response.json(), {
+      status: 200,
+      url: `${backendUrl()}/api/raw?x=1`,
+    });
+    assert.equal(backendCalls[0].url, "/api/raw?x=1");
+  });
+
+  void it("answers a backend refusal with its status and public message", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/refused`);
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), {
+      message: "error.fixture.refused",
+    });
+  });
+
+  void it("answers 204 for a handler that returns nothing", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/empty`);
+    assert.equal(response.status, 204);
+  });
+
+  void it("owns the paths of its routes for every method, the backend never asked", async () => {
+    const declared = await fetch(`${frontendUrl()}/api/_auth/session`);
+    assert.deepEqual(await declared.json(), {
+      shadowed: true,
+      signedIn: false,
+    });
+    backendCalls.length = 0;
+    for (const [method, path] of [
+      ["DELETE", "/api/_auth/session"],
+      ["PUT", "/api/_fixture/hello/ada"],
+    ]) {
+      const response = await fetch(`${frontendUrl()}${path}`, {
+        method,
+        headers: { origin: frontendUrl() },
+      });
+      assert.equal(response.status, 405, `${method} ${path}`);
+      assert.match(response.headers.get("allow") ?? "", /GET, HEAD/);
+      await response.body?.cancel();
+    }
+    assert.deepEqual(backendCalls, []);
+  });
+
+  void it("answers a HEAD with the GET route, without its body", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/hello/ada`, {
+      method: "HEAD",
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "");
+  });
+
+  void it("proxies the prefix the module declares, and nothing outside it", async () => {
+    backendCalls.length = 0;
+    await (await fetch(`${frontendUrl()}/api/items?x=1`)).body?.cancel();
+    const outside = await fetch(`${frontendUrl()}/dms/page`, {
+      method: "POST",
+      headers: { origin: frontendUrl() },
+    });
+    assert.equal(outside.status, 404);
+    await outside.body?.cancel();
+    assert.deepEqual(
+      backendCalls.map(({ method, url }) => ({ method, url })),
+      [{ method: "GET", url: "/api/items?x=1" }],
+    );
+  });
+
+  void it("reports the routes it ignored when it loaded them", () => {
+    assert.ok(
+      warnings.some((warning) =>
+        /declares route "GET \/assets\/taken\.js", which is ignored/.test(
+          warning,
+        ),
+      ),
+      warnings.join("\n"),
+    );
+  });
+}
+
 void describe("Module server routes in the production server", () => {
   const workspace = realpathSync(mkdtempSync(resolve(".server-modules-")));
   const source = mkdtempSync(join(tmpdir(), "dms-server-fixture-"));
@@ -100,200 +306,12 @@ void describe("Module server routes in the production server", () => {
     rmSync(source, { recursive: true, force: true });
   });
 
-  void it("answers a route from the built bundle with its parameters, the module's options and no-store", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/hello/ada?q=1`);
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("cache-control"), "no-store");
-    assert.deepEqual(await response.json(), {
-      name: "ada",
-      module: "acme__fixture-frontend",
-      options: { greeting: "hi" },
-      relaySecret: "relay-from-manifest",
-      origin: frontendUrl,
-      query: "1",
-    });
-  });
+  registerRouteTests(() => frontendUrl);
 
-  void it("refuses a state-changing request without the frontend's Origin", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/echo`, {
-      method: "POST",
-      body: "{}",
-    });
-    assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), {
-      error: "Forbidden",
-      reason: "missing or untrusted Origin header",
-    });
-  });
-
-  void it("reads the body and writes a sealed cookie the built-in code decodes", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/echo`, {
-      method: "POST",
-      headers: { origin: frontendUrl, "content-type": "application/json" },
-      body: '{"a":1}',
-    });
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { a: 1 });
-    const [cookie] = response.headers.getSetCookie();
-    assert.match(
-      cookie,
-      /^acme__fixture-frontend\.fixture_flow_[0-9a-f]{12}=[^;]+; Path=\/auth\/fixture; HttpOnly; SameSite=Lax; Max-Age=60$/,
-    );
-    const pair = cookie.split(";", 1)[0];
-    assert.deepEqual(
-      readSealedCookie(
-        requestOf({ headers: { cookie: pair } }),
-        "acme__fixture-frontend.fixture_flow",
-      ),
-      { input: { a: 1 } },
-    );
-  });
-
-  void it("answers 413 past the route's body limit", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/echo`, {
-      method: "POST",
-      headers: { origin: frontendUrl },
-      body: JSON.stringify({ text: "x".repeat(100) }),
-    });
-    assert.equal(response.status, 413);
-    assert.deepEqual(await response.json(), {
-      message: "Request body too large",
-    });
-  });
-
-  void it("answers 413 for a streamed body past the limit, which declares no length", async () => {
-    const chunk = new TextEncoder().encode(`"${"x".repeat(100)}"`);
-    const response = await fetch(
-      `${frontendUrl}/api/_fixture/echo`,
-      streamedBody({
-        method: "POST",
-        headers: { origin: frontendUrl },
-        body: new ReadableStream({
-          start(controller) {
-            controller.enqueue(chunk);
-            controller.close();
-          },
-        }),
-      }),
-    );
-    assert.equal(response.status, 413);
-  });
-
-  void it("streams a returned Response and keeps every cookie", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/stream`);
-    assert.equal(response.status, 201);
-    assert.equal(response.headers.get("cache-control"), "max-age=5");
-    assert.equal(await response.text(), "one two three");
-    const cookies = response.headers.getSetCookie();
-    assert.equal(cookies.length, 3);
-    assert.match(
-      cookies[0],
-      /^acme__fixture-frontend\.fixture_seen_[0-9a-f]{12}=/,
-    );
-    assert.deepEqual(cookies.slice(1), [
-      "plain_a=1; Path=/",
-      "plain_b=2; Path=/",
-    ]);
-  });
-
-  void it("calls the backend with the client's address, which a module cannot replace", async () => {
-    backendCalls.length = 0;
-    const response = await fetch(`${frontendUrl}/api/_fixture/backend`, {
-      method: "POST",
-      headers: {
-        origin: frontendUrl,
-        "x-realtime-connection": "connection-7",
-        "x-time-zone": "Europe/Brussels",
-        "x-custom": "dropped",
-      },
-    });
-    assert.deepEqual(await response.json(), { from: "backend" });
-    const [call] = backendCalls;
-    assert.equal(call.url, "/api/echo");
-    assert.equal(call.headers["x-forwarded-for"], "127.0.0.1");
-    assert.equal(call.headers["x-realtime-connection"], "connection-7");
-    assert.equal(call.headers["x-time-zone"], undefined);
-    assert.equal(call.headers["x-custom"], undefined);
-    assert.equal(call.headers["x-fixture"], "yes");
-    assert.equal(call.headers.authorization, "Bearer module-token");
-  });
-
-  void it("gives a backend URL on the backend's origin, whatever the path names", async () => {
-    backendCalls.length = 0;
-    const response = await fetch(`${frontendUrl}/api/_fixture/raw`);
-    assert.deepEqual(await response.json(), {
-      status: 200,
-      url: `${backendUrl}/api/raw?x=1`,
-    });
-    assert.equal(backendCalls[0].url, "/api/raw?x=1");
-  });
-
-  void it("answers a backend refusal with its status and public message", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/refused`);
-    assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), {
-      message: "error.fixture.refused",
-    });
-  });
-
-  void it("answers 204 for a handler that returns nothing", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/empty`);
-    assert.equal(response.status, 204);
-  });
-
-  void it("owns the paths of its routes for every method, the backend never asked", async () => {
-    const declared = await fetch(`${frontendUrl}/api/_auth/session`);
-    assert.deepEqual(await declared.json(), {
-      shadowed: true,
-      signedIn: false,
-    });
-    backendCalls.length = 0;
-    for (const [method, path] of [
-      ["DELETE", "/api/_auth/session"],
-      ["PUT", "/api/_fixture/hello/ada"],
-    ]) {
-      const response = await fetch(`${frontendUrl}${path}`, {
-        method,
-        headers: { origin: frontendUrl },
-      });
-      assert.equal(response.status, 405, `${method} ${path}`);
-      assert.match(response.headers.get("allow") ?? "", /GET, HEAD/);
-      await response.body?.cancel();
-    }
-    assert.deepEqual(backendCalls, []);
-  });
-
-  void it("answers a HEAD with the GET route, without its body", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/hello/ada`, {
-      method: "HEAD",
-    });
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "");
-  });
-
-  void it("proxies the prefix the module declares, and nothing outside it", async () => {
-    backendCalls.length = 0;
-    await (await fetch(`${frontendUrl}/api/items?x=1`)).body?.cancel();
-    const outside = await fetch(`${frontendUrl}/dms/page`, {
-      method: "POST",
-      headers: { origin: frontendUrl },
-    });
-    assert.equal(outside.status, 404);
-    await outside.body?.cancel();
-    assert.deepEqual(
-      backendCalls.map(({ method, url }) => ({ method, url })),
-      [{ method: "GET", url: "/api/items?x=1" }],
-    );
-  });
-
-  void it("reports the routes it ignored when it loaded them", () => {
-    assert.ok(
-      warnings.some((warning) =>
-        /declares route "GET \/assets\/taken\.js", which is ignored/.test(
-          warning,
-        ),
-      ),
-      warnings.join("\n"),
-    );
-  });
+  registerBackendTests(
+    () => frontendUrl,
+    () => backendUrl,
+    backendCalls,
+    warnings,
+  );
 });

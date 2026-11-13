@@ -55,47 +55,7 @@ function resolved(
   return { modules, warnings };
 }
 
-void describe("Auth hook declarations", () => {
-  void it("come from the highest-priority module that registers them, and another one is reported", () => {
-    const { modules, warnings } = resolved([
-      {
-        id: "low",
-        priority: 1,
-        setup: (s) => s.registerAuth({ signInPath: "/other" }),
-      },
-      {
-        id: "dms",
-        priority: 5,
-        setup: (s) => s.registerAuth({ signInPath: "/auth" }),
-      },
-    ]);
-    assert.equal(modules.auth?.id, "dms");
-    assert.equal(modules.auth?.signInPath, "/auth");
-    assert.deepEqual(warnings, [
-      "Frontend module low registers auth hooks, which are ignored: dms (priority 5) provides them.",
-    ]);
-  });
-
-  void it("are ignored whole when malformed, with a warning", () => {
-    const { modules, warnings } = resolved([
-      {
-        id: "dms",
-        setup: (s) => s.registerAuth({ signInExempt: ["auth/**"] }),
-      },
-      {
-        id: "saas",
-        // @ts-expect-error refreshSession is the string "no", an off-contract hook that must make the whole auth declaration ignored with a warning
-        setup: (s) => s.registerAuth({ refreshSession: "no" }),
-      },
-    ]);
-    assert.equal(modules.auth, undefined);
-    assert.match(
-      warnings[0],
-      /^Frontend module dms registers auth hooks, which are ignored: signInExempt/,
-    );
-    assert.match(warnings[1], /refreshSession is not a function/);
-  });
-
+function registerDefaultAuthTests(): void {
   void it("leave pages without a session where no module registers them", () => {
     const auth = serverAuth(undefined, context);
     assert.equal(auth.signInPath, "/auth");
@@ -179,6 +139,50 @@ void describe("Auth hook declarations", () => {
     );
     assert.deepEqual(auth.view(undefined), {});
   });
+}
+
+void describe("Auth hook declarations", () => {
+  void it("come from the highest-priority module that registers them, and another one is reported", () => {
+    const { modules, warnings } = resolved([
+      {
+        id: "low",
+        priority: 1,
+        setup: (s) => s.registerAuth({ signInPath: "/other" }),
+      },
+      {
+        id: "dms",
+        priority: 5,
+        setup: (s) => s.registerAuth({ signInPath: "/auth" }),
+      },
+    ]);
+    assert.equal(modules.auth?.id, "dms");
+    assert.equal(modules.auth?.signInPath, "/auth");
+    assert.deepEqual(warnings, [
+      "Frontend module low registers auth hooks, which are ignored: dms (priority 5) provides them.",
+    ]);
+  });
+
+  void it("are ignored whole when malformed, with a warning", () => {
+    const { modules, warnings } = resolved([
+      {
+        id: "dms",
+        setup: (s) => s.registerAuth({ signInExempt: ["auth/**"] }),
+      },
+      {
+        id: "saas",
+        // @ts-expect-error refreshSession is the string "no", an off-contract hook that must make the whole auth declaration ignored with a warning
+        setup: (s) => s.registerAuth({ refreshSession: "no" }),
+      },
+    ]);
+    assert.equal(modules.auth, undefined);
+    assert.match(
+      warnings[0],
+      /^Frontend module dms registers auth hooks, which are ignored: signInExempt/,
+    );
+    assert.match(warnings[1], /refreshSession is not a function/);
+  });
+
+  registerDefaultAuthTests();
 
   void it("call the provider's hooks with the registered object as this", async () => {
     const secret = process.env.DMS_SESSION_SECRET;
@@ -280,6 +284,65 @@ function setCookies(response: ServerResponse): string[] {
 
 function cookiePairs(response: ServerResponse): string[] {
   return setCookies(response).map((cookie) => cookie.split(";", 1)[0]);
+}
+
+function registerSessionRouteTests(frontendUrl: () => string): void {
+  void it("hands the module owning sign-in the session and its own dms_* cookies", async () => {
+    const jar = responseOf();
+    const session = {
+      accessToken: "a",
+      refreshToken: "r",
+      accountId: ACCOUNT_ID,
+      user: { _id: "u1", name: "Ada" },
+      persistent: false,
+    };
+    sessions.writeSession(jar, session);
+    sessions.writeSealedCookie(
+      jar,
+      `dms_account_${ACCOUNT_ID.replaceAll("-", "")}`,
+      { refreshToken: "r", accountId: ACCOUNT_ID },
+      undefined,
+    );
+    const response = await fetch(`${frontendUrl()}/api/_fixture/session`, {
+      headers: { cookie: cookiePairs(jar).join("; ") },
+    });
+    const body = await responseJson(response);
+    assert.equal(jsonAt(body, "read", "accessToken"), "a");
+    assert.deepEqual(jsonAt(body, "view", "user"), {
+      _id: "u1",
+      name: "Ada",
+      viaHook: true,
+    });
+    assert.equal(jsonAt(body, "account", "refreshToken"), "r");
+    assert.equal(jsonAt(body, "account", "accountId"), ACCOUNT_ID);
+  });
+
+  void it("keeps only a session written persistent for 30 days", () => {
+    const persistent = responseOf();
+    const session = responseOf();
+    sessions.writeSession(persistent, { accessToken: "a", persistent: true });
+    sessions.writeSession(session, { accessToken: "b", persistent: false });
+    assert.match(setCookies(persistent)[0] ?? "", /; Max-Age=2592000/);
+    assert.doesNotMatch(setCookies(session)[0] ?? "", /Max-Age/);
+  });
+
+  void it("writes the session cookie, ending with the browser when not persistent", async () => {
+    const response = await fetch(`${frontendUrl()}/api/_fixture/session`, {
+      method: "POST",
+      headers: { origin: frontendUrl() },
+    });
+    assert.equal(response.status, 204);
+    const [cookie] = response.headers.getSetCookie();
+    assert.match(
+      cookie,
+      /^dms_session_[0-9a-f]{12}=[^;]+; Path=\/; HttpOnly; SameSite=Lax$/,
+    );
+    const written = sessions.readSession(
+      requestOf({ headers: { cookie: cookie.split(";", 1)[0] } }),
+    );
+    assert.equal(written?.accessToken, "from-module");
+    assert.ok(isNumber(written?.updatedAt));
+  });
 }
 
 void describe("Auth hooks in the production server", () => {
@@ -390,60 +453,5 @@ void describe("Auth hooks in the production server", () => {
     );
   });
 
-  void it("hands the module owning sign-in the session and its own dms_* cookies", async () => {
-    const jar = responseOf();
-    const session = {
-      accessToken: "a",
-      refreshToken: "r",
-      accountId: ACCOUNT_ID,
-      user: { _id: "u1", name: "Ada" },
-      persistent: false,
-    };
-    sessions.writeSession(jar, session);
-    sessions.writeSealedCookie(
-      jar,
-      `dms_account_${ACCOUNT_ID.replaceAll("-", "")}`,
-      { refreshToken: "r", accountId: ACCOUNT_ID },
-      undefined,
-    );
-    const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
-      headers: { cookie: cookiePairs(jar).join("; ") },
-    });
-    const body = await responseJson(response);
-    assert.equal(jsonAt(body, "read", "accessToken"), "a");
-    assert.deepEqual(jsonAt(body, "view", "user"), {
-      _id: "u1",
-      name: "Ada",
-      viaHook: true,
-    });
-    assert.equal(jsonAt(body, "account", "refreshToken"), "r");
-    assert.equal(jsonAt(body, "account", "accountId"), ACCOUNT_ID);
-  });
-
-  void it("keeps only a session written persistent for 30 days", () => {
-    const persistent = responseOf();
-    const session = responseOf();
-    sessions.writeSession(persistent, { accessToken: "a", persistent: true });
-    sessions.writeSession(session, { accessToken: "b", persistent: false });
-    assert.match(setCookies(persistent)[0] ?? "", /; Max-Age=2592000/);
-    assert.doesNotMatch(setCookies(session)[0] ?? "", /Max-Age/);
-  });
-
-  void it("writes the session cookie, ending with the browser when not persistent", async () => {
-    const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
-      method: "POST",
-      headers: { origin: frontendUrl },
-    });
-    assert.equal(response.status, 204);
-    const [cookie] = response.headers.getSetCookie();
-    assert.match(
-      cookie,
-      /^dms_session_[0-9a-f]{12}=[^;]+; Path=\/; HttpOnly; SameSite=Lax$/,
-    );
-    const written = sessions.readSession(
-      requestOf({ headers: { cookie: cookie.split(";", 1)[0] } }),
-    );
-    assert.equal(written?.accessToken, "from-module");
-    assert.ok(isNumber(written?.updatedAt));
-  });
+  registerSessionRouteTests(() => frontendUrl);
 });

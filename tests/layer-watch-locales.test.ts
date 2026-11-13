@@ -24,69 +24,16 @@ import { useIsolatedHome } from "./helpers/isolated-home";
 import { eventually, output, warnings, writeFile } from "./helpers/layer-watch";
 useIsolatedHome();
 
-void describe("locale catalogs in the dev layer watcher", () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-layer-watch-"));
-  const workspace = join(root, "workspace");
-  const base = join(root, "sources", "base");
-  const app = join(root, "sources", "app");
-  const baseLocales = join(base, "layers", "ui", "i18n", "locales");
-  const generated = join(workspace, "locales.generated");
-  const layers: ResolvedLayer[] = [
-    { path: base, packageName: "@fixture/base", priority: 1 },
-    { path: app, packageName: "@fixture/app", priority: 10 },
-  ];
-  let stopWatchers: () => Promise<void> = async () => {};
-
-  const catalog = (locale: string): JsonValue =>
-    readJson(join(generated, `${locale}.json`));
-  const emailLocales = (): string[] => {
-    const locales = readJson(join(workspace, "email-locales.generated.json"));
-    assert.ok(isTextList(locales), "the email locales are a list of names");
-    return locales;
-  };
-  const mtime = (path: string): number => statSync(path).mtimeMs;
-
-  before(() => {
-    writeFile(
-      join(base, "package.json"),
-      JSON.stringify({ name: "@fixture/base" }),
-    );
-    writeFile(
-      join(base, "layers", "ui", "app", "components", "Form.vue"),
-      "<template><form /></template>\n",
-    );
-    writeFile(
-      join(baseLocales, "ui-en-GB.json"),
-      JSON.stringify({ form: { title: "Form", owner: "base" } }),
-    );
-    writeFile(
-      join(baseLocales, "ui-fr-FR.json"),
-      JSON.stringify({ form: { title: "Formulaire" } }),
-    );
-    writeFile(
-      join(app, "package.json"),
-      JSON.stringify({ name: "@fixture/app" }),
-    );
-    writeFile(
-      join(app, "i18n", "locales", "app-en-GB.json"),
-      JSON.stringify({ form: { owner: "app" } }),
-    );
-    mkdirSync(workspace, { recursive: true });
-    materializeLayers(workspace, layers);
-    writeFrontendModuleRegistry(workspace, layers);
-    stopWatchers = startLayerWatchers(
-      workspace,
-      layers,
-      output.ui,
-      output.write,
-    );
-  });
-
-  after(async () => {
-    await stopWatchers();
-    rmSync(root, { recursive: true, force: true });
-  });
-
+function registerCatalogRewriteTests(fx: LocaleFixture): void {
+  const {
+    workspace,
+    app,
+    baseLocales,
+    generated,
+    catalog,
+    emailLocales,
+    mtime,
+  } = fx;
   void it("regenerates the merged catalogs when a layer adds a key", async () => {
     assert.deepEqual(jsonAt(catalog("en"), "form"), {
       title: "Form",
@@ -164,7 +111,10 @@ void describe("locale catalogs in the dev layer watcher", () => {
       rename.mock.restore();
     }
   });
+}
 
+function registerLocaleLifecycleTests(fx: LocaleFixture): void {
+  const { workspace, baseLocales, generated, catalog, emailLocales } = fx;
   void it("adds and removes a locale", async () => {
     const german = join(baseLocales, "ui-de-DE.json");
     await eventually(
@@ -234,7 +184,10 @@ void describe("locale catalogs in the dev layer watcher", () => {
       output.clear();
     }
   });
+}
 
+function registerNonLocaleChangeTests(fx: LocaleFixture): void {
+  const { workspace, base, generated, catalog } = fx;
   void it("leaves the catalogs alone when a change is not a locale file", async () => {
     writeFileSync(join(generated, "en.json"), '{"form":{"marker":true}}');
     const component = join(
@@ -263,6 +216,95 @@ void describe("locale catalogs in the dev layer watcher", () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
     assert.deepEqual(catalog("en"), { form: { marker: true } });
   });
+}
+
+function createLocaleFixture() {
+  const root = mkdtempSync(join(tmpdir(), "dms-layer-watch-"));
+  const workspace = join(root, "workspace");
+  const base = join(root, "sources", "base");
+  const app = join(root, "sources", "app");
+  const baseLocales = join(base, "layers", "ui", "i18n", "locales");
+  const generated = join(workspace, "locales.generated");
+  const layers: ResolvedLayer[] = [
+    { path: base, packageName: "@fixture/base", priority: 1 },
+    { path: app, packageName: "@fixture/app", priority: 10 },
+  ];
+
+  const catalog = (locale: string): JsonValue =>
+    readJson(join(generated, `${locale}.json`));
+  const emailLocales = (): string[] => {
+    const locales = readJson(join(workspace, "email-locales.generated.json"));
+    assert.ok(isTextList(locales), "the email locales are a list of names");
+    return locales;
+  };
+  const mtime = (path: string): number => statSync(path).mtimeMs;
+
+  return {
+    root,
+    workspace,
+    base,
+    app,
+    baseLocales,
+    generated,
+    layers,
+    catalog,
+    emailLocales,
+    mtime,
+    stop: async (): Promise<void> => {},
+  };
+}
+
+type LocaleFixture = ReturnType<typeof createLocaleFixture>;
+
+function seedLocaleLayers(fx: LocaleFixture): void {
+  const { workspace, base, app, baseLocales, layers } = fx;
+  writeFile(
+    join(base, "package.json"),
+    JSON.stringify({ name: "@fixture/base" }),
+  );
+  writeFile(
+    join(base, "layers", "ui", "app", "components", "Form.vue"),
+    "<template><form /></template>\n",
+  );
+  writeFile(
+    join(baseLocales, "ui-en-GB.json"),
+    JSON.stringify({ form: { title: "Form", owner: "base" } }),
+  );
+  writeFile(
+    join(baseLocales, "ui-fr-FR.json"),
+    JSON.stringify({ form: { title: "Formulaire" } }),
+  );
+  writeFile(
+    join(app, "package.json"),
+    JSON.stringify({ name: "@fixture/app" }),
+  );
+  writeFile(
+    join(app, "i18n", "locales", "app-en-GB.json"),
+    JSON.stringify({ form: { owner: "app" } }),
+  );
+  mkdirSync(workspace, { recursive: true });
+  materializeLayers(workspace, layers);
+  writeFrontendModuleRegistry(workspace, layers);
+  fx.stop = startLayerWatchers(workspace, layers, output.ui, output.write);
+}
+
+void describe("locale catalogs in the dev layer watcher", () => {
+  const fx = createLocaleFixture();
+
+  before(() => {
+    seedLocaleLayers(fx);
+  });
+
+  after(async () => {
+    await fx.stop();
+    rmSync(fx.root, { recursive: true, force: true });
+  });
+
+  registerCatalogRewriteTests(fx);
+
+  registerLocaleLifecycleTests(fx);
+
+  registerNonLocaleChangeTests(fx);
 });
 
 void describe("affectsLocaleMessages", () => {

@@ -18,9 +18,13 @@ import {
   writeFrontendModuleRegistry,
 } from "../src/common";
 import { readText } from "./helpers/files";
-import { isText } from "./helpers/guards";
-import { isJsonObject, jsonAt, type JsonValue, readJson } from "./helpers/json";
+import { jsonAt, type JsonValue, readJson } from "./helpers/json";
 import { useIsolatedHome } from "./helpers/isolated-home";
+import {
+  createWatchFixture,
+  seedWatchedLayers,
+  type WatchFixture,
+} from "./helpers/layer-watch-fixture";
 import {
   eventually,
   memory,
@@ -31,89 +35,8 @@ import {
 
 useIsolatedHome();
 
-void describe("derived outputs in the dev layer watcher", () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-derived-watch-"));
-  const workspace = join(root, "workspace");
-  const base = join(root, "sources", "base");
-  const app = join(root, "sources", "app");
-  const baseUi = join(base, "layers", "ui");
-  const publicDir = join(workspace, "public");
-  const layers: ResolvedLayer[] = [
-    { path: base, packageName: "@fixture/base", priority: 1 },
-    { path: app, packageName: "@fixture/app", priority: 10 },
-  ];
-  let stopWatchers: () => Promise<void> = async () => {};
-
-  const read = (path: string): string => readText(path);
-  const workspaceFile = (name: string): string => read(join(workspace, name));
-  const typePaths = (): string[] => {
-    const paths = jsonAt(
-      readJson(join(workspace, "frontend-paths.generated.json")),
-      "compilerOptions",
-      "paths",
-    );
-    assert.ok(isJsonObject(paths), "the type paths are an object");
-    return Object.keys(paths);
-  };
-  const registryEntries = (): Array<[string, string | undefined]> => {
-    const modules = jsonAt(
-      readJson(join(workspace, "generated-frontend-modules.json")),
-      "modules",
-    );
-    assert.ok(Array.isArray(modules), "the registry lists its modules");
-    return modules.map((module) => {
-      const id = jsonAt(module, "id");
-      const entry = jsonAt(module, "entry");
-      assert.ok(isText(id), "a registry module has an id");
-      assert.ok(entry === undefined || isText(entry), "its entry is a path");
-      return [id, entry];
-    });
-  };
-  const isRestartNotice = (warning: string): boolean =>
-    warning.includes("Restart ajs dms dev");
-
-  before(() => {
-    writeFile(
-      join(base, "package.json"),
-      JSON.stringify({ name: "@fixture/base" }),
-    );
-    writeFile(
-      join(base, "dms.frontend.ts"),
-      "export default { setup() {} };\n",
-    );
-    writeFile(
-      join(baseUi, "app", "components", "Form.vue"),
-      "<template><form /></template>\n",
-    );
-    writeFile(join(baseUi, "public", "logo.svg"), "<svg id='base' />");
-    writeFile(
-      join(baseUi, "app", "config", "shortcuts-registry.ts"),
-      "export default [{ component: 'Form', shortcuts: [] }];\n",
-    );
-    writeFile(
-      join(app, "package.json"),
-      JSON.stringify({ name: "@fixture/app" }),
-    );
-    writeFile(
-      join(app, "app", "components", "Card.vue"),
-      "<template><article /></template>\n",
-    );
-    mkdirSync(workspace, { recursive: true });
-    materializeLayers(workspace, layers);
-    writeFrontendModuleRegistry(workspace, layers);
-    stopWatchers = startLayerWatchers(
-      workspace,
-      layers,
-      output.ui,
-      output.write,
-    );
-  });
-
-  after(async () => {
-    await stopWatchers();
-    rmSync(root, { recursive: true, force: true });
-  });
-
+function registerPublicFileTests(fx: WatchFixture): void {
+  const { app, baseUi, publicDir, read } = fx;
   void it("mirrors the public files a layer adds, changes and removes", async () => {
     const added = join(baseUi, "public", "images", "new.png");
     await eventually(
@@ -150,7 +73,10 @@ void describe("derived outputs in the dev layer watcher", () => {
     );
     assert.equal(read(join(publicDir, "logo.svg")), "<svg id='edited' />");
   });
+}
 
+function registerGeneratedFileTests(fx: WatchFixture): void {
+  const { app, baseUi, workspaceFile, registryEntries } = fx;
   void it("aggregates the shortcut registry a module adds, and drops it once removed", async () => {
     const registry = join(app, "app", "config", "shortcuts-registry.ts");
     const aggregated = (): string =>
@@ -227,7 +153,10 @@ void describe("derived outputs in the dev layer watcher", () => {
       /appConfigs: DmsLayerAppConfig\[\] = \[\{ module: "fixture__base", config: config0 \}\];/,
     );
   });
+}
 
+function registerRestartNoticeTests(fx: WatchFixture): void {
+  const { workspace, base, app, publicDir, read, typePaths } = fx;
   void it("serves a public file before the source saved with it that names it", async () => {
     const logo = join(app, "public", "branding", "logo-1a2b.png");
     const served = join(publicDir, "branding", "logo-1a2b.png");
@@ -334,7 +263,10 @@ void describe("derived outputs in the dev layer watcher", () => {
     }
     assert.ok(typePaths().includes("#ui/*"));
   });
+}
 
+function registerBurstAndFailureTests(fx: WatchFixture): void {
+  const { workspace, app, baseUi, publicDir, read } = fx;
   void it("writes each output once for changes flushed by several layers together", async () => {
     const contested = join(publicDir, "burst.txt");
     const aggregatedPath = join(workspace, "shortcuts-aggregated.generated.ts");
@@ -414,6 +346,30 @@ void describe("derived outputs in the dev layer watcher", () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
     for (const [path, content] of markers) assert.equal(read(path), content);
   });
+}
+
+const isRestartNotice = (warning: string): boolean =>
+  warning.includes("Restart ajs dms dev");
+
+void describe("derived outputs in the dev layer watcher", () => {
+  const fx = createWatchFixture();
+
+  before(() => {
+    seedWatchedLayers(fx);
+  });
+
+  after(async () => {
+    await fx.stop();
+    rmSync(fx.root, { recursive: true, force: true });
+  });
+
+  registerPublicFileTests(fx);
+
+  registerGeneratedFileTests(fx);
+
+  registerRestartNoticeTests(fx);
+
+  registerBurstAndFailureTests(fx);
 });
 
 void describe("mirrorFiles", () => {

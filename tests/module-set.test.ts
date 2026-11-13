@@ -33,6 +33,13 @@ type ServedModule = typeof dmsModule & {
   backendProxies?: unknown[];
 };
 
+interface ModuleSetFixture {
+  backendUrl: string;
+  served: ServedModule[];
+  settling: boolean;
+  requests: RecordedRequest[];
+}
+
 function manifestOf(modules: ServedModule[]) {
   return {
     version: 2,
@@ -43,19 +50,137 @@ function manifestOf(modules: ServedModule[]) {
   };
 }
 
+function registerCallbackTests(state: ModuleSetFixture): void {
+  void it(
+    "calls back once a module declares other public endpoints",
+    { timeout: 2000 },
+    async () => {
+      state.served = [dmsModule];
+      let changes = 0;
+      const changed = new Promise<void>((resolve) => {
+        const stop = followModuleSet({
+          backendUrl: state.backendUrl,
+          fingerprint: moduleSetFingerprint([dmsModule]),
+          intervalMs: 20,
+          onChange: () => {
+            changes += 1;
+            stop();
+            resolve();
+          },
+        });
+      });
+      state.served = [
+        { ...dmsModule, publicEndpoints: [{ path: "/api/tracker/beacon" }] },
+      ];
+      await changed;
+      assert.equal(changes, 1);
+      state.served = [dmsModule];
+    },
+  );
+
+  void it("calls back once the backend serves another set", async () => {
+    state.served = [dmsModule];
+    let changes = 0;
+    const changed = new Promise<void>((resolve) => {
+      followModuleSet({
+        backendUrl: state.backendUrl,
+        fingerprint: moduleSetFingerprint([dmsModule]),
+        intervalMs: 20,
+        onChange: () => {
+          changes += 1;
+          resolve();
+        },
+      });
+    });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(changes, 0);
+    state.served = [dmsModule, langModule];
+    await changed;
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(changes, 1);
+  });
+}
+
+function registerFollowTests(state: ModuleSetFixture): void {
+  void it("ignores a set seen on one read only", async () => {
+    state.served = [dmsModule];
+    let changes = 0;
+    const stop = followModuleSet({
+      backendUrl: state.backendUrl,
+      fingerprint: moduleSetFingerprint([dmsModule]),
+      intervalMs: 50,
+      onChange: () => (changes += 1),
+    });
+    state.served = [];
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    state.served = [dmsModule];
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    stop();
+    assert.equal(changes, 0);
+  });
+
+  void it("waits while the backend says its set is settling", async () => {
+    state.served = [];
+    state.settling = true;
+    let changes = 0;
+    const stop = followModuleSet({
+      backendUrl: state.backendUrl,
+      fingerprint: moduleSetFingerprint([dmsModule]),
+      intervalMs: 20,
+      onChange: () => (changes += 1),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    stop();
+    state.settling = false;
+    assert.equal(changes, 0);
+  });
+
+  void it("tells each unchanged read, so a restarted backend hears again", async () => {
+    state.served = [dmsModule];
+    let unchanged = 0;
+    const stop = followModuleSet({
+      backendUrl: state.backendUrl,
+      fingerprint: moduleSetFingerprint([dmsModule]),
+      intervalMs: 20,
+      onChange: () => undefined,
+      onUnchanged: () => (unchanged += 1),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    stop();
+    assert.ok(unchanged >= 2);
+  });
+
+  void it("stops following when asked", async () => {
+    state.served = [dmsModule];
+    let changes = 0;
+    const stop = followModuleSet({
+      backendUrl: state.backendUrl,
+      fingerprint: moduleSetFingerprint([dmsModule]),
+      intervalMs: 20,
+      onChange: () => (changes += 1),
+    });
+    stop();
+    state.served = [dmsModule, langModule];
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(changes, 0);
+  });
+}
+
 void describe("module set", () => {
   let server: Server;
-  let backendUrl: string;
-  let served: ServedModule[] = [dmsModule];
-  let settling = false;
-  const requests: RecordedRequest[] = [];
+  const state: ModuleSetFixture = {
+    backendUrl: "",
+    served: [dmsModule],
+    settling: false,
+    requests: [],
+  };
 
   before(async () => {
     server = createServer((request, response) => {
       let body = "";
       request.on("data", (chunk) => (body += chunk));
       request.on("end", () => {
-        requests.push({
+        state.requests.push({
           method: request.method,
           url: request.url,
           headers: request.headers,
@@ -66,11 +191,16 @@ void describe("module set", () => {
           response.end("{}");
           return;
         }
-        response.end(JSON.stringify({ ...manifestOf(served), settling }));
+        response.end(
+          JSON.stringify({
+            ...manifestOf(state.served),
+            settling: state.settling,
+          }),
+        );
       });
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
-    backendUrl = `http://127.0.0.1:${addressOf(server).port}`;
+    state.backendUrl = `http://127.0.0.1:${addressOf(server).port}`;
   });
 
   after(() => server.close());
@@ -112,125 +242,17 @@ void describe("module set", () => {
     );
   });
 
-  void it(
-    "calls back once a module declares other public endpoints",
-    { timeout: 2000 },
-    async () => {
-      served = [dmsModule];
-      let changes = 0;
-      const changed = new Promise<void>((resolve) => {
-        const stop = followModuleSet({
-          backendUrl,
-          fingerprint: moduleSetFingerprint([dmsModule]),
-          intervalMs: 20,
-          onChange: () => {
-            changes += 1;
-            stop();
-            resolve();
-          },
-        });
-      });
-      served = [
-        { ...dmsModule, publicEndpoints: [{ path: "/api/tracker/beacon" }] },
-      ];
-      await changed;
-      assert.equal(changes, 1);
-      served = [dmsModule];
-    },
-  );
+  registerCallbackTests(state);
 
-  void it("calls back once the backend serves another set", async () => {
-    served = [dmsModule];
-    let changes = 0;
-    const changed = new Promise<void>((resolve) => {
-      followModuleSet({
-        backendUrl,
-        fingerprint: moduleSetFingerprint([dmsModule]),
-        intervalMs: 20,
-        onChange: () => {
-          changes += 1;
-          resolve();
-        },
-      });
-    });
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    assert.equal(changes, 0);
-    served = [dmsModule, langModule];
-    await changed;
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    assert.equal(changes, 1);
-  });
-
-  void it("ignores a set seen on one read only", async () => {
-    served = [dmsModule];
-    let changes = 0;
-    const stop = followModuleSet({
-      backendUrl,
-      fingerprint: moduleSetFingerprint([dmsModule]),
-      intervalMs: 50,
-      onChange: () => (changes += 1),
-    });
-    served = [];
-    await new Promise((resolve) => setTimeout(resolve, 75));
-    served = [dmsModule];
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    stop();
-    assert.equal(changes, 0);
-  });
-
-  void it("waits while the backend says its set is settling", async () => {
-    served = [];
-    settling = true;
-    let changes = 0;
-    const stop = followModuleSet({
-      backendUrl,
-      fingerprint: moduleSetFingerprint([dmsModule]),
-      intervalMs: 20,
-      onChange: () => (changes += 1),
-    });
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    stop();
-    settling = false;
-    assert.equal(changes, 0);
-  });
-
-  void it("tells each unchanged read, so a restarted backend hears again", async () => {
-    served = [dmsModule];
-    let unchanged = 0;
-    const stop = followModuleSet({
-      backendUrl,
-      fingerprint: moduleSetFingerprint([dmsModule]),
-      intervalMs: 20,
-      onChange: () => undefined,
-      onUnchanged: () => (unchanged += 1),
-    });
-    await new Promise((resolve) => setTimeout(resolve, 120));
-    stop();
-    assert.ok(unchanged >= 2);
-  });
-
-  void it("stops following when asked", async () => {
-    served = [dmsModule];
-    let changes = 0;
-    const stop = followModuleSet({
-      backendUrl,
-      fingerprint: moduleSetFingerprint([dmsModule]),
-      intervalMs: 20,
-      onChange: () => (changes += 1),
-    });
-    stop();
-    served = [dmsModule, langModule];
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    assert.equal(changes, 0);
-  });
+  registerFollowTests(state);
 
   void it("reports the served modules' versions and its own with the bootstrap credential", async () => {
     const isTaken = await reportFrontendReady(
-      backendUrl,
+      state.backendUrl,
       [{ name: dmsModule.name, version: "0.9.8" }, { name: "unversioned" }],
       "secret",
     );
-    const report = requests.find((request) =>
+    const report = state.requests.find((request) =>
       request.url?.startsWith("/dms/frontend/ready"),
     );
     assert.equal(isTaken, true);

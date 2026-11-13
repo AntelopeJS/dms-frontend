@@ -16,57 +16,7 @@ import {
   handler,
 } from "./fixtures/server-modules";
 
-void describe("Module server declarations", () => {
-  void it("serve nothing for a deployment whose modules declare nothing", () => {
-    assert.deepEqual(resolved([]), { routes: [], warnings: [] });
-  });
-
-  void it("match a declared route with its parameters, decoded, and ignore a trailing slash", () => {
-    const { routes, warnings } = resolved([
-      {
-        id: "auth",
-        setup: (server) => {
-          server.registerRoute("GET", "/auth/oauth/:provider/start", handler);
-        },
-      },
-    ]);
-    assert.deepEqual(warnings, []);
-    const reached = matchModuleRoute(
-      routes,
-      "GET",
-      "/auth/oauth/git%2Dhub/start/",
-    );
-    assert.equal(reached?.route.id, "auth");
-    assert.deepEqual(reached?.params, { provider: "git-hub" });
-    assert.equal(
-      matchModuleRoute(routes, "POST", "/auth/oauth/github/start"),
-      undefined,
-    );
-    assert.equal(
-      matchModuleRoute(routes, "GET", "/auth/oauth/a/b/start"),
-      undefined,
-    );
-  });
-
-  void it("register one handler for several methods", () => {
-    const { routes } = resolved([
-      {
-        id: "auth",
-        setup: (server) => {
-          server.registerRoute(
-            ["GET", "DELETE"],
-            "/api/_auth/session",
-            handler,
-          );
-        },
-      },
-    ]);
-    assert.deepEqual(
-      routes.map((route: { method: string }) => route.method),
-      ["GET", "DELETE"],
-    );
-  });
-
+function registerRouteDeclarationTests(): void {
   void it("ignore a malformed declaration with a warning naming the module", () => {
     const { routes, warnings } = resolved([
       {
@@ -133,7 +83,9 @@ void describe("Module server declarations", () => {
       '"GET /api/_x/ping": saas (priority 0) is shadowed by override (priority 10); the higher priority wins.',
     ]);
   });
+}
 
+function registerRoutePriorityTests(): void {
   void it("settle a priority tie by module id, and say so", () => {
     const { routes, warnings } = resolved([
       {
@@ -218,7 +170,9 @@ void describe("Module server declarations", () => {
       /^"POST \/api\/_x\/b\/:name" of high .+ and "POST \/api\/_x\/:id\/a" of low .+ which high answers: the higher priority wins\.$/,
     );
   });
+}
 
+function registerRouteWarningTests(): void {
   void it("stay quiet on routes that cannot match the same request", () => {
     const { warnings } = resolved([
       {
@@ -295,6 +249,64 @@ void describe("Module server declarations", () => {
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /a public endpoint a backend module declared/);
   });
+}
+
+void describe("Module server declarations", () => {
+  void it("serve nothing for a deployment whose modules declare nothing", () => {
+    assert.deepEqual(resolved([]), { routes: [], warnings: [] });
+  });
+
+  void it("match a declared route with its parameters, decoded, and ignore a trailing slash", () => {
+    const { routes, warnings } = resolved([
+      {
+        id: "auth",
+        setup: (server) => {
+          server.registerRoute("GET", "/auth/oauth/:provider/start", handler);
+        },
+      },
+    ]);
+    assert.deepEqual(warnings, []);
+    const reached = matchModuleRoute(
+      routes,
+      "GET",
+      "/auth/oauth/git%2Dhub/start/",
+    );
+    assert.equal(reached?.route.id, "auth");
+    assert.deepEqual(reached?.params, { provider: "git-hub" });
+    assert.equal(
+      matchModuleRoute(routes, "POST", "/auth/oauth/github/start"),
+      undefined,
+    );
+    assert.equal(
+      matchModuleRoute(routes, "GET", "/auth/oauth/a/b/start"),
+      undefined,
+    );
+  });
+
+  void it("register one handler for several methods", () => {
+    const { routes } = resolved([
+      {
+        id: "auth",
+        setup: (server) => {
+          server.registerRoute(
+            ["GET", "DELETE"],
+            "/api/_auth/session",
+            handler,
+          );
+        },
+      },
+    ]);
+    assert.deepEqual(
+      routes.map((route: { method: string }) => route.method),
+      ["GET", "DELETE"],
+    );
+  });
+
+  registerRouteDeclarationTests();
+
+  registerRoutePriorityTests();
+
+  registerRouteWarningTests();
 
   void it("ignore a module whose setup throws, and keep the others", () => {
     const { routes, warnings } = resolved([

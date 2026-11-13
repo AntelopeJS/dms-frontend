@@ -32,7 +32,7 @@ async function closedBackendUrl(): Promise<string> {
   return baseUrl;
 }
 
-void describe("fetchManifest", () => {
+function registerQueryAndVersionTests(): void {
   void it("passes clientUrl as a query parameter", async () => {
     const { server, baseUrl, requests } = await startBackend();
     try {
@@ -133,7 +133,9 @@ void describe("fetchManifest", () => {
       await closeServer(server);
     }
   });
+}
 
+function registerVersionMessageAndRendererTests(): void {
   void it("says which side to upgrade for a manifest of another version", () => {
     assert.equal(
       problemText(new ManifestRefusedError(describeManifestVersion(3))),
@@ -239,7 +241,9 @@ void describe("fetchManifest", () => {
       await closeServer(server);
     }
   });
+}
 
+function registerCredentialAndNetworkTests(): void {
   void it("reports a refused credential distinctly, naming the fix", async () => {
     const { server, baseUrl } = await startBackend(401);
     try {
@@ -335,6 +339,14 @@ void describe("fetchManifest", () => {
       },
     );
   });
+}
+
+void describe("fetchManifest", () => {
+  registerQueryAndVersionTests();
+
+  registerVersionMessageAndRendererTests();
+
+  registerCredentialAndNetworkTests();
 
   void it("rejects a backend URL fetch cannot use, before any request", async () => {
     for (const backendUrl of ["localhost:5010", "http://dms backend:5010"]) {
