@@ -9,6 +9,8 @@ import { isBoolean, isNumber, isRecord, isString } from "../type-guards.mjs";
 export const SESSION_COOKIE = "dms_session";
 const REQUEST_SESSION = Symbol("dms-request-session");
 const MAX_AGE = 60 * 60 * 24 * 30;
+/** How far ahead of this instance's clock another instance may stamp a session. */
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 /**
  * The session a module writes: the `DmsSession` of `#dms/server`.
@@ -217,9 +219,9 @@ function appendSealedCookie(response, name, value, cookieAttributes) {
 export function readSession(request) {
   if (REQUEST_SESSION in request) return request[REQUEST_SESSION];
   const sealed = readSealedCookie(request, SESSION_COOKIE);
-  return isSession(sealed) && Date.now() - sealed.updatedAt <= MAX_AGE * 1000
-    ? sealed
-    : undefined;
+  if (!isSession(sealed)) return undefined;
+  const age = Date.now() - sealed.updatedAt;
+  return age <= MAX_AGE * 1000 && age >= -CLOCK_SKEW_MS ? sealed : undefined;
 }
 
 /**

@@ -16,6 +16,9 @@ const HOOK_ROUTE = Object.freeze({ bodyLimit: 0 });
  */
 export const SESSION_RECONFIRM_AFTER_MS = 5 * 60 * 1000;
 
+/** The methods that read: a request with another one changes state. */
+const READ_METHODS = new Set(["GET", "HEAD"]);
+
 /**
  * The pages a signed-out visit reaches when the provider names none: the
  * sign-in page and everything below it, whole segments only (`/auth` exempts
@@ -139,20 +142,30 @@ export function serverAuth(provider, context) {
     /** Renews the request's session after the backend refused it. */
     refresh,
     /**
-     * Renews the request's session when its `updatedAt` is further than
-     * `SESSION_RECONFIRM_AFTER_MS` from now, in the past or, from an instance
-     * whose clock runs ahead, in the future. A renewal that throws runs the
-     * request signed out; without a `refreshSession` hook the session stays.
+     * Renews the request's session when it was written longer ago than
+     * `SESSION_RECONFIRM_AFTER_MS`. A renewal that throws runs the request
+     * signed out; without a `refreshSession` hook the session stays. A
+     * request that changes state on a route of the module owning sign-in, a
+     * sign-out for instance, gets the session as sealed: that module renews
+     * or revokes it itself, and a sign-out still revokes it on the backend
+     * when a renewal would have failed.
      *
      * @param {import("./request-target.mjs").ServerRequest} request
      * @param {import("node:http").ServerResponse} response
+     * @param {string | undefined} routeModule The module whose route answers
+     *   the request, if any
      */
-    async reconfirm(request, response) {
+    async reconfirm(request, response, routeModule) {
+      if (
+        routeModule !== undefined &&
+        routeModule === provider?.id &&
+        !READ_METHODS.has(request.method)
+      )
+        return;
       const session = readSession(request);
       if (
         !session ||
-        Math.abs(Date.now() - (session.updatedAt ?? 0)) <=
-          SESSION_RECONFIRM_AFTER_MS
+        Date.now() - (session.updatedAt ?? 0) <= SESSION_RECONFIRM_AFTER_MS
       )
         return;
       await refresh(request, response).catch(() =>
