@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { getProcessUi } from "@antelopejs/core/cli";
 import {
   AUTH_ESTABLISH_FILE,
@@ -161,16 +161,26 @@ export function materializeLayers(
   }
 }
 
-/** Whether `path` is `directory` or lies inside it. */
-function isWithin(directory: string, path: string): boolean {
+/** Whether `path` lies strictly inside `directory`. */
+function isInside(directory: string, path: string): boolean {
   const rel = relative(directory, path);
-  return !rel.startsWith("..") && !isAbsolute(rel);
+  return rel !== "" && rel.split(sep)[0] !== ".." && !isAbsolute(rel);
+}
+
+/** Copies `src` to `dest` with the layer blocklist of `root` at any depth. */
+function copyLayerTree(root: string, src: string, dest: string): void {
+  cpSync(src, dest, {
+    recursive: true,
+    dereference: true,
+    filter: (srcPath) => !isBlocklistedCopyPath(root, srcPath),
+  });
 }
 
 /**
- * Copies the entries of `from`, a directory of the layer at `root`, into
- * `to`. A directory that holds the workspace is walked rather than handed to
- * `cpSync`, which rejects a copy into its own source before any filter runs.
+ * Copies the entries of `from`, a directory of the layer at `root` that holds
+ * the workspace, into `to`, leaving the workspace out. A directory that holds
+ * the workspace is walked rather than handed to `cpSync`, which rejects a
+ * copy into its own source before any filter runs.
  */
 function copyLayerEntries(
   root: string,
@@ -182,17 +192,11 @@ function copyLayerEntries(
   for (const entry of readdirSync(from)) {
     const source = join(from, entry);
     const target = join(to, entry);
-    if (isBlocklistedCopyPath(root, source) || isWithin(workspaceDir, source))
-      continue;
-    if (isWithin(source, workspaceDir)) {
+    if (isBlocklistedCopyPath(root, source)) continue;
+    if (relative(source, workspaceDir) === "") continue;
+    if (isInside(source, workspaceDir))
       copyLayerEntries(root, source, target, workspaceDir);
-      continue;
-    }
-    cpSync(source, target, {
-      recursive: true,
-      dereference: true,
-      filter: (srcPath) => !isBlocklistedCopyPath(root, srcPath),
-    });
+    else copyLayerTree(root, source, target);
   }
 }
 
@@ -220,7 +224,9 @@ function copyLayerSource(
   dest: string,
   workspaceDir: string,
 ): void {
-  copyLayerEntries(src, src, dest, workspaceDir);
+  if (isInside(src, workspaceDir))
+    copyLayerEntries(src, src, dest, workspaceDir);
+  else copyLayerTree(src, src, dest);
 
   sanitizeLayerPackage(join(dest, "package.json"));
   sanitizeBuildDeclaration(join(dest, FRONTEND_BUILD_ENTRY));
