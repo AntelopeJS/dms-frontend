@@ -105,6 +105,8 @@ function optionsRejection(options) {
     !(Number.isSafeInteger(options.bodyLimit) && options.bodyLimit >= 0)
   )
     return "bodyLimit is not a byte count";
+  if (options.signOut !== undefined && !isBoolean(options.signOut))
+    return "signOut is not a boolean";
   return undefined;
 }
 
@@ -267,6 +269,7 @@ function routesOfModule(module, warn) {
       sameOrigin: registration.options?.sameOrigin ?? true,
       bodyLimit: registration.options?.bodyLimit ?? DEFAULT_BODY_LIMIT,
       overridesBackend: registration.options?.overridesBackend === true,
+      signOut: registration.options?.signOut === true,
     }));
   });
 }

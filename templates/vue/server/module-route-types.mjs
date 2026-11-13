@@ -55,6 +55,7 @@ export {};
  * @property {boolean} sameOrigin
  * @property {number} bodyLimit
  * @property {boolean} overridesBackend
+ * @property {boolean} signOut
  */
 /**
  * The auth hooks of the module that provides them.

@@ -27,9 +27,9 @@ export default defineDmsServer((server) => {
     },
   });
   server.registerBackendProxy("/api/items");
-  server.registerRoute("GET", "/api/_fixture/session", (event) => ({
-    read: event.session.read()?.refreshToken ?? null,
-  }));
+  const read = (event) => ({ read: event.session.read()?.refreshToken ?? null });
+  server.registerRoute("GET", "/api/_fixture/session", read);
+  server.registerRoute("POST", "/api/_fixture/note", read);
   server.registerRoute("DELETE", "/api/_fixture/session", async (event) => {
     const session = event.session.read();
     if (session?.refreshToken) {
@@ -44,7 +44,7 @@ export default defineDmsServer((server) => {
     }
     event.session.clear();
     return { signedOut: session?.refreshToken ?? null };
-  });
+  }, { signOut: true });
 });
 `;
 
@@ -54,7 +54,7 @@ import { defineDmsServer } from "#dms/server";
 export default defineDmsServer((server) => {
   const read = (event) => ({ read: event.session.read()?.refreshToken ?? null });
   server.registerRoute("PUT", "/api/_fixture/session", read);
-  server.registerRoute("POST", "/api/_other/note", read);
+  server.registerRoute("POST", "/api/_other/note", read, { signOut: true });
 });
 `;
 
@@ -141,6 +141,66 @@ function registerLateRenewalTest(send: Send): void {
   });
 }
 
+/** Routes the backend refused the session for, and requests no route answers. */
+function registerRefusalTests(
+  send: Send,
+  origin: () => string,
+  calls: BackendCall[],
+): void {
+  void it("runs a route of the sign-in module signed out after a refused renewal, the sign-out included", async (t) => {
+    const revoked = aged(
+      t,
+      {
+        accessToken: "renewed-before-sign-out",
+        refreshToken: "revoked",
+        persistent: false,
+      },
+      STALE,
+    );
+    const headers = { origin: origin() };
+    const note = await send("/api/_fixture/note", revoked, {
+      method: "POST",
+      headers,
+    });
+    assert.deepEqual(await responseJson(note), { read: null });
+    assert.ok(clears(note, sessionName()));
+
+    calls.length = 0;
+    const signOut = await send("/api/_fixture/session", revoked, {
+      method: "DELETE",
+      headers,
+    });
+    assert.deepEqual(await responseJson(signOut), { signedOut: null });
+    assert.deepEqual(calls, []);
+    assert.ok(clears(signOut, sessionName()));
+  });
+
+  void it("renews no session for a request no route answers", async (t) => {
+    const revoked = aged(
+      t,
+      { accessToken: "stale", refreshToken: "revoked", persistent: false },
+      STALE,
+    );
+    const answers = [];
+    for (const [path, method] of [
+      ["/private", "POST"],
+      ["/private", "OPTIONS"],
+      ["/api/_fixture/session", "PATCH"],
+    ]) {
+      const response = await send(path, revoked, {
+        method,
+        headers: { origin: origin() },
+      });
+      answers.push([response.status, clears(response, sessionName())]);
+    }
+    assert.deepEqual(answers, [
+      [404, false],
+      [404, false],
+      [405, false],
+    ]);
+  });
+}
+
 void describe("Revoking a session on the production server", () => {
   const calls: BackendCall[] = [];
   let server: AuthServer | undefined;
@@ -219,7 +279,9 @@ void describe("Revoking a session on the production server", () => {
     assert.ok(clears(proxied, sessionName()));
   });
 
-  void it("reconfirms what other modules and the backend answer, whatever the method", async (t) => {
+  registerRefusalTests(send, () => server?.url ?? "", calls);
+
+  void it("reconfirms what every route but the sign-out and the backend answer, whatever the method", async (t) => {
     const write = (path: string, cookie: string, method: string) =>
       send(path, cookie, { method, headers: { origin: server?.url ?? "" } });
     const unreachable = aged(
@@ -228,6 +290,7 @@ void describe("Revoking a session on the production server", () => {
       STALE,
     );
     for (const [path, method] of [
+      ["/api/_fixture/note", "POST"],
       ["/api/_other/note", "POST"],
       ["/api/_fixture/session", "PUT"],
     ])

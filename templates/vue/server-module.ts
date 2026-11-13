@@ -182,6 +182,15 @@ export interface DmsServerRouteOptions {
    * backend serves there. Say so to silence the warning.
    */
   overridesBackend?: boolean;
+  /**
+   * The route signs out, on a module that registers `refreshSession`. When
+   * the session is renewed before the route runs and the hook gives no
+   * session without clearing it, the backend being unreachable for instance,
+   * the route runs with the session as sealed, so it can still revoke it on
+   * the backend. Any other route runs signed out then, and so does this one
+   * when the hook cleared the session. Another module's route ignores it.
+   */
+  signOut?: boolean;
 }
 
 /**
@@ -203,11 +212,13 @@ export interface DmsServerAuth {
   /**
    * Renews a session: one the backend refused (a 401 to a signed-in page
    * visit, which is then retried once), and one written more than 5 minutes
-   * ago, before a request uses it. Writes it with `event.session.write` and
-   * returns it, or clears it and returns `undefined`; the request then runs
-   * signed out, except a request that changes state on a route of this
-   * module, a sign-out for instance, which runs with the session as sealed.
-   * A session the backend revoked is cleared this way.
+   * ago or stamped ahead of the server's clock, before a request uses it.
+   * Writes it with `event.session.write` and returns it, or returns
+   * `undefined`, after clearing it with `event.session.clear` when the
+   * backend refused it; the request then runs signed out. A session the
+   * backend revoked is cleared this way. A route registered with
+   * `signOut: true` runs with the session as sealed when the hook gave none
+   * without clearing it.
    */
   refreshSession?(
     event: DmsServerEvent,

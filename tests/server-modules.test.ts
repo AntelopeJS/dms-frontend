@@ -32,6 +32,9 @@ function registerRouteDeclarationTests(): void {
           server.registerRoute("GET", "/api/_billing/e", handler, {
             bodyLimit: -1,
           });
+          registerRouteFromJavaScript("DELETE", "/api/_billing/f", handler, {
+            signOut: "yes",
+          });
           server.registerRoute("GET", "/api/_billing/ok", handler);
         },
       },
@@ -40,7 +43,7 @@ function registerRouteDeclarationTests(): void {
       routes.map((route: { path: string }) => route.path),
       ["/api/_billing/ok"],
     );
-    assert.equal(warnings.length, 6);
+    assert.equal(warnings.length, 7);
     for (const warning of warnings)
       assert.match(
         warning,
