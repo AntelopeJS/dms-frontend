@@ -16,7 +16,10 @@ import {
   createFrontendModuleRegistry,
   writeFrontendModuleRegistry,
 } from "../src/common";
-import { serverAuth } from "../templates/vue/server/auth-hooks.mjs";
+import {
+  SESSION_RECONFIRM_AFTER_MS,
+  serverAuth,
+} from "../templates/vue/server/auth-hooks.mjs";
 import * as sessions from "../templates/vue/server/auth/session.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
 import type {
@@ -255,6 +258,7 @@ export default defineDmsServer((server) => {
     signInPath: "/login",
     signInExempt: ["/login/**"],
     async refreshSession(event, session) {
+      if (session.refreshToken === "revoked") return event.session.clear();
       const renewed = { ...session, accessToken: "renewed-" + event.module.id };
       event.session.write(renewed);
       return renewed;
@@ -286,6 +290,36 @@ function setCookies(response: ServerResponse): string[] {
 
 function cookiePairs(response: ServerResponse): string[] {
   return setCookies(response).map((cookie) => cookie.split(";", 1)[0]);
+}
+
+type Visit = (path: string, cookie?: string) => Promise<Response>;
+
+function registerReconfirmTest(visit: Visit): void {
+  void it("reconfirms a session after five minutes, and clears one the backend revoked", async (t) => {
+    const start = Date.now();
+    t.mock.timers.enable({ apis: ["Date"], now: start });
+    const jar = responseOf();
+    sessions.writeSession(jar, { refreshToken: "revoked", persistent: false });
+    const cookie = cookiePairs(jar)[0];
+    const read = async (at: number) => {
+      t.mock.timers.setTime(start + at);
+      const response = await visit("/api/_fixture/session", cookie);
+      return {
+        read: jsonAt(await responseJson(response), "read", "refreshToken"),
+        cleared: response.headers
+          .getSetCookie()
+          .some((line) => line.startsWith(`${cookie.split("=", 1)[0]}=;`)),
+      };
+    };
+    assert.deepEqual(await read(SESSION_RECONFIRM_AFTER_MS), {
+      read: "revoked",
+      cleared: false,
+    });
+    assert.deepEqual(await read(SESSION_RECONFIRM_AFTER_MS + 1), {
+      read: undefined,
+      cleared: true,
+    });
+  });
 }
 
 function registerSessionRouteTests(frontendUrl: () => string): void {
@@ -454,6 +488,8 @@ void describe("Auth hooks in the production server", () => {
       jsonAt(page, "props", "session", "updatedAt"),
     );
   });
+
+  registerReconfirmTest(visit);
 
   registerSessionRouteTests(() => frontendUrl);
 });
