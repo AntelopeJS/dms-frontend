@@ -186,7 +186,7 @@ export interface DmsServerRouteOptions {
    * The route signs out, on a module that registers `refreshSession`. When
    * the session is renewed before the route runs and the hook gives no
    * session without clearing it, the backend being unreachable for instance,
-   * the route runs with the session as sealed, so it can still revoke it on
+   * or throws, the route runs with the session as sealed, so it can still revoke it on
    * the backend. Any other route runs signed out then, and so does this one
    * when the hook cleared the session. Another module's route ignores it.
    */

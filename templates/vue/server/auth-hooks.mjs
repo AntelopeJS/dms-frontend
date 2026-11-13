@@ -150,8 +150,8 @@ export function serverAuth(provider, context) {
      * signed out; without a `refreshSession` hook the session stays. The
      * sign-out route of the module owning sign-in (`signOut: true`) runs
      * with the sealed session when the renewal gives none without clearing
-     * it, the backend being unreachable for instance, so it still revokes the
-     * session on the backend. After a renewal that cleared the session, the
+     * it, or throws, the backend being unreachable for instance, so it still
+     * revokes the session on the backend. After a renewal that cleared the session, the
      * backend's refusal, it runs signed out too.
      *
      * @param {import("./request-target.mjs").ServerRequest} request
