@@ -247,14 +247,9 @@ function frozenCopy(value) {
 export function createServerEvent(context) {
   const { request, response, route, params } = context;
   const webRequestValue = webRequest(request, route);
-  // SAFETY: `server-module.ts` lets a handler name the JSON shape it expects from the backend and from the client, as `Response.json()` does; the server parses that JSON and hands it on unchecked, which these two members are the only place to state.
-  const parsedJson = /** @type {Pick<ServerEvent, "backend" | "readJson">} */ ({
-    backend: (/** @type {string} */ path, init = {}) =>
-      backend(path, request, init),
-    readJson: () => readJson(webRequestValue),
-  });
   return {
-    ...parsedJson,
+    backend: (path, init = {}) => backend(path, request, init),
+    readJson: () => readJson(webRequestValue),
     request: webRequestValue,
     params: Object.freeze({ ...params }),
     session: sessionAccess(request, response, context.view),
