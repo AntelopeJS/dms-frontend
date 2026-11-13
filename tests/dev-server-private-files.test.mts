@@ -10,7 +10,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { createServer as createViteServer } from "vite";
+import { createServer as createViteServer, normalizePath } from "vite";
 import {
   DEV_FS_DENY,
   denyPrivateFiles,
@@ -137,7 +137,9 @@ void describe("private files the development server refuses", () => {
       ".manifest-cache.json",
       "frontend-modules/shop/layers/base/server/sign.ts",
     ]) {
-      const response = await fetch(`${base}/@fs${join(root, file)}?raw`);
+      const response = await fetch(
+        `${base}/@fs/${normalizePath(join(root, file)).replace(/^\//, "")}?raw`,
+      );
       const body = await response.text();
       assert.equal(response.status, 403, file);
       assert.doesNotMatch(body, new RegExp(SECRET));

@@ -1,7 +1,8 @@
 import * as assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { dirname, join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 import {
   createPathMapper,
@@ -44,11 +45,12 @@ void describe("child output lines", () => {
 
 void describe("the output a framed child leaves", () => {
   void it("keeps stdout, then stderr, whichever pipe was read first", async () => {
-    const script = [
-      'process.stderr.write("ERR_PNPM_FETCH_404\\n");',
-      'setTimeout(() => { process.stdout.write("line 1\\nline 2\\n"); process.exitCode = 1; }, 100);',
-    ].join("");
-    const result = await runFramedCommand(process.execPath, ["-e", script], {
+    const script = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "fixtures",
+      "framed-child.mjs",
+    );
+    const result = await runFramedCommand(process.execPath, [script], {
       name: "node",
       cwd: process.cwd(),
     });

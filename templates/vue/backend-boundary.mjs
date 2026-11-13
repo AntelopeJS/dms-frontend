@@ -103,7 +103,7 @@ function boundaryCheck(backendPackages) {
           ? "an entry point"
           : importer.replace(QUERY_OR_HASH, "");
       return this.error(
-        `Backend boundary: ${from} imports ${backend.file}, which is under the src of ${backend.name}. ` +
+        `Backend boundary: ${from} imports ${backend.file.split(sep).join("/")}, which is under the src of ${backend.name}. ` +
           "The frontend reaches the backend only through its HTTP interface.",
       );
     },

@@ -10,7 +10,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
-import { build, createServer, type Plugin, type ViteDevServer } from "vite";
+import {
+  build,
+  createServer,
+  normalizePath,
+  type Plugin,
+  type ViteDevServer,
+} from "vite";
 import { createFrontendModuleRegistry } from "../src/derived-outputs";
 import {
   copyStaticTemplates,
@@ -215,7 +221,7 @@ void describe("The backend boundary plugin", () => {
     await assert.rejects(built, (error: Error) => {
       assert.ok(
         error.message.includes(
-          `Backend boundary: ${join(layer, "entry.ts")} imports ${join(dirname(layer), "src", "x.ts")}, which is under the src of ${BACKEND}.`,
+          `Backend boundary: ${normalizePath(join(layer, "entry.ts"))} imports ${normalizePath(join(dirname(layer), "src", "x.ts"))}, which is under the src of ${BACKEND}.`,
         ),
         error.message,
       );
