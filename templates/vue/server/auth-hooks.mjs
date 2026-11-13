@@ -9,6 +9,14 @@ const DEFAULT_ONBOARDING_PATH = "/onboarding";
 const HOOK_ROUTE = Object.freeze({ bodyLimit: 0 });
 
 /**
+ * How long a sealed session is used without the module that owns sign-in
+ * confirming it. An older one is renewed through `refreshSession` before a
+ * request uses it, so a session the backend revoked, at a sign-out for
+ * instance, is cleared on every instance within this delay.
+ */
+export const SESSION_RECONFIRM_AFTER_MS = 5 * 60 * 1000;
+
+/**
  * The pages a signed-out visit reaches when the provider names none: the
  * sign-in page and everything below it, whole segments only (`/auth` exempts
  * `/auth/callback`, never `/authors`), and the onboarding page. Derived from
@@ -87,13 +95,35 @@ function hookView(publicSession, session) {
  *   registers any
  * @param {(id: string) => import("./module-server.mjs").ModuleContext} context `(id) => ({ module, app })`, a module's event context
  * @returns `{ provider, signInPath, isSignInExempt, signInLocation, view,
- *   refresh }`
+ *   refresh, reconfirm }`
  */
 export function serverAuth(provider, context) {
   const signInPath = provider?.signInPath ?? DEFAULT_SIGN_IN_PATH;
   const exempt = provider?.signInExempt ?? defaultExempt(signInPath);
   const publicSession = provider?.publicSession;
   const refreshSession = provider?.refreshSession;
+  /**
+   * Renews the request's session through the provider's hook. Returns the new
+   * session, which the rest of the request runs with, or `undefined`.
+   *
+   * @param {import("./request-target.mjs").ServerRequest} request
+   * @param {import("node:http").ServerResponse} response
+   */
+  const refresh = async (request, response) => {
+    if (!refreshSession) return undefined;
+    const session = readSession(request);
+    if (!session) return undefined;
+    const event = createServerEvent({
+      request,
+      response,
+      route: HOOK_ROUTE,
+      params: {},
+      ...context(provider.id),
+    });
+    const refreshed = (await refreshSession(event, session)) ?? undefined;
+    setRequestSession(request, refreshed);
+    return refreshed;
+  };
   return {
     provider: provider?.id,
     signInPath,
@@ -106,27 +136,26 @@ export function serverAuth(provider, context) {
           /** @type {import("./module-event.mjs").Session | undefined} */ session,
         ) => hookView(publicSession, session)
       : () => ({}),
+    /** Renews the request's session after the backend refused it. */
+    refresh,
     /**
-     * Renews the request's session after the backend refused it. Returns the
-     * new session, which the rest of the request runs with, or `undefined`.
+     * Renews the request's session when it was written longer ago than
+     * `SESSION_RECONFIRM_AFTER_MS`. A renewal that fails runs the request
+     * signed out; without a `refreshSession` hook the session stays.
      *
      * @param {import("./request-target.mjs").ServerRequest} request
      * @param {import("node:http").ServerResponse} response
      */
-    async refresh(request, response) {
-      if (!refreshSession) return undefined;
+    async reconfirm(request, response) {
       const session = readSession(request);
-      if (!session) return undefined;
-      const event = createServerEvent({
-        request,
-        response,
-        route: HOOK_ROUTE,
-        params: {},
-        ...context(provider.id),
-      });
-      const refreshed = (await refreshSession(event, session)) ?? undefined;
-      setRequestSession(request, refreshed);
-      return refreshed;
+      if (
+        !session ||
+        Date.now() - (session.updatedAt ?? 0) <= SESSION_RECONFIRM_AFTER_MS
+      )
+        return;
+      await refresh(request, response).catch(() =>
+        setRequestSession(request, undefined),
+      );
     },
   };
 }
