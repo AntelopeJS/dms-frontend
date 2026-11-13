@@ -146,9 +146,9 @@ export function serverAuth(provider, context) {
      * `SESSION_RECONFIRM_AFTER_MS`. A renewal that throws runs the request
      * signed out; without a `refreshSession` hook the session stays. A
      * request that changes state on a route of the module owning sign-in, a
-     * sign-out for instance, gets the session as sealed: that module renews
-     * or revokes it itself, and a sign-out still revokes it on the backend
-     * when a renewal would have failed.
+     * sign-out for instance, runs with the sealed session when the renewal
+     * gives none: a sign-out then still revokes it on the backend, and with
+     * a renewed one it does so with a live access token.
      *
      * @param {import("./request-target.mjs").ServerRequest} request
      * @param {import("node:http").ServerResponse} response
@@ -156,21 +156,20 @@ export function serverAuth(provider, context) {
      *   the request, if any
      */
     async reconfirm(request, response, routeModule) {
-      if (
-        routeModule !== undefined &&
-        routeModule === provider?.id &&
-        !READ_METHODS.has(request.method)
-      )
-        return;
       const session = readSession(request);
       if (
+        !refreshSession ||
         !session ||
         Date.now() - (session.updatedAt ?? 0) <= SESSION_RECONFIRM_AFTER_MS
       )
         return;
-      await refresh(request, response).catch(() =>
-        setRequestSession(request, undefined),
-      );
+      const renewed = await refresh(request, response).catch(() => undefined);
+      if (renewed) return;
+      const ownsSession =
+        routeModule !== undefined &&
+        routeModule === provider?.id &&
+        !READ_METHODS.has(request.method);
+      setRequestSession(request, ownsSession ? session : undefined);
     },
   };
 }
