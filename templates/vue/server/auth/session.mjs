@@ -100,6 +100,7 @@ function decode(name, value) {
       "aes-256-gcm",
       key(),
       payload.subarray(0, 12),
+      { authTagLength: 16 },
     );
     decipher.setAuthTag(payload.subarray(12, 28));
     decipher.setAAD(Buffer.from(name));
@@ -116,16 +117,21 @@ function decode(name, value) {
 
 /**
  * @param {unknown} value
- * @returns {value is Session} Whether `value` is what `writeSession` seals
+ * @returns {value is Session & { updatedAt: number }} Whether `value` is what
+ *   `writeSession` seals
  */
 function isSession(value) {
-  if (!isRecord(value) || !isBoolean(value.persistent)) return false;
+  if (
+    !isRecord(value) ||
+    !isBoolean(value.persistent) ||
+    !isNumber(value.updatedAt)
+  )
+    return false;
   const { user } = value;
   return (
     ["accessToken", "refreshToken", "accountId", "activeTenantId"].every(
       (field) => !Object.hasOwn(value, field) || isString(value[field]),
     ) &&
-    (!Object.hasOwn(value, "updatedAt") || isNumber(value.updatedAt)) &&
     (!Object.hasOwn(value, "user") ||
       (isRecord(user) &&
         (!Object.hasOwn(user, "language") || isString(user.language))))
@@ -194,7 +200,9 @@ function appendSealedCookie(response, name, value, cookieAttributes) {
 export function readSession(request) {
   if (REQUEST_SESSION in request) return request[REQUEST_SESSION];
   const sealed = readSealedCookie(request, SESSION_COOKIE);
-  return isSession(sealed) ? sealed : undefined;
+  return isSession(sealed) && Date.now() - sealed.updatedAt <= MAX_AGE * 1000
+    ? sealed
+    : undefined;
 }
 
 /**
@@ -206,10 +214,18 @@ export function setRequestSession(request, session) {
 }
 
 /**
+ * Seals `session` into the session cookie, stamped with `updatedAt`. It opens
+ * for 30 days from that stamp, whatever the browser keeps.
+ *
  * @param {import("node:http").ServerResponse} response
  * @param {Session} session
  */
 export function writeSession(response, session) {
+  if (!isBoolean(session.persistent))
+    throw new TypeError(
+      "A session needs persistent: true to outlive the browser, or false to end with it",
+    );
+  session.updatedAt = Date.now();
   appendSealedCookie(
     response,
     SESSION_COOKIE,
