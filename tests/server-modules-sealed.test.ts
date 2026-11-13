@@ -143,3 +143,57 @@ void describe("Sealed cookies bound to their name", () => {
     }
   });
 });
+
+void describe("Sealed cookies of modules with similar ids", () => {
+  void it("stay each module's own", async () => {
+    process.env.DMS_SESSION_SECRET ??=
+      "a-test-only-session-secret-of-32-characters";
+    const { serveModuleRoutes } =
+      await import("../templates/vue/server/module-testing.mjs");
+    const { scopedCookieName } =
+      await import("../templates/vue/server/auth/session.mjs");
+    const cartModule = (id: string, route: string) => ({
+      id,
+      setup: defineDmsServer((server) => {
+        server.registerRoute("GET", `/api/_${route}/write`, (event) => {
+          event.cookies.writeSealed("cart", { owner: id });
+          return null;
+        });
+        server.registerRoute("GET", `/api/_${route}/read`, (event) => ({
+          value:
+            event.cookies.readSealed(
+              "cart",
+              (value): value is unknown => value !== undefined,
+            ) ?? null,
+        }));
+      }),
+    });
+    const served = await serveModuleRoutes([
+      cartModule("acme.shop", "dotted"),
+      cartModule("acme-shop", "dashed"),
+    ]);
+    const written = async (route: string) =>
+      (await fetch(`${served.url}/api/_${route}/write`)).headers
+        .getSetCookie()[0]
+        ?.split(";", 1)[0] ?? "";
+    const read = async (route: string, cookie: string) =>
+      responseJson(
+        await fetch(`${served.url}/api/_${route}/read`, {
+          headers: { cookie },
+        }),
+      );
+    try {
+      const dotted = await written("dotted");
+      assert.deepEqual(await read("dotted", dotted), {
+        value: { owner: "acme.shop" },
+      });
+      assert.deepEqual(await read("dashed", dotted), { value: null });
+
+      const dashed = await written("dashed");
+      assert.equal(dashed.split("=", 1)[0], scopedCookieName("acme-shop.cart"));
+      assert.deepEqual(await read("dotted", dashed), { value: null });
+    } finally {
+      await served.close();
+    }
+  });
+});
