@@ -44,6 +44,18 @@ void describe("sealed session lifetime", () => {
     }
   });
 
+  void it("refuses a session stamped more than five minutes ahead of the clock", (t) => {
+    process.env.DMS_SESSION_SECRET = SECRET;
+    const minutes = 60 * 1000;
+    t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 + 5 * minutes });
+    const ahead = sealedCookie(true);
+    t.mock.timers.setTime(1_000_000 + 5 * minutes + 1);
+    const further = sealedCookie(true);
+    t.mock.timers.setTime(1_000_000);
+    assert.equal(readCookie(ahead)?.accessToken, "token");
+    assert.equal(readCookie(further), undefined);
+  });
+
   void it("stamps the time it writes a session", (t) => {
     process.env.DMS_SESSION_SECRET = SECRET;
     t.mock.timers.enable({ apis: ["Date"], now: 5_000 });

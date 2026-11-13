@@ -48,7 +48,7 @@ function reconfirmedAt(
   });
   clock.setTime(START + offset);
   const response = responseOf(request);
-  return auth.reconfirm(request, response).then(() => ({
+  return auth.reconfirm(request, response, undefined).then(() => ({
     renewals: renewals.length,
     session: sessions.readSession(request)?.accessToken,
     setCookie: response.getHeader("set-cookie"),
@@ -56,26 +56,6 @@ function reconfirmedAt(
 }
 
 void describe("reconfirming a session", () => {
-  void it("renews one stamped further than five minutes ahead of the clock", async (t) => {
-    t.mock.timers.enable({ apis: ["Date"], now: START });
-    const renew: Renewal = async (session) => ({
-      ...session,
-      accessToken: "renewed",
-    });
-    assert.deepEqual(
-      await reconfirmedAt(-SESSION_RECONFIRM_AFTER_MS, renew, t.mock.timers),
-      { renewals: 0, session: "sealed", setCookie: undefined },
-    );
-    assert.deepEqual(
-      await reconfirmedAt(
-        -SESSION_RECONFIRM_AFTER_MS - 1,
-        renew,
-        t.mock.timers,
-      ),
-      { renewals: 1, session: "renewed", setCookie: undefined },
-    );
-  });
-
   void it("runs the request signed out and keeps the cookie when the renewal throws", async (t) => {
     t.mock.timers.enable({ apis: ["Date"], now: START });
     const renew: Renewal = () => Promise.reject(new Error("backend down"));

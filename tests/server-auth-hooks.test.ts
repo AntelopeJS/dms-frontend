@@ -1,25 +1,7 @@
 import * as assert from "node:assert/strict";
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { createServer, type Server, type ServerResponse } from "node:http";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import type { ServerResponse } from "node:http";
 import { after, before, describe, it } from "node:test";
-import {
-  copyStaticTemplates,
-  createFrontendModuleRegistry,
-  writeFrontendModuleRegistry,
-} from "../src/common";
-import {
-  SESSION_RECONFIRM_AFTER_MS,
-  serverAuth,
-} from "../templates/vue/server/auth-hooks.mjs";
+import { serverAuth } from "../templates/vue/server/auth-hooks.mjs";
 import * as sessions from "../templates/vue/server/auth/session.mjs";
 import { resolveServerDeclarations } from "../templates/vue/server/module-routes.mjs";
 import type {
@@ -27,20 +9,13 @@ import type {
   DmsServerSetup,
   DmsSession,
 } from "../templates/vue/server-module";
-import { addressOf } from "./helpers/net";
 import { isNumber, isText } from "./helpers/guards";
 import { requestOf, responseOf, serverRequestOf } from "./helpers/http-doubles";
 import { jsonAt, responseJson } from "./helpers/json";
-import { requestHandlerOf } from "./helpers/workspace-server";
+import { type AuthServer, startAuthServer } from "./helpers/auth-server";
 
 const SESSION_SECRET = "a-test-only-session-secret-of-32-characters";
 const ACCOUNT_ID = "0b5e7c2a-4d1f-4a8e-9c3b-2f6d8e1a7b40";
-
-function writeFixture(root: string, path: string, content: string): void {
-  const destination = join(root, path);
-  mkdirSync(dirname(destination), { recursive: true });
-  writeFileSync(destination, content);
-}
 
 const context: Parameters<typeof serverAuth>[1] = (id) => ({
   module: { id, options: undefined, privateOptions: undefined },
@@ -236,20 +211,6 @@ void describe("Auth hook declarations", () => {
   });
 });
 
-async function listen(server: Server): Promise<string> {
-  await new Promise<void>((settle) => server.listen(0, "127.0.0.1", settle));
-  const address = addressOf(server);
-  return `http://127.0.0.1:${address.port}`;
-}
-
-function close(server: Server | undefined): Promise<void> {
-  return new Promise((settle) => {
-    if (!server?.listening) return settle();
-    server.closeAllConnections();
-    server.close(() => settle());
-  });
-}
-
 const FIXTURE_ENTRY = `
 import { defineDmsServer } from "#dms/server";
 
@@ -258,7 +219,6 @@ export default defineDmsServer((server) => {
     signInPath: "/login",
     signInExempt: ["/login/**"],
     async refreshSession(event, session) {
-      if (session.refreshToken === "revoked") return event.session.clear();
       const renewed = { ...session, accessToken: "renewed-" + event.module.id };
       event.session.write(renewed);
       return renewed;
@@ -290,36 +250,6 @@ function setCookies(response: ServerResponse): string[] {
 
 function cookiePairs(response: ServerResponse): string[] {
   return setCookies(response).map((cookie) => cookie.split(";", 1)[0]);
-}
-
-type Visit = (path: string, cookie?: string) => Promise<Response>;
-
-function registerReconfirmTest(visit: Visit): void {
-  void it("reconfirms a session after five minutes, and clears one the backend revoked", async (t) => {
-    const start = Date.now();
-    t.mock.timers.enable({ apis: ["Date"], now: start });
-    const jar = responseOf();
-    sessions.writeSession(jar, { refreshToken: "revoked", persistent: false });
-    const cookie = cookiePairs(jar)[0];
-    const read = async (at: number) => {
-      t.mock.timers.setTime(start + at);
-      const response = await visit("/api/_fixture/session", cookie);
-      return {
-        read: jsonAt(await responseJson(response), "read", "refreshToken"),
-        cleared: response.headers
-          .getSetCookie()
-          .some((line) => line.startsWith(`${cookie.split("=", 1)[0]}=;`)),
-      };
-    };
-    assert.deepEqual(await read(SESSION_RECONFIRM_AFTER_MS), {
-      read: "revoked",
-      cleared: false,
-    });
-    assert.deepEqual(await read(SESSION_RECONFIRM_AFTER_MS + 1), {
-      read: undefined,
-      cleared: true,
-    });
-  });
 }
 
 function registerSessionRouteTests(frontendUrl: () => string): void {
@@ -382,60 +312,31 @@ function registerSessionRouteTests(frontendUrl: () => string): void {
 }
 
 void describe("Auth hooks in the production server", () => {
-  const workspace = realpathSync(mkdtempSync(resolve(".server-auth-hooks-")));
-  const source = mkdtempSync(join(tmpdir(), "dms-auth-fixture-"));
-  let backend: Server | undefined;
-  let frontend: Server | undefined;
+  let server: AuthServer | undefined;
   let frontendUrl = "";
-  const environment = {
-    DMS_API_BASE_URL: process.env.DMS_API_BASE_URL,
-    DMS_SESSION_SECRET: process.env.DMS_SESSION_SECRET,
-    DMS_COOKIE_SECURE: process.env.DMS_COOKIE_SECURE,
-  };
 
   before(async () => {
-    backend = createServer((request, response) => {
-      const authorization = request.headers.authorization ?? "";
-      const signedIn = authorization.startsWith("Bearer renewed-");
-      response.writeHead(signedIn ? 200 : 401, {
-        "content-type": "application/json",
-      });
-      response.end(
-        signedIn
-          ? JSON.stringify({ route: { hasAccess: true }, layout: {} })
-          : '{"message":"error.401"}',
-      );
-    });
-    process.env.DMS_API_BASE_URL = await listen(backend);
-    process.env.DMS_SESSION_SECRET = SESSION_SECRET;
-    process.env.DMS_COOKIE_SECURE = "false";
-
-    writeFixture(source, "dms.server.ts", FIXTURE_ENTRY);
-    copyStaticTemplates(workspace);
-    writeFixture(workspace, "package.json", '{"type":"module"}');
-    const layers = [{ path: source, packageName: "@acme/auth-frontend" }];
-    const registry = createFrontendModuleRegistry(workspace, layers);
-    cpSync(source, registry.modules[0].root, { recursive: true });
-    writeFrontendModuleRegistry(workspace, layers);
-    const { build } = await import("vite");
-    await build({
-      configFile: join(workspace, "vite.server.config.ts"),
-      root: workspace,
-      logLevel: "silent",
-    });
-    frontend = createServer(await requestHandlerOf(workspace));
-    frontendUrl = await listen(frontend);
+    server = await startAuthServer(
+      ".server-auth-hooks-",
+      FIXTURE_ENTRY,
+      (request, response) => {
+        const authorization = request.headers.authorization ?? "";
+        const signedIn = authorization.startsWith("Bearer renewed-");
+        response.writeHead(signedIn ? 200 : 401, {
+          "content-type": "application/json",
+        });
+        response.end(
+          signedIn
+            ? JSON.stringify({ route: { hasAccess: true }, layout: {} })
+            : '{"message":"error.401"}',
+        );
+      },
+      SESSION_SECRET,
+    );
+    frontendUrl = server.url;
   });
 
-  after(async () => {
-    await close(frontend);
-    await close(backend);
-    for (const [name, value] of Object.entries(environment))
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    rmSync(workspace, { recursive: true, force: true });
-    rmSync(source, { recursive: true, force: true });
-  });
+  after(() => server?.close());
 
   const visit = (path: string, cookie?: string) => {
     const headers = new Headers({ "x-inertia": "true" });
@@ -488,8 +389,6 @@ void describe("Auth hooks in the production server", () => {
       jsonAt(page, "props", "session", "updatedAt"),
     );
   });
-
-  registerReconfirmTest(visit);
 
   registerSessionRouteTests(() => frontendUrl);
 });
