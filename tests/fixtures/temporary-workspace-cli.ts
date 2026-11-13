@@ -1,11 +1,14 @@
-import { writeFileSync } from "node:fs";
+import { realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createTemporaryWorkspace } from "../../src/temporary-workspace";
 
 const mode = process.argv[2];
-const workspace = createTemporaryWorkspace("dms-frontend-workspace-test-");
+const workspace = createTemporaryWorkspace(
+  "dms-frontend-workspace-test-",
+  process.cwd(),
+);
 writeFileSync(join(workspace, "marker.txt"), "content");
-process.stdout.write(`${workspace}\n`);
+process.stdout.write(`${workspace}\n${realpathSync.native(workspace)}\n`);
 
 if (mode === "throw") throw new Error("verification failed");
 if (mode === "reject") void Promise.reject(new Error("async failure"));

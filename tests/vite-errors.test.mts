@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,7 +22,9 @@ import { addressOf } from "./helpers/net";
 const PAGE_FALLBACK_STATUS = 404;
 
 void describe("the dev server's answer to a module Vite cannot transform", () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-vite-errors-"));
+  const root = realpathSync.native(
+    mkdtempSync(join(tmpdir(), "dms-vite-errors-")),
+  );
   const overlayErrors: Array<ErrorPayload["err"]> = [];
   let vite: ViteDevServer;
   let server: Server;

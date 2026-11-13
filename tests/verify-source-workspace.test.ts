@@ -20,7 +20,9 @@ after(() => {
 });
 
 function directory(prefix: string): string {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  const root = realpathSync(
+    realpathSync.native(mkdtempSync(join(tmpdir(), prefix))),
+  );
   roots.push(root);
   return root;
 }
@@ -175,7 +177,7 @@ void describe("the workspace verify-source installs", () => {
       (error) =>
         error instanceof CliError &&
         error.problem.title.endsWith(
-          "frontend-vue/pnpm-lock.yaml is not a pnpm lockfile",
+          `${join("frontend-vue", "pnpm-lock.yaml")} is not a pnpm lockfile`,
         ),
     );
   });

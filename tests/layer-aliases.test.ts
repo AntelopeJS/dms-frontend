@@ -75,7 +75,7 @@ void describe("layer aliases", () => {
     const root = moduleWithLayers("dms-paths-", ["dms-ui"]);
     const directory = join(root, "layers", "dms-ui");
     assert.deepEqual(frontendLayerTypePaths(root), {
-      "#dms-ui/*": [`${directory}/*`],
+      "#dms-ui/*": [`${directory.replaceAll("\\", "/")}/*`],
     });
     assert.deepEqual(frontendLayerTypePaths(root, { relativeTo: root }), {
       "#dms-ui/*": ["./layers/dms-ui/*"],

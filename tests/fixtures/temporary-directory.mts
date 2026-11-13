@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after } from "node:test";
@@ -12,7 +12,7 @@ after(() => {
 });
 
 export function temporaryDirectory(prefix: string): string {
-  const directory = mkdtempSync(join(tmpdir(), prefix));
+  const directory = realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
   created.push(directory);
   return directory;
 }

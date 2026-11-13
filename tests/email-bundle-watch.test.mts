@@ -57,6 +57,15 @@ async function emailWorkspace(templates: Record<string, string>): Promise<{
   return { workspace, moduleRoot, email };
 }
 
+/** Stops the watcher and waits for its exit, so it holds no file of the workspace. */
+async function stopBuilder(builder: ChildProcess | undefined): Promise<void> {
+  if (!builder || builder.exitCode !== null || builder.signalCode !== null)
+    return;
+  const exited = once(builder, "exit");
+  builder.kill();
+  await exited;
+}
+
 void it("builds the email bundle in development and rebuilds it when a template changes", async () => {
   const { workspace, moduleRoot, email } = await emailWorkspace({
     "Welcome.vue": "<template><p>Welcome, first edition</p></template>\n",
@@ -77,7 +86,7 @@ void it("builds the email bundle in development and rebuilds it when a template 
     }
     assert.match(second, /Welcome, second edition/);
   } finally {
-    builder?.kill();
+    await stopBuilder(builder);
     rmSync(workspace, { recursive: true, force: true });
   }
 });
@@ -139,7 +148,7 @@ if (props.footer) {
   } finally {
     openGate();
     Reflect.deleteProperty(globalThis, "emailRenderGate");
-    builder?.kill();
+    await stopBuilder(builder);
     rmSync(workspace, { recursive: true, force: true });
   }
 });

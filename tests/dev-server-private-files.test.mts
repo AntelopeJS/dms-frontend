@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { createServer as createViteServer } from "vite";
+import { createServer as createViteServer, normalizePath } from "vite";
 import {
   DEV_FS_DENY,
   denyPrivateFiles,
@@ -85,7 +91,9 @@ const PRIVATE_PATHS = [
 ];
 
 void describe("private files the development server refuses", () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-dev-private-files-"));
+  const root = realpathSync.native(
+    mkdtempSync(join(tmpdir(), "dms-dev-private-files-")),
+  );
   const previousCwd = process.cwd();
   const previousDev = process.env.DMS_DEV;
   const previousBackend = process.env.DMS_API_BASE_URL;
@@ -129,7 +137,9 @@ void describe("private files the development server refuses", () => {
       ".manifest-cache.json",
       "frontend-modules/shop/layers/base/server/sign.ts",
     ]) {
-      const response = await fetch(`${base}/@fs${join(root, file)}?raw`);
+      const response = await fetch(
+        `${base}/@fs/${normalizePath(join(root, file)).replace(/^\//, "")}?raw`,
+      );
       const body = await response.text();
       assert.equal(response.status, 403, file);
       assert.doesNotMatch(body, new RegExp(SECRET));

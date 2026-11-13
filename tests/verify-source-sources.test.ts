@@ -37,7 +37,9 @@ interface JsonFile {
 
 /** A project directory holding `files`, by path relative to its root. */
 function project(files: Record<string, string | JsonFile>): string {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-sources-")));
+  const root = realpathSync(
+    realpathSync.native(mkdtempSync(join(tmpdir(), "dms-sources-"))),
+  );
   roots.push(root);
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -114,7 +116,7 @@ function registerCoreLayerTests(): void {
       layerSource: join(root, "dms/frontend-vue"),
       moduleSources: [join(root, "frontend-vue")],
     });
-    assert.match(coreLayer, /^the DMS core layer in .*dms\/frontend-vue$/);
+    assert.match(coreLayer, /^the DMS core layer in .*dms[\\/]frontend-vue$/);
     assert.deepEqual(
       layers.map((layer) => layer.path),
       [join(root, "dms/frontend-vue"), join(root, "frontend-vue")],

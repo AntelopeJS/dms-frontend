@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -58,7 +64,9 @@ function write(root: string, path: string, content: string): void {
  * package (as the UI libraries are), each another subset of its files.
  */
 function fixture(folder = "app"): string {
-  const parent = mkdtempSync(join(tmpdir(), "dms-client-chunking-"));
+  const parent = realpathSync.native(
+    mkdtempSync(join(tmpdir(), "dms-client-chunking-")),
+  );
   roots.push(parent);
   const root = join(parent, folder);
   write(

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,7 +16,9 @@ async function listen(server: Server): Promise<string> {
 }
 
 void describe("files the development server serves", () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-dev-server-files-"));
+  const root = realpathSync.native(
+    mkdtempSync(join(tmpdir(), "dms-dev-server-files-")),
+  );
   const previousCwd = process.cwd();
   const previousDev = process.env.DMS_DEV;
   const previousBackend = process.env.DMS_API_BASE_URL;
