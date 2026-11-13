@@ -6,8 +6,8 @@ import eslintGlobals from "../templates/eslint-globals.mjs";
 const REGENERATE =
   "run `pnpm eslint-globals` and commit templates/eslint-globals.mjs";
 
-describe("the published ESLint globals", () => {
-  it("declare every name the renderer auto-imports, and no other", async () => {
+void describe("the published ESLint globals", () => {
+  void it("declare every name the renderer auto-imports, and no other", async () => {
     const injected = await autoImportedGlobals();
     const missing = Object.keys(injected).filter(
       (name) => !Object.hasOwn(eslintGlobals, name),
