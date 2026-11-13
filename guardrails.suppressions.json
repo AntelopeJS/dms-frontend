@@ -3,7 +3,7 @@
     "anti-slop/no-unknown-parameters": 5,
     "anti-slop/no-unknown-returns": 1,
     "typescript/no-unsafe-assignment": 0,
-    "typescript/no-unsafe-return": 1
+    "typescript/no-unsafe-return": 0
   },
   "tsExpectError": 0,
   "tsIgnore": 0,

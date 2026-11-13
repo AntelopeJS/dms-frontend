@@ -77,3 +77,69 @@ void describe("Sealed cookies read through a guard", () => {
     }
   });
 });
+
+void describe("Sealed cookies bound to their name", () => {
+  void it("open only under the name they were written for", async () => {
+    process.env.DMS_SESSION_SECRET ??=
+      "a-test-only-session-secret-of-32-characters";
+    const { serveModuleRoutes } =
+      await import("../templates/vue/server/module-testing.mjs");
+    const { scopedCookieName, SESSION_COOKIE } =
+      await import("../templates/vue/server/auth/session.mjs");
+    const moduleAccount = { refreshToken: "module-held", persistent: true };
+    const served = await serveModuleRoutes([
+      {
+        id: "shop",
+        setup: defineDmsServer((server) => {
+          server.registerRoute("GET", "/api/_shop/write", (event) => {
+            event.cookies.writeSealed("flow", moduleAccount);
+            return null;
+          });
+          server.registerRoute("GET", "/api/_shop/session", (event) => ({
+            session: event.session.read() ?? null,
+          }));
+        }),
+      },
+      {
+        id: "bank",
+        setup: defineDmsServer((server) => {
+          server.registerRoute("GET", "/api/_bank/read", (event) => ({
+            value:
+              event.cookies.readSealed(
+                "flow",
+                (value): value is unknown => value !== undefined,
+              ) ?? null,
+          }));
+        }),
+      },
+    ]);
+    const body = async (path: string, cookie: string) =>
+      responseJson(
+        await fetch(`${served.url}${path}`, { headers: { cookie } }),
+      );
+    try {
+      const written = await fetch(`${served.url}/api/_shop/write`);
+      const sealed =
+        written.headers.getSetCookie()[0]?.split(";", 1)[0]?.split("=")[1] ??
+        "";
+      assert.notEqual(sealed, "");
+
+      assert.deepEqual(
+        await body(
+          "/api/_shop/session",
+          `${scopedCookieName(SESSION_COOKIE)}=${sealed}`,
+        ),
+        { session: null },
+      );
+      assert.deepEqual(
+        await body(
+          "/api/_bank/read",
+          `${scopedCookieName("bank.flow")}=${sealed}`,
+        ),
+        { value: null },
+      );
+    } finally {
+      await served.close();
+    }
+  });
+});

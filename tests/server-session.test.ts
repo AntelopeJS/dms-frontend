@@ -169,6 +169,23 @@ void describe("cookies of instances sharing a host", () => {
     assert.equal(read(...first)?.accountId, "account-1");
     assert.equal(read(...second)?.accountId, "account-2");
   });
+
+  void it("reads a sealed session only when it holds a session", () => {
+    const sealed = (accessToken: string | number) =>
+      asInstance(...first, () => {
+        const session = { persistent: true };
+        Reflect.set(session, "accessToken", accessToken);
+        const response = responseOf();
+        writeSession(response, session);
+        const cookie = String(response.getHeader("set-cookie")).split(";")[0];
+        return readSession(requestOf({ headers: { cookie } }));
+      });
+    assert.deepEqual(sealed("token"), {
+      accessToken: "token",
+      persistent: true,
+    });
+    assert.equal(sealed(7), undefined);
+  });
 });
 
 void describe("session establishment from a module endpoint", () => {
