@@ -35,7 +35,9 @@ interface Layout {
 
 /** A backend package with its frontend layer in `frontend-vue`, beside another package. */
 function layout(t: TestContext): Layout {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-boundary-")));
+  const root = realpathSync(
+    realpathSync.native(mkdtempSync(join(tmpdir(), "dms-boundary-"))),
+  );
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const backend = join(root, "backend");
   const layer = join(backend, "frontend-vue");
@@ -211,11 +213,11 @@ void describe("The backend boundary plugin", () => {
       },
     });
     await assert.rejects(built, (error: Error) => {
-      assert.match(
-        error.message,
-        new RegExp(
-          `Backend boundary: ${join(layer, "entry.ts")} imports ${join(dirname(layer), "src", "x.ts")}, which is under the src of ${BACKEND}\\.`,
+      assert.ok(
+        error.message.includes(
+          `Backend boundary: ${join(layer, "entry.ts")} imports ${join(dirname(layer), "src", "x.ts")}, which is under the src of ${BACKEND}.`,
         ),
+        error.message,
       );
       return true;
     });

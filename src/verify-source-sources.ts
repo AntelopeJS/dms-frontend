@@ -116,7 +116,9 @@ function isCoreLayer(layer: ResolvedLayer): boolean {
 
 /** A path as an argument to paste in a shell. */
 function shellArgument(path: string): string {
-  return /^[\w@%+=:,./~-]+$/.test(path) ? path : JSON.stringify(path);
+  const plain =
+    process.platform === "win32" ? /^[\w@%+=:,./\\~-]+$/ : /^[\w@%+=:,./~-]+$/;
+  return plain.test(path) ? path : JSON.stringify(path);
 }
 
 /**

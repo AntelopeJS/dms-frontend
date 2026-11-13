@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { after, before, describe, it } from "node:test";
 import {
   createPathMapper,
@@ -121,7 +121,9 @@ void describe("workspace paths in child output", () => {
   let layers: ResolvedLayer[];
 
   before(() => {
-    sources = mkdtempSync(join(tmpdir(), "dms-frontend-paths-"));
+    sources = realpathSync.native(
+      mkdtempSync(join(tmpdir(), "dms-frontend-paths-")),
+    );
     demoSource = join(sources, "frontend-vue");
     mkdirSync(demoSource);
     layers = [
@@ -144,7 +146,7 @@ void describe("workspace paths in child output", () => {
 
   const mapper = (platform: NodeJS.Platform = "linux") =>
     createPathMapper(WORKSPACE, layers, {
-      showSource: (path) => path.replace(`${sources}/`, ""),
+      showSource: (path) => path.replace(`${sources}${sep}`, ""),
       shownWorkspace: "~/.antelopejs/dms-frontend/f6af15c7…",
       platform,
     });

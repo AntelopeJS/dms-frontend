@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -85,7 +91,9 @@ const PRIVATE_PATHS = [
 ];
 
 void describe("private files the development server refuses", () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-dev-private-files-"));
+  const root = realpathSync.native(
+    mkdtempSync(join(tmpdir(), "dms-dev-private-files-")),
+  );
   const previousCwd = process.cwd();
   const previousDev = process.env.DMS_DEV;
   const previousBackend = process.env.DMS_API_BASE_URL;

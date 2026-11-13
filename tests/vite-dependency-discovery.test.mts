@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -66,7 +72,9 @@ function writeFixture(root: string, path: string, content: string): void {
 }
 
 void it("optimizes a module's CommonJS dependency discovered after startup", async () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-vite-dependency-"));
+  const root = realpathSync.native(
+    mkdtempSync(join(tmpdir(), "dms-vite-dependency-")),
+  );
   const moduleRoot = "frontend-modules/example";
   const dependencyRoot = `${moduleRoot}/node_modules/example-cjs`;
   writeFixture(root, "package.json", '{"type":"module"}');
@@ -164,7 +172,9 @@ void it("optimizes a module's CommonJS dependency discovered after startup", asy
 });
 
 void it("pre-bundles a module's dependency at startup without naming it", async () => {
-  const root = mkdtempSync(join(tmpdir(), "dms-vite-dependency-"));
+  const root = realpathSync.native(
+    mkdtempSync(join(tmpdir(), "dms-vite-dependency-")),
+  );
   const moduleRoot = "frontend-modules/example";
   const dependencyRoot = `${moduleRoot}/node_modules/example-sortable`;
   writeFixture(root, "package.json", '{"type":"module"}');

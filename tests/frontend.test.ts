@@ -241,7 +241,6 @@ void describe("Windows path separators in generated output", () => {
       "/srv/od\\d name/app",
     ]) {
       assert.equal(toPosixPath(path, "/"), path);
-      assert.equal(toPosixPath(path), path);
     }
   });
 

@@ -154,7 +154,7 @@ void describe("update check cache location", () => {
   void it("lives in the loader home, next to the workspaces", () => {
     const file = updateCheckCacheFile();
     assert.equal(file, join(DMS_FRONTEND_HOME, "update-check.json"));
-    assert.match(file, /\.antelopejs\/dms-frontend\/update-check\.json$/);
+    assert.match(file, /\.antelopejs[\\/]dms-frontend[\\/]update-check\.json$/);
   });
 });
 

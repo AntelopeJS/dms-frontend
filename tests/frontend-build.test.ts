@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
+import { normalizePath } from "vite";
 import {
   copyStaticTemplates,
   createFrontendModuleRegistry,
@@ -52,9 +54,12 @@ void describe("Module build declarations", () => {
       declaring("layers/*/app/composables", "app/utils"),
     ]);
     assert.deepEqual(dirs, [
-      { glob: `${root}/layers/*/app/composables/**/*`, types: true },
-      { glob: `${root}/app/utils/**/*`, types: true },
-      { glob: `!${root}/**/app/build/**`, types: true },
+      {
+        glob: `${normalizePath(root)}/layers/*/app/composables/**/*`,
+        types: true,
+      },
+      { glob: `${normalizePath(root)}/app/utils/**/*`, types: true },
+      { glob: `!${normalizePath(root)}/**/app/build/**`, types: true },
     ]);
     assert.deepEqual(warnings, []);
   });
@@ -71,7 +76,10 @@ void describe("Module build declarations", () => {
     ]);
     assert.deepEqual(
       dirs.map(({ glob }) => glob),
-      [`${root}/app/types/**/*`, `!${root}/**/app/build/**`],
+      [
+        `${normalizePath(root)}/app/types/**/*`,
+        `!${normalizePath(root)}/**/app/build/**`,
+      ],
     );
     assert.equal(warnings.length, rejected.length);
     rejected.forEach((directory, index) => {
@@ -98,7 +106,7 @@ void describe("Module build declarations", () => {
     const unimport = createRequire(
       require.resolve("unplugin-auto-import/package.json"),
     ).resolve("unimport");
-    const unimportModule: unknown = await import(unimport);
+    const unimportModule: unknown = await import(pathToFileURL(unimport).href);
     assert.ok(
       isObjectLike(unimportModule) &&
         "scanDirExports" in unimportModule &&
@@ -233,8 +241,8 @@ void describe("The generated build declarations loader", () => {
       const root = registry.modules[0].root;
       assert.ok("dirs" in loaded.config);
       assert.deepEqual(loaded.config.dirs, [
-        { glob: `${root}/app/composables/**/*`, types: true },
-        { glob: `!${root}/**/app/build/**`, types: true },
+        { glob: `${normalizePath(root)}/app/composables/**/*`, types: true },
+        { glob: `!${normalizePath(root)}/**/app/build/**`, types: true },
       ]);
       const { config } = loaded;
       assert.ok("warnings" in config && Array.isArray(config.warnings));

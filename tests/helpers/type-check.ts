@@ -3,7 +3,10 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const TESTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SNIPPET_FILE = join(TESTS_DIR, "type-check-snippet.ts");
+const SNIPPET_FILE = join(TESTS_DIR, "type-check-snippet.ts").replaceAll(
+  "\\",
+  "/",
+);
 
 const OPTIONS: ts.CompilerOptions = {
   strict: true,
@@ -72,7 +75,7 @@ export function typeErrors(source: string): string[] {
  * or a syntax error may list other errors than tsc prints, never none.
  */
 export function projectTypeErrors(configFile: string): string[] {
-  const project = dirname(configFile);
+  const project = dirname(configFile).replaceAll("\\", "/");
   const config = ts.getParsedCommandLineOfConfigFile(configFile, undefined, {
     ...ts.sys,
     onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
