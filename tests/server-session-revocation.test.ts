@@ -115,6 +115,32 @@ function sender(url: () => string) {
   };
 }
 
+type Send = ReturnType<typeof sender>;
+
+/** A renewal that answers after the sign-out sets a session the frontend trusts for 5 minutes at most. */
+function registerLateRenewalTest(send: Send): void {
+  void it("trusts a renewal that lands after the sign-out for five minutes at most", async (t) => {
+    const late = {
+      accessToken: "renewed-late",
+      refreshToken: "revoked",
+      persistent: false,
+    };
+    const trusted = await send(
+      "/api/_fixture/session",
+      aged(t, late, SESSION_RECONFIRM_AFTER_MS),
+    );
+    assert.deepEqual(await responseJson(trusted), { read: "revoked" });
+    assert.ok(!clears(trusted, sessionName()));
+
+    const reconfirmed = await send(
+      "/api/_fixture/session",
+      aged(t, late, STALE),
+    );
+    assert.equal(jsonAt(await responseJson(reconfirmed), "read"), null);
+    assert.ok(clears(reconfirmed, sessionName()));
+  });
+}
+
 void describe("Revoking a session on the production server", () => {
   const calls: BackendCall[] = [];
   let server: AuthServer | undefined;
@@ -135,26 +161,40 @@ void describe("Revoking a session on the production server", () => {
 
   const send = sender(() => server?.url ?? "");
 
-  void it("signs out on the backend a session whose renewal fails", async (t) => {
-    const cookie = aged(
-      t,
-      { accessToken: "stale", refreshToken: "unreachable", persistent: false },
-      STALE,
+  void it("signs out on the backend with a renewed token, or the sealed one when the renewal fails", async (t) => {
+    for (const [refreshToken, token] of [
+      ["unreachable", "Bearer stale"],
+      ["live", "Bearer renewed"],
+    ]) {
+      const session = { accessToken: "stale", refreshToken, persistent: false };
+      const cookie = aged(t, session, STALE);
+      calls.length = 0;
+      const signOut = await send("/api/_fixture/session", cookie, {
+        method: "DELETE",
+        headers: { origin: server?.url ?? "" },
+      });
+      assert.deepEqual(await responseJson(signOut), {
+        signedOut: refreshToken,
+      });
+      assert.deepEqual(calls, [
+        { path: "/api/auth/logout", authorization: token },
+      ]);
+      assert.ok(clears(signOut, sessionName()));
+      assert.ok(clears(signOut, sessions.scopedCookieName("dms_account")));
+    }
+    const read = await send(
+      "/api/_fixture/session",
+      aged(
+        t,
+        {
+          accessToken: "stale",
+          refreshToken: "unreachable",
+          persistent: false,
+        },
+        STALE,
+      ),
     );
-    const read = await send("/api/_fixture/session", cookie);
     assert.deepEqual(await responseJson(read), { read: null });
-
-    calls.length = 0;
-    const signOut = await send("/api/_fixture/session", cookie, {
-      method: "DELETE",
-      headers: { origin: server?.url ?? "" },
-    });
-    assert.deepEqual(await responseJson(signOut), { signedOut: "unreachable" });
-    assert.deepEqual(calls, [
-      { path: "/api/auth/logout", authorization: "Bearer stale" },
-    ]);
-    assert.ok(clears(signOut, sessionName()));
-    assert.ok(clears(signOut, sessions.scopedCookieName("dms_account")));
   });
 
   void it("signs out a revoked session before a page or a proxied call uses it", async (t) => {
@@ -217,24 +257,5 @@ void describe("Revoking a session on the production server", () => {
     assert.ok(clears(head, sessionName()));
   });
 
-  void it("trusts a renewal that lands after the sign-out for five minutes at most", async (t) => {
-    const late = {
-      accessToken: "renewed-late",
-      refreshToken: "revoked",
-      persistent: false,
-    };
-    const trusted = await send(
-      "/api/_fixture/session",
-      aged(t, late, SESSION_RECONFIRM_AFTER_MS),
-    );
-    assert.deepEqual(await responseJson(trusted), { read: "revoked" });
-    assert.ok(!clears(trusted, sessionName()));
-
-    const reconfirmed = await send(
-      "/api/_fixture/session",
-      aged(t, late, STALE),
-    );
-    assert.equal(jsonAt(await responseJson(reconfirmed), "read"), null);
-    assert.ok(clears(reconfirmed, sessionName()));
-  });
+  registerLateRenewalTest(send);
 });
