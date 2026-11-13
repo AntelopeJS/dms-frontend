@@ -51,7 +51,7 @@ export const modules = [
         publicSession: (/** @type {Session} */ session) => ({ user: { name: session.user.name }, session: { accountId: session.accountId } }),
       });
       server.registerRoute("POST", "/login-test", (/** @type {Event} */ event) => {
-        event.session.write({ accessToken: "stale", refreshToken: "r", user: { name: "Hooked" }, accountId: "acc-1", activeTenantId: "t1" });
+        event.session.write({ accessToken: "stale", refreshToken: "r", user: { name: "Hooked" }, accountId: "acc-1", activeTenantId: "t1", persistent: false });
         return { written: true };
       }, { sameOrigin: false });
       server.registerRoute("GET", "/api/_hook/view", (/** @type {Event} */ event) => event.session.view());
