@@ -171,6 +171,8 @@ void describe("Sealed cookies of modules with similar ids", () => {
     const served = await serveModuleRoutes([
       cartModule("acme.shop", "dotted"),
       cartModule("acme-shop", "dashed"),
+      cartModule("a b", "spaced"),
+      cartModule("a%20b", "encoded"),
     ]);
     const written = async (route: string) =>
       (await fetch(`${served.url}/api/_${route}/write`)).headers
@@ -192,6 +194,12 @@ void describe("Sealed cookies of modules with similar ids", () => {
       const dashed = await written("dashed");
       assert.equal(dashed.split("=", 1)[0], scopedCookieName("acme-shop.cart"));
       assert.deepEqual(await read("dotted", dashed), { value: null });
+
+      const spaced = await written("spaced");
+      assert.deepEqual(await read("spaced", spaced), {
+        value: { owner: "a b" },
+      });
+      assert.deepEqual(await read("encoded", spaced), { value: null });
     } finally {
       await served.close();
     }
