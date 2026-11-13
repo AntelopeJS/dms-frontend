@@ -39,8 +39,8 @@ function withWarnings<T>(run: () => T) {
   }
 }
 
-describe("backend proxy declarations of DMS_BACKEND_PROXIES", () => {
-  it("keep the entries that name a path, with the variable as their declarer", () => {
+void describe("backend proxy declarations of DMS_BACKEND_PROXIES", () => {
+  void it("keep the entries that name a path, with the variable as their declarer", () => {
     const { result, warnings } = withWarnings(() =>
       environmentBackendProxies(ENTRIES),
     );
@@ -57,7 +57,7 @@ describe("backend proxy declarations of DMS_BACKEND_PROXIES", () => {
     assert.match(warnings[0], /^Ignoring 10 entries of DMS_BACKEND_PROXIES/);
   });
 
-  it("reach the routing with the same proxies as before", () => {
+  void it("reach the routing with the same proxies as before", () => {
     const { result: manifest } = withWarnings(() =>
       environmentBackendProxies(ENTRIES),
     );
@@ -71,7 +71,7 @@ describe("backend proxy declarations of DMS_BACKEND_PROXIES", () => {
     );
   });
 
-  it("are ignored whole, with a reason, when they are not a JSON array", () => {
+  void it("are ignored whole, with a reason, when they are not a JSON array", () => {
     for (const declaration of ["{}", "abc", "5", "null"]) {
       const { result, warnings } = withWarnings(() =>
         environmentBackendProxies(declaration),
@@ -84,7 +84,7 @@ describe("backend proxy declarations of DMS_BACKEND_PROXIES", () => {
   });
 });
 
-describe("backend proxy declarations of the generated manifest file", () => {
+void describe("backend proxy declarations of the generated manifest file", () => {
   function declared(text: string) {
     const dir = mkdtempSync(join(tmpdir(), "dms-declared-proxies-"));
     try {
@@ -96,7 +96,7 @@ describe("backend proxy declarations of the generated manifest file", () => {
     }
   }
 
-  it("keep the entries that name a path and say which module declared them", () => {
+  void it("keep the entries that name a path and say which module declared them", () => {
     const { result, warnings } = declared(
       JSON.stringify({
         proxies: [
@@ -117,7 +117,7 @@ describe("backend proxy declarations of the generated manifest file", () => {
     assert.match(warnings[0], /^Ignoring 4 entries of the generated manifest/);
   });
 
-  it("declare no proxy when the file is missing, broken or holds no list", () => {
+  void it("declare no proxy when the file is missing, broken or holds no list", () => {
     for (const text of ["", "{", "[]", "{}", '{"proxies":"/x"}', "null"]) {
       const { result, warnings } = declared(text);
       assert.deepEqual(result, [], text);

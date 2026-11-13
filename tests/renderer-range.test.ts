@@ -67,12 +67,12 @@ function check(
   return warnings;
 }
 
-describe("renderer range", () => {
-  it("accepts a module whose range allows this release", () => {
+void describe("renderer range", () => {
+  void it("accepts a module whose range allows this release", () => {
     assert.deepEqual(check([declaring("supported", ">=0.3.2 <0.5.0")]), []);
   });
 
-  it("refuses a module whose range excludes this release, naming both", () => {
+  void it("refuses a module whose range excludes this release, naming both", () => {
     assert.throws(
       () => check([declaring("@acme/dms-billing", ">=0.2.8 <0.4.0")]),
       (err: Error) => {
@@ -90,7 +90,7 @@ describe("renderer range", () => {
     );
   });
 
-  it("names the modules before saying how to fix them", () => {
+  void it("names the modules before saying how to fix them", () => {
     const first = declaring("too-old", "<0.4.0");
     const second = declaring("too-new", ">=0.5.0");
     assert.throws(
@@ -112,7 +112,7 @@ describe("renderer range", () => {
     );
   });
 
-  it("names every module that does not support the release at once", () => {
+  void it("names every module that does not support the release at once", () => {
     assert.throws(
       () =>
         check([
@@ -131,7 +131,7 @@ describe("renderer range", () => {
     );
   });
 
-  it("refuses a range it cannot read rather than guessing", () => {
+  void it("refuses a range it cannot read rather than guessing", () => {
     for (const range of ["latest", 3, null]) {
       assert.throws(
         () => check([declaring(`unreadable-${String(range)}`, range)]),
@@ -142,13 +142,13 @@ describe("renderer range", () => {
     }
   });
 
-  it("loads a module that declares no range, naming it once", () => {
+  void it("loads a module that declares no range, naming it once", () => {
     const undeclared = layer("undeclared-module");
     assert.equal(check([undeclared]).length, 1);
     assert.deepEqual(check([undeclared]), []);
   });
 
-  it("names a module once per workspace, across runs", () => {
+  void it("names a module once per workspace, across runs", () => {
     const workspace = temporaryDir("dms-renderer-range-workspace-");
     const noticed = join(workspace, ".renderer-range-noticed");
     const earlier = layer("noticed-by-an-earlier-run");
@@ -163,7 +163,7 @@ describe("renderer range", () => {
     ]);
   });
 
-  it("tells apart two modules that share a package name", () => {
+  void it("tells apart two modules that share a package name", () => {
     const first = declaring("playground-frontend-vue", "<0.4.0");
     const second = declaring("playground-frontend-vue", "<0.4.0");
     assert.throws(
@@ -175,7 +175,7 @@ describe("renderer range", () => {
     );
   });
 
-  it("says where the missing range belongs", () => {
+  void it("says where the missing range belongs", () => {
     const undeclared = layer("undeclared-hint", { node: ">=20" });
     const [warning] = check([undeclared]);
     assert.equal(
@@ -188,7 +188,7 @@ describe("renderer range", () => {
     );
   });
 
-  it("names a module from its source, not from the archive it came in", () => {
+  void it("names a module from its source, not from the archive it came in", () => {
     const source = temporaryDir("dms-renderer-range-source-");
     const archived = {
       ...declaring("archived", "<0.4.0"),
@@ -202,7 +202,7 @@ describe("renderer range", () => {
     );
   });
 
-  it("checks a prerelease as the release it leads to", () => {
+  void it("checks a prerelease as the release it leads to", () => {
     assert.throws(
       () => check([declaring("before-0.4", "<0.4.0")], "0.4.0-next.1"),
       (err) =>
@@ -215,7 +215,7 @@ describe("renderer range", () => {
     );
   });
 
-  it("checks against this package's own name and version by default", () => {
+  void it("checks against this package's own name and version by default", () => {
     const layers = [declaring("excluding-all", EXCLUDING_EVERY_RELEASE)];
     assert.throws(
       () => assertLayersSupportRenderer(layers),
@@ -345,8 +345,8 @@ async function runTypeScript(
   }
 }
 
-describe("commands refusing a module that does not support this release", () => {
-  it("stops dev before the workspace is built, from a cached manifest too", async () => {
+void describe("commands refusing a module that does not support this release", () => {
+  void it("stops dev before the workspace is built, from a cached manifest too", async () => {
     const layerPath = layerWith("excluding-module", {
       [RENDERER]: EXCLUDING_EVERY_RELEASE,
     });
@@ -375,7 +375,7 @@ describe("commands refusing a module that does not support this release", () => 
     }
   });
 
-  it("stops verify-source before installing anything", async () => {
+  void it("stops verify-source before installing anything", async () => {
     const layerPath = layerWith("excluding-source", {
       [RENDERER]: EXCLUDING_EVERY_RELEASE,
     });

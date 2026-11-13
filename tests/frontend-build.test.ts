@@ -40,14 +40,14 @@ function scanned(root: string, declarations: ReturnType<typeof declaring>[]) {
   return { dirs, warnings };
 }
 
-describe("Module build declarations", () => {
+void describe("Module build declarations", () => {
   const root = temporaryDirectory("dms-build-module-");
 
-  it("auto-import nothing for a module that declares nothing", () => {
+  void it("auto-import nothing for a module that declares nothing", () => {
     assert.deepEqual(scanned(root, []), { dirs: [], warnings: [] });
   });
 
-  it("scan the declared directories, never a module's app/build", () => {
+  void it("scan the declared directories, never a module's app/build", () => {
     const { dirs, warnings } = scanned(root, [
       declaring("layers/*/app/composables", "app/utils"),
     ]);
@@ -59,7 +59,7 @@ describe("Module build declarations", () => {
     assert.deepEqual(warnings, []);
   });
 
-  it("ignore a declaration of app/build or outside the module, with a warning", () => {
+  void it("ignore a declaration of app/build or outside the module, with a warning", () => {
     const rejected = [
       "layers/*/app/build/composables",
       "./app/build",
@@ -82,7 +82,7 @@ describe("Module build declarations", () => {
     assert.match(warnings[2], /not inside the module/);
   });
 
-  it("leave app/build out of what a broader declaration covers", async () => {
+  void it("leave app/build out of what a broader declaration covers", async () => {
     const module = temporaryDirectory("dms-build-scan-");
     writeFixture(
       module,
@@ -114,7 +114,7 @@ describe("Module build declarations", () => {
   });
 });
 
-describe("The generated build declarations loader", () => {
+void describe("The generated build declarations loader", () => {
   function sources() {
     const billing = temporaryDirectory("dms-build-billing-");
     const crm = temporaryDirectory("dms-build-crm-");
@@ -146,7 +146,7 @@ describe("The generated build declarations loader", () => {
     ];
   }
 
-  it("lists the modules that have a declaration, under their manifest names", () => {
+  void it("lists the modules that have a declaration, under their manifest names", () => {
     const workspace = temporaryDirectory("dms-build-workspace-");
     const layers = sources();
     const registry = createFrontendModuleRegistry(workspace, layers);
@@ -179,7 +179,7 @@ describe("The generated build declarations loader", () => {
     );
   });
 
-  it("hands each module's manifest name to the application's module loader", () => {
+  void it("hands each module's manifest name to the application's module loader", () => {
     const workspace = temporaryDirectory("dms-build-workspace-");
     const layers = sources();
     writeFixture(layers[0].path, "dms.frontend.ts", "export default {};");
@@ -191,7 +191,7 @@ describe("The generated build declarations loader", () => {
     );
   });
 
-  it("is what Vite's config loads, resolving the public import, as a config dependency", async () => {
+  void it("is what Vite's config loads, resolving the public import, as a config dependency", async () => {
     const workspace = mkdtempSync(resolve(".frontend-build-"));
     try {
       copyStaticTemplates(workspace);
@@ -244,8 +244,8 @@ describe("The generated build declarations loader", () => {
   });
 });
 
-describe("A module's build declaration in the workspace", () => {
-  it("imports the helper by path, whatever the quotes", () => {
+void describe("A module's build declaration in the workspace", () => {
+  void it("imports the helper by path, whatever the quotes", () => {
     assert.equal(
       sanitizedBuildDeclaration(
         'import { a } from \'#dms/frontend-build\';\nimport { b } from "#dms/frontend-build";\nimport c from "#dms/frontend-module";\n',

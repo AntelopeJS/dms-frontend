@@ -173,14 +173,14 @@ async function entryClosure(
   };
 }
 
-describe("client code splitting", () => {
-  it("keeps the entry's static imports in one chunk next to the entry and Rolldown's runtime", async () => {
+void describe("client code splitting", () => {
+  void it("keeps the entry's static imports in one chunk next to the entry and Rolldown's runtime", async () => {
     const { closure, files } = await entryClosure(fixture());
     assert.equal(closure.length, 3, closure.join(", "));
     assert.ok(files.length > closure.length, "components are separate chunks");
   });
 
-  it("names no file with a leading dot when the build runs in a dot folder", async () => {
+  void it("names no file with a leading dot when the build runs in a dot folder", async () => {
     const { emitted } = await entryClosure(fixture(".dms-frontend"));
     assert.ok(
       emitted.some((file) => /^index-.+\.css$/.test(file)),
@@ -193,7 +193,7 @@ describe("client code splitting", () => {
   });
 });
 
-describe("onBuildLog", () => {
+void describe("onBuildLog", () => {
   const log = (ids: string[]) => ({ code: "INEFFECTIVE_DYNAMIC_IMPORT", ids });
 
   function run(entry: { code: string; ids?: string[] }): boolean {
@@ -204,7 +204,7 @@ describe("onBuildLog", () => {
     return forwarded;
   }
 
-  it("drops the notice for a module's catch-all glob", () => {
+  void it("drops the notice for a module's catch-all glob", () => {
     assert.equal(
       run(
         log([
@@ -216,14 +216,14 @@ describe("onBuildLog", () => {
     );
   });
 
-  it("keeps it for a dynamic import written anywhere else", () => {
+  void it("keeps it for a dynamic import written anywhere else", () => {
     assert.equal(
       run(log(["/ws/frontend-modules/acme__shop/app/pages/Cart.vue"])),
       true,
     );
   });
 
-  it("keeps every other notice", () => {
+  void it("keeps every other notice", () => {
     assert.equal(run({ code: "CIRCULAR_DEPENDENCY" }), true);
   });
 });

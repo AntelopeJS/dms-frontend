@@ -14,8 +14,8 @@ function writeFixture(root: string, path: string, content: string): void {
   writeFileSync(destination, content);
 }
 
-describe("development stylesheets in the served document", () => {
-  it("links every stylesheet the server-side render reached", async () => {
+void describe("development stylesheets in the served document", () => {
+  void it("links every stylesheet the server-side render reached", async () => {
     const root = mkdtempSync(join(tmpdir(), "dms-dev-styles-"));
     writeFixture(root, "package.json", '{"type":"module"}');
     writeFixture(root, "module.css", ".dms-example { color: rebeccapurple; }");
@@ -50,7 +50,7 @@ describe("development stylesheets in the served document", () => {
     }
   });
 
-  it("inlines a component's own styles, which are not served as CSS", async () => {
+  void it("inlines a component's own styles, which are not served as CSS", async () => {
     const styleUrl = "/Widget.vue?vue&type=style&index=0&scoped=abc&lang.css";
     const devServer = {
       environments: {
@@ -83,7 +83,7 @@ describe("development stylesheets in the served document", () => {
     assert.doesNotMatch(tags, /ignored\.ts/);
   });
 
-  it("serves a component's style block compiled, with its package imports resolved", async () => {
+  void it("serves a component's style block compiled, with its package imports resolved", async () => {
     const root = mkdtempSync(
       join(process.cwd(), "node_modules", ".dms-dev-styles-"),
     );
@@ -143,7 +143,7 @@ describe("development stylesheets in the served document", () => {
     }
   });
 
-  it("drops a style block that could close its own tag", async () => {
+  void it("drops a style block that could close its own tag", async () => {
     const devServer = {
       environments: {
         ssr: {
@@ -166,7 +166,7 @@ describe("development stylesheets in the served document", () => {
   });
 });
 
-describe("first paint in the built document", () => {
+void describe("first paint in the built document", () => {
   const built = [
     "<head>",
     "    <title>Antelope DMS</title>",
@@ -175,7 +175,7 @@ describe("first paint in the built document", () => {
     "  </head>",
   ].join("\n");
 
-  it("puts the stylesheet ahead of the entry script and restores its priority", () => {
+  void it("puts the stylesheet ahead of the entry script and restores its priority", () => {
     const ordered = orderHeadForFirstPaint(built);
     assert.match(ordered, /<script[^>]*fetchpriority="low"/);
     assert.ok(
@@ -187,7 +187,7 @@ describe("first paint in the built document", () => {
     assert.equal(ordered.match(/rel="stylesheet"/g)?.length, 1);
   });
 
-  it("leaves an already ordered document alone", () => {
+  void it("leaves an already ordered document alone", () => {
     const once = orderHeadForFirstPaint(built);
     assert.equal(orderHeadForFirstPaint(once), once);
   });

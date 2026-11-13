@@ -76,8 +76,8 @@ function workspaceOverrides(
   return jsonAt(readJson(join(workspace, "package.json")), "pnpm", "overrides");
 }
 
-describe("the workspace verify-source installs", () => {
-  it("carries the overrides the layer's lockfile records, resolving file: and link: paths from it", () => {
+void describe("the workspace verify-source installs", () => {
+  void it("carries the overrides the layer's lockfile records, resolving file: and link: paths from it", () => {
     const module = layer("demo-frontend-vue", {
       [`${MODULE}/pnpm-lock.yaml`]: lockfile(
         "'@antelopejs/interface-database': file:../.tgz-deps/antelopejs-interface-database-abc1234.tgz",
@@ -96,7 +96,7 @@ describe("the workspace verify-source installs", () => {
     });
   });
 
-  it("reads the lockfile of the workspace the layer belongs to, not the layer's own overrides or stale lockfile", () => {
+  void it("reads the lockfile of the workspace the layer belongs to, not the layer's own overrides or stale lockfile", () => {
     const module = layer("demo-frontend-vue", {
       [`${PROJECT}/pnpm-workspace.yaml`]: "packages:\n  - frontend-vue\n",
       [`${PROJECT}/pnpm-lock.yaml`]: lockfile(
@@ -116,7 +116,7 @@ describe("the workspace verify-source installs", () => {
     });
   });
 
-  it("reads the layer's own lockfile in a workspace that gives each project one", () => {
+  void it("reads the layer's own lockfile in a workspace that gives each project one", () => {
     const module = layer("demo-frontend-vue", {
       [`${PROJECT}/pnpm-workspace.yaml`]: "packages:\n  - frontend-vue\n",
       [`${PROJECT}/.npmrc`]: "shared-workspace-lockfile=false\n",
@@ -131,7 +131,7 @@ describe("the workspace verify-source installs", () => {
     });
   });
 
-  it("carries no overrides for a layer whose workspace has no lockfile", () => {
+  void it("carries no overrides for a layer whose workspace has no lockfile", () => {
     const module = layer("demo-frontend-vue", {
       [`${PROJECT}/pnpm-workspace.yaml`]: "packages:\n  - frontend-vue\n",
       "pnpm-lock.yaml": lockfile("is-number: 6.0.0"),
@@ -141,7 +141,7 @@ describe("the workspace verify-source installs", () => {
     });
   });
 
-  it("reads every document of a lockfile pnpm splits in two", () => {
+  void it("reads every document of a lockfile pnpm splits in two", () => {
     const module = layer("demo-frontend-vue", {
       [`${MODULE}/pnpm-lock.yaml`]: [
         "lockfileVersion: '9.0'",
@@ -160,7 +160,7 @@ describe("the workspace verify-source installs", () => {
     });
   });
 
-  it("stops on a lockfile that does not parse, naming it", () => {
+  void it("stops on a lockfile that does not parse, naming it", () => {
     const module = layer("demo-frontend-vue", {
       [`${MODULE}/pnpm-lock.yaml`]: [
         "<<<<<<< HEAD",
@@ -180,7 +180,7 @@ describe("the workspace verify-source installs", () => {
     );
   });
 
-  it("keeps the layers and --local-package links over the overrides a layer was installed with", () => {
+  void it("keeps the layers and --local-package links over the overrides a layer was installed with", () => {
     const local = directory("dms-local-");
     const module = layer("demo-frontend-vue", {
       [`${MODULE}/pnpm-lock.yaml`]: lockfile(

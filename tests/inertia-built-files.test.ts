@@ -17,8 +17,8 @@ import {
   frontendWithBackend,
 } from "./fixtures/inertia";
 
-describe("Inertia HTTP protocol", () => {
-  it("serves a built asset without asking the backend first", async () => {
+void describe("Inertia HTTP protocol", () => {
+  void it("serves a built asset without asking the backend first", async () => {
     const backendPaths: string[] = [];
     const backend = createServer((request, response) => {
       backendPaths.push(request.url ?? "");
@@ -92,7 +92,7 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
-  it("puts a favicon placeholder in a page whose render declares no icon", async () => {
+  void it("puts a favicon placeholder in a page whose render declares no icon", async () => {
     await writeSsrRendererFixture();
     const runtime = await server;
     try {
@@ -123,7 +123,7 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
-  it("renders sanitized backend failures through Inertia for HTML and X-Inertia visits", async () => {
+  void it("renders sanitized backend failures through Inertia for HTML and X-Inertia visits", async () => {
     await writeSsrRendererFixture();
     const backend = createServer((_request, response) => {
       response.writeHead(503, { "content-type": "application/json" });
@@ -185,7 +185,7 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
-  it("redirects a typed access refusal to the page a frontend module registered", async () => {
+  void it("redirects a typed access refusal to the page a frontend module registered", async () => {
     process.env.DMS_SESSION_SECRET =
       "test-secret-with-at-least-thirty-two-characters";
     await writeSsrRendererFixture();
@@ -264,8 +264,8 @@ describe("Inertia HTTP protocol", () => {
   });
 });
 
-describe("Site layout as an Inertia once prop", () => {
-  it("keeps the layout over a frontend-only page only when the browser holds it", async () => {
+void describe("Site layout as an Inertia once prop", () => {
+  void it("keeps the layout over a frontend-only page only when the browser holds it", async () => {
     await writeSsrRendererFixture();
     const { sharedOnceKey } = await pagePropsModule;
     const { visit, close } = await frontendWithBackend();

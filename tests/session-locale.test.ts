@@ -229,7 +229,7 @@ function localeOf(app: App<Node>): string {
   return i18n.locale.value;
 }
 
-it("takes the interface language from the session, not from a restored page", async () => {
+void it("takes the interface language from the session, not from a restored page", async () => {
   await withRuntime(async (fixture) => {
     const props = ref(page("fr", 2));
     const app = await configuredApp(fixture, props);
@@ -255,7 +255,7 @@ it("takes the interface language from the session, not from a restored page", as
   });
 });
 
-it("renders an anonymous visit in the language its browser picked", async () => {
+void it("renders an anonymous visit in the language its browser picked", async () => {
   await withRuntime(async (fixture) => {
     const picked = await configuredApp(
       fixture,
@@ -277,7 +277,7 @@ it("renders an anonymous visit in the language its browser picked", async () => 
   });
 });
 
-it("keeps a signed-in user's language over the one the browser picked", async () => {
+void it("keeps a signed-in user's language over the one the browser picked", async () => {
   await withRuntime(async (fixture) => {
     const app = await configuredApp(
       fixture,
@@ -289,7 +289,7 @@ it("keeps a signed-in user's language over the one the browser picked", async ()
   });
 });
 
-it("remembers the language a visitor picks, for the next page load", async () => {
+void it("remembers the language a visitor picks, for the next page load", async () => {
   await withRuntime(async (fixture) => {
     const app = await configuredApp(fixture, ref(anonymousPage()));
     const written: string[] = [];

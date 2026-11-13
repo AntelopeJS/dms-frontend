@@ -30,8 +30,8 @@ function translator() {
   };
 }
 
-describe("the messages a render reads", () => {
-  it("keeps the messages read, with their siblings left out", () => {
+void describe("the messages a render reads", () => {
+  void it("keeps the messages read, with their siblings left out", () => {
     const { recorder, t } = translator();
     assert.equal(t("page.auth.title"), "Sign in");
     assert.deepEqual(recorder.subset(), {
@@ -39,7 +39,7 @@ describe("the messages a render reads", () => {
     });
   });
 
-  it("merges the messages read through the same branch, however many reads", () => {
+  void it("merges the messages read through the same branch, however many reads", () => {
     const { recorder, t } = translator();
     assert.equal(t("page.auth.title"), "Sign in");
     assert.equal(t("page.orders.title"), "Orders");
@@ -52,14 +52,14 @@ describe("the messages a render reads", () => {
     });
   });
 
-  it("records an existence check, and nothing for a key the catalog lacks", () => {
+  void it("records an existence check, and nothing for a key the catalog lacks", () => {
     const { recorder, te } = translator();
     assert.equal(te("saas.plans.pro"), true);
     assert.equal(te("saas.plans.team"), false);
     assert.deepEqual(recorder.subset(), { saas: { plans: { pro: "Pro" } } });
   });
 
-  it("serves the recorded messages back to a client that reads only them", () => {
+  void it("serves the recorded messages back to a client that reads only them", () => {
     const { recorder, t } = translator();
     t("list[1]");
     t("page.auth.title");

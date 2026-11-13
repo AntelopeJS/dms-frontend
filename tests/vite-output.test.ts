@@ -23,8 +23,8 @@ const SYNTAX_ERROR = [
   "    at TypeScriptParserMixin.raise (/ws/node_modules/@babel/parser/lib/index.js:6622:19)",
 ];
 
-describe("Vite build failures", () => {
-  it("names the source file and keeps the code frame, not the stack", () => {
+void describe("Vite build failures", () => {
+  void it("names the source file and keeps the code frame, not the stack", () => {
     const problem = describeViteFailure(SYNTAX_ERROR, "client bundle", false);
     assert.deepEqual(problem, {
       title:
@@ -41,12 +41,12 @@ describe("Vite build failures", () => {
     });
   });
 
-  it("does not point at --verbose in a verbose run", () => {
+  void it("does not point at --verbose in a verbose run", () => {
     const problem = describeViteFailure(SYNTAX_ERROR, "client bundle", true);
     assert.ok(!problem?.details?.includes(VERBOSE_VITE_HINT));
   });
 
-  it("names the step when Vite reports no file", () => {
+  void it("names the step when Vite reports no file", () => {
     const problem = describeViteFailure(
       [
         "error during build:",
@@ -68,7 +68,7 @@ describe("Vite build failures", () => {
     ]);
   });
 
-  it("leaves a failure Vite did not report to the generic report", () => {
+  void it("leaves a failure Vite did not report to the generic report", () => {
     assert.equal(
       describeViteFailure(
         ["Error: ENOENT: no such file or directory, scandir 'dist/client'"],
@@ -80,8 +80,8 @@ describe("Vite build failures", () => {
   });
 });
 
-describe("Vite build warnings", () => {
-  it("counts warnings, not the lines they span", () => {
+void describe("Vite build warnings", () => {
+  void it("counts warnings, not the lines they span", () => {
     const warnings = new ViteWarnings();
     for (const line of [
       "",
@@ -100,14 +100,14 @@ describe("Vite build warnings", () => {
     assert.equal(warnings.lines()[2], "[plugin vite:reporter]");
   });
 
-  it("counts output without a known warning opening as one warning", () => {
+  void it("counts output without a known warning opening as one warning", () => {
     const warnings = new ViteWarnings();
     warnings.read('Generated an empty chunk: "vendor".');
     assert.equal(warnings.count, 1);
     assert.equal(new ViteWarnings().count, 0);
   });
 
-  it("runs Vite at warn, or at info in a verbose run", () => {
+  void it("runs Vite at warn, or at info in a verbose run", () => {
     assert.equal(viteLogLevel(false), "warn");
     assert.equal(viteLogLevel(true), "info");
   });

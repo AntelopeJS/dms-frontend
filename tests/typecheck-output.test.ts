@@ -46,8 +46,8 @@ const THREE_ERRORS = [
   "     2  ./frontend-vue/app/pages/index.vue:3",
 ];
 
-describe("vue-tsc output", () => {
-  it("reads each error with its message chain and code frame", () => {
+void describe("vue-tsc output", () => {
+  void it("reads each error with its message chain and code frame", () => {
     const { errors, count } = parseTypeCheckOutput(THREE_ERRORS);
     assert.equal(count, 3);
     assert.deepEqual(errors[1], {
@@ -63,7 +63,7 @@ describe("vue-tsc output", () => {
     assert.deepEqual(errors[2].frame, ["9 missing()", "  ~~~~~~~"]);
   });
 
-  it("reports a single error as the problem itself", () => {
+  void it("reports a single error as the problem itself", () => {
     const problem = describeTypeCheckErrors(
       parseTypeCheckOutput(ONE_ERROR),
       RERUN,
@@ -79,7 +79,7 @@ describe("vue-tsc output", () => {
     });
   });
 
-  it("lists several errors under their count", () => {
+  void it("lists several errors under their count", () => {
     const problem = describeTypeCheckErrors(
       parseTypeCheckOutput(THREE_ERRORS),
       RERUN,
@@ -97,7 +97,7 @@ describe("vue-tsc output", () => {
     assert.ok(!problem?.details?.includes(VERBOSE_OUTPUT_HINT));
   });
 
-  it("counts the errors it does not spell out", () => {
+  void it("counts the errors it does not spell out", () => {
     const lines = Array.from({ length: 7 }, (_, index) => [
       `./frontend-vue/app/a.ts:${index + 1}:1 - error TS2304: Cannot find name 'x${index}'.`,
       "",
@@ -113,7 +113,7 @@ describe("vue-tsc output", () => {
     ]);
   });
 
-  it("finds nothing in output without type errors", () => {
+  void it("finds nothing in output without type errors", () => {
     const report = parseTypeCheckOutput([
       "node:internal/modules/cjs/loader:1228",
       "Error: Cannot find module 'vue-tsc'",

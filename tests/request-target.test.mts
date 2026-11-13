@@ -77,13 +77,13 @@ function rawRequest(port: number, method: string, target: string) {
   });
 }
 
-describe("request targets", () => {
-  it("accepts a path, with or without a query", () => {
+void describe("request targets", () => {
+  void it("accepts a path, with or without a query", () => {
     for (const target of ["/", "/api/items?page=2", "/a\\b", "/%2f%2fhost"])
       assert.equal(isOriginForm(target), true, target);
   });
 
-  it("refuses a target naming another host", () => {
+  void it("refuses a target naming another host", () => {
     for (const target of [
       "//169.254.169.254/latest/meta-data",
       "http://169.254.169.254/latest/meta-data",
@@ -97,7 +97,7 @@ describe("request targets", () => {
       assert.equal(isOriginForm(target), false, target);
   });
 
-  it("keeps the backend's origin whatever the path normalizes to", () => {
+  void it("keeps the backend's origin whatever the path normalizes to", () => {
     assert.equal(
       backendUrl("/api/items?page=2", `${BACKEND}/ignored`).href,
       `${BACKEND}/api/items?page=2`,
@@ -111,7 +111,7 @@ describe("request targets", () => {
   });
 });
 
-describe("the proxy with a target naming another host", () => {
+void describe("the proxy with a target naming another host", () => {
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backendUrls: string[] = [];
   const attackerUrls: string[] = [];
@@ -144,7 +144,7 @@ describe("the proxy with a target naming another host", () => {
     attacker.close();
   });
 
-  it("answers 400 and never reaches the other host", async () => {
+  void it("answers 400 and never reaches the other host", async () => {
     for (const [method, target] of [
       ["GET", `//${attackerHost}/latest/meta-data`],
       ["GET", `http://${attackerHost}/latest/meta-data`],
@@ -160,7 +160,7 @@ describe("the proxy with a target naming another host", () => {
     assert.deepEqual(backendUrls, []);
   });
 
-  it("proxies an encoded double slash to the backend as a path", async () => {
+  void it("proxies an encoded double slash to the backend as a path", async () => {
     const response = await rawRequest(
       frontendPort,
       "GET",
@@ -171,7 +171,7 @@ describe("the proxy with a target naming another host", () => {
     assert.deepEqual(backendUrls, [`/api/%2f%2f${attackerHost}/x`]);
   });
 
-  it("never proxies a path normalizing out of the backend's prefixes", async () => {
+  void it("never proxies a path normalizing out of the backend's prefixes", async () => {
     await rawRequest(
       frontendPort,
       "GET",

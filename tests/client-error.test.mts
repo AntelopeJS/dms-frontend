@@ -51,8 +51,8 @@ function exchange(port: number, request: string): Promise<string> {
   });
 }
 
-describe("requests Node rejects before the frontend handler", () => {
-  it(
+void describe("requests Node rejects before the frontend handler", () => {
+  void it(
     "answers oversized headers with 431 and explains it once",
     { timeout: 15_000 },
     async (context) => {
@@ -73,7 +73,7 @@ describe("requests Node rejects before the frontend handler", () => {
     },
   );
 
-  it(
+  void it(
     "answers any other malformed request with 400",
     { timeout: 15_000 },
     async (context) => {

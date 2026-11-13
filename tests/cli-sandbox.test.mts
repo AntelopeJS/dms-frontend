@@ -13,34 +13,34 @@ import {
   HELP_WIDTH,
 } from "./fixtures/cli-sandbox.mts";
 
-describe("running outside a DMS project", () => {
-  it("prints help without a project", async () => {
+void describe("running outside a DMS project", () => {
+  void it("prints help without a project", async () => {
     const result = await runCli(["--help"]);
     assert.equal(result.code, 0);
     assert.match(result.stdout, /Usage: ajs dms/);
     assert.match(result.stdout, /--no-update-check/);
   });
 
-  it("reports the version without a project", async () => {
+  void it("reports the version without a project", async () => {
     const result = await runCli(["--version"]);
     assert.equal(result.code, 0);
     assert.equal(result.stdout.trim(), OWN_PACKAGE.version);
   });
 
-  it("cleans an empty home without a project", async () => {
+  void it("cleans an empty home without a project", async () => {
     const result = await runCli(["clean", "--all"]);
     assert.equal(result.code, 0);
     assert.equal(result.stdout, "");
     assert.match(result.stderr, /No workspaces found/);
   });
 
-  it("accepts the update-check opt-out anywhere on the command line", async () => {
+  void it("accepts the update-check opt-out anywhere on the command line", async () => {
     const result = await runCli(["clean", "--all", "--no-update-check"]);
     assert.equal(result.code, 0);
     assert.match(result.stderr, /No workspaces found/);
   });
 
-  it("names what is missing for a project-bound command", async () => {
+  void it("names what is missing for a project-bound command", async () => {
     const build = await runCli(["build"]);
     assert.equal(build.code, 1);
     assert.equal(build.stdout, "");
@@ -63,7 +63,7 @@ describe("running outside a DMS project", () => {
     assert.match(dev.stderr, /→ Or pass the backend explicitly with -b <url>/);
   });
 
-  it("writes feedback to stderr and leaves stdout empty", async () => {
+  void it("writes feedback to stderr and leaves stdout empty", async () => {
     const noUrl = await runCli(["prepare"]);
     assert.equal(noUrl.code, 0);
     assert.equal(noUrl.stdout, "");
@@ -79,7 +79,7 @@ describe("running outside a DMS project", () => {
     assert.match(unreachable.stderr, /▲ Skipped prepare:/);
   });
 
-  it("requires a session secret to start, and none to build", async () => {
+  void it("requires a session secret to start, and none to build", async () => {
     const noSecret = { env: { DMS_SESSION_SECRET: undefined } };
     const build = await runCli(["build"], noSecret);
     assert.notEqual(build.code, 2);
@@ -111,8 +111,8 @@ describe("running outside a DMS project", () => {
   });
 });
 
-describe("following the ajs output contract", () => {
-  it("prints the help on stdout and exits 0 when given no command", async () => {
+void describe("following the ajs output contract", () => {
+  void it("prints the help on stdout and exits 0 when given no command", async () => {
     for (const args of [[], ["--no-color"], ["--no-update-check"]]) {
       const result = await runCli(args);
       assert.equal(result.code, 0, args.join(" "));
@@ -126,7 +126,7 @@ describe("following the ajs output contract", () => {
     }
   });
 
-  it("reports usage errors with the core template and exit code 2", async () => {
+  void it("reports usage errors with the core template and exit code 2", async () => {
     const option = await runCli(["build", "--minify"]);
     assert.equal(option.code, 2);
     assert.equal(option.stdout, "");
@@ -157,7 +157,7 @@ describe("following the ajs output contract", () => {
     assert.match(nothing.stderr, /^✖ No frontend module to verify\n/);
   });
 
-  it("reports every problem with verify-source's options at once", async () => {
+  void it("reports every problem with verify-source's options at once", async () => {
     const result = await runCli([
       "verify-source",
       "-l",
@@ -180,7 +180,7 @@ describe("following the ajs output contract", () => {
     assert.match(missing.stderr, /^✖ Invalid local package 'foo'\n/);
   });
 
-  it("exits quietly when the reader of its output goes away", async () => {
+  void it("exits quietly when the reader of its output goes away", async () => {
     const cli = spawn(process.execPath, [...cliCommand, "help", "dev"], {
       cwd: temporaryDirectory("dms-cli-"),
       stdio: ["ignore", "pipe", "pipe"],
@@ -194,7 +194,7 @@ describe("following the ajs output contract", () => {
     assert.equal(stderr, "");
   });
 
-  it("accepts the global options of ajs after a command", async () => {
+  void it("accepts the global options of ajs after a command", async () => {
     for (const flag of ["--no-color", "--verbose"]) {
       const result = await runCli(["clean", "--all", flag]);
       assert.equal(result.code, 0, flag);
@@ -202,7 +202,7 @@ describe("following the ajs output contract", () => {
     }
   });
 
-  it("colors feedback only when allowed, and --no-color and NO_COLOR win", async () => {
+  void it("colors feedback only when allowed, and --no-color and NO_COLOR win", async () => {
     const forced = await runCli(["clean"], { env: { FORCE_COLOR: "1" } });
     assert.ok(
       forced.stderr.startsWith(`${ESC}[31m✖${ESC}[39m Nothing to clean`),
@@ -220,7 +220,7 @@ describe("following the ajs output contract", () => {
     }
   });
 
-  it("falls back to ASCII symbols on a dumb terminal", async () => {
+  void it("falls back to ASCII symbols on a dumb terminal", async () => {
     const result = await runCli(["clean"], { env: { TERM: "dumb" } });
     assert.equal(result.code, 2);
     assert.match(result.stderr, /^x Nothing to clean/);
@@ -235,7 +235,7 @@ describe("following the ajs output contract", () => {
     assert.doesNotMatch(build.stderr, /[^\n -~]/);
   });
 
-  it("shows the cause's stack trace only in a verbose run", async () => {
+  void it("shows the cause's stack trace only in a verbose run", async () => {
     const quiet = await runCli(["build"], {
       env: { DMS_SESSION_SECRET: SESSION_SECRET },
     });
@@ -260,8 +260,8 @@ describe("following the ajs output contract", () => {
   });
 });
 
-describe("documenting the commands", () => {
-  it("lists one-line summaries, examples and the environment topic", async () => {
+void describe("documenting the commands", () => {
+  void it("lists one-line summaries, examples and the environment topic", async () => {
     const result = await runCli(["--help"]);
     assert.equal(result.code, 0);
     assert.match(
@@ -274,7 +274,7 @@ describe("documenting the commands", () => {
     assert.match(result.stdout, /ajs dms help environment for the variables/);
   });
 
-  it("gives every command examples, within 80 columns", async () => {
+  void it("gives every command examples, within 80 columns", async () => {
     for (const command of ["", ...COMMANDS]) {
       const result = await runCli(command ? [command, "--help"] : ["--help"]);
       assert.equal(result.code, 0, command);
@@ -294,7 +294,7 @@ describe("documenting the commands", () => {
     }
   });
 
-  it("describes -b as each command uses it", async () => {
+  void it("describes -b as each command uses it", async () => {
     const help = async (command: string) =>
       (await runCli([command, "--help"])).stdout.replace(/\s+/g, " ");
     assert.match(
@@ -317,7 +317,7 @@ describe("documenting the commands", () => {
     );
   });
 
-  it("prints the environment topic on stdout", async () => {
+  void it("prints the environment topic on stdout", async () => {
     for (const args of [
       ["help", "environment"],
       ["--no-color", "help", "environment"],

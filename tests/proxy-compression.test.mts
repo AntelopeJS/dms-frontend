@@ -37,7 +37,7 @@ interface RawAnswer {
   body: Buffer;
 }
 
-describe("the proxy compresses what the backend did not", () => {
+void describe("the proxy compresses what the backend did not", () => {
   const previousBackend = process.env.DMS_API_BASE_URL;
   const routes = new Map<string, Route>();
   const backend = createServer((request, response) => {
@@ -132,7 +132,7 @@ describe("the proxy compresses what the backend did not", () => {
     backend.close();
   });
 
-  it("sends a JSON answer in Brotli to a client that accepts it", async () => {
+  void it("sends a JSON answer in Brotli to a client that accepts it", async () => {
     const answer = await get("/api/rows", { "accept-encoding": "gzip, br" });
     assert.equal(answer.status, 200);
     assert.equal(answer.headers["content-encoding"], "br");
@@ -143,7 +143,7 @@ describe("the proxy compresses what the backend did not", () => {
     assert.equal(brotliDecompressSync(answer.body).toString(), ROWS);
   });
 
-  it("falls back to gzip, and to the plain answer", async () => {
+  void it("falls back to gzip, and to the plain answer", async () => {
     const gzipped = await get("/api/rows", { "accept-encoding": "gzip" });
     assert.equal(gzipped.headers["content-encoding"], "gzip");
     assert.equal(gunzipSync(gzipped.body).toString(), ROWS);
@@ -154,7 +154,7 @@ describe("the proxy compresses what the backend did not", () => {
     assert.equal(plain.body.toString(), ROWS);
   });
 
-  it("relays as it came what compressing would not help or would break", async () => {
+  void it("relays as it came what compressing would not help or would break", async () => {
     const small = await get("/api/small", { "accept-encoding": "br" });
     assert.equal(small.headers["content-encoding"], undefined);
     assert.equal(small.headers["content-length"], "2");
@@ -173,7 +173,7 @@ describe("the proxy compresses what the backend did not", () => {
     assert.equal(head.body.length, 0);
   });
 
-  it("negotiates tokens and qualities rather than substrings", async () => {
+  void it("negotiates tokens and qualities rather than substrings", async () => {
     for (const [accepted, encoding] of [
       ["br;q=0, gzip;q=1", "gzip"],
       ["BR;q=0.5, GZIP;q=0.9", "gzip"],
@@ -192,7 +192,7 @@ describe("the proxy compresses what the backend did not", () => {
     }
   });
 
-  it("repairs headers when fetch decodes a backend ignoring identity", async () => {
+  void it("repairs headers when fetch decodes a backend ignoring identity", async () => {
     routes.set("/api/forced-gzip", (request, response) => {
       assert.equal(request.headers["accept-encoding"], "identity");
       const body = gzipSync(ROWS);
@@ -224,7 +224,7 @@ describe("the proxy compresses what the backend did not", () => {
     }
   });
 
-  it("preserves opaque encodings, HEAD metadata and plain ranges", async () => {
+  void it("preserves opaque encodings, HEAD metadata and plain ranges", async () => {
     routes.set("/api/opaque", (_request, response) => {
       response.writeHead(200, {
         "content-type": "application/json",
@@ -282,7 +282,7 @@ describe("the proxy compresses what the backend did not", () => {
     assert.equal(notModified.headers["content-length"], "123");
   });
 
-  it("passes on each part of a streamed answer as the backend writes it", async () => {
+  void it("passes on each part of a streamed answer as the backend writes it", async () => {
     let finish: (() => void) | undefined;
     routes.set("/api/stream", (_request, response) => {
       response.writeHead(200, { "content-type": "text/plain" });
@@ -328,7 +328,7 @@ describe("the proxy compresses what the backend did not", () => {
     }
   });
 
-  it("relays exactly what the backend sent, whatever it could compress", async () => {
+  void it("relays exactly what the backend sent, whatever it could compress", async () => {
     const answer = await get("/api/negotiated", { "accept-encoding": "br" });
     assert.equal(answer.status, 200);
     assert.equal(answer.headers["content-encoding"], "br");
@@ -341,7 +341,7 @@ describe("the proxy compresses what the backend did not", () => {
     assert.equal(plain.body.toString(), ROWS);
   });
 
-  it("leaves an event stream alone", async () => {
+  void it("leaves an event stream alone", async () => {
     routes.set("/api/events", (_request, response) => {
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.end(`data: ${"x".repeat(2048)}\n\n`);

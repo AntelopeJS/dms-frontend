@@ -13,12 +13,12 @@ function project(files: Record<string, string>): string {
   return dir;
 }
 
-describe("project .env loading", () => {
-  it("reads .env.local before .env", () => {
+void describe("project .env loading", () => {
+  void it("reads .env.local before .env", () => {
     assert.deepEqual([...ENV_FILE_NAMES], [".env.local", ".env"]);
   });
 
-  it("fills variables the environment does not define", () => {
+  void it("fills variables the environment does not define", () => {
     const cwd = project({
       ".env": "DMS_API_BASE_URL=http://127.0.0.1:5010\nDMS_SESSION_SECRET=s\n",
     });
@@ -31,7 +31,7 @@ describe("project .env loading", () => {
     assert.equal(env.DMS_SESSION_SECRET, "s");
   });
 
-  it("lets an environment variable win over the file", () => {
+  void it("lets an environment variable win over the file", () => {
     const cwd = project({ ".env": "DMS_API_BASE_URL=http://from-file\n" });
     const env: NodeJS.ProcessEnv = { DMS_API_BASE_URL: "http://from-env" };
 
@@ -40,7 +40,7 @@ describe("project .env loading", () => {
     assert.equal(env.DMS_API_BASE_URL, "http://from-env");
   });
 
-  it("treats a variable set to the empty string as set", () => {
+  void it("treats a variable set to the empty string as set", () => {
     const cwd = project({ ".env": "DMS_BOOTSTRAP_SECRET=from-file\n" });
     const env: NodeJS.ProcessEnv = { DMS_BOOTSTRAP_SECRET: "" };
 
@@ -49,7 +49,7 @@ describe("project .env loading", () => {
     assert.equal(env.DMS_BOOTSTRAP_SECRET, "");
   });
 
-  it("lets .env.local win over .env", () => {
+  void it("lets .env.local win over .env", () => {
     const cwd = project({
       ".env": "DMS_API_BASE_URL=http://shared\nPORT=3001\n",
       ".env.local": "DMS_API_BASE_URL=http://local\n",
@@ -63,7 +63,7 @@ describe("project .env loading", () => {
     assert.equal(env.PORT, "3001");
   });
 
-  it("is a no-op in a directory without either file", () => {
+  void it("is a no-op in a directory without either file", () => {
     const cwd = project({});
     const env: NodeJS.ProcessEnv = {};
 
@@ -71,7 +71,7 @@ describe("project .env loading", () => {
     assert.deepEqual(env, {});
   });
 
-  it("reports an unreadable file instead of failing the command", () => {
+  void it("reports an unreadable file instead of failing the command", () => {
     const cwd = project({ ".env": "DMS_API_BASE_URL=http://kept\n" });
     mkdirSync(join(cwd, ".env.local"));
     const warnings: string[] = [];

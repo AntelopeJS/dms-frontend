@@ -36,7 +36,7 @@ function isBuiltManifest(
   );
 }
 
-it("keeps large locale catalogs out of email code without pruning dynamic translations", async (context) => {
+void it("keeps large locale catalogs out of email code without pruning dynamic translations", async (context) => {
   const workspace = mkdtempSync(resolve(".email-locales-"));
   try {
     const layers = ["base", "override", "unrelated"].map((name, index) => {

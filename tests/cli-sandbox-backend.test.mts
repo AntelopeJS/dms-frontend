@@ -11,8 +11,8 @@ import {
   closeServer,
 } from "./fixtures/cli-sandbox.mts";
 
-describe("reporting what the verify-source runner found", () => {
-  it("sends a package without package.json back as a usage error", async () => {
+void describe("reporting what the verify-source runner found", () => {
+  void it("sends a package without package.json back as a usage error", async () => {
     const result = await runCli(["verify-source", "-l", "packages"], {
       files: { "packages/broken/dms.frontend.ts": "export default {};\n" },
     });
@@ -28,7 +28,7 @@ describe("reporting what the verify-source runner found", () => {
     );
   });
 
-  it("names a directory without any package", async () => {
+  void it("names a directory without any package", async () => {
     const result = await runCli(["verify-source", "-l", "empty"], {
       files: { "empty/README.md": "" },
     });
@@ -36,7 +36,7 @@ describe("reporting what the verify-source runner found", () => {
     assert.match(result.stderr, /^✖ No frontend package in \.\/empty\n/);
   });
 
-  it("sends a frontend module passed with -l to -m", async () => {
+  void it("sends a frontend module passed with -l to -m", async () => {
     const result = await runCli(["verify-source", "-l", "frontend-vue"], {
       files: {
         "frontend-vue/package.json": JSON.stringify({ name: "demo-frontend" }),
@@ -56,7 +56,7 @@ describe("reporting what the verify-source runner found", () => {
     assert.doesNotMatch(result.stderr, /Materializ|ApexCharts|node_modules/);
   });
 
-  it("asks to install @antelopejs/dms when the project has none", async () => {
+  void it("asks to install @antelopejs/dms when the project has none", async () => {
     const result = await runCli(["verify-source", "-m", "frontend-vue"], {
       files: {
         "package.json": JSON.stringify({ name: "demo" }),
@@ -74,14 +74,14 @@ describe("reporting what the verify-source runner found", () => {
   });
 });
 
-describe("explaining an unreachable backend", () => {
+void describe("explaining an unreachable backend", () => {
   async function closedBackendUrl(): Promise<string> {
     const { server, port } = await listenOnFreePort();
     await closeServer(server);
     return `http://127.0.0.1:${port}`;
   }
 
-  it("names the URL and the cause in dev and prepare", async () => {
+  void it("names the URL and the cause in dev and prepare", async () => {
     const backendUrl = await closedBackendUrl();
     for (const command of ["dev", "prepare"]) {
       const result = await runCli([command, "-b", backendUrl], {
@@ -103,7 +103,7 @@ describe("explaining an unreachable backend", () => {
   });
 });
 
-describe("telling a skipped prepare from a failed one", () => {
+void describe("telling a skipped prepare from a failed one", () => {
   const STRICT_HINT =
     /\n {2}prepare never fails an install; add --strict to make this an error\.\n$/;
 
@@ -134,7 +134,7 @@ describe("telling a skipped prepare from a failed one", () => {
     }
   }
 
-  it("skips without a backend URL, and needs one with --strict", async () => {
+  void it("skips without a backend URL, and needs one with --strict", async () => {
     const skipped = await runCli(["prepare"]);
     assert.equal(skipped.code, 0);
     assert.match(skipped.stderr, /^▲ Skipped prepare: no backend URL\n/);
@@ -146,7 +146,7 @@ describe("telling a skipped prepare from a failed one", () => {
     assert.match(strict.stderr, /^✖ Backend URL is required\n/);
   });
 
-  it("reads --strict from DMS_PREPARE_STRICT, in the environment or ./.env", async () => {
+  void it("reads --strict from DMS_PREPARE_STRICT, in the environment or ./.env", async () => {
     const fromEnv = await runCli(["prepare"], {
       env: { DMS_PREPARE_STRICT: "1" },
     });
@@ -163,7 +163,7 @@ describe("telling a skipped prepare from a failed one", () => {
     }
   });
 
-  it("skips while the backend is out of reach, and fails with --strict", async () => {
+  void it("skips while the backend is out of reach, and fails with --strict", async () => {
     const backendUrl = await closedBackendUrl();
     const skipped = await runCli(["prepare", "-b", backendUrl]);
     assert.equal(skipped.code, 0);
@@ -183,7 +183,7 @@ describe("telling a skipped prepare from a failed one", () => {
     assert.doesNotMatch(strict.stderr, /Skipped prepare|--strict/);
   });
 
-  it("skips offline without a cached manifest, and fails with --strict", async () => {
+  void it("skips offline without a cached manifest, and fails with --strict", async () => {
     const args = ["prepare", "-b", BACKEND_URL, "--offline"];
     const skipped = await runCli(args);
     assert.equal(skipped.code, 0);
@@ -197,7 +197,7 @@ describe("telling a skipped prepare from a failed one", () => {
     assert.match(strict.stderr, /✖ No cached manifest for this workspace\n/);
   });
 
-  it("reports a refused credential as a failure, an error with --strict", async () => {
+  void it("reports a refused credential as a failure, an error with --strict", async () => {
     await withBackend(401, "{}", async (backendUrl) => {
       const env = { DMS_BOOTSTRAP_SECRET: undefined };
       const failed = await runCli(["prepare", "-b", backendUrl], { env });
@@ -221,7 +221,7 @@ describe("telling a skipped prepare from a failed one", () => {
     });
   });
 
-  it("reports an incompatible manifest as a failure, an error with DMS_PREPARE_STRICT", async () => {
+  void it("reports an incompatible manifest as a failure, an error with DMS_PREPARE_STRICT", async () => {
     await withBackend(
       200,
       JSON.stringify({ version: 3, modules: [] }),
@@ -254,7 +254,7 @@ describe("telling a skipped prepare from a failed one", () => {
  * in its header.
  */
 
-describe("loading the project .env", () => {
+void describe("loading the project .env", () => {
   const ENV_ONLY = {
     DMS_API_BASE_URL: undefined,
     DMS_SESSION_SECRET: "configured-session-secret-at-least-32-characters",
@@ -263,7 +263,7 @@ describe("loading the project .env", () => {
   const startedFor = (port: number) =>
     new RegExp(`^ajs dms start {2}http://127\\.0\\.0\\.1:${port} · `);
 
-  it("fills a variable the environment does not define", async () => {
+  void it("fills a variable the environment does not define", async () => {
     const result = await runCli(["start"], {
       files: {
         ...builtWorkspace(),
@@ -277,7 +277,7 @@ describe("loading the project .env", () => {
     assert.match(result.stderr, startedFor(5010));
   });
 
-  it("lets a real environment variable win over the .env", async () => {
+  void it("lets a real environment variable win over the .env", async () => {
     const result = await runCli(["start"], {
       files: {
         ...builtWorkspace(),
@@ -291,7 +291,7 @@ describe("loading the project .env", () => {
     assert.doesNotMatch(result.stderr, /5010/);
   });
 
-  it("lets .env.local win over .env", async () => {
+  void it("lets .env.local win over .env", async () => {
     const result = await runCli(["start"], {
       files: {
         ...builtWorkspace(),
@@ -305,14 +305,14 @@ describe("loading the project .env", () => {
     assert.match(result.stderr, startedFor(5011));
   });
 
-  it("runs normally in a directory with no .env", async () => {
+  void it("runs normally in a directory with no .env", async () => {
     const result = await runCli(["start"], { env: ENV_ONLY });
 
     assert.equal(result.code, 2);
     assert.match(result.stderr, /Backend URL is required/);
   });
 
-  it("documents the .env contract in the environment topic", async () => {
+  void it("documents the .env contract in the environment topic", async () => {
     const result = await runCli(["help", "environment"]);
 
     assert.equal(result.code, 0);

@@ -43,8 +43,8 @@ function usageError(title: RegExp, ...details: RegExp[]) {
   };
 }
 
-describe("DMS CLI plugin", () => {
-  it("resolves session secrets by command mode", () => {
+void describe("DMS CLI plugin", () => {
+  void it("resolves session secrets by command mode", () => {
     const generated = resolveSessionSecret("dev", undefined);
     assert.match(generated, /^[0-9a-f]{64}$/);
     assert.equal(
@@ -68,7 +68,7 @@ describe("DMS CLI plugin", () => {
     );
   });
 
-  it("accepts only http and https backend URLs", () => {
+  void it("accepts only http and https backend URLs", () => {
     assert.equal(
       parseBackendUrl("http://127.0.0.1:5010"),
       "http://127.0.0.1:5010",
@@ -91,7 +91,7 @@ describe("DMS CLI plugin", () => {
     assert.throws(() => parseBackendUrl("not a url"), UsageError);
   });
 
-  it("accepts only ports from 0 to 65535", () => {
+  void it("accepts only ports from 0 to 65535", () => {
     assert.equal(parsePort("3001"), 3001);
     assert.equal(parsePort("0"), 0);
     assert.equal(parsePort("65535"), 65535);
@@ -103,7 +103,7 @@ describe("DMS CLI plugin", () => {
     }
   });
 
-  it("requires a backend URL where nothing can discover one", () => {
+  void it("requires a backend URL where nothing can discover one", () => {
     assert.equal(
       requireBackendUrl("http://127.0.0.1:5010"),
       "http://127.0.0.1:5010",
@@ -116,7 +116,7 @@ describe("DMS CLI plugin", () => {
     }
   });
 
-  it("preserves the command surface", () => {
+  void it("preserves the command surface", () => {
     const commands = [
       cmdDev(),
       cmdBuild(),
@@ -132,8 +132,8 @@ describe("DMS CLI plugin", () => {
   });
 });
 
-describe("help environment", () => {
-  it("wraps the topic to the width it is given, between words", () => {
+void describe("help environment", () => {
+  void it("wraps the topic to the width it is given, between words", () => {
     for (const width of [80, 60, 40]) {
       const lines = formatEnvironmentHelp(width).split("\n");
       const over = lines.filter((line) => line.length > width);
@@ -145,7 +145,7 @@ describe("help environment", () => {
     );
   });
 
-  it("wraps option descriptions, or puts them under the option when narrow", () => {
+  void it("wraps option descriptions, or puts them under the option when narrow", () => {
     const help = (width: number) => {
       const program = new Command("ajs dms").option(
         "--bootstrap-secret <secret>",
@@ -171,7 +171,7 @@ describe("help environment", () => {
     }
   });
 
-  it("lists commands without [options], and the global options on every page", () => {
+  void it("lists commands without [options], and the global options on every page", () => {
     const program = new Command("ajs dms").option("--verbose", "Show more");
     program.addCommand(
       new Command("dev")
@@ -198,7 +198,7 @@ describe("help environment", () => {
     );
   });
 
-  it("reads a flag's variable as a boolean, the flag first", () => {
+  void it("reads a flag's variable as a boolean, the flag first", () => {
     const name = "DMS_TEST_FLAG";
     const saved = process.env[name];
     try {
@@ -220,8 +220,8 @@ describe("help environment", () => {
   });
 });
 
-describe("verify-source CLI", () => {
-  it("publishes source and local package options", () => {
+void describe("verify-source CLI", () => {
+  void it("publishes source and local package options", () => {
     const command = cmdVerifySource().exitOverride();
     assert.equal(command.name(), "verify-source");
     assert.deepEqual(
@@ -230,7 +230,7 @@ describe("verify-source CLI", () => {
     );
   });
 
-  it("reports every usage problem of a run at once", () => {
+  void it("reports every usage problem of a run at once", () => {
     const options = {
       layer: "./no-such-layer",
       module: ["./no-such-module"],
@@ -267,7 +267,7 @@ describe("verify-source CLI", () => {
     assert.doesNotThrow(() => assertValidUsage([], output.ui));
   });
 
-  it("resolves local package bindings and rejects malformed values", () => {
+  void it("resolves local package bindings and rejects malformed values", () => {
     assert.deepEqual(parseLocalPackages(["@scope/package=../package"]), {
       "@scope/package": resolve("../package"),
     });
@@ -280,7 +280,7 @@ describe("verify-source CLI", () => {
 
 /** Starts every ANSI color sequence. */
 
-describe("workspace listing", () => {
+void describe("workspace listing", () => {
   const home = "/home/user/.antelopejs/dms-frontend";
   const projectId = `76672b08${"0".repeat(56)}`;
   const urlId = `f6af15c7${"1".repeat(56)}`;
@@ -304,7 +304,7 @@ describe("workspace listing", () => {
     },
   ];
 
-  it("prints an aligned table with a header on a terminal", () => {
+  void it("prints an aligned table with a header on a terminal", () => {
     const output = memoryUi({ isTerminal: true });
     renderWorkspaces(output.ui, records, true);
     assert.equal(output.stderr(), "");
@@ -316,7 +316,7 @@ describe("workspace listing", () => {
     ]);
   });
 
-  it("prints whole, tab-separated values without a header in a pipe", () => {
+  void it("prints whole, tab-separated values without a header in a pipe", () => {
     const output = memoryUi();
     renderWorkspaces(output.ui, records, false);
     assert.deepEqual(output.stdout().split("\n"), [
@@ -342,21 +342,21 @@ describe("workspace listing", () => {
     ]);
   });
 
-  it("says there are none on stderr only", () => {
+  void it("says there are none on stderr only", () => {
     const output = memoryUi();
     renderWorkspaces(output.ui, [], false);
     assert.equal(output.stdout(), "");
     assert.match(output.stderr(), /^ℹ No workspaces in /);
   });
 
-  it("lists what clean --all removes, columns aligned", () => {
+  void it("lists what clean --all removes, columns aligned", () => {
     assert.deepEqual(describeWorkspaces(records, true), [
       "76672b08  http://127.0.0.1:5010  project /srv/demo",
       "f6af15c7  http://127.0.0.1:5011  url",
     ]);
   });
 
-  it("wraps the clean --all list under the backend on a narrow terminal", () => {
+  void it("wraps the clean --all list under the backend on a narrow terminal", () => {
     assert.deepEqual(describeWorkspaces(records, true, 38), [
       "76672b08  http://127.0.0.1:5010",
       "          project /srv/demo",

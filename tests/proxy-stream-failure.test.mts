@@ -67,7 +67,7 @@ function failingEventStream(onCancel: () => void): ReadableStream {
   });
 }
 
-describe("a backend stream that fails", () => {
+void describe("a backend stream that fails", () => {
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backendRequests: string[] = [];
   const backend = createServer((request, response) => {
@@ -99,7 +99,7 @@ describe("a backend stream that fails", () => {
     backend.closeAllConnections();
   });
 
-  it("ends the response, not the server, when it breaks mid-stream", async () => {
+  void it("ends the response, not the server, when it breaks mid-stream", async () => {
     handler = (request, response) =>
       void runtime.handleRequestSafely(request, response);
     const outcome = await new Promise<{ status?: number; body: string }>(
@@ -123,7 +123,7 @@ describe("a backend stream that fails", () => {
     assert.match(outcome.body, /: connected/);
   });
 
-  it("opens no backend stream for a client that left during routing", async () => {
+  void it("opens no backend stream for a client that left during routing", async () => {
     const before = backendRequests.length;
     const handled = new Promise<void>((resolve) => {
       handler = afterTheClientLeft(
@@ -137,7 +137,7 @@ describe("a backend stream that fails", () => {
     assert.equal(backendRequests.length, before);
   });
 
-  it("cancels a body it can no longer relay instead of leaving it unread", async () => {
+  void it("cancels a body it can no longer relay instead of leaving it unread", async () => {
     let cancelled = false;
     const relayed = new Promise<unknown>((resolve, reject) => {
       handler = afterTheClientLeft((request, response) =>

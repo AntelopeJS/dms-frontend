@@ -31,7 +31,7 @@ async function sessionCookie(
  * proxy tells it the Origin, the Referer and the client's address, which no
  * caller can make up unless a trusted reverse proxy stands in front.
  */
-describe("the proxy forwards who is asking", () => {
+void describe("the proxy forwards who is asking", () => {
   const previous = {
     backend: process.env.DMS_API_BASE_URL,
     clientIpHeader: process.env.DMS_CLIENT_IP_HEADER,
@@ -84,7 +84,7 @@ describe("the proxy forwards who is asking", () => {
     backend.close();
   });
 
-  it("sends a public endpoint the Origin, the Referer and the client, never the session", async () => {
+  void it("sends a public endpoint the Origin, the Referer and the client, never the session", async () => {
     const cookie = await sessionCookie({
       accessToken: "access",
       accountId: "account-a",
@@ -117,7 +117,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received.cookie, undefined);
   });
 
-  it("appends the client to the chain a trusted reverse proxy sent", async () => {
+  void it("appends the client to the chain a trusted reverse proxy sent", async () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     const response = await fetch(`${frontendUrl}/api/items`, {
       headers: {
@@ -133,7 +133,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received["x-forwarded-host"], "app.example.test");
   });
 
-  it("relays the realtime session and connection by name, and no other custom header", async () => {
+  void it("relays the realtime session and connection by name, and no other custom header", async () => {
     const response = await fetch(`${frontendUrl}/api/items`, {
       headers: {
         "x-realtime-session": "session-1",
@@ -152,7 +152,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received["x-custom"], undefined);
   });
 
-  it("sets the client alone on a request no proxy forwarded", async () => {
+  void it("sets the client alone on a request no proxy forwarded", async () => {
     const response = await fetch(`${frontendUrl}/api/items`);
     assert.equal(response.status, 200);
     await response.arrayBuffer();
@@ -161,7 +161,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received.referer, undefined);
   });
 
-  it("sends the client the platform header names, with the platform's scheme and host", async () => {
+  void it("sends the client the platform header names, with the platform's scheme and host", async () => {
     process.env.DMS_CLIENT_IP_HEADER = "X-Client-IP";
     const response = await fetch(`${frontendUrl}/api/items`, {
       headers: {
@@ -179,7 +179,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received["x-forwarded-host"], "app.example.test");
   });
 
-  it("falls back to the socket when the platform header is absent", async () => {
+  void it("falls back to the socket when the platform header is absent", async () => {
     process.env.DMS_CLIENT_IP_HEADER = "X-Client-IP";
     const response = await fetch(`${frontendUrl}/api/items`, {
       headers: {
@@ -196,7 +196,7 @@ describe("the proxy forwards who is asking", () => {
     assert.equal(received["x-forwarded-host"], new URL(frontendUrl).host);
   });
 
-  it("ignores a client IP header no platform is configured to write", async () => {
+  void it("ignores a client IP header no platform is configured to write", async () => {
     const response = await fetch(`${frontendUrl}/api/items`, {
       headers: {
         "x-client-ip": "203.0.113.7",

@@ -20,8 +20,8 @@ function nuxtUiConfig(): NuxtUiConfig {
   };
 }
 
-describe("merging the DMS app config into Nuxt UI's", () => {
-  it("merges one DMS config once, however many renders ask for it", () => {
+void describe("merging the DMS app config into Nuxt UI's", () => {
+  void it("merges one DMS config once, however many renders ask for it", () => {
     const merge = createUiAppConfigMerger();
     const ui = nuxtUiConfig();
     const dms = {
@@ -38,7 +38,7 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     ]);
   });
 
-  it("applies a changed value from a new DMS config, in the same object", () => {
+  void it("applies a changed value from a new DMS config, in the same object", () => {
     const merge = createUiAppConfigMerger();
     const ui = nuxtUiConfig();
     const sameObject = ui;
@@ -51,7 +51,7 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     });
   });
 
-  it("drops a key the new DMS config no longer declares", () => {
+  void it("drops a key the new DMS config no longer declares", () => {
     const merge = createUiAppConfigMerger();
     const ui = nuxtUiConfig();
     merge(ui, { ui: { icons: { check: "i-ph-check-light" } }, brand: "old" });
@@ -64,7 +64,7 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     });
   });
 
-  it("merges a DMS config changed in place again when told it changed", () => {
+  void it("merges a DMS config changed in place again when told it changed", () => {
     const merge = createUiAppConfigMerger();
     const ui = nuxtUiConfig();
     const dms = {
@@ -86,7 +86,7 @@ describe("merging the DMS app config into Nuxt UI's", () => {
     ]);
   });
 
-  it("never lets a merge write into the DMS config", () => {
+  void it("never lets a merge write into the DMS config", () => {
     const merge = createUiAppConfigMerger();
     const dms = { ui: { colors: { primary: "v1" } } };
     merge(nuxtUiConfig(), dms);

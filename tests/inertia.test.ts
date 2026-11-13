@@ -5,8 +5,8 @@ import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
-describe("Inertia HTTP protocol", () => {
-  it("returns the required page object", async () => {
+void describe("Inertia HTTP protocol", () => {
+  void it("returns the required page object", async () => {
     const runtime = await server;
     const page = runtime.createInertiaPage("/articles", { path: "/articles" });
     assert.equal(page.component, "DmsDynamicPage");
@@ -18,7 +18,7 @@ describe("Inertia HTTP protocol", () => {
     assert.equal("encryptHistory" in page, false);
   });
 
-  it("embeds the initial page using the safe Inertia v3 JSON script", async () => {
+  void it("embeds the initial page using the safe Inertia v3 JSON script", async () => {
     const runtime = await server;
     const html = runtime.inertiaAppHtml({
       component: "DmsDynamicPage",
@@ -32,7 +32,7 @@ describe("Inertia HTTP protocol", () => {
     assert.match(html, /<\\\/script>/);
   });
 
-  it("sets Inertia response and cache variation headers", async () => {
+  void it("sets Inertia response and cache variation headers", async () => {
     const runtime = await server;
     assert.deepEqual(runtime.inertiaHeaders(), {
       "cache-control": "private, no-cache",
@@ -43,7 +43,7 @@ describe("Inertia HTTP protocol", () => {
     });
   });
 
-  it("keeps session-bearing responses out of shared caches", async () => {
+  void it("keeps session-bearing responses out of shared caches", async () => {
     const backend = createServer((_request, response) => {
       response.writeHead(200, { "content-type": "application/json" });
       response.end('{"route":{},"layout":{}}');
@@ -84,7 +84,7 @@ describe("Inertia HTTP protocol", () => {
     });
   });
 
-  it("uses native Inertia v3 semantics for internal, fragment, and external redirects", async (context) => {
+  void it("uses native Inertia v3 semantics for internal, fragment, and external redirects", async (context) => {
     const runtime = await server;
     const capture = (location: string) => {
       let result:
@@ -126,7 +126,7 @@ describe("Inertia HTTP protocol", () => {
     });
   });
 
-  it("keeps shared navigation data on regular Inertia visits", async () => {
+  void it("keeps shared navigation data on regular Inertia visits", async () => {
     let backendUrl = "";
     const backend = createServer((request, response) => {
       backendUrl = request.url ?? "";
@@ -157,7 +157,7 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
-  it("forces a full visit when the deployed asset version changed", async () => {
+  void it("forces a full visit when the deployed asset version changed", async () => {
     let backendRequests = 0;
     const backend = createServer((_request, response) => {
       backendRequests += 1;

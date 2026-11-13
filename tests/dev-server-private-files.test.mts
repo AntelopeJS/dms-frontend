@@ -25,7 +25,7 @@ function writeFixture(root: string, path: string, content: string): void {
   writeFileSync(destination, content);
 }
 
-describe("private files the development server refuses", () => {
+void describe("private files the development server refuses", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-dev-private-files-"));
   const previousCwd = process.cwd();
   const previousDev = process.env.DMS_DEV;
@@ -112,14 +112,14 @@ describe("private files the development server refuses", () => {
   ];
 
   for (const path of privatePaths)
-    it(`refuses ${path}`, async () => {
+    void it(`refuses ${path}`, async () => {
       const response = await fetch(`${base}${path}`);
       const body = await response.text();
       assert.equal(response.status, 403, body);
       assert.doesNotMatch(body, new RegExp(SECRET));
     });
 
-  it("refuses them under /@fs/ too", async () => {
+  void it("refuses them under /@fs/ too", async () => {
     for (const file of [
       "generated-server-options.json",
       ".manifest-cache.json",
@@ -132,7 +132,7 @@ describe("private files the development server refuses", () => {
     }
   });
 
-  it("still serves a module's client code", async () => {
+  void it("still serves a module's client code", async () => {
     const response = await fetch(
       `${base}/frontend-modules/shop/layers/base/app/util.ts`,
     );
@@ -141,7 +141,7 @@ describe("private files the development server refuses", () => {
     assert.equal(response.headers.get("x-dms-route-owner"), "renderer");
   });
 
-  it("names the owner of what no module declares: a page, or a 404", async () => {
+  void it("names the owner of what no module declares: a page, or a 404", async () => {
     const page = await fetch(`${base}/api/items`, { method: "HEAD" });
     assert.equal(page.headers.get("x-dms-route-owner"), "page");
     const write = await fetch(`${base}/api/items`, { method: "POST" });
@@ -150,7 +150,7 @@ describe("private files the development server refuses", () => {
     await write.body?.cancel();
   });
 
-  it("still loads a module's server code for the server, never for the client", async () => {
+  void it("still loads a module's server code for the server, never for the client", async () => {
     const vite = await createViteServer({
       root,
       configFile: false,

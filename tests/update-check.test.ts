@@ -73,12 +73,12 @@ function harness(latestVersion?: string, now = 1_000_000): Harness {
   };
 }
 
-describe("update check opt-outs", () => {
-  it("runs for a regular invocation", () => {
+void describe("update check opt-outs", () => {
+  void it("runs for a regular invocation", () => {
     assert.equal(isUpdateCheckEnabled(["dev", "-b", "http://x"], {}), true);
   });
 
-  it("stays silent for --help, -h, --version, -v and help", () => {
+  void it("stays silent for --help, -h, --version, -v and help", () => {
     for (const argv of [
       ["--help"],
       ["dev", "--help"],
@@ -91,11 +91,11 @@ describe("update check opt-outs", () => {
     }
   });
 
-  it("stays silent for --json, whose stdout a script parses", () => {
+  void it("stays silent for --json, whose stdout a script parses", () => {
     assert.equal(isUpdateCheckEnabled(["workspaces", "--json"], {}), false);
   });
 
-  it("honours CI, NO_UPDATE_NOTIFIER, TERM=dumb and --no-update-check", () => {
+  void it("honours CI, NO_UPDATE_NOTIFIER, TERM=dumb and --no-update-check", () => {
     assert.equal(isUpdateCheckEnabled(["dev"], { CI: "true" }), false);
     assert.equal(isUpdateCheckEnabled(["dev"], { TERM: "dumb" }), false);
     assert.equal(
@@ -105,7 +105,7 @@ describe("update check opt-outs", () => {
     assert.equal(isUpdateCheckEnabled(["dev", "--no-update-check"], {}), false);
   });
 
-  it("stays silent in a quiet run, whatever the position of -q", () => {
+  void it("stays silent in a quiet run, whatever the position of -q", () => {
     for (const argv of [
       ["-q", "dev"],
       ["dev", "-q"],
@@ -126,14 +126,14 @@ describe("update check opt-outs", () => {
     }
   });
 
-  it("removes the opt-out flag from the arguments Commander parses", () => {
+  void it("removes the opt-out flag from the arguments Commander parses", () => {
     assert.deepEqual(
       stripUpdateCheckFlag(["dev", "--no-update-check", "-b", "http://x"]),
       ["dev", "-b", "http://x"],
     );
   });
 
-  it("leaves the spelling alone past `--` or as an option value", () => {
+  void it("leaves the spelling alone past `--` or as an option value", () => {
     for (const argv of [
       ["dev", "--", "--no-update-check"],
       ["dev", "-b", "--no-update-check"],
@@ -144,22 +144,22 @@ describe("update check opt-outs", () => {
     }
   });
 
-  it("ignores --help and --version past `--` or as an option value", () => {
+  void it("ignores --help and --version past `--` or as an option value", () => {
     assert.equal(isUpdateCheckEnabled(["dev", "--", "--help"], {}), true);
     assert.equal(isUpdateCheckEnabled(["dev", "-b", "--version"], {}), true);
   });
 });
 
-describe("update check cache location", () => {
-  it("lives in the loader home, next to the workspaces", () => {
+void describe("update check cache location", () => {
+  void it("lives in the loader home, next to the workspaces", () => {
     const file = updateCheckCacheFile();
     assert.equal(file, join(DMS_FRONTEND_HOME, "update-check.json"));
     assert.match(file, /\.antelopejs\/dms-frontend\/update-check\.json$/);
   });
 });
 
-describe("update check notice", () => {
-  it("reports a newer release last, in the core style, and caches it", async () => {
+void describe("update check notice", () => {
+  void it("reports a newer release last, in the core style, and caches it", async () => {
     const test = harness("0.1.0");
     await test.run();
 
@@ -172,13 +172,13 @@ describe("update check notice", () => {
     });
   });
 
-  it("stays silent when the published version is not newer", async () => {
+  void it("stays silent when the published version is not newer", async () => {
     const test = harness("0.0.1");
     await test.run();
     assert.deepEqual(test.written, []);
   });
 
-  it("skips the registry within the interval but still reminds", async () => {
+  void it("skips the registry within the interval but still reminds", async () => {
     const test = harness("0.2.0", 1_000_000);
     await test.run();
     test.written.length = 0;
@@ -190,7 +190,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.written, notice("0.2.0"));
   });
 
-  it("checks the registry again once the interval has elapsed", async () => {
+  void it("checks the registry again once the interval has elapsed", async () => {
     const test = harness("0.2.0", 1_000_000);
     await test.run();
     test.fetched.length = 0;
@@ -200,7 +200,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.fetched, [UPDATE_CHECK_PACKAGE]);
   });
 
-  it("stamps the cache when the lookup fails, keeping the known version", async () => {
+  void it("stamps the cache when the lookup fails, keeping the known version", async () => {
     const test = harness("0.4.0", 1_000_000);
     await test.run();
     test.written.length = 0;
@@ -219,7 +219,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.written, notice("0.4.0"));
   });
 
-  it("stamps a bare attempt when nothing was ever published", async () => {
+  void it("stamps a bare attempt when nothing was ever published", async () => {
     const test = harness();
     await test.run({ fetchLatestVersion: async () => undefined });
 
@@ -234,7 +234,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.fetched, [], "the failed attempt throttles the next");
   });
 
-  it("retries a failed lookup after the back-off instead of a day later", async () => {
+  void it("retries a failed lookup after the back-off instead of a day later", async () => {
     const test = harness("0.5.0", 1_000_000);
     await test.run({ fetchLatestVersion: async () => undefined });
     test.fetched.length = 0;
@@ -250,7 +250,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.written, notice("0.5.0"));
   });
 
-  it("keeps a successful lookup throttled for the whole day", async () => {
+  void it("keeps a successful lookup throttled for the whole day", async () => {
     const test = harness("0.5.0", 1_000_000);
     await test.run();
     test.fetched.length = 0;
@@ -260,7 +260,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.fetched, []);
   });
 
-  it("retries a failure that followed a success, keeping the notice going", async () => {
+  void it("retries a failure that followed a success, keeping the notice going", async () => {
     const test = harness("0.6.0", 1_000_000);
     await test.run();
     const failedAt = 1_000_000 + UPDATE_CHECK_INTERVAL_MS;
@@ -275,7 +275,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.fetched, [UPDATE_CHECK_PACKAGE]);
   });
 
-  it("retries a cache written before the outcome was recorded", async () => {
+  void it("retries a cache written before the outcome was recorded", async () => {
     const test = harness("0.7.0", 1_000_000);
     mkdirSync(dirname(test.cacheFile), { recursive: true });
     writeFileSync(test.cacheFile, JSON.stringify({ checkedAt: 1_000_000 }));
@@ -288,7 +288,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.written, notice("0.7.0"));
   });
 
-  it("never throws when the registry fails, hangs or answers nonsense", async () => {
+  void it("never throws when the registry fails, hangs or answers nonsense", async () => {
     const test = harness();
     await test.run({
       fetchLatestVersion: async () => {
@@ -300,7 +300,7 @@ describe("update check notice", () => {
     assert.deepEqual(test.written, []);
   });
 
-  it("survives an unreadable cache file", async () => {
+  void it("survives an unreadable cache file", async () => {
     const test = harness("0.3.0");
     await test.run({ cacheFile: "/proc/version/impossible.json" });
     assert.deepEqual(test.written, notice("0.3.0"));
@@ -316,14 +316,14 @@ function seedCache(file: string, checkedAt: number, latestVersion: string) {
   );
 }
 
-describe("update check timing and placement", () => {
-  it("starts the lookup as the check starts, before the command runs", () => {
+void describe("update check timing and placement", () => {
+  void it("starts the lookup as the check starts, before the command runs", () => {
     const test = harness("0.1.0");
     startUpdateCheck(test.options());
     assert.deepEqual(test.fetched, [UPDATE_CHECK_PACKAGE]);
   });
 
-  it("stays silent and offline when stderr is not a terminal", async () => {
+  void it("stays silent and offline when stderr is not a terminal", async () => {
     const test = harness("0.1.0");
     assert.equal(
       startUpdateCheck(test.options({ isTerminal: false })),
@@ -332,7 +332,7 @@ describe("update check timing and placement", () => {
     assert.deepEqual(test.fetched, []);
   });
 
-  it("prints the notice once, however often it is reported", async () => {
+  void it("prints the notice once, however often it is reported", async () => {
     const test = harness("0.1.0");
     const check = startUpdateCheck(test.options());
     await check?.completion;
@@ -341,7 +341,7 @@ describe("update check timing and placement", () => {
     assert.equal(test.written.length, 2);
   });
 
-  it("never waits for a lookup still in flight", async () => {
+  void it("never waits for a lookup still in flight", async () => {
     const test = harness();
     seedCache(test.cacheFile, 1_000_000 - UPDATE_CHECK_INTERVAL_MS, "0.8.0");
     let answer: (version: string) => void = () => undefined;
@@ -366,7 +366,7 @@ describe("update check timing and placement", () => {
     );
   });
 
-  it("prints nothing before the first lookup answered", async () => {
+  void it("prints nothing before the first lookup answered", async () => {
     const test = harness();
     const check = startUpdateCheck(
       test.options({ fetchLatestVersion: () => new Promise(() => undefined) }),
@@ -375,7 +375,7 @@ describe("update check timing and placement", () => {
     assert.deepEqual(test.written, []);
   });
 
-  it("sets the notice apart from the server output that follows it", async () => {
+  void it("sets the notice apart from the server output that follows it", async () => {
     const test = harness("0.1.0");
     const check = startUpdateCheck(test.options());
     await check?.completion;
@@ -383,7 +383,7 @@ describe("update check timing and placement", () => {
     assert.deepEqual(test.written, [...notice("0.1.0").reverse()]);
   });
 
-  it("wraps the notice to the terminal, under its text", async () => {
+  void it("wraps the notice to the terminal, under its text", async () => {
     const test = harness("0.1.0");
     await test.run({ columns: 40 });
     assert.deepEqual(test.written, [
@@ -393,7 +393,7 @@ describe("update check timing and placement", () => {
     ]);
   });
 
-  it("falls back to ASCII and colors only the symbol and the command", async () => {
+  void it("falls back to ASCII and colors only the symbol and the command", async () => {
     const ascii = harness("0.1.0");
     await ascii.run({ ui: memoryUi({ isUnicode: false }).ui });
     assert.deepEqual(ascii.written, [
@@ -436,8 +436,8 @@ async function registryStub(
   };
 }
 
-describe("registry lookup", () => {
-  it("reads the version off the scoped package's latest dist-tag", async () => {
+void describe("registry lookup", () => {
+  void it("reads the version off the scoped package's latest dist-tag", async () => {
     const stub = await registryStub(() => ({
       status: 200,
       body: JSON.stringify({ name: UPDATE_CHECK_PACKAGE, version: "9.9.9" }),
@@ -455,7 +455,7 @@ describe("registry lookup", () => {
     }
   });
 
-  it("returns undefined for a non-200 answer", async () => {
+  void it("returns undefined for a non-200 answer", async () => {
     const stub = await registryStub(() => ({ status: 404, body: "{}" }));
     try {
       assert.equal(
@@ -467,7 +467,7 @@ describe("registry lookup", () => {
     }
   });
 
-  it("returns undefined for a body that is not a version", async () => {
+  void it("returns undefined for a body that is not a version", async () => {
     const stub = await registryStub(() => ({ status: 200, body: "not json" }));
     try {
       assert.equal(
@@ -479,7 +479,7 @@ describe("registry lookup", () => {
     }
   });
 
-  it("gives up on the deadline rather than on socket inactivity", async () => {
+  void it("gives up on the deadline rather than on socket inactivity", async () => {
     const stalled = createServer(() => {});
     await new Promise<void>((resolve) =>
       stalled.listen(0, "127.0.0.1", resolve),
@@ -505,7 +505,7 @@ describe("registry lookup", () => {
     }
   });
 
-  it("treats a redirect as no answer instead of following it", async () => {
+  void it("treats a redirect as no answer instead of following it", async () => {
     const stub = await registryStub(() => ({
       status: 301,
       body: JSON.stringify({ version: "9.9.9" }),
@@ -520,7 +520,7 @@ describe("registry lookup", () => {
     }
   });
 
-  it("returns undefined when the registry cannot be reached", async () => {
+  void it("returns undefined when the registry cannot be reached", async () => {
     const stub = await registryStub(() => ({ status: 200, body: "{}" }));
     const url = stub.url;
     await stub.close();

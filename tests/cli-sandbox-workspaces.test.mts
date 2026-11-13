@@ -73,8 +73,8 @@ const PROJECT_WORKSPACE = stampedWorkspace(
 );
 const STRAY_DIR = join(".antelopejs", "dms-frontend", "stray-dir", "file");
 
-describe("listing and removing workspaces", () => {
-  it("prints one JSON document on stdout, whatever else is said", async () => {
+void describe("listing and removing workspaces", () => {
+  void it("prints one JSON document on stdout, whatever else is said", async () => {
     const result = await runCli(["workspaces", "--json"], {
       files: {
         ...URL_WORKSPACE,
@@ -120,13 +120,13 @@ describe("listing and removing workspaces", () => {
     );
   });
 
-  it("prints an empty JSON list when there is no workspace", async () => {
+  void it("prints an empty JSON list when there is no workspace", async () => {
     const result = await runCli(["workspaces", "--json"]);
     assert.equal(result.code, 0);
     assert.deepEqual(JSON.parse(result.stdout), []);
   });
 
-  it("prints tab-separated lines without a header in a pipe", async () => {
+  void it("prints tab-separated lines without a header in a pipe", async () => {
     const result = await runCli(["workspaces"], { files: URL_WORKSPACE });
     assert.equal(result.code, 0);
     assert.equal(result.stderr, "");
@@ -140,7 +140,7 @@ describe("listing and removing workspaces", () => {
     ]);
   });
 
-  it("refuses to clean --all without a terminal to confirm on", async () => {
+  void it("refuses to clean --all without a terminal to confirm on", async () => {
     const result = await runCli(["clean", "--all"], { files: URL_WORKSPACE });
     assert.equal(result.code, 2);
     assert.equal(result.stdout, "");
@@ -152,7 +152,7 @@ describe("listing and removing workspaces", () => {
     assert.ok(existsSync(join(result.sandbox, workspaceDir(BACKEND_URL))));
   });
 
-  it("removes every workspace with --yes and says how much it freed", async () => {
+  void it("removes every workspace with --yes and says how much it freed", async () => {
     const result = await runCli(["clean", "--all", "--yes"], {
       files: { ...URL_WORKSPACE, ...PROJECT_WORKSPACE, [STRAY_DIR]: "" },
     });
@@ -188,8 +188,8 @@ const UPDATE_ENV = {
 };
 const UPDATE_NOTICE = `ℹ ajs dms 999.0.0 is available (you have ${OWN_PACKAGE.version}) → ajs update dms\n`;
 
-describe("update notice", () => {
-  it("ends a successful command on a terminal, after its own output", async () => {
+void describe("update notice", () => {
+  void it("ends a successful command on a terminal, after its own output", async () => {
     const result = await runCli(["clean", "--all"], {
       files: UPDATE_DUE,
       env: UPDATE_ENV,
@@ -200,7 +200,7 @@ describe("update notice", () => {
     assert.equal(result.stderr, `ℹ No workspaces found\n\n${UPDATE_NOTICE}`);
   });
 
-  it("stays out of pipes, failed commands and --json", async () => {
+  void it("stays out of pipes, failed commands and --json", async () => {
     const piped = await runCli(["clean", "--all"], {
       files: UPDATE_DUE,
       env: UPDATE_ENV,
@@ -237,8 +237,8 @@ function settingsWorkspace() {
   };
 }
 
-describe("global options after the command", () => {
-  it("accepts -q and --verbose=<channels> before and after it", async () => {
+void describe("global options after the command", () => {
+  void it("accepts -q and --verbose=<channels> before and after it", async () => {
     const listing = (result: { stdout: string; sandbox: string }) =>
       result.stdout.replaceAll(result.sandbox, "<home>");
     const plain = await runCli(["workspaces"], { files: URL_WORKSPACE });
@@ -259,7 +259,7 @@ describe("global options after the command", () => {
     }
   });
 
-  it("prints the help for global options alone", async () => {
+  void it("prints the help for global options alone", async () => {
     for (const args of [["-q"], ["--verbose=vite"], ["-q", "--no-color"]]) {
       const result = await runCli(args);
       assert.equal(result.code, 0, args.join(" "));
@@ -267,7 +267,7 @@ describe("global options after the command", () => {
     }
   });
 
-  it("documents -q and --verbose=<channels> in the help and the environment topic", async () => {
+  void it("documents -q and --verbose=<channels> in the help and the environment topic", async () => {
     const help = await runCli(["--help"]);
     assert.match(
       help.stdout,
@@ -281,7 +281,7 @@ describe("global options after the command", () => {
     assert.match(topic.stdout, /\n {2}ANTELOPEJS_QUIET {2,}Same as -q/);
   });
 
-  it("hands them on to the server as ajs does when given before dms", async () => {
+  void it("hands them on to the server as ajs does when given before dms", async () => {
     const settings = async (args: string[]) => {
       const result = await runCli(
         [...args.slice(0, 1), "-b", BACKEND_URL, "-p", "0", ...args.slice(1)],
@@ -306,8 +306,8 @@ describe("global options after the command", () => {
   });
 });
 
-describe("quiet runs", () => {
-  it("print the results of workspaces and nothing else", async () => {
+void describe("quiet runs", () => {
+  void it("print the results of workspaces and nothing else", async () => {
     const listing = (result: { stdout: string; sandbox: string }) =>
       result.stdout.replaceAll(result.sandbox, "<home>");
     const files = { ...URL_WORKSPACE, [STRAY_DIR]: "" };
@@ -324,7 +324,7 @@ describe("quiet runs", () => {
     }
   });
 
-  it("clean silently, and still report a usage error", async () => {
+  void it("clean silently, and still report a usage error", async () => {
     const cleaned = await runCli(["clean", "--all", "--yes", "-q"], {
       files: { ...URL_WORKSPACE, ...PROJECT_WORKSPACE },
     });
@@ -341,7 +341,7 @@ describe("quiet runs", () => {
     assert.match(usage.stderr, /^✖ Nothing to clean: pass -b <url> or --all\n/);
   });
 
-  it("open start, build and dev without their header, and keep their errors", async () => {
+  void it("open start, build and dev without their header, and keep their errors", async () => {
     const started = await runCli(
       ["start", "-b", BACKEND_URL, "-p", "0", "-q"],
       {
@@ -372,13 +372,13 @@ describe("quiet runs", () => {
     assert.doesNotMatch(build.stderr, /ajs dms build {2}/);
   });
 
-  it("keep the warning of a skipped prepare", async () => {
+  void it("keep the warning of a skipped prepare", async () => {
     const result = await runCli(["prepare", "--quiet"]);
     assert.equal(result.code, 0);
     assert.match(result.stderr, /^▲ Skipped prepare: no backend URL\n/);
   });
 
-  it("are quiet only when ANTELOPEJS_QUIET is on", async () => {
+  void it("are quiet only when ANTELOPEJS_QUIET is on", async () => {
     for (const value of ["0", "false"]) {
       const result = await runCli(["clean", "--all"], {
         env: { ANTELOPEJS_QUIET: value },
@@ -387,7 +387,7 @@ describe("quiet runs", () => {
     }
   });
 
-  it("leave out the update notice", async () => {
+  void it("leave out the update notice", async () => {
     for (const env of [{}, { ANTELOPEJS_QUIET: "1" }]) {
       const result = await runCli(
         ["clean", "--all", ...("ANTELOPEJS_QUIET" in env ? [] : ["-q"])],

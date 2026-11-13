@@ -43,12 +43,12 @@ function writeConfig(project: string, title: string, modules = ""): void {
   );
 }
 
-describe("dev reads the project's modules", () => {
+void describe("dev reads the project's modules", () => {
   const project = mkdtempSync(join(tmpdir(), "dms-dev-modules-"));
   after(() => rmSync(project, { recursive: true, force: true }));
   const options = { projectDir: project, environment: "default", dev: true };
 
-  it("as they are on each read, after the configuration and the module change", async () => {
+  void it("as they are on each read, after the configuration and the module change", async () => {
     writeModule(project, "first");
     writeConfig(project, "before");
     const [first] = await readProjectModulesFresh(options);
@@ -71,7 +71,7 @@ describe("dev reads the project's modules", () => {
     );
   });
 
-  it("fails with the CLI's own problem when the project cannot be read", async () => {
+  void it("fails with the CLI's own problem when the project cannot be read", async () => {
     await assert.rejects(
       readProjectModulesFresh({
         ...options,
@@ -86,7 +86,7 @@ describe("dev reads the project's modules", () => {
   });
 });
 
-describe("dev completes the project's modules with the backend's values", () => {
+void describe("dev completes the project's modules with the backend's values", () => {
   const projectModule = (
     name: string,
     options: ProjectFrontendModule["layer"]["options"],
@@ -95,7 +95,7 @@ describe("dev completes the project's modules with the backend's values", () => 
     layer: { path: `/src/${name}`, name, priority: 0, options, privateOptions },
   });
 
-  it("fills only the private values each module declares, from its own registration", () => {
+  void it("fills only the private values each module declares, from its own registration", () => {
     const [dms, other] = withBackendValues(
       [
         projectModule(
@@ -129,7 +129,7 @@ describe("dev completes the project's modules with the backend's values", () => 
     assert.deepEqual(other.privateOptions, { token: "" });
   });
 
-  it("rewrites the backend's development origins in the options, whole origins only", () => {
+  void it("rewrites the backend's development origins in the options, whole origins only", () => {
     const [layer] = withBackendValues(
       [
         projectModule("dms", {

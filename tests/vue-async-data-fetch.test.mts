@@ -22,8 +22,8 @@ import { addressOf } from "./helpers/net";
 
 type FetchOptions = NonNullable<Parameters<typeof ofetch>[1]>;
 
-describe("useDmsFetch", () => {
-  it("keeps created fetch defaults and error hooks for raw requests", async (context) => {
+void describe("useDmsFetch", () => {
+  void it("keeps created fetch defaults and error hooks for raw requests", async (context) => {
     let requestHeader: string | string[] | undefined;
     const server = createServer((request, response) => {
       requestHeader = request.headers["x-fetch-default"];
@@ -68,7 +68,7 @@ describe("useDmsFetch", () => {
     return { runtime, requests };
   }
 
-  it("renders and transfers a server response instead of discarding it (E1)", async () => {
+  void it("renders and transfers a server response instead of discarding it (E1)", async () => {
     const { runtime, requests } = fetchingRuntime(true);
     const app = createSSRApp(
       defineComponent({
@@ -98,7 +98,7 @@ describe("useDmsFetch", () => {
     assert.deepEqual(browser.requests, [], "hydration does not fetch again");
   });
 
-  it("shares one request per method, URL, query and body, whatever the headers", async () => {
+  void it("shares one request per method, URL, query and body, whatever the headers", async () => {
     const { runtime, requests } = fetchingRuntime(false);
     const { app } = clientApp(runtime);
     const load = (url: string, options = {}) =>
@@ -130,7 +130,7 @@ describe("useDmsFetch", () => {
     );
   });
 
-  it("follows a URL getter to the key of each URL, showing the previous data meanwhile", async () => {
+  void it("follows a URL getter to the key of each URL, showing the previous data meanwhile", async () => {
     const runtime = createDmsFrontendRuntime();
     const id = ref(1);
     const answers = new Map<string, ReturnType<typeof deferred<string>>>();
@@ -185,7 +185,7 @@ describe("useDmsFetch", () => {
     app.unmount();
   });
 
-  it("follows a reactive query and body to the key of each request", async () => {
+  void it("follows a reactive query and body to the key of each request", async () => {
     const runtime = createDmsFrontendRuntime();
     const page = ref(1);
     const requests: string[] = [];
@@ -234,7 +234,7 @@ describe("useDmsFetch", () => {
     app.unmount();
   });
 
-  it("requests nothing while the URL is null, on the server as in the browser", async () => {
+  void it("requests nothing while the URL is null, on the server as in the browser", async () => {
     const server = fetchingRuntime(true);
     const Waiting = defineComponent({
       setup() {
@@ -327,7 +327,7 @@ describe("useDmsFetch", () => {
     return { runtime, app, entry: () => entry! };
   }
 
-  it("refetches a key whose run a switch away aborted, never showing another key's data as its own", async () => {
+  void it("refetches a key whose run a switch away aborted, never showing another key's data as its own", async () => {
     const { fetcher, requests, answers } = switchingFetcher();
     const id = ref(1);
     const { runtime, app, entry } = followOrders(fetcher, id);
@@ -364,7 +364,7 @@ describe("useDmsFetch", () => {
     app.unmount();
   });
 
-  it("shows a failed key's own data and error, not the previous key's data", async () => {
+  void it("shows a failed key's own data and error, not the previous key's data", async () => {
     const { fetcher, answers } = switchingFetcher();
     const id = ref(1);
     const { runtime, app, entry } = followOrders(fetcher, id);
@@ -392,15 +392,15 @@ describe("useDmsFetch", () => {
     app.unmount();
   });
 
-  it("transfers its keys without the URL, query or body they request", async () => {
+  void it("transfers its keys without the URL, query or body they request", async () => {
     const { runtime, requests } = fetchingRuntime(true);
     const app = createSSRApp(
       defineComponent({
         setup() {
-          runtimeModule.useDmsFetch("/api/orders/secret-path", {
+          void runtimeModule.useDmsFetch("/api/orders/secret-path", {
             query: { token: "query-secret" },
           });
-          runtimeModule.useDmsFetch("/api/login", {
+          void runtimeModule.useDmsFetch("/api/login", {
             method: "POST",
             body: { password: "body-secret" },
           });
@@ -437,7 +437,7 @@ describe("useDmsFetch", () => {
     assert.deepEqual(browser.requests, [], "the browser finds the same key");
   });
 
-  it("keys a request by its params as well as its query", async () => {
+  void it("keys a request by its params as well as its query", async () => {
     const { runtime, requests } = fetchingRuntime(false);
     const { app } = clientApp(runtime);
     const load = (params: FetchOptions["params"]) =>
@@ -453,13 +453,13 @@ describe("useDmsFetch", () => {
     );
   });
 
-  it("does not retry a server read, unless asked to, and leaves the browser's retries alone", async () => {
+  void it("does not retry a server read, unless asked to, and leaves the browser's retries alone", async () => {
     const server = fetchingRuntime(true);
     const ssr = createSSRApp(
       defineComponent({
         setup() {
-          runtimeModule.useDmsFetch("/api/default");
-          runtimeModule.useDmsFetch("/api/explicit", { retry: 2 });
+          void runtimeModule.useDmsFetch("/api/default");
+          void runtimeModule.useDmsFetch("/api/explicit", { retry: 2 });
           return () => h("p");
         },
       }),

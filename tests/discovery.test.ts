@@ -45,8 +45,8 @@ const validRegistry: DevRegistry = {
   },
 };
 
-describe("discoverBackend", () => {
-  it("finds the registry by walking up from a nested cwd", () => {
+void describe("discoverBackend", () => {
+  void it("finds the registry by walking up from a nested cwd", () => {
     const { root, nested } = makeProject(validRegistry);
     const result = discoverBackend(nested, { isPidAlive: alive });
     assert.equal(result.status, "found");
@@ -57,13 +57,13 @@ describe("discoverBackend", () => {
     }
   });
 
-  it("returns not-found when no dev.json exists up the tree", () => {
+  void it("returns not-found when no dev.json exists up the tree", () => {
     const { nested } = makeProject(undefined);
     const result = discoverBackend(nested, { isPidAlive: alive });
     assert.equal(result.status, "not-found");
   });
 
-  it("reports a stale registry when the writer pid is dead", () => {
+  void it("reports a stale registry when the writer pid is dead", () => {
     const { root, nested } = makeProject(validRegistry);
     const result = discoverBackend(nested, { isPidAlive: dead });
     assert.equal(result.status, "stale");
@@ -73,7 +73,7 @@ describe("discoverBackend", () => {
     }
   });
 
-  it("reports a live registry without an api endpoint", () => {
+  void it("reports a live registry without an api endpoint", () => {
     const { root, nested } = makeProject({
       pid: process.pid,
       servers: { other: { endpoints: [] } },
@@ -85,7 +85,7 @@ describe("discoverBackend", () => {
     }
   });
 
-  it("reports a malformed dev.json instead of falling through to a parent", () => {
+  void it("reports a malformed dev.json instead of falling through to a parent", () => {
     const { root, nested } = makeProject("{not json");
     const result = discoverBackend(nested, { isPidAlive: alive });
     assert.equal(result.status, "malformed");
@@ -94,7 +94,7 @@ describe("discoverBackend", () => {
     }
   });
 
-  it("reports a dev.json that breaks the contract as malformed", () => {
+  void it("reports a dev.json that breaks the contract as malformed", () => {
     const endpoint = { protocol: "http", host: "localhost", port: 5011 };
     const pid = process.pid;
     for (const broken of [
@@ -120,7 +120,7 @@ describe("discoverBackend", () => {
     }
   });
 
-  it("finds the api endpoint among other servers", () => {
+  void it("finds the api endpoint among other servers", () => {
     const { nested } = makeProject({
       pid: process.pid,
       servers: {
@@ -144,7 +144,7 @@ describe("discoverBackend", () => {
     }
   });
 
-  it("normalizes wildcard bind hosts to localhost and brackets IPv6", () => {
+  void it("normalizes wildcard bind hosts to localhost and brackets IPv6", () => {
     assert.equal(
       buildBackendUrl({ protocol: "http", host: "0.0.0.0", port: 5010 }),
       "http://localhost:5010",

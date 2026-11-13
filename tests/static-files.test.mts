@@ -12,7 +12,7 @@ const SCRIPT_BROTLI = Buffer.from("brotli bytes");
 const SCRIPT_GZIP = Buffer.from("gzip bytes");
 const ONE_DAY_MS = 86_400_000;
 
-describe("the files of the build", () => {
+void describe("the files of the build", () => {
   let root = "";
   let server: Server | undefined;
   let base = "";
@@ -57,7 +57,7 @@ describe("the files of the build", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("sends a font with its type, revalidated rather than downloaded again", async () => {
+  void it("sends a font with its type, revalidated rather than downloaded again", async () => {
     const first = await fetch(`${base}/fonts/Face.woff2`);
     assert.equal(first.status, 200);
     assert.equal(first.headers.get("content-type"), "font/woff2");
@@ -82,7 +82,7 @@ describe("the files of the build", () => {
     await byDate.body?.cancel();
   });
 
-  it("sends the file again once it changed", async () => {
+  void it("sends the file again once it changed", async () => {
     const before = await fetch(`${base}/fonts/Face.woff2`);
     const tag = before.headers.get("etag")!;
     await before.body?.cancel();
@@ -97,7 +97,7 @@ describe("the files of the build", () => {
     assert.deepEqual(Buffer.from(await changed.arrayBuffer()), FONT);
   });
 
-  it("tags each encoding of a built asset apart", async () => {
+  void it("tags each encoding of a built asset apart", async () => {
     const brotli = await fetch(`${base}/assets/app-abc123.js`, {
       headers: { "accept-encoding": "br" },
     });
@@ -125,7 +125,7 @@ describe("the files of the build", () => {
     await crossed.body?.cancel();
   });
 
-  it("sends the precompressed copy the client wants most, never one it refused with q=0", async () => {
+  void it("sends the precompressed copy the client wants most, never one it refused with q=0", async () => {
     const answers = [
       ["app-abc123.js", "br;q=0, gzip", "gzip"],
       ["app-abc123.js", "gzip;q=0", null],
@@ -148,14 +148,14 @@ describe("the files of the build", () => {
     }
   });
 
-  it("answers a HEAD request without a body", async () => {
+  void it("answers a HEAD request without a body", async () => {
     const head = await fetch(`${base}/fonts/Face.woff2`, { method: "HEAD" });
     assert.equal(head.status, 200);
     assert.equal(head.headers.get("content-length"), String(FONT.length));
     assert.equal(await head.text(), "");
   });
 
-  it("still serves only the files publicBuildFile names", async () => {
+  void it("still serves only the files publicBuildFile names", async () => {
     const metadata = await fetch(`${base}/.vite/manifest.json`);
     assert.equal(metadata.status, 404);
     await metadata.body?.cancel();

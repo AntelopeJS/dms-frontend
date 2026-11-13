@@ -107,8 +107,8 @@ afterEach(() => {
   warn.mock.restore();
 });
 
-describe("Component prefix", () => {
-  it("is put in front of every component a module registers", async () => {
+void describe("Component prefix", () => {
+  void it("is put in front of every component a module registers", async () => {
     assert.equal(
       await rendered(resolveDmsComponent("BillingBadge")),
       "<p>billing badge</p>",
@@ -124,7 +124,7 @@ describe("Component prefix", () => {
     assert.equal(warn.mock.callCount(), 0);
   });
 
-  it("keeps a leading Dms apart from an unprefixed name", async () => {
+  void it("keeps a leading Dms apart from an unprefixed name", async () => {
     assert.equal(
       await rendered(resolveDmsComponent("dms-badge")),
       "<p>dms badge</p>",
@@ -135,7 +135,7 @@ describe("Component prefix", () => {
     );
   });
 
-  it("names the global components by their full name", async () => {
+  void it("names the global components by their full name", async () => {
     const app = createSSRApp({ render: () => null });
     const runtime = createDmsFrontendRuntime(undefined, {}, true);
     provideDmsFrontendRuntime(app, runtime);
@@ -150,7 +150,7 @@ describe("Component prefix", () => {
     assert.ok(globals.includes("BillingLazyTotals"));
   });
 
-  it("warns when two modules register the same full name", async () => {
+  void it("warns when two modules register the same full name", async () => {
     await setupFrontendModules([
       {
         name: "@acme/high",
@@ -185,7 +185,7 @@ describe("Component prefix", () => {
     );
   });
 
-  it("lets a module replace another's component without a warning", async () => {
+  void it("lets a module replace another's component without a warning", async () => {
     await setupFrontendModules([
       {
         name: "@acme/app",
@@ -218,7 +218,7 @@ describe("Component prefix", () => {
     assert.equal(warn.mock.callCount(), 0);
   });
 
-  it("preloads the components a page names by their full name", async () => {
+  void it("preloads the components a page names by their full name", async () => {
     const layout = {
       components: { totals: { componentName: "BillingLazyTotals" } },
     };
@@ -227,7 +227,7 @@ describe("Component prefix", () => {
     assert.equal(lazyTotals.loads(), 1);
   });
 
-  it("preloads a component a page places inside another one", async () => {
+  void it("preloads a component a page places inside another one", async () => {
     const layout = {
       components: {
         grid: {
@@ -243,7 +243,7 @@ describe("Component prefix", () => {
     assert.equal(lazyTotals.loads(), 1);
   });
 
-  it("resolves before hydration the components the server render reached", async () => {
+  void it("resolves before hydration the components the server render reached", async () => {
     const server = createSSRApp({
       render: () => h(resolveDmsComponent("BillingLazyTotals")!),
     });

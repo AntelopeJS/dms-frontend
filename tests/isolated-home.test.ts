@@ -30,8 +30,8 @@ function withTempDirInsideHome(body: () => void): void {
   }
 }
 
-describe("isolated home", () => {
-  it("shows a temp directory under the real home in full, not from `~`", () => {
+void describe("isolated home", () => {
+  void it("shows a temp directory under the real home in full, not from `~`", () => {
     withTempDirInsideHome(() => {
       const restore = isolateHome();
       try {
@@ -43,7 +43,7 @@ describe("isolated home", () => {
     });
   });
 
-  it("gives the home back when the test is done", () => {
+  void it("gives the home back when the test is done", () => {
     withTempDirInsideHome(() => {
       const before = homedir();
       isolateHome()();

@@ -119,7 +119,7 @@ function linkedStylesheets(html: string): string[] {
   );
 }
 
-it("links the stylesheet of every component the server rendered, and only those", async () => {
+void it("links the stylesheet of every component the server rendered, and only those", async () => {
   const workspace = mkdtempSync(resolve(".ssr-component-styles-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backend = createServer((request, response) => {

@@ -61,8 +61,8 @@ function transform(code: string, id = USE_KBD) {
   return plugin.transform.call(context, code, id);
 }
 
-describe("Nuxt UI's useKbd", () => {
-  it("is routed to the DMS runtime, the shared one kept for the platform", () => {
+void describe("Nuxt UI's useKbd", () => {
+  void it("is routed to the DMS runtime, the shared one kept for the platform", () => {
     const code = transform(NUXT_UI_4_10)?.code ?? "";
     assert.match(
       code,
@@ -71,7 +71,7 @@ describe("Nuxt UI's useKbd", () => {
     assert.doesNotMatch(code, /export const useKbd = \/\* @__PURE__ \*\//);
   });
 
-  it("fails the build in a form the rewrite does not know", () => {
+  void it("fails the build in a form the rewrite does not know", () => {
     assert.throws(
       () =>
         transform(
@@ -84,7 +84,7 @@ describe("Nuxt UI's useKbd", () => {
     );
   });
 
-  it("leaves other files alone", () => {
+  void it("leaves other files alone", () => {
     assert.equal(transform(NUXT_UI_4_10, "/w/src/useKbd.js"), null);
     assert.equal(
       transform(
@@ -159,8 +159,8 @@ afterEach(() => {
   globalThis.window = realWindow;
 });
 
-describe("Key hints in a server render", () => {
-  it("prints the application's platform from the server on", async () => {
+void describe("Key hints in a server render", () => {
+  void it("prints the application's platform from the server on", async () => {
     for (const [platform, printed] of [
       ["mac", "⌘|⌃|⌥|⇧|k"],
       ["other", "Ctrl|Ctrl|Alt|⇧|k"],
@@ -171,7 +171,7 @@ describe("Key hints in a server render", () => {
     }
   });
 
-  it("calls the platform source in the setup of each hint", async () => {
+  void it("calls the platform source in the setup of each hint", async () => {
     let calls = 0;
     const app = createSSRApp({
       render: () => h("div", [h(hint(false)), h(hint(false))]),
@@ -184,7 +184,7 @@ describe("Key hints in a server render", () => {
     assert.equal(calls, 2);
   });
 
-  it("prints Nuxt UI's blank without a platform, as before", async () => {
+  void it("prints Nuxt UI's blank without a platform, as before", async () => {
     assert.equal(
       await renderToString(createSSRApp(hint(true))),
       "<kbd> | | |⇧|k</kbd>",
@@ -192,8 +192,8 @@ describe("Key hints in a server render", () => {
   });
 });
 
-describe("Key hints mounted in the browser", () => {
-  it("print the browser's platform at once without a platform source", () => {
+void describe("Key hints mounted in the browser", () => {
+  void it("print the browser's platform at once without a platform source", () => {
     Reflect.set(globalThis, "window", {});
     const mac = mountFresh(hint(true));
     assert.equal(mac.text(), "⌘|⌃|⌥|⇧|k");
@@ -201,7 +201,7 @@ describe("Key hints mounted in the browser", () => {
     assert.equal(pc.text(), "Ctrl|Ctrl|Alt|⇧|k");
   });
 
-  it("follow the platform source when the application gives one", async () => {
+  void it("follow the platform source when the application gives one", async () => {
     Reflect.set(globalThis, "window", {});
     const platform = ref<"mac" | "other">("other");
     const mounted = mountFresh(hint(true), (app) =>

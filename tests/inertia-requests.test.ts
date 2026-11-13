@@ -5,8 +5,8 @@ import { requestOf, responseOf } from "./helpers/http-doubles";
 import { addressOf } from "./helpers/net";
 import { server } from "./fixtures/inertia";
 
-describe("Inertia HTTP protocol", () => {
-  it("does not write a second response after a client disconnect", async (context) => {
+void describe("Inertia HTTP protocol", () => {
+  void it("does not write a second response after a client disconnect", async (context) => {
     const runtime = await server;
     let writeCount = 0;
     let headersSent = false;
@@ -37,7 +37,7 @@ describe("Inertia HTTP protocol", () => {
     assert.equal(writeCount, 0);
   });
 
-  it("releases the backend stream of a client that leaves before it answers", async () => {
+  void it("releases the backend stream of a client that leaves before it answers", async () => {
     let backendClosed: () => void = () => {};
     const released = new Promise<void>((settle) => {
       backendClosed = settle;
@@ -80,7 +80,7 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
-  it("injects the rendered body without expanding replacement patterns", async () => {
+  void it("injects the rendered body without expanding replacement patterns", async () => {
     const runtime = await server;
     const patterns = "$& $` $' $$";
     const page = runtime.createInertiaPage("/articles", {
@@ -104,7 +104,7 @@ describe("Inertia HTTP protocol", () => {
     assert.ok(html.includes(JSON.stringify(patterns)));
   });
 
-  it("leaves the session, sign-in, e-mail render and tester paths to the modules and the backend", async () => {
+  void it("leaves the session, sign-in, e-mail render and tester paths to the modules and the backend", async () => {
     const reached: string[] = [];
     const backend = createServer((request, response) => {
       reached.push(`${request.method} ${request.url}`);
@@ -152,7 +152,7 @@ describe("Inertia HTTP protocol", () => {
     }
   });
 
-  it("redirects signed-out protected visits while preserving public routes", async () => {
+  void it("redirects signed-out protected visits while preserving public routes", async () => {
     const publicRoutes = new Map([
       ["/auth", { fullSlug: "/auth", publicAccess: true }],
       [

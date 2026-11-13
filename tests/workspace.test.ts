@@ -25,8 +25,8 @@ import {
 import { CliError } from "@antelopejs/core/cli";
 import { problemText } from "./fixtures/memory-ui";
 
-describe("dependency fingerprint", () => {
-  it("changes when the generated workspace dependencies change", () => {
+void describe("dependency fingerprint", () => {
+  void it("changes when the generated workspace dependencies change", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-deps-"));
     const layer = mkdtempSync(join(tmpdir(), "dms-layer-"));
     cleanupDirs.push(workspace, layer);
@@ -38,7 +38,7 @@ describe("dependency fingerprint", () => {
     assert.notEqual(computeDepsHash([layer], workspacePackage), before);
   });
 
-  it("changes when a dependency patch or the pnpm workspace config changes", () => {
+  void it("changes when a dependency patch or the pnpm workspace config changes", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-deps-"));
     cleanupDirs.push(workspace);
     const workspacePackage = join(workspace, "package.json");
@@ -57,8 +57,8 @@ describe("dependency fingerprint", () => {
   });
 });
 
-describe("workspace identity", () => {
-  it("keeps the same workspace for a project whatever the backend port", () => {
+void describe("workspace identity", () => {
+  void it("keeps the same workspace for a project whatever the backend port", () => {
     const key = projectWorkspaceKey("/home/user/my-project");
     assert.equal(getWorkspaceDirForKey(key), getWorkspaceDirForKey(key));
     assert.notEqual(
@@ -67,14 +67,14 @@ describe("workspace identity", () => {
     );
   });
 
-  it("gives distinct workspaces to distinct project paths", () => {
+  void it("gives distinct workspaces to distinct project paths", () => {
     assert.notEqual(
       getWorkspaceDirForKey(projectWorkspaceKey("/home/user/worktree-a")),
       getWorkspaceDirForKey(projectWorkspaceKey("/home/user/worktree-b")),
     );
   });
 
-  it("shares one workspace between build, start, clean and dev -b", () => {
+  void it("shares one workspace between build, start, clean and dev -b", () => {
     const spellings = [
       "http://localhost:5010",
       "http://localhost:5010/",
@@ -90,7 +90,7 @@ describe("workspace identity", () => {
     );
   });
 
-  it("never collides a project key with a backend URL key", () => {
+  void it("never collides a project key with a backend URL key", () => {
     assert.notEqual(
       getWorkspaceDirForKey(projectWorkspaceKey("/http://localhost:5010")),
       getWorkspaceDir("http://localhost:5010"),
@@ -123,8 +123,8 @@ function makeWorkspace(cacheFile: string): string {
   return dir;
 }
 
-describe("workspace size", () => {
-  it("counts a hard-linked file once and never follows a symbolic link", () => {
+void describe("workspace size", () => {
+  void it("counts a hard-linked file once and never follows a symbolic link", () => {
     const outside = mkdtempSync(join(tmpdir(), "dms-store-"));
     const workspace = mkdtempSync(join(tmpdir(), "dms-workspace-"));
     cleanupDirs.push(outside, workspace);
@@ -141,8 +141,8 @@ describe("workspace size", () => {
   });
 });
 
-describe("manifest cache", () => {
-  it("survives the credential rotating between runs", () => {
+void describe("manifest cache", () => {
+  void it("survives the credential rotating between runs", () => {
     const dir = makeWorkspace(
       JSON.stringify(
         { manifest: cachedManifest, fetchedAt: "2026-08-06T10:00:00Z" },
@@ -153,7 +153,7 @@ describe("manifest cache", () => {
     assert.deepEqual(readCachedManifest(dir)?.manifest, cachedManifest);
   });
 
-  it("ignores a file that is not a cache entry", () => {
+  void it("ignores a file that is not a cache entry", () => {
     assert.equal(
       readCachedManifest(makeWorkspace(JSON.stringify({ nope: 1 }, null, 2))),
       undefined,
@@ -161,7 +161,7 @@ describe("manifest cache", () => {
   });
 });
 
-describe("layer paths withheld by the backend", () => {
+void describe("layer paths withheld by the backend", () => {
   const backendUrl = "http://127.0.0.1:5010";
   const pathless: ManifestModule[] = [
     { name: "@scope/dms-frontend-module", priority: 0 },
@@ -181,7 +181,7 @@ describe("layer paths withheld by the backend", () => {
     assert.fail("expected the pathless manifest to be refused");
   }
 
-  it("names the backend and counts the modules instead of listing them", () => {
+  void it("names the backend and counts the modules instead of listing them", () => {
     const message = messageFor();
     assert.match(
       message,
@@ -190,7 +190,7 @@ describe("layer paths withheld by the backend", () => {
     assert.doesNotMatch(message, /@scope\//);
   });
 
-  it("names the missing credential when the run sent none", () => {
+  void it("names the missing credential when the run sent none", () => {
     const message = messageFor();
     assert.match(message, /this run sent none/);
     assert.match(message, /\.antelope\/dms-dev\.json/);
@@ -198,17 +198,17 @@ describe("layer paths withheld by the backend", () => {
     assert.match(message, /ajs dms build/);
   });
 
-  it("names the refused credential when the run sent one", () => {
+  void it("names the refused credential when the run sent one", () => {
     const message = messageFor("a-credential");
     assert.match(message, /did not accept the one this run sent/);
     assert.doesNotMatch(message, /sent none/);
   });
 
-  it("does not speak for one command, since dev and prepare share it", () => {
+  void it("does not speak for one command, since dev and prepare share it", () => {
     assert.doesNotMatch(messageFor(), /ajs dms dev/);
   });
 
-  it("blames the run that cached the manifest when this run sent nothing", () => {
+  void it("blames the run that cached the manifest when this run sent nothing", () => {
     const fetchedAt = new Date(Date.now() - 5 * 60_000).toISOString();
     for (const bootstrapSecret of [undefined, "a-credential"]) {
       const message = messageFor(bootstrapSecret, { fetchedAt });
@@ -226,7 +226,7 @@ describe("layer paths withheld by the backend", () => {
     );
   });
 
-  it("accepts a manifest whose modules all have a path", () => {
+  void it("accepts a manifest whose modules all have a path", () => {
     assert.doesNotThrow(() =>
       assertLayerPathsServed(
         [{ ...pathless[0], path: "/layers/a" }],

@@ -8,7 +8,7 @@ import { it } from "node:test";
 const CLEANUP_FAILURE = "tests/fixtures/failing-server-cleanup.mjs";
 const LIMIT_MS = 30_000;
 
-it(
+void it(
   "fails, and stops its development server, when removing the server's directory fails",
   { timeout: LIMIT_MS + 10_000 },
   async () => {

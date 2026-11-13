@@ -35,8 +35,8 @@ function transform(code: string, id = STUB) {
   return plugin.transform.call(context, code, id);
 }
 
-describe("Nuxt UI's useState", () => {
-  it("keeps its state in the DMS's per-application state", () => {
+void describe("Nuxt UI's useState", () => {
+  void it("keeps its state in the DMS's per-application state", () => {
     const code = transform(NUXT_UI_4_10)?.code ?? "";
     assert.match(
       code,
@@ -47,7 +47,7 @@ describe("Nuxt UI's useState", () => {
     assert.match(code, /const hooks = createHooks\(\);/);
   });
 
-  it("fails the build in a form the rewrite does not know", () => {
+  void it("fails the build in a form the rewrite does not know", () => {
     assert.throws(
       () =>
         transform(
@@ -57,7 +57,7 @@ describe("Nuxt UI's useState", () => {
     );
   });
 
-  it("leaves other files alone", () => {
+  void it("leaves other files alone", () => {
     assert.equal(transform(NUXT_UI_4_10, "/w/src/base.js"), null);
     assert.equal(
       transform(
@@ -68,7 +68,7 @@ describe("Nuxt UI's useState", () => {
     );
   });
 
-  it("fails the build when another Nuxt UI file defines useState", () => {
+  void it("fails the build when another Nuxt UI file defines useState", () => {
     assert.throws(
       () =>
         transform(

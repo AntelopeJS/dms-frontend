@@ -19,7 +19,7 @@ type LocaleMessages = { [key: string]: string | LocaleMessages };
  * A message vue-i18n cannot compile stops the generation of the catalogs,
  * which the build and the dev server's start both run first: it never reaches a page.
  */
-describe("locale messages vue-i18n cannot compile", () => {
+void describe("locale messages vue-i18n cannot compile", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-locale-files-"));
   after(() => rmSync(root, { recursive: true, force: true }));
 
@@ -44,7 +44,7 @@ describe("locale messages vue-i18n cannot compile", () => {
     return undefined;
   }
 
-  it("names the file, the key and the escaped message to write", () => {
+  void it("names the file, the key and the escaped message to write", () => {
     const error = materializeWith({
       auth: {
         email: { placeholder: "first.last@example.com" },
@@ -67,7 +67,7 @@ describe("locale messages vue-i18n cannot compile", () => {
     assert.deepEqual(rest, []);
   });
 
-  it("prints the key and the message to write without --verbose", () => {
+  void it("prints the key and the message to write without --verbose", () => {
     const error = materializeWith({
       auth: { email: { placeholder: "first.last@example.com" } },
     });
@@ -83,7 +83,7 @@ describe("locale messages vue-i18n cannot compile", () => {
     );
   });
 
-  it("accepts what vue-i18n compiles: placeholders, plurals, links, escapes", () => {
+  void it("accepts what vue-i18n compiles: placeholders, plurals, links, escapes", () => {
     assert.equal(
       materializeWith({
         count: "no item | one item | {n} items",
@@ -100,7 +100,7 @@ describe("locale messages vue-i18n cannot compile", () => {
  * A catalog is a JSON object of messages: a file holding any other JSON value
  * would have its characters or elements spread into the catalog as messages.
  */
-describe("a locale file that is not a JSON object", () => {
+void describe("a locale file that is not a JSON object", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-locale-file-kind-"));
   after(() => rmSync(root, { recursive: true, force: true }));
 
@@ -111,7 +111,7 @@ describe("a locale file that is not a JSON object", () => {
   }
 
   for (const json of ['"abc"', "[1,2]", "5", "null", "true"]) {
-    it(`is refused as an invalid locale file: ${json}`, () => {
+    void it(`is refused as an invalid locale file: ${json}`, () => {
       const path = locale(json);
       assert.throws(() => readLocaleFile(path), {
         name: "InvalidLocaleFileError",
@@ -120,7 +120,7 @@ describe("a locale file that is not a JSON object", () => {
     });
   }
 
-  it("is named on one line when its JSON does not parse", () => {
+  void it("is named on one line when its JSON does not parse", () => {
     const path = locale("abc\ndef");
     assert.throws(
       () => readLocaleFile(path),
@@ -135,7 +135,7 @@ describe("a locale file that is not a JSON object", () => {
     );
   });
 
-  it("is read as before when it holds an object", () => {
+  void it("is read as before when it holds an object", () => {
     assert.deepEqual(
       readLocaleFile(locale('{"greeting":"Hello {name}","nested":{"a":"b"}}')),
       { greeting: "Hello {name}", nested: { a: "b" } },

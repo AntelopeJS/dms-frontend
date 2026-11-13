@@ -18,8 +18,8 @@ import { runFramedCommand } from "../src/workspace-setup";
 
 const WORKSPACE = "/home/user/.antelopejs/dms-frontend/f6af15c7221e3402";
 
-describe("child output lines", () => {
-  it("splits a stream into lines whatever the chunk boundaries", () => {
+void describe("child output lines", () => {
+  void it("splits a stream into lines whatever the chunk boundaries", () => {
     const lines: string[] = [];
     const splitter = new LineSplitter((line) => lines.push(line));
     splitter.push("Progress: resol");
@@ -31,19 +31,19 @@ describe("child output lines", () => {
     assert.equal(lines.length, 3);
   });
 
-  it("keeps only the last lines of a long output", () => {
+  void it("keeps only the last lines of a long output", () => {
     const tail = new OutputTail(3);
     for (const line of ["1", "2", "3", "4", "5"]) tail.push(line);
     assert.deepEqual(tail.lines(), ["3", "4", "5"]);
   });
 
-  it("removes colors", () => {
+  void it("removes colors", () => {
     assert.equal(stripAnsi("\u001b[33m(!) chunk\u001b[39m"), "(!) chunk");
   });
 });
 
-describe("the output a framed child leaves", () => {
-  it("keeps stdout, then stderr, whichever pipe was read first", async () => {
+void describe("the output a framed child leaves", () => {
+  void it("keeps stdout, then stderr, whichever pipe was read first", async () => {
     const script = [
       'process.stderr.write("ERR_PNPM_FETCH_404\\n");',
       'setTimeout(() => { process.stdout.write("line 1\\nline 2\\n"); process.exitCode = 1; }, 100);',
@@ -58,7 +58,7 @@ describe("the output a framed child leaves", () => {
   });
 });
 
-describe("the output a failure replays", () => {
+void describe("the output a failure replays", () => {
   const output = [
     ...Array.from({ length: 30 }, (_, index) => `line ${index + 1}`),
     "",
@@ -68,7 +68,7 @@ describe("the output a failure replays", () => {
     "    at fetch (/pnpm/dist/pnpm.cjs:1:1)",
   ];
 
-  it("is the last fifteen lines, without blanks, colors or Node notices", () => {
+  void it("is the last fifteen lines, without blanks, colors or Node notices", () => {
     const tail = failureTail(output);
     assert.equal(tail.length, 15);
     assert.equal(tail[0], "line 17");
@@ -80,12 +80,12 @@ describe("the output a failure replays", () => {
     assert.ok(tail.every((line) => !line.includes("trace-deprecation")));
   });
 
-  it("drops stack frames unless they are asked for", () => {
+  void it("drops stack frames unless they are asked for", () => {
     assert.ok(failureTail(output).every((line) => !line.includes(" at ")));
     assert.match(failureTail(output, 15, true)[14], /^ {4}at fetch/);
   });
 
-  it("follows the exit code, then ends on the way to see everything", () => {
+  void it("follows the exit code, then ends on the way to see everything", () => {
     const problem = describeChildFailure({
       title: "Dependency install failed",
       command: "pnpm install",
@@ -99,7 +99,7 @@ describe("the output a failure replays", () => {
     assert.equal(problem.details?.[15], VERBOSE_OUTPUT_HINT);
   });
 
-  it("is not replayed when a verbose run streamed it", () => {
+  void it("is not replayed when a verbose run streamed it", () => {
     const problem = describeChildFailure({
       title: "Dependency install failed",
       command: "pnpm install",
@@ -115,7 +115,7 @@ describe("the output a failure replays", () => {
   });
 });
 
-describe("workspace paths in child output", () => {
+void describe("workspace paths in child output", () => {
   let sources: string;
   let demoSource: string;
   let layers: ResolvedLayer[];
@@ -149,7 +149,7 @@ describe("workspace paths in child output", () => {
       platform,
     });
 
-  it("names the source a layer was copied from", () => {
+  void it("names the source a layer was copied from", () => {
     assert.equal(
       mapper()(
         `file: ${WORKSPACE}/frontend-modules/template-dms-demo-frontend-vue/app/components/Callout.vue:10:50`,
@@ -158,7 +158,7 @@ describe("workspace paths in child output", () => {
     );
   });
 
-  it("names the package of a layer whose source is not on this disk", () => {
+  void it("names the package of a layer whose source is not on this disk", () => {
     assert.equal(
       mapper()(
         `(!) ${WORKSPACE}/frontend-modules/antelopejs__dms-frontend-vue/layers/dms-ui/app/Modal.vue is dynamically imported`,
@@ -167,7 +167,7 @@ describe("workspace paths in child output", () => {
     );
   });
 
-  it("does not mistake a layer for another whose name it starts", () => {
+  void it("does not mistake a layer for another whose name it starts", () => {
     assert.equal(
       mapper()(
         `${WORKSPACE}/frontend-modules/antelopejs__dms-frontend-vue-x/app/a.ts`,
@@ -176,7 +176,7 @@ describe("workspace paths in child output", () => {
     );
   });
 
-  it("maps paths relative to the workspace too", () => {
+  void it("maps paths relative to the workspace too", () => {
     assert.equal(
       mapper()(
         'Could not resolve "./Foo.vue" from "frontend-modules/template-dms-demo-frontend-vue/app/pages/index.vue"',
@@ -191,7 +191,7 @@ describe("workspace paths in child output", () => {
     );
   });
 
-  it("maps a relative path right behind a color sequence", () => {
+  void it("maps a relative path right behind a color sequence", () => {
     assert.equal(
       mapper()(
         "\u001b[96mfrontend-modules/template-dms-demo-frontend-vue/app/a.vue\u001b[0m:\u001b[93m17\u001b[0m",
@@ -200,14 +200,14 @@ describe("workspace paths in child output", () => {
     );
   });
 
-  it("shortens any other path into the workspace", () => {
+  void it("shortens any other path into the workspace", () => {
     assert.equal(
       mapper()(`> vite build ${WORKSPACE}/node_modules/.pnpm/vite/index.js`),
       "> vite build ~/.antelopejs/dms-frontend/f6af15c7…/node_modules/.pnpm/vite/index.js",
     );
   });
 
-  it("reads backslashes and any drive letter case on Windows", () => {
+  void it("reads backslashes and any drive letter case on Windows", () => {
     const windowsWorkspace = WORKSPACE.replace(/\//g, "\\");
     assert.equal(
       mapper("win32")(
@@ -217,14 +217,14 @@ describe("workspace paths in child output", () => {
     );
   });
 
-  it("leaves lines without workspace paths alone", () => {
+  void it("leaves lines without workspace paths alone", () => {
     const line = "Progress: resolved 548, reused 446, downloaded 0, added 448";
     assert.equal(mapper()(line), line);
   });
 });
 
-describe("pnpm install progress", () => {
-  it("follows the counts pnpm prints, then says what it installed", () => {
+void describe("pnpm install progress", () => {
+  void it("follows the counts pnpm prints, then says what it installed", () => {
     const progress = new InstallProgress();
     assert.equal(progress.label, "Installing dependencies");
     assert.equal(progress.read("Scope: all 13 workspace projects"), false);
@@ -247,7 +247,7 @@ describe("pnpm install progress", () => {
     assert.equal(progress.doneLabel, "Installed 448 packages");
   });
 
-  it("says when nothing had to change", () => {
+  void it("says when nothing had to change", () => {
     const progress = new InstallProgress();
     progress.read("Lockfile is up to date, resolution step is skipped");
     progress.read("Already up to date");

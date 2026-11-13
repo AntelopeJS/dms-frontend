@@ -21,7 +21,7 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
-describe("requests the frontend server cannot serve", () => {
+void describe("requests the frontend server cannot serve", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-request-failure-"));
   const previousCwd = process.cwd();
   const previousDev = process.env.DMS_DEV;
@@ -58,7 +58,7 @@ describe("requests the frontend server cannot serve", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("answers a malformed page path with 400 and keeps serving", async () => {
+  void it("answers a malformed page path with 400 and keeps serving", async () => {
     const variants: Record<string, string>[] = [
       { accept: "text/html" },
       { "x-inertia": "true" },
@@ -84,7 +84,7 @@ describe("requests the frontend server cannot serve", () => {
     assert.notEqual(next.status, 400, "the process is still up and serving");
   });
 
-  it("answers 500 when rendering the error page fails too", async (context) => {
+  void it("answers 500 when rendering the error page fails too", async (context) => {
     const writes: Array<[number, Record<string, string>]> = [];
     let body: string | undefined;
     const response = responseOf();
@@ -114,7 +114,7 @@ describe("requests the frontend server cannot serve", () => {
     assert.equal(body, "Internal Server Error");
   });
 
-  it("falls back to the client-rendered shell when the server render fails", async (context) => {
+  void it("falls back to the client-rendered shell when the server render fails", async (context) => {
     const errors = context.mock.method(console, "error", () => undefined);
     const page = runtime.createInertiaPage("/articles", { path: "/articles" });
     const reads = Object.assign(async () => undefined, {
@@ -139,7 +139,7 @@ describe("requests the frontend server cannot serve", () => {
     );
   });
 
-  it("drops the connection when the failed response had already started", async (context) => {
+  void it("drops the connection when the failed response had already started", async (context) => {
     let destroyed = false;
     let headersSent = false;
     const response = Object.defineProperty(responseOf(), "headersSent", {

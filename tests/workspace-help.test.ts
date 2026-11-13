@@ -38,8 +38,8 @@ function linesSharingWithProduction(text: string): string[] {
     .filter((line) => /\b(build|start)\b/.test(line));
 }
 
-describe("workspace help", () => {
-  it("never says build and start share the workspace dev -b uses", async () => {
+void describe("workspace help", () => {
+  void it("never says build and start share the workspace dev -b uses", async () => {
     const surfaces = {
       "help environment": formatEnvironmentHelp(200),
       "clean --help": fullHelp(cmdClean()),
@@ -60,7 +60,7 @@ describe("workspace help", () => {
     });
   });
 
-  it("says build and start use <project>/.dms-frontend or --workspace", () => {
+  void it("says build and start use <project>/.dms-frontend or --workspace", () => {
     assert.match(
       formatEnvironmentHelp(200).replace(/\s+/g, " "),
       /build and start use <project>\/\.dms-frontend, or --workspace/,

@@ -27,7 +27,7 @@ function translator(locale: string, messages: Record<string, string> = {}) {
   };
 }
 
-describe("network error feedback", () => {
+void describe("network error feedback", () => {
   let removeListener: (() => void) | undefined;
 
   beforeEach(() => {
@@ -41,7 +41,7 @@ describe("network error feedback", () => {
     Reflect.deleteProperty(globalThis, "document");
   });
 
-  it("shows a toast and keeps the failed visit from rejecting", () => {
+  void it("shows a toast and keeps the failed visit from rejecting", () => {
     const toasts: DmsNetworkErrorToast[] = [];
     removeListener = showNetworkErrors(
       (toast) => toasts.push(toast),
@@ -70,7 +70,7 @@ describe("network error feedback", () => {
     );
   });
 
-  it("speaks the visitor's language, preferring the modules' wording", () => {
+  void it("speaks the visitor's language, preferring the modules' wording", () => {
     const toasts: DmsNetworkErrorToast[] = [];
     removeListener = showNetworkErrors(
       (toast) => toasts.push(toast),
@@ -84,7 +84,7 @@ describe("network error feedback", () => {
     );
   });
 
-  it("falls back to English for a language the renderer does not ship", () => {
+  void it("falls back to English for a language the renderer does not ship", () => {
     const toasts: DmsNetworkErrorToast[] = [];
     removeListener = showNetworkErrors(
       (toast) => toasts.push(toast),

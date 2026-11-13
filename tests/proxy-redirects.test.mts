@@ -29,7 +29,7 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
-describe("backend redirects", () => {
+void describe("backend redirects", () => {
   const previous = Object.fromEntries(
     ENVIRONMENT.map((name) => [name, process.env[name]]),
   );
@@ -100,9 +100,9 @@ describe("backend redirects", () => {
     return fetch(`${frontendUrl}${path}`, { redirect: "manual", ...init });
   }
 
-  describe("through a backend proxy", () => {
+  void describe("through a backend proxy", () => {
     for (const status of REDIRECT_STATUSES) {
-      it(`relays a ${status} to another site as the backend sent it`, async () => {
+      void it(`relays a ${status} to another site as the backend sent it`, async () => {
         const method = status === 307 ? "POST" : "GET";
         const response = await visit(`/api/maps?status=${status}`, {
           method,
@@ -119,7 +119,7 @@ describe("backend redirects", () => {
         assert.equal(thirdPartyCalls, 0);
       });
 
-      it(`relays a ${status} on the backend's origin as a path on the frontend's`, async () => {
+      void it(`relays a ${status} on the backend's origin as a path on the frontend's`, async () => {
         const response = await visit(`/api/internal?status=${status}`);
         assert.equal(response.status, status);
         assert.equal(
@@ -130,7 +130,7 @@ describe("backend redirects", () => {
       });
     }
 
-    it("relays a relative Location, which already names the frontend's path", async () => {
+    void it("relays a relative Location, which already names the frontend's path", async () => {
       const response = await visit("/api/relative");
       assert.equal(response.status, 302);
       assert.equal(
@@ -140,7 +140,7 @@ describe("backend redirects", () => {
       );
     });
 
-    it("keeps a backend path the frontend does not proxy on the backend", async () => {
+    void it("keeps a backend path the frontend does not proxy on the backend", async () => {
       const response = await visit("/api/unproxied");
       assert.equal(response.status, 302);
       assert.equal(
@@ -149,7 +149,7 @@ describe("backend redirects", () => {
       );
     });
 
-    it("keeps a backend path the renderer answers first on the backend", async () => {
+    void it("keeps a backend path the renderer answers first on the backend", async () => {
       for (const path of ICON_URLS) {
         const response = await visit(
           `/api/to-icons?to=${encodeURIComponent(path)}`,
@@ -159,7 +159,7 @@ describe("backend redirects", () => {
       }
     });
 
-    it("never turns a backend path that starts with // into another host", async () => {
+    void it("never turns a backend path that starts with // into another host", async () => {
       const response = await visit("/api/climbing");
       const location = new URL(
         response.headers.get("location") ?? "",
@@ -169,7 +169,7 @@ describe("backend redirects", () => {
       assert.equal(location.pathname, "//elsewhere.test/x");
     });
 
-    it("leaves an answer that is no redirect as it was", async () => {
+    void it("leaves an answer that is no redirect as it was", async () => {
       const response = await visit("/api/target");
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("location"), null);
@@ -177,7 +177,7 @@ describe("backend redirects", () => {
     });
   });
 
-  it("relays a public endpoint's redirect without following it", async () => {
+  void it("relays a public endpoint's redirect without following it", async () => {
     const response = await visit("/api/public/hook?status=307", {
       method: "POST",
       body: "{}",
@@ -190,7 +190,7 @@ describe("backend redirects", () => {
     assert.equal(thirdPartyCalls, 0);
   });
 
-  describe("from a module route", () => {
+  void describe("from a module route", () => {
     let served:
       | Awaited<
           ReturnType<
@@ -241,7 +241,7 @@ describe("backend redirects", () => {
 
     after(() => served?.close());
 
-    it("refuses a redirect to backend(), a JSON call, without following it", async () => {
+    void it("refuses a redirect to backend(), a JSON call, without following it", async () => {
       const originalError = console.error;
       console.error = () => {};
       try {
@@ -258,7 +258,7 @@ describe("backend redirects", () => {
       assert.equal(thirdPartyCalls, 0);
     });
 
-    it("relays a backend redirect a route returns, on the frontend's origin", async () => {
+    void it("relays a backend redirect a route returns, on the frontend's origin", async () => {
       const response = await fetch(`${served?.url}/api/_relay/raw`, {
         redirect: "manual",
       });
@@ -270,7 +270,7 @@ describe("backend redirects", () => {
       assert.deepEqual(response.headers.getSetCookie(), [BACKEND_COOKIE]);
     });
 
-    it("keeps a route's backend redirect to a path the frontend does not proxy on the backend", async () => {
+    void it("keeps a route's backend redirect to a path the frontend does not proxy on the backend", async () => {
       const response = await fetch(`${served?.url}/api/_relay/unproxied`, {
         redirect: "manual",
       });
@@ -281,7 +281,7 @@ describe("backend redirects", () => {
       );
     });
 
-    it("drops the cookies of another site a route's fetch was redirected to", async () => {
+    void it("drops the cookies of another site a route's fetch was redirected to", async () => {
       const response = await fetch(`${served?.url}/api/_relay/followed`, {
         redirect: "manual",
       });
@@ -289,7 +289,7 @@ describe("backend redirects", () => {
       assert.deepEqual(response.headers.getSetCookie(), []);
     });
 
-    it("leaves a Location the route wrote itself as it is", async () => {
+    void it("leaves a Location the route wrote itself as it is", async () => {
       const response = await fetch(`${served?.url}/api/_relay/own`, {
         redirect: "manual",
       });
@@ -301,12 +301,12 @@ describe("backend redirects", () => {
   });
 });
 
-describe("relayedLocation", () => {
+void describe("relayedLocation", () => {
   const backend = "http://backend.test";
   const fetched = `${backend}/api/files/1`;
   const proxied = (path: string) => path.startsWith("/api/");
 
-  it("names a proxied backend path on the frontend", () => {
+  void it("names a proxied backend path on the frontend", () => {
     assert.equal(
       relayedLocation(`${backend}/api/files/2?v=1#x`, fetched, proxied),
       "/api/files/2?v=1#x",
@@ -317,7 +317,7 @@ describe("relayedLocation", () => {
     );
   });
 
-  it("keeps a backend path the frontend does not proxy absolute", () => {
+  void it("keeps a backend path the frontend does not proxy absolute", () => {
     assert.equal(
       relayedLocation(`${backend}${UNPROXIED_URL}`, fetched, proxied),
       `${backend}${UNPROXIED_URL}`,
@@ -328,21 +328,21 @@ describe("relayedLocation", () => {
     );
   });
 
-  it("keeps every backend location absolute without a proxied path", () => {
+  void it("keeps every backend location absolute without a proxied path", () => {
     assert.equal(
       relayedLocation(`${backend}/api/files/2`, fetched),
       `${backend}/api/files/2`,
     );
   });
 
-  it("keeps a path that starts with // a path", () => {
+  void it("keeps a path that starts with // a path", () => {
     assert.equal(
       relayedLocation(`${backend}//elsewhere.test/x`, fetched, () => true),
       "/.//elsewhere.test/x",
     );
   });
 
-  it("keeps another site's location as it came", () => {
+  void it("keeps another site's location as it came", () => {
     assert.equal(
       relayedLocation("https://maps.test/place", fetched, () => true),
       "https://maps.test/place",

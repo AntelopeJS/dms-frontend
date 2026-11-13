@@ -69,8 +69,8 @@ function typecheck(...configFiles: string[]): Promise<RunnerResult> {
   });
 }
 
-describe("typecheck-projects", { concurrency: true }, () => {
-  it("fails on a JSDoc type the project's own .mjs file contradicts", async () => {
+void describe("typecheck-projects", { concurrency: true }, () => {
+  void it("fails on a JSDoc type the project's own .mjs file contradicts", async () => {
     const config = project(
       'import { imported } from "./imported.ts";\n/** @type {string} */\nexport const own = imported;\n',
       "export const imported: number = 1;\n",
@@ -82,7 +82,7 @@ describe("typecheck-projects", { concurrency: true }, () => {
     assert.match(result.stderr, /own\.mjs\(3,14\): error TS2322:/);
   });
 
-  it("leaves the errors of a file the project only imports to that file's own project", async () => {
+  void it("leaves the errors of a file the project only imports to that file's own project", async () => {
     const config = project(
       'import { imported } from "./imported.ts";\n/** @type {number} */\nexport const own = imported;\n',
       'export const imported: number = "text";\n',
@@ -93,7 +93,7 @@ describe("typecheck-projects", { concurrency: true }, () => {
     assert.deepEqual(result, { status: 0, stderr: "", stdout: "" });
   });
 
-  it("fails on an error in the project's own tsconfig, such as a misspelled checkJs", async () => {
+  void it("fails on an error in the project's own tsconfig, such as a misspelled checkJs", async () => {
     const config = project(
       '/** @type {number} */\nexport const own = "text";\n',
       "export const imported = 1;\n",
@@ -116,7 +116,7 @@ describe("typecheck-projects", { concurrency: true }, () => {
     assert.match(result.stderr, /tsconfig\.json\(\d+,\d+\): error TS5025:/);
   });
 
-  it("fails when any of the projects it is given fails", async () => {
+  void it("fails when any of the projects it is given fails", async () => {
     const clean = project(
       "/** @type {number} */\nexport const own = 1;\n",
       "export const imported = 1;\n",

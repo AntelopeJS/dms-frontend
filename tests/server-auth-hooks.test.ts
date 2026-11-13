@@ -55,8 +55,8 @@ function resolved(
   return { modules, warnings };
 }
 
-describe("Auth hook declarations", () => {
-  it("come from the highest-priority module that registers them, and another one is reported", () => {
+void describe("Auth hook declarations", () => {
+  void it("come from the highest-priority module that registers them, and another one is reported", () => {
     const { modules, warnings } = resolved([
       {
         id: "low",
@@ -76,7 +76,7 @@ describe("Auth hook declarations", () => {
     ]);
   });
 
-  it("are ignored whole when malformed, with a warning", () => {
+  void it("are ignored whole when malformed, with a warning", () => {
     const { modules, warnings } = resolved([
       {
         id: "dms",
@@ -96,7 +96,7 @@ describe("Auth hook declarations", () => {
     assert.match(warnings[1], /refreshSession is not a function/);
   });
 
-  it("leave pages without a session where no module registers them", () => {
+  void it("leave pages without a session where no module registers them", () => {
     const auth = serverAuth(undefined, context);
     assert.equal(auth.signInPath, "/auth");
     assert.equal(auth.signInLocation("/x?y=1"), "/auth?redirect=%2Fx%3Fy%3D1");
@@ -119,7 +119,7 @@ describe("Auth hook declarations", () => {
     );
   });
 
-  it("renew no session where no module registers them", async () => {
+  void it("renew no session where no module registers them", async () => {
     const auth = serverAuth(undefined, context);
     assert.equal(
       await auth.refresh(
@@ -130,7 +130,7 @@ describe("Auth hook declarations", () => {
     );
   });
 
-  it("exempt the provider's sign-in path when it names no exempt pages", () => {
+  void it("exempt the provider's sign-in path when it names no exempt pages", () => {
     const { modules } = resolved([
       { id: "dms", setup: (s) => s.registerAuth({ signInPath: "/login" }) },
     ]);
@@ -145,7 +145,7 @@ describe("Auth hook declarations", () => {
     assert.equal(auth.isSignInExempt("/dashboard"), false);
   });
 
-  it("use the provider's, the server adding the session stamp", () => {
+  void it("use the provider's, the server adding the session stamp", () => {
     const { modules } = resolved([
       {
         id: "dms",
@@ -180,7 +180,7 @@ describe("Auth hook declarations", () => {
     assert.deepEqual(auth.view(undefined), {});
   });
 
-  it("call the provider's hooks with the registered object as this", async () => {
+  void it("call the provider's hooks with the registered object as this", async () => {
     const secret = process.env.DMS_SESSION_SECRET;
     process.env.DMS_SESSION_SECRET = SESSION_SECRET;
     try {
@@ -282,7 +282,7 @@ function cookiePairs(response: ServerResponse): string[] {
   return setCookies(response).map((cookie) => cookie.split(";", 1)[0]);
 }
 
-describe("Auth hooks in the production server", () => {
+void describe("Auth hooks in the production server", () => {
   const workspace = realpathSync(mkdtempSync(resolve(".server-auth-hooks-")));
   const source = mkdtempSync(join(tmpdir(), "dms-auth-fixture-"));
   let backend: Server | undefined;
@@ -344,7 +344,7 @@ describe("Auth hooks in the production server", () => {
     return fetch(`${frontendUrl}${path}`, { redirect: "manual", headers });
   };
 
-  it("sends a signed-out visit the backend refuses to the provider's sign-in page", async () => {
+  void it("sends a signed-out visit the backend refuses to the provider's sign-in page", async () => {
     const response = await visit("/private?tab=1");
     assert.equal(response.status, 302);
     assert.equal(
@@ -353,13 +353,13 @@ describe("Auth hooks in the production server", () => {
     );
   });
 
-  it("leaves the provider's exempt pages to the error page", async () => {
+  void it("leaves the provider's exempt pages to the error page", async () => {
     const response = await visit("/login/reset");
     assert.equal(response.status, 401);
     assert.equal((await response.json()).props.error.statusCode, 401);
   });
 
-  it("renews a refused session through the provider's hook and retries the visit with it", async () => {
+  void it("renews a refused session through the provider's hook and retries the visit with it", async () => {
     const jar = responseOf();
     sessions.writeSession(jar, {
       accessToken: "expired",
@@ -390,7 +390,7 @@ describe("Auth hooks in the production server", () => {
     );
   });
 
-  it("hands the module owning sign-in the session and its own dms_* cookies", async () => {
+  void it("hands the module owning sign-in the session and its own dms_* cookies", async () => {
     const jar = responseOf();
     const session = {
       accessToken: "a",
@@ -420,7 +420,7 @@ describe("Auth hooks in the production server", () => {
     assert.equal(jsonAt(body, "account", "accountId"), ACCOUNT_ID);
   });
 
-  it("keeps only a session written persistent for 30 days", () => {
+  void it("keeps only a session written persistent for 30 days", () => {
     const persistent = responseOf();
     const session = responseOf();
     sessions.writeSession(persistent, { accessToken: "a", persistent: true });
@@ -429,7 +429,7 @@ describe("Auth hooks in the production server", () => {
     assert.doesNotMatch(setCookies(session)[0] ?? "", /Max-Age/);
   });
 
-  it("writes the session cookie, ending with the browser when not persistent", async () => {
+  void it("writes the session cookie, ending with the browser when not persistent", async () => {
     const response = await fetch(`${frontendUrl}/api/_fixture/session`, {
       method: "POST",
       headers: { origin: frontendUrl },

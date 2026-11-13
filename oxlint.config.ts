@@ -26,16 +26,12 @@ const COMMANDS_USE_CORE_OUTPUT = {
   },
 } as const;
 
-/**
- * A `describe` block is not a function anyone splits, and node:test's
- * describe/it return a promise the runner owns, which the suite does not await.
- */
+/** A `describe` block is not a function anyone splits. */
 const TEST_SUITES = {
   files: ["tests/**/*.test.ts", "tests/**/*.test.mts"],
   rules: {
     "eslint/max-lines": "off",
     "eslint/max-lines-per-function": "off",
-    "typescript/no-floating-promises": "off",
   },
 } as const;
 

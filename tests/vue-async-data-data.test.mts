@@ -13,12 +13,12 @@ import {
   mountRuntime,
 } from "./fixtures/vue-async-data.mts";
 
-describe("Another caller's data (useDmsData)", () => {
+void describe("Another caller's data (useDmsData)", () => {
   interface Rows {
     rows: string[];
   }
 
-  it("follows a key as a caller loads it, keeps it across a navigation, and updates it in place without reading it again", async () => {
+  void it("follows a key as a caller loads it, keeps it across a navigation, and updates it in place without reading it again", async () => {
     const runtime = createDmsFrontendRuntime();
     const shown = ref(true);
     let calls = 0;
@@ -86,11 +86,11 @@ describe("Another caller's data (useDmsData)", () => {
     app.unmount();
   });
 
-  it("reads a request's own data on a server, and hydrates with what it rendered", async () => {
+  void it("reads a request's own data on a server, and hydrates with what it rendered", async () => {
     const Owner = (key: string) =>
       defineComponent({
         setup() {
-          useDmsAsyncData<Rows>(key, async () => ({ rows: [key] }));
+          void useDmsAsyncData<Rows>(key, async () => ({ rows: [key] }));
           return () => h("i");
         },
       });
@@ -154,7 +154,7 @@ describe("Another caller's data (useDmsData)", () => {
     app.unmount();
   });
 
-  it("gives a reactive key's own data only, not the previous key's shown in its place", async () => {
+  void it("gives a reactive key's own data only, not the previous key's shown in its place", async () => {
     const runtime = createDmsFrontendRuntime();
     const id = ref(1);
     const answers = new Map<string, ReturnType<typeof deferred<Rows>>>();

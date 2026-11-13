@@ -17,7 +17,7 @@ function writeFile(path: string, content: string): void {
   writeFileSync(path, content);
 }
 
-it("gives emails the layers' app configs, module by module, after each module's email config", async () => {
+void it("gives emails the layers' app configs, module by module, after each module's email config", async () => {
   const workspace = mkdtempSync(resolve(".email-app-config-"));
   try {
     const project: ResolvedLayer = {

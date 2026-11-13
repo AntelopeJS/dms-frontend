@@ -46,20 +46,20 @@ function dmsModule(
     ...overrides,
   };
 }
-describe("manifest secrets resolution", () => {
+void describe("manifest secrets resolution", () => {
   const plain: ManifestModule = {
     name: "@fixture/plain",
     priority: 1,
   };
 
-  it("maps each variable of the closed table to its manifest path", () => {
+  void it("maps each variable of the closed table to its manifest path", () => {
     assert.deepEqual(MANIFEST_SECRET_ENV, {
       DMS_HTML_RENDER_SECRET: ["htmlRender", "serviceSecret"],
       DMS_OAUTH_RELAY_SECRET: ["oauth", "relaySecret"],
     });
   });
 
-  it("reads both secrets the backend publishes in the manifest", () => {
+  void it("reads both secrets the backend publishes in the manifest", () => {
     const resolved = resolveManifestSecrets(
       collectManifestSecrets([plain, dmsModule(MANIFEST_SECRET)]),
       {},
@@ -75,7 +75,7 @@ describe("manifest secrets resolution", () => {
     assert.deepEqual(resolved.conflicts, []);
   });
 
-  it("ignores values that are not a non-empty string", () => {
+  void it("ignores values that are not a non-empty string", () => {
     for (const value of [null, "", 42, { nested: "x" }]) {
       const resolved = resolveManifestSecrets(
         collectManifestSecrets([dmsModule(value, value)]),
@@ -93,7 +93,7 @@ describe("manifest secrets resolution", () => {
     );
   });
 
-  it("lets the manifest win, a variable filling in a secret it leaves out", () => {
+  void it("lets the manifest win, a variable filling in a secret it leaves out", () => {
     const resolved = resolveManifestSecrets(
       collectManifestSecrets([dmsModule(MANIFEST_SECRET, null)]),
       {
@@ -117,7 +117,7 @@ describe("manifest secrets resolution", () => {
     );
   });
 
-  it("takes the first value in manifest priority order and reports a conflict", () => {
+  void it("takes the first value in manifest priority order and reports a conflict", () => {
     const low = dmsModule("low-render", "low-relay", {
       name: "@fixture/low",
       priority: 1,
@@ -157,7 +157,7 @@ describe("manifest secrets resolution", () => {
     );
   });
 
-  it("keeps manifest order between modules of equal priority", () => {
+  void it("keeps manifest order between modules of equal priority", () => {
     const first = dmsModule("first", null, { name: "@fixture/first" });
     const second = dmsModule("second", null, { name: "@fixture/second" });
     assert.equal(
@@ -168,8 +168,8 @@ describe("manifest secrets resolution", () => {
   });
 });
 
-describe("the server secrets report", () => {
-  it("groups the secrets the server receives by where they come from", () => {
+void describe("the server secrets report", () => {
+  void it("groups the secrets the server receives by where they come from", () => {
     assert.equal(
       describeSecretSources({
         DMS_HTML_RENDER_SECRET: "env",
@@ -196,7 +196,7 @@ describe("the server secrets report", () => {
     );
   });
 
-  it("warns about each missing secret with what it costs, then how to set them", () => {
+  void it("warns about each missing secret with what it costs, then how to set them", () => {
     const memory = memoryUi();
     reportManifestSecrets(
       resolveManifestSecrets(collectManifestSecrets([]), {}),
@@ -212,7 +212,7 @@ describe("the server secrets report", () => {
     );
   });
 
-  it("says nothing about the secrets the server receives", () => {
+  void it("says nothing about the secrets the server receives", () => {
     const memory = memoryUi();
     reportManifestSecrets(
       resolveManifestSecrets(
@@ -225,7 +225,7 @@ describe("the server secrets report", () => {
     assert.equal(memory.stderr(), "");
   });
 
-  it("never prints a secret value", () => {
+  void it("never prints a secret value", () => {
     const resolved = resolveManifestSecrets(
       collectManifestSecrets([
         dmsModule(MANIFEST_SECRET, null),
@@ -251,7 +251,7 @@ describe("the server secrets report", () => {
   });
 });
 
-describe("ajs dms start", { concurrency: true }, () => {
+void describe("ajs dms start", { concurrency: true }, () => {
   const BACKEND_URL = "http://127.0.0.1:5010";
   const PUBLIC_KEY_VARIABLE = "FIXTURE_PUBLIC_KEY";
   const SERVER_LIFETIME_MS = 3000;
@@ -413,7 +413,7 @@ describe("ajs dms start", { concurrency: true }, () => {
     }
   }
 
-  it("computes the modules' public options from the project and the variables it runs with", async () => {
+  void it("computes the modules' public options from the project and the variables it runs with", async () => {
     const fromConfig = await start({});
     assert.deepEqual(JSON.parse(fromConfig.report.publicOptions ?? "{}"), {
       "fixture__module-frontend-vue": {
@@ -436,7 +436,7 @@ describe("ajs dms start", { concurrency: true }, () => {
     });
   });
 
-  it("says whether the backend took or refused the ready report", async () => {
+  void it("says whether the backend took or refused the ready report", async () => {
     const backend = createServer((request, response) => {
       const isAuthorized = request.headers["x-dms-bootstrap"] === "right";
       response.statusCode = isAuthorized ? 204 : 401;
@@ -471,7 +471,7 @@ describe("ajs dms start", { concurrency: true }, () => {
     }
   });
 
-  it("hands the server the secrets of its environment, and names their source", async () => {
+  void it("hands the server the secrets of its environment, and names their source", async () => {
     const { report, log } = await start({
       DMS_HTML_RENDER_SECRET: "deployment-secret",
       DMS_OAUTH_RELAY_SECRET: "deployment-relay",
@@ -485,7 +485,7 @@ describe("ajs dms start", { concurrency: true }, () => {
     assert.ok(!log.includes("deployment-"));
   });
 
-  it("starts the server without secrets and says what they cost", async () => {
+  void it("starts the server without secrets and says what they cost", async () => {
     const { report, log } = await start({});
     assert.equal(report.secret, undefined);
     assert.equal(report.relay, undefined);
@@ -500,7 +500,7 @@ describe("ajs dms start", { concurrency: true }, () => {
     assert.doesNotMatch(log, /Secrets:/);
   });
 
-  it("names each module option the server would get empty, until DMS_PRIVATE_OPTIONS sets it", async () => {
+  void it("names each module option the server would get empty, until DMS_PRIVATE_OPTIONS sets it", async () => {
     const built = {
       "acme__shop-frontend-vue": {
         apiKey: "",
@@ -532,7 +532,7 @@ describe("ajs dms start", { concurrency: true }, () => {
     assert.ok(!set.log.includes("shop-api-key"));
   });
 
-  it("refuses a DMS_PRIVATE_OPTIONS that is not options by module id, without repeating it", async () => {
+  void it("refuses a DMS_PRIVATE_OPTIONS that is not options by module id, without repeating it", async () => {
     await assert.rejects(
       start({
         DMS_PRIVATE_OPTIONS: '{"acme__shop-frontend-vue":"leaked-value"}',

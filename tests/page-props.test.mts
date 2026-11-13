@@ -12,8 +12,8 @@ function backendAnswering(answer: () => Promise<JsonValue>) {
   return { fetchJson: answer, isFrontendPage: () => Promise.resolve(false) };
 }
 
-describe("page props from the backend's page answer", () => {
-  it("keeps the page an object answer describes and leaves its shared layout out", async () => {
+void describe("page props from the backend's page answer", () => {
+  void it("keeps the page an object answer describes and leaves its shared layout out", async () => {
     const backend = backendAnswering(() =>
       Promise.resolve({ componentName: "Articles", shared: { menu: [] } }),
     );
@@ -29,7 +29,7 @@ describe("page props from the backend's page answer", () => {
     });
   });
 
-  it("refuses an answer that is not a page object, as the backend failing", async () => {
+  void it("refuses an answer that is not a page object, as the backend failing", async () => {
     for (const answer of ["abc", 5, true, null, [], ["a"]]) {
       const backend = backendAnswering(() => Promise.resolve(answer));
       await assert.rejects(
@@ -43,7 +43,7 @@ describe("page props from the backend's page answer", () => {
     }
   });
 
-  it("still serves a custom frontend page when the backend has none", async () => {
+  void it("still serves a custom frontend page when the backend has none", async () => {
     const backend = {
       fetchJson: () => Promise.reject(new BackendResponseError(404, undefined)),
       isFrontendPage: () => Promise.resolve(true),

@@ -23,12 +23,12 @@ function workspaceRecording(content?: string): string {
   return root;
 }
 
-describe("The entry weight a client build recorded", () => {
-  it("is nothing when the build recorded none", () => {
+void describe("The entry weight a client build recorded", () => {
+  void it("is nothing when the build recorded none", () => {
     assert.equal(readEntryWeight(workspaceRecording()), undefined);
   });
 
-  it("is read from what the build records", () => {
+  void it("is read from what the build records", () => {
     const root = workspaceRecording(
       JSON.stringify({ files: [], bytes: 0, owners: { shared: 10, mod: 30 } }),
     );
@@ -42,7 +42,7 @@ describe("The entry weight a client build recorded", () => {
     });
   });
 
-  it("is refused when the file is not what the build records", () => {
+  void it("is refused when the file is not what the build records", () => {
     for (const content of [
       "null",
       "[]",

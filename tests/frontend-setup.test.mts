@@ -112,8 +112,8 @@ async function serverApp() {
   return { app, runtime };
 }
 
-describe("Frontend module setup", () => {
-  it("replaces what an earlier setup registered, keeping module priority", async () => {
+void describe("Frontend module setup", () => {
+  void it("replaces what an earlier setup registered, keeping module priority", async () => {
     const calls = noCalls();
     await setupFrontendModules(evaluateModules(1, calls));
     await setupFrontendModules(evaluateModules(2, calls));
@@ -153,7 +153,7 @@ describe("Frontend module setup", () => {
     assert.equal(calls.middleware.at(-1), "guard high 2");
   });
 
-  it("gives a name back to a lower-priority module once the higher one stops claiming it", async () => {
+  void it("gives a name back to a lower-priority module once the higher one stops claiming it", async () => {
     const claiming = (
       label: string,
       name?: string,
@@ -184,7 +184,7 @@ describe("Frontend module setup", () => {
     );
   });
 
-  it("keeps each module's registrations once however often the modules are set up", async () => {
+  void it("keeps each module's registrations once however often the modules are set up", async () => {
     const calls = noCalls();
     for (const generation of [1, 2, 3])
       await setupFrontendModules(evaluateModules(generation, calls));
@@ -201,7 +201,7 @@ describe("Frontend module setup", () => {
     assert.deepEqual(toRaw(useDmsAppConfig().variants), ["high", "low"]);
   });
 
-  it("serves the previous registrations until a new setup is complete", async () => {
+  void it("serves the previous registrations until a new setup is complete", async () => {
     await setupFrontendModules([
       {
         options: { public: {} },
@@ -310,8 +310,8 @@ function layerConfigs(
   ];
 }
 
-describe("Layer app configs", () => {
-  it("are merged into the app config before the first module is set up", async () => {
+void describe("Layer app configs", () => {
+  void it("are merged into the app config before the first module is set up", async () => {
     let seen: unknown;
     await setupFrontendModules(
       [
@@ -330,7 +330,7 @@ describe("Layer app configs", () => {
     });
   });
 
-  it("let the modules extend the app config, but never the layers' configs", async () => {
+  void it("let the modules extend the app config, but never the layers' configs", async () => {
     const layers = layerConfigs({
       branding: { logo: { light: "/project.svg" } },
     });
@@ -349,7 +349,7 @@ describe("Layer app configs", () => {
     assert.deepEqual(layers, pristine);
   });
 
-  it("apply an edit in place, under what the setups changed", async () => {
+  void it("apply an edit in place, under what the setups changed", async () => {
     await setupFrontendModules(
       [configuring((appConfig) => (appConfig.extra = "by setup"))],
       layerConfigs({ branding: { logo: { light: "/v1.svg" } } }),
@@ -384,7 +384,7 @@ describe("Layer app configs", () => {
     assert.equal(appConfig.extra, "by setup");
   });
 
-  it("repeat the arrays of an entry that still merges its own config", async () => {
+  void it("repeat the arrays of an entry that still merges its own config", async () => {
     const dms = { ui: { button: { compoundVariants: [{ class: "dms" }] } } };
     await setupFrontendModules(
       [

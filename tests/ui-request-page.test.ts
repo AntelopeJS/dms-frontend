@@ -203,7 +203,7 @@ async function withServerRenderer(
   }
 }
 
-it("gives Nuxt UI's Link and route stub their own request's URL while another request renders", async () => {
+void it("gives Nuxt UI's Link and route stub their own request's URL while another request renders", async () => {
   const probe: RenderProbe = {};
   Reflect.set(globalThis, "__dmsUiRequestPage", probe);
   try {
@@ -230,7 +230,7 @@ it("gives Nuxt UI's Link and route stub their own request's URL while another re
   }
 });
 
-it("keeps Nuxt UI's state, such as a toast, to the request that set it", async () => {
+void it("keeps Nuxt UI's state, such as a toast, to the request that set it", async () => {
   await withServerRenderer(TOAST_PAGE, async (renderer) => {
     const toasts = async (url: string) =>
       /toasts:([^<]*)/.exec(

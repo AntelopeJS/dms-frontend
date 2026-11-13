@@ -21,8 +21,8 @@ function workspaceWith(files: Record<string, string>): string {
   return root;
 }
 
-describe("The private options a build wrote", () => {
-  it("are the options by module id of its server options file", () => {
+void describe("The private options a build wrote", () => {
+  void it("are the options by module id of its server options file", () => {
     const modules = { a: { key: "", nested: { list: ["", "x"] } }, b: {} };
     const root = workspaceWith({
       "generated-server-options.json": JSON.stringify({
@@ -33,7 +33,7 @@ describe("The private options a build wrote", () => {
     assert.deepEqual(readBuiltPrivateOptions(root), modules);
   });
 
-  it("are none when the file is missing, unreadable or not what the build writes", () => {
+  void it("are none when the file is missing, unreadable or not what the build writes", () => {
     for (const content of [
       undefined,
       "{",
@@ -55,8 +55,8 @@ describe("The private options a build wrote", () => {
   });
 });
 
-describe("The modules a build serves", () => {
-  it("are named by the manifest name, else the id, with their version", () => {
+void describe("The modules a build serves", () => {
+  void it("are named by the manifest name, else the id, with their version", () => {
     const root = workspaceWith({
       "generated-frontend-modules.json": JSON.stringify({
         modules: [
@@ -73,7 +73,7 @@ describe("The modules a build serves", () => {
     ]);
   });
 
-  it("leave out an entry that has no id, and are none when the registry is not a list", () => {
+  void it("leave out an entry that has no id, and are none when the registry is not a list", () => {
     const root = workspaceWith({
       "generated-frontend-modules.json": JSON.stringify({
         modules: [null, "x", {}, { id: 5 }, { id: "kept" }],

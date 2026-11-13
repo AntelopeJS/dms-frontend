@@ -55,7 +55,7 @@ async function eventually(done: () => boolean | Promise<boolean>) {
  * applies updates with the same client the browser uses, and the server side
  * by `ssrLoadModule`, which is how the generated server renders pages.
  */
-describe("regenerated locale catalogs in the dev server", () => {
+void describe("regenerated locale catalogs in the dev server", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-locale-hmr-")));
   const workspace = join(root, "workspace");
   const layer: ResolvedLayer = {
@@ -113,7 +113,7 @@ describe("regenerated locale catalogs in the dev server", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("serves the regenerated catalogs to the next server render", async () => {
+  void it("serves the regenerated catalogs to the next server render", async () => {
     const render = async (locale: string): Promise<string> => {
       const entry: unknown = await server.ssrLoadModule("/server-entry.ts");
       assert.ok(isGreeter(entry), "the server entry exports greeting");
@@ -131,7 +131,7 @@ describe("regenerated locale catalogs in the dev server", () => {
     await eventually(async () => (await render("fr")) === "Bonjour du serveur");
   });
 
-  it("applies each regenerated catalog to the running app in place", async () => {
+  void it("applies each regenerated catalog to the running app in place", async () => {
     const { createServerModuleRunner } = await import("vite");
     const runner = createServerModuleRunner(server.environments.ssr, {
       hmr: { logger: false },
@@ -178,7 +178,7 @@ describe("regenerated locale catalogs in the dev server", () => {
     }
   });
 
-  it("asks for a full reload when a locale appears", async () => {
+  void it("asks for a full reload when a locale appears", async () => {
     const { createServerModuleRunner } = await import("vite");
     const runner = createServerModuleRunner(server.environments.ssr, {
       hmr: { logger: false },

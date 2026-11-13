@@ -50,7 +50,7 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
-describe("the same-origin Iconify API", () => {
+void describe("the same-origin Iconify API", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-icons-"));
 
   before(() => {
@@ -69,7 +69,7 @@ describe("the same-origin Iconify API", () => {
 
   after(() => rmSync(root, { recursive: true, force: true }));
 
-  it("answers the requested subset of an installed collection", async () => {
+  void it("answers the requested subset of an installed collection", async () => {
     const response = await iconResponse(
       root,
       "GET",
@@ -86,7 +86,7 @@ describe("the same-origin Iconify API", () => {
     assert.equal(jsonAt(data, "width"), 256);
   });
 
-  it("answers 404 for a collection that is not installed", async () => {
+  void it("answers 404 for a collection that is not installed", async () => {
     const response = await iconResponse(
       root,
       "GET",
@@ -96,7 +96,7 @@ describe("the same-origin Iconify API", () => {
     assert.equal(response.headers["cache-control"], "no-store");
   });
 
-  it("rejects any prefix or icon name outside Iconify's naming rule", async () => {
+  void it("rejects any prefix or icon name outside Iconify's naming rule", async () => {
     for (const path of [
       "demo.json?icons=../check",
       "demo.json?icons=Check",
@@ -112,7 +112,7 @@ describe("the same-origin Iconify API", () => {
     }
   });
 
-  it("loads every installed collection for the server render", async () => {
+  void it("loads every installed collection for the server render", async () => {
     assert.deepEqual(await installedCollections(root), [COLLECTION]);
     const empty = mkdtempSync(join(tmpdir(), "dms-no-icons-"));
     try {
@@ -122,7 +122,7 @@ describe("the same-origin Iconify API", () => {
     }
   });
 
-  it("only answers reads", async () => {
+  void it("only answers reads", async () => {
     const response = await iconResponse(
       root,
       "POST",
@@ -133,7 +133,7 @@ describe("the same-origin Iconify API", () => {
   });
 });
 
-describe("the generated server's icon route", () => {
+void describe("the generated server's icon route", () => {
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backendPaths: string[] = [];
   const backend = createServer((request, response) => {
@@ -157,7 +157,7 @@ describe("the generated server's icon route", () => {
     backend.close();
   });
 
-  it("answers icon queries itself instead of proxying them", async () => {
+  void it("answers icon queries itself instead of proxying them", async () => {
     const unknown = await fetch(
       `${base}${ICON_API_PATH}unknown.json?icons=check`,
     );
@@ -171,7 +171,7 @@ describe("the generated server's icon route", () => {
   });
 });
 
-describe("the client's Iconify API provider", () => {
+void describe("the client's Iconify API provider", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-icon-provider-"));
   const requested: string[] = [];
 
@@ -191,7 +191,7 @@ describe("the client's Iconify API provider", () => {
 
   after(() => rmSync(root, { recursive: true, force: true }));
 
-  it("loads every icon the bundle lacks from the page's own origin", async () => {
+  void it("loads every icon the bundle lacks from the page's own origin", async () => {
     assert.equal(addAPIProvider("", sameOriginIconProvider(ORIGIN)), true);
     const icon = await loadIcon("demo:check");
     assert.equal(icon.body, CHECK_ICON.body);
@@ -202,7 +202,7 @@ describe("the client's Iconify API provider", () => {
   });
 });
 
-describe("the client-bundle icon scan", () => {
+void describe("the client-bundle icon scan", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-icon-scan-"));
   const layer = join(root, "frontend-modules", "dms", "layers", "dms-layout");
   const module = join(root, "frontend-modules", "ai");
@@ -216,7 +216,7 @@ describe("the client-bundle icon scan", () => {
 
   after(() => rmSync(root, { recursive: true, force: true }));
 
-  it("reads the TypeScript of every layer's app directory", () => {
+  void it("reads the TypeScript of every layer's app directory", () => {
     const globs = iconScanGlobs(root, [layer, module]);
     assert.ok(globs.includes("**/*.{vue,jsx,tsx,md,mdc,mdx,yml,yaml}"));
     const scanned = globSync(globs, { cwd: root }).map((path) =>

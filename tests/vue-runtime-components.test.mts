@@ -42,8 +42,8 @@ import {
 } from "./fixtures/vue-runtime.mts";
 import { inertiaPage } from "./helpers/inertia-page";
 
-describe("Cookie refs", () => {
-  it("shares one browser ref per cookie and writes it to the document", (context) => {
+void describe("Cookie refs", () => {
+  void it("shares one browser ref per cookie and writes it to the document", (context) => {
     const cookieJar = { cookie: "dms-shared-pref=%22small%22" };
     Reflect.set(globalThis, "document", cookieJar);
     context.after(() => {
@@ -58,7 +58,7 @@ describe("Cookie refs", () => {
     assert.match(cookieJar.cookie, /^dms-shared-pref=%22large%22; path=\//);
   });
 
-  it("reads a server ref from the rendered request, isolated per request", () => {
+  void it("reads a server ref from the rendered request, isolated per request", () => {
     const render = (cookieHeader: string) => {
       const app = createSSRApp({ render: () => null });
       const runtime = createDmsFrontendRuntime(
@@ -103,13 +103,13 @@ describe("Cookie refs", () => {
   });
 });
 
-describe("Async component hydration", () => {
+void describe("Async component hydration", () => {
   const asyncBlock = (label: string) =>
     defineAsyncComponent(async () =>
       defineComponent({ render: () => h("span", label) }),
     );
 
-  it("records the registered async components a server render reaches", async () => {
+  void it("records the registered async components a server render reaches", async () => {
     const rendered = asyncBlock("rendered");
     registerDmsComponent("TrackedRenderedBlock", rendered);
     registerDmsComponent("TrackedUnusedBlock", asyncBlock("unused"));
@@ -119,7 +119,7 @@ describe("Async component hydration", () => {
     assert.deepEqual([...names], ["TrackedRenderedBlock"]);
   });
 
-  it("resolves the recorded async components before hydration", async () => {
+  void it("resolves the recorded async components before hydration", async () => {
     const block = asyncBlock("ahead");
     registerDmsComponent("ResolvedAheadBlock", block);
     const isResolved = () =>
@@ -130,8 +130,8 @@ describe("Async component hydration", () => {
   });
 });
 
-describe("Server render scopes", () => {
-  it("stops the scope of every component a server render created", async () => {
+void describe("Server render scopes", () => {
+  void it("stops the scope of every component a server render created", async () => {
     const disposed: string[] = [];
     const disposable = (label: string, child?: () => VNode) =>
       defineComponent({
@@ -150,7 +150,7 @@ describe("Server render scopes", () => {
   });
 });
 
-describe("Page meta", () => {
+void describe("Page meta", () => {
   const DeclaringPage: DefineComponent = defineComponent({
     setup() {
       defineDmsPageMeta({ auth: true });
@@ -179,7 +179,7 @@ describe("Page meta", () => {
     await runtime.pendingNavigation;
   }
 
-  it("keeps the meta a page declared once it reads its route", async () => {
+  void it("keeps the meta a page declared once it reads its route", async () => {
     const seen: unknown[] = [];
     await setupFrontendModules([
       {
@@ -205,7 +205,7 @@ describe("Page meta", () => {
     assert.deepEqual(seen, [true, true]);
   });
 
-  it("renders a page once its middleware is done, with the same ids in the browser", async () => {
+  void it("renders a page once its middleware is done, with the same ids in the browser", async () => {
     await registerGlobalMiddleware(async () => {
       const guard = useDmsState("guard", () => "");
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -243,7 +243,7 @@ describe("Page meta", () => {
     assert.deepEqual(Object.fromEntries(ids), serverIds);
   });
 
-  it("keeps a page's meta while it stays on screen and drops it for the next page", async () => {
+  void it("keeps a page's meta while it stays on screen and drops it for the next page", async () => {
     await setupFrontendModules([]);
     const { app, runtime } = application("first");
     app.runWithContext(() => {
@@ -258,7 +258,7 @@ describe("Page meta", () => {
     assert.deepEqual(runtime.route.meta, {});
   });
 
-  it("shows the error a middleware throws in place of the page", async () => {
+  void it("shows the error a middleware throws in place of the page", async () => {
     await registerGlobalMiddleware(async (to) => {
       await Promise.resolve();
       if (to.path === "/missing")
@@ -279,7 +279,7 @@ describe("Page meta", () => {
     assert.equal(error.message, "Not here");
   });
 
-  it("drops a page's meta when an error page replaces it at the same path", async () => {
+  void it("drops a page's meta when an error page replaces it at the same path", async () => {
     await setupFrontendModules([]);
     const { app, runtime } = application("first");
     app.runWithContext(() => {
@@ -294,7 +294,7 @@ describe("Page meta", () => {
   });
 });
 
-describe("Page loading state", () => {
+void describe("Page loading state", () => {
   function settle(): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve));
   }
@@ -331,7 +331,7 @@ describe("Page loading state", () => {
     return { loading: () => loading.value, shown };
   }
 
-  it("is pending while the page suspends and settles once it resolves", async () => {
+  void it("is pending while the page suspends and settles once it resolves", async () => {
     const { page, release } = suspendingPage();
     const { loading } = mountPage(page);
     assert.equal(loading(), true);
@@ -340,7 +340,7 @@ describe("Page loading state", () => {
     assert.equal(loading(), false);
   });
 
-  it("settles when a page is left before it resolves", async () => {
+  void it("settles when a page is left before it resolves", async () => {
     const { page } = suspendingPage();
     const { loading, shown } = mountPage(page);
     assert.equal(loading(), true);
@@ -349,13 +349,13 @@ describe("Page loading state", () => {
     assert.equal(loading(), false);
   });
 
-  it("never turns on for a page that does not suspend", () => {
+  void it("never turns on for a page that does not suspend", () => {
     const { loading } = mountPage(defineComponent({ render: () => h("p") }));
     assert.equal(loading(), false);
   });
 });
 
-describe("Session hydration", () => {
+void describe("Session hydration", () => {
   function hydrate(app: App, language: string, session: Partial<DmsSession>) {
     app.runWithContext(() =>
       hydrateDmsPageProps({
@@ -371,14 +371,14 @@ describe("Session hydration", () => {
     return app.runWithContext(() => useDmsUserSession().user.value?.language);
   }
 
-  it("keeps a newer session over the one a restored page carries", () => {
+  void it("keeps a newer session over the one a restored page carries", () => {
     const { app } = application("first");
     hydrate(app, "fr", { updatedAt: 2 });
     hydrate(app, "en", { updatedAt: 1 });
     assert.equal(currentLanguage(app), "fr");
   });
 
-  it("takes the session of a fresh page, or of another account", () => {
+  void it("takes the session of a fresh page, or of another account", () => {
     const { app } = application("first");
     hydrate(app, "fr", { updatedAt: 2 });
     hydrate(app, "de", { updatedAt: 3 });
@@ -387,14 +387,14 @@ describe("Session hydration", () => {
     assert.equal(currentLanguage(app), "en");
   });
 
-  it("takes every session a server without stamps sends", () => {
+  void it("takes every session a server without stamps sends", () => {
     const { app } = application("first");
     hydrate(app, "fr", {});
     hydrate(app, "en", {});
     assert.equal(currentLanguage(app), "en");
   });
 
-  it("clears the session of a signed-out page", () => {
+  void it("clears the session of a signed-out page", () => {
     const { app } = application("first");
     hydrate(app, "fr", { updatedAt: 2 });
     app.runWithContext(() => hydrateDmsPageProps({ path: "/auth", page: {} }));

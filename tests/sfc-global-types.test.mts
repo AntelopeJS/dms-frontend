@@ -119,8 +119,8 @@ function compiledProps(
   return content;
 }
 
-describe("the auto-imported types, declared for the SFC compiler", () => {
-  it("lets a prop typed with one compile to its real runtime type", async () => {
+void describe("the auto-imported types, declared for the SFC compiler", () => {
+  void it("lets a prop typed with one compile to its real runtime type", async () => {
     const { root, module, dirs, file } = workspace();
     const component = join(module, "app/components/Panel.vue");
 
@@ -145,7 +145,7 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
     }
   });
 
-  it("declares what the auto-imports expose, and only that", async () => {
+  void it("declares what the auto-imports expose, and only that", async () => {
     const { root, dirs } = workspace();
     const declarations = await sfcGlobalTypes(dirs, root);
     assert.match(
@@ -159,7 +159,7 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
     assert.doesNotMatch(declarations, /InternalRule/);
   });
 
-  it("lets a module's type shadow Vue's of the same name, as the auto-imports do", async () => {
+  void it("lets a module's type shadow Vue's of the same name, as the auto-imports do", async () => {
     const { root, module, dirs } = workspace();
     writeFixture(
       module,
@@ -174,7 +174,7 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
     assert.doesNotMatch(declarations, /import\("vue"\)\.Component;/);
   });
 
-  it("follows a type file added to a dev server's workspace", async () => {
+  void it("follows a type file added to a dev server's workspace", async () => {
     const { root, module, dirs, file } = workspace();
     await writeSfcGlobalTypes(dirs, root, file);
     const server = await createServer({
@@ -203,7 +203,7 @@ describe("the auto-imported types, declared for the SFC compiler", () => {
     }
   });
 
-  it("warns, rather than ending the dev server, when it cannot rewrite them", async () => {
+  void it("warns, rather than ending the dev server, when it cannot rewrite them", async () => {
     const { root, module, dirs } = workspace();
     const file = join(root, "missing", "sfc-global-types.generated.d.ts");
     const warnings: string[] = [];

@@ -22,8 +22,8 @@ import {
 } from "../src/server-process";
 import { CliError } from "@antelopejs/core/cli";
 import { memoryUi, problemText } from "./fixtures/memory-ui";
-describe("CLI output", () => {
-  it("puts the time before a running server's notices", () => {
+void describe("CLI output", () => {
+  void it("puts the time before a running server's notices", () => {
     const output = memoryUi();
     const at = new Date(2026, 9, 3, 14, 3, 22);
     assert.equal(
@@ -47,7 +47,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("wraps a running server's notices under their text", () => {
+  void it("wraps a running server's notices under their text", () => {
     const output = memoryUi();
     const at = new Date(2026, 9, 3, 14, 3, 22);
     const options = {
@@ -81,7 +81,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("explains why the server could not listen", () => {
+  void it("explains why the server could not listen", () => {
     assert.deepEqual(
       describeListenError({
         code: "EADDRINUSE",
@@ -115,7 +115,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("lists a warned failure's details before its fixes, as the core does", () => {
+  void it("lists a warned failure's details before its fixes, as the core does", () => {
     const error = new UsageError({
       title: "Locale catalogs not regenerated",
       reason: "fr.json is not valid JSON",
@@ -130,7 +130,7 @@ describe("CLI output", () => {
     ]);
   });
 
-  it("titles a failure that is not a CliError by the first line of its message", () => {
+  void it("titles a failure that is not a CliError by the first line of its message", () => {
     const { ui } = memoryUi();
     assert.deepEqual(
       failureDetails(classifyFailure(new Error("disk full\nretry later")), ui),
@@ -148,7 +148,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("adds the stack of an Error, minus its first line, only in a verbose run", () => {
+  void it("adds the stack of an Error, minus its first line, only in a verbose run", () => {
     const { ui } = memoryUi();
     const error = new Error("boom");
     error.stack =
@@ -174,7 +174,7 @@ describe("CLI output", () => {
     }
   });
 
-  it("cuts lines in ASCII where the terminal has no Unicode", () => {
+  void it("cuts lines in ASCII where the terminal has no Unicode", () => {
     const ascii = memoryUi({ isUnicode: false }).ui;
     const home = "/home/user";
     const dir = `${home}/.antelopejs/dms-frontend/76672b089458f187ebe9586040f9b8ae`;
@@ -191,7 +191,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("explains a Vite that could not start, at the source the user edits", () => {
+  void it("explains a Vite that could not start, at the source the user edits", () => {
     const workspace = "/home/user/.antelopejs/dms-frontend/abc";
     const mapPath = (line: string) =>
       line.replace(`${workspace}/frontend-modules/demo`, "./frontend-vue");
@@ -254,7 +254,7 @@ describe("CLI output", () => {
     );
   });
 
-  it("fails the run once when the dev server reports that Vite could not start", async () => {
+  void it("fails the run once when the dev server reports that Vite could not start", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "dms-start-error-"));
     const file = join(workspace, "frontend-modules/demo/app/plugin.ts");
     const report = {
@@ -295,7 +295,7 @@ describe("CLI output", () => {
     assert.equal(isReady, false);
   });
 
-  it("shows a workspace from ~, cut to its id on a terminal only", () => {
+  void it("shows a workspace from ~, cut to its id on a terminal only", () => {
     const home = "/home/user";
     const id =
       "76672b089458f187ebe9586040f9b8ae79e01c9f990f5201f4475b8326d0f0ec";
@@ -312,7 +312,7 @@ describe("CLI output", () => {
     assert.equal(showPath(process.cwd(), home), ".");
   });
 
-  it("says how old a cached manifest is", () => {
+  void it("says how old a cached manifest is", () => {
     const now = Date.parse("2026-10-03T14:00:00.000Z");
     assert.equal(formatAge("2026-10-03T13:59:30.000Z", now), "just now");
     assert.equal(formatAge("2026-10-03T13:55:00.000Z", now), "5 min ago");
@@ -322,7 +322,7 @@ describe("CLI output", () => {
     assert.equal(formatAge("not a date", now), "not a date");
   });
 
-  it("says how much space a workspace takes", () => {
+  void it("says how much space a workspace takes", () => {
     assert.equal(formatSize(0), "0 B");
     assert.equal(formatSize(900), "900 B");
     assert.equal(formatSize(1536), "1.5 KB");
@@ -330,7 +330,7 @@ describe("CLI output", () => {
     assert.equal(formatSize(1_610_612_736), "1.5 GB");
   });
 
-  it("cuts a workspace id on a terminal only", () => {
+  void it("cuts a workspace id on a terminal only", () => {
     const dir = `/home/user/.antelopejs/dms-frontend/${"a".repeat(64)}`;
     assert.equal(workspaceId(dir, true), "aaaaaaaa");
     assert.equal(workspaceId(dir, false), "a".repeat(64));

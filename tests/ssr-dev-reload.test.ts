@@ -53,7 +53,7 @@ export default {
   );
 }
 
-it("serves an edited component on the next server render in development", async () => {
+void it("serves an edited component on the next server render in development", async () => {
   const workspace = realpathSync(mkdtempSync(resolve(".ssr-dev-reload-")));
   const probe: ReloadProbe = { setups: 0, plugins: [] };
   let server: ViteDevServer | undefined;

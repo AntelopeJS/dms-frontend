@@ -45,7 +45,7 @@ function projectSpawningWorker(): string {
   return root;
 }
 
-it("applies a module's registered Vite plugins to a worker's imports", async () => {
+void it("applies a module's registered Vite plugins to a worker's imports", async () => {
   const module = moduleRegisteringProbe();
   const layers = [
     {

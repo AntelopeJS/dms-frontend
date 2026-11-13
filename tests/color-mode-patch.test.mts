@@ -194,8 +194,8 @@ afterEach(() => {
   for (const scope of scopes.splice(0)) scope.stop();
 });
 
-describe("vueuse useColorMode patch", () => {
-  it("leaves a class mode the element already carries alone", async () => {
+void describe("vueuse useColorMode patch", () => {
+  void it("leaves a class mode the element already carries alone", async () => {
     reset({ htmlClasses: ["light"], stored: "light" });
     colorMode();
     colorMode({ storageKey: "other-key", initialValue: "light" });
@@ -205,7 +205,7 @@ describe("vueuse useColorMode patch", () => {
     assert.equal(dom.html.classList.value, "light");
   });
 
-  it("switches classes, without transitions, when the mode changes", async () => {
+  void it("switches classes, without transitions, when the mode changes", async () => {
     reset({ htmlClasses: ["light"], stored: "light" });
     const mode = colorMode();
     await vue.nextTick();
@@ -225,7 +225,7 @@ describe("vueuse useColorMode patch", () => {
     assert.equal(dom.counts.forcedRecalcs, 2);
   });
 
-  it("applies the stored mode when the element carries another one", async () => {
+  void it("applies the stored mode when the element carries another one", async () => {
     reset({ htmlClasses: ["light"], stored: "dark" });
     colorMode();
     await vue.nextTick();
@@ -237,7 +237,7 @@ describe("vueuse useColorMode patch", () => {
     );
   });
 
-  it("applies a mode another tab stores", async () => {
+  void it("applies a mode another tab stores", async () => {
     reset({ htmlClasses: ["light"], stored: "light" });
     colorMode();
     await vue.nextTick();
@@ -247,7 +247,7 @@ describe("vueuse useColorMode patch", () => {
     assert.equal(dom.counts.forcedRecalcs, 1);
   });
 
-  it("follows the system preference in auto mode", async () => {
+  void it("follows the system preference in auto mode", async () => {
     reset({ htmlClasses: ["dark"], stored: "auto" });
     dom.setPrefersDark(true);
     colorMode();
@@ -262,7 +262,7 @@ describe("vueuse useColorMode patch", () => {
     assert.equal(dom.counts.forcedRecalcs, 1);
   });
 
-  it("adds only the missing class of a multi-class mode", async () => {
+  void it("adds only the missing class of a multi-class mode", async () => {
     reset({ htmlClasses: ["dark"], stored: "dark" });
     colorMode({ modes: { dark: "dark dim" } });
     await vue.nextTick();
@@ -270,7 +270,7 @@ describe("vueuse useColorMode patch", () => {
     assert.equal(dom.counts.forcedRecalcs, 1);
   });
 
-  it("writes an attribute mode only when its value differs", async () => {
+  void it("writes an attribute mode only when its value differs", async () => {
     reset({ stored: "dark" });
     dom.html.setAttribute("data-theme", "dark");
     dom.html.attributeWrites = 0;

@@ -16,8 +16,8 @@ function transform(code: string, id = NUXT_UI) {
   return plugin.transform.call(context, code, id);
 }
 
-describe("Nuxt UI's reads of Inertia's page", () => {
-  it("read the DMS's per-request page instead", () => {
+void describe("Nuxt UI's reads of Inertia's page", () => {
+  void it("read the DMS's per-request page instead", () => {
     const result = transform(
       'import { usePage } from "@inertiajs/vue3";\nexport const url = () => usePage().url;\n',
     );
@@ -27,7 +27,7 @@ describe("Nuxt UI's reads of Inertia's page", () => {
     );
   });
 
-  it("fail the build in a form the rewrite does not know", () => {
+  void it("fail the build in a form the rewrite does not know", () => {
     for (const code of [
       'import { router, usePage } from "@inertiajs/vue3";',
       'import { usePage as page } from "@inertiajs/vue3";',
@@ -36,7 +36,7 @@ describe("Nuxt UI's reads of Inertia's page", () => {
       assert.throws(() => transform(code), /does not rewrite/, code);
   });
 
-  it("leave other files and other Inertia imports alone", () => {
+  void it("leave other files and other Inertia imports alone", () => {
     assert.equal(
       transform('import { usePage } from "@inertiajs/vue3";', "/w/src/a.ts"),
       null,

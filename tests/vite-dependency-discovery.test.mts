@@ -65,7 +65,7 @@ function writeFixture(root: string, path: string, content: string): void {
   writeFileSync(destination, content);
 }
 
-it("optimizes a module's CommonJS dependency discovered after startup", async () => {
+void it("optimizes a module's CommonJS dependency discovered after startup", async () => {
   const root = mkdtempSync(join(tmpdir(), "dms-vite-dependency-"));
   const moduleRoot = "frontend-modules/example";
   const dependencyRoot = `${moduleRoot}/node_modules/example-cjs`;
@@ -155,7 +155,7 @@ it("optimizes a module's CommonJS dependency discovered after startup", async ()
   }
 });
 
-it("pre-bundles a module's dependency at startup without naming it", async () => {
+void it("pre-bundles a module's dependency at startup without naming it", async () => {
   const root = mkdtempSync(join(tmpdir(), "dms-vite-dependency-"));
   const moduleRoot = "frontend-modules/example";
   const dependencyRoot = `${moduleRoot}/node_modules/example-sortable`;
@@ -215,7 +215,7 @@ it("pre-bundles a module's dependency at startup without naming it", async () =>
   }
 });
 
-it("names no dependency the DMS dropped for SortableJS", () => {
+void it("names no dependency the DMS dropped for SortableJS", () => {
   const list = templateSource().match(
     /const optimizedDependencies = (\[[^\]]*\])/,
   );

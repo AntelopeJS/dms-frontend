@@ -32,8 +32,8 @@ import {
   mountRuntime,
 } from "./fixtures/vue-async-data.mts";
 
-describe("Async data in the browser", () => {
-  it("hands a hydrating component the server's data when the server's render had it", async () => {
+void describe("Async data in the browser", () => {
+  void it("hands a hydrating component the server's data when the server's render had it", async () => {
     const rendered: string[] = [];
     const Selection = defineComponent({
       setup() {
@@ -67,7 +67,7 @@ describe("Async data in the browser", () => {
     app.unmount();
   });
 
-  it("hands an awaiting setup the server's data once it resumes", async () => {
+  void it("hands an awaiting setup the server's data once it resumes", async () => {
     let seen: unknown;
     const Awaiting = defineComponent({
       async setup() {
@@ -86,7 +86,7 @@ describe("Async data in the browser", () => {
     assert.equal(seen, "server value");
   });
 
-  it("returns refs usable at once, and the same ones once awaited", async () => {
+  void it("returns refs usable at once, and the same ones once awaited", async () => {
     const { app } = clientApp();
 
     const result = app.runWithContext(() =>
@@ -99,7 +99,7 @@ describe("Async data in the browser", () => {
     assert.equal(awaited.data.value, "value");
   });
 
-  it("does not hold a navigation for lazy data (E3)", async () => {
+  void it("does not hold a navigation for lazy data (E3)", async () => {
     const { app } = clientApp();
     const answer = deferred<string>();
     let awaited = false;
@@ -120,7 +120,7 @@ describe("Async data in the browser", () => {
     assert.equal(result.status.value, "success");
   });
 
-  it("fetches server: false data once its hydrated component is mounted", async () => {
+  void it("fetches server: false data once its hydrated component is mounted", async () => {
     const runtime = createDmsFrontendRuntime(undefined, { other: 1 });
     const rendered: string[] = [];
     let calls = 0;
@@ -151,7 +151,7 @@ describe("Async data in the browser", () => {
     assert.equal(rendered.at(-1), "success:browser value");
   });
 
-  it("hands the handler a signal a newer run aborts, unless it defers to the run in flight", async () => {
+  void it("hands the handler a signal a newer run aborts, unless it defers to the run in flight", async () => {
     const { app } = clientApp();
     const signals: AbortSignal[] = [];
     const answers: Array<ReturnType<typeof deferred<string>>> = [];
@@ -181,14 +181,14 @@ describe("Async data in the browser", () => {
     assert.equal(entry.data.value, "deferred");
   });
 
-  it("aborts a run once the last component showing its key unmounts", async () => {
+  void it("aborts a run once the last component showing its key unmounts", async () => {
     const runtime = createDmsFrontendRuntime();
     const signals: AbortSignal[] = [];
     const first = ref(true);
     const second = ref(true);
     const Consumer = defineComponent({
       setup() {
-        useDmsAsyncData(
+        void useDmsAsyncData(
           "shared-run",
           ({ signal }) => {
             signals.push(signal);
@@ -219,13 +219,13 @@ describe("Async data in the browser", () => {
     app.unmount();
   });
 
-  it("keeps, past a navigation, the most recently shown data no component shows any more", async () => {
+  void it("keeps, past a navigation, the most recently shown data no component shows any more", async () => {
     const runtime = createDmsFrontendRuntime();
     const shownKeys = ref<string[]>([]);
     const Consumer = defineComponent({
       props: { name: { type: String, required: true } },
       setup(props) {
-        useDmsAsyncData(props.name, async () => props.name);
+        void useDmsAsyncData(props.name, async () => props.name);
         return () => h("p");
       },
     });
@@ -256,7 +256,7 @@ describe("Async data in the browser", () => {
     app.unmount();
   });
 
-  it("forgets the server data no component claimed once hydration is over", async () => {
+  void it("forgets the server data no component claimed once hydration is over", async () => {
     const { app } = clientApp(
       createDmsFrontendRuntime(undefined, { unclaimed: "server value" }),
     );
@@ -275,7 +275,7 @@ describe("Async data in the browser", () => {
     assert.equal(entry.data.value, "fresh");
   });
 
-  it("ends the hydration the tick the page suspense resolves, without showing the page as loading", async () => {
+  void it("ends the hydration the tick the page suspense resolves, without showing the page as loading", async () => {
     const runtime = createDmsFrontendRuntime(undefined, {
       unclaimed: "server value",
     });
@@ -297,7 +297,7 @@ describe("Async data in the browser", () => {
     assert.equal(runtime.pageLoading.value, false);
   });
 
-  it("says whether the browser hydrates: until the page has, and never in a page the server did not render", async () => {
+  void it("says whether the browser hydrates: until the page has, and never in a page the server did not render", async () => {
     const hydrated = createDmsFrontendRuntime(undefined, {});
     const { app } = clientApp(hydrated);
     const isHydrating = () => app.runWithContext(runtimeModule.isDmsHydrating);
@@ -320,7 +320,7 @@ describe("Async data in the browser", () => {
     }
   });
 
-  it("clears the data and aborts its run", async () => {
+  void it("clears the data and aborts its run", async () => {
     const { app } = clientApp();
     let signal: AbortSignal | undefined;
     const entry = app.runWithContext(() =>
@@ -341,7 +341,7 @@ describe("Async data in the browser", () => {
     assert.equal(entry.status.value, "idle");
   });
 
-  it("keeps the data shallow on request", async () => {
+  void it("keeps the data shallow on request", async () => {
     const { app } = clientApp();
 
     const [shallow, deep] = await Promise.all(
@@ -359,7 +359,7 @@ describe("Async data in the browser", () => {
   });
 });
 
-describe("A reactive key a render sets", () => {
+void describe("A reactive key a render sets", () => {
   /** A backend that answers at once, and records each request on its side. */
   function backend(isServer: boolean) {
     const requests: string[] = [];
@@ -409,7 +409,7 @@ describe("A reactive key a render sets", () => {
     };
   }
 
-  it("leaves a server: false read whose key its setup sets to the browser, which reads it once mounted", async () => {
+  void it("leaves a server: false read whose key its setup sets to the browser, which reads it once mounted", async () => {
     const result = await renderThenHydrate(
       (rendered) =>
         defineComponent({
@@ -437,7 +437,7 @@ describe("A reactive key a render sets", () => {
     assert.equal(result.last, "success:data:/api/sizes");
   });
 
-  it("renders the default for a key a server read moves to once its render stopped waiting, and leaves it to the browser", async () => {
+  void it("renders the default for a key a server read moves to once its render stopped waiting, and leaves it to the browser", async () => {
     const result = await renderThenHydrate(
       (rendered) =>
         defineComponent({
@@ -464,7 +464,7 @@ describe("A reactive key a render sets", () => {
     assert.equal(result.last, "success:data:/api/sizes");
   });
 
-  it("renders and transfers the key a setup sets for a server read, lazy or not", async () => {
+  void it("renders and transfers the key a setup sets for a server read, lazy or not", async () => {
     const result = await renderThenHydrate(
       (rendered) =>
         defineComponent({
@@ -494,7 +494,7 @@ describe("A reactive key a render sets", () => {
     assert.deepEqual(result.browserRequests, [], "the browser reads nothing");
   });
 
-  it("runs no immediate: false read on a server when its key changes, even with a default", async () => {
+  void it("runs no immediate: false read on a server when its key changes, even with a default", async () => {
     const server = backend(true);
     let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
     const ssr = createSSRApp(
