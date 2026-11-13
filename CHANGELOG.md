@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10.5
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.4...v0.10.5)
+
+### 🩹 Fixes
+
+- **auth:** ⚠️  Bind each sealed cookie to its name, ending sessions sealed before ([#332](https://github.com/AntelopeJS/dms-frontend/pull/332))
+
+#### ⚠️ Breaking Changes
+
+- **auth:** ⚠️  Bind each sealed cookie to its name, ending sessions sealed before ([#332](https://github.com/AntelopeJS/dms-frontend/pull/332))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.10.4
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.3...v0.10.4)
