@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { it } from "node:test";
 import { RUNNER_VARIABLE } from "../src/commands/verify-source-action";
 import { showPath } from "../src/output";
@@ -14,7 +15,9 @@ const ACTION = join(
   "commands",
   "verify-source-action.ts",
 );
-const PROBE = join(__dirname, "fixtures", "spawn-probe.mjs");
+const PROBE = pathToFileURL(
+  join(__dirname, "fixtures", "spawn-probe.mjs"),
+).href;
 const PROCESS_TIMEOUT_MS = 20_000;
 
 /**

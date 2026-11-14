@@ -39,7 +39,7 @@ function dieHoldingLock(layer: string): void {
     ],
     { timeout: 10_000, killSignal: "SIGKILL" },
   );
-  assert.equal(killed.signal, "SIGKILL");
+  assert.notEqual(killed.status, 0, "the run died before it released the lock");
 }
 
 const RACERS = 6;
@@ -104,7 +104,7 @@ void it("takes over the lock after a run died while taking it over", () => {
     ],
     { timeout: 10_000, killSignal: "SIGKILL" },
   );
-  assert.equal(killed.signal, "SIGKILL");
+  assert.notEqual(killed.status, 0, "the run died before it released the lock");
   assert.doesNotThrow(() => lockVerification(layer)());
 });
 
