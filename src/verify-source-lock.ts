@@ -6,14 +6,20 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { CliError } from "@antelopejs/core/cli";
 import { isPidAlive } from "./discovery";
 import { showPath } from "./output";
 
-/** Where the lock files live, shared by every user of the host's temporary directory. */
-const LOCK_DIRECTORY = join(tmpdir(), "ajs-dms-verify-source");
+/**
+ * Where the lock files live: one directory per user, since another user could
+ * not create a file in a directory this one created.
+ */
+const LOCK_DIRECTORY = join(
+  tmpdir(),
+  `ajs-dms-verify-source-${userInfo().username}`,
+);
 
 /** Tries to create the lock: once, then once more after removing the lock of a dead run. */
 const LOCK_ATTEMPTS = 2;
@@ -63,7 +69,10 @@ function runningProblem(target: string, pid: number, path: string): CliError {
   return new CliError({
     title: `A verification of ${showPath(target)} is already running`,
     reason: `Process ${pid} holds its lock, ${path}.`,
-    fixes: [`Wait for process ${pid} to end, or stop it with kill ${pid}`],
+    fixes: [
+      `Wait for process ${pid} to end, or stop it with kill ${pid}`,
+      `Remove ${path} if process ${pid} is not a verification`,
+    ],
   });
 }
 
