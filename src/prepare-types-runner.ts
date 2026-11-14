@@ -7,6 +7,7 @@ import {
   assertOutsideSources,
   PREPARE_TYPES_OUT_VARIABLE,
   resetOutput,
+  runInputs,
   writeRelocatedTypes,
 } from "./prepare-types-output";
 import { emitVueDeclarations } from "./prepare-types-declarations";
@@ -34,7 +35,7 @@ async function prepareTypes(): Promise<PreparationResult> {
   const { layers } = readSources(options);
   writeHeader("prepare-types", [pluralize(layers.length, "module")]);
   assertLayersSupportRenderer(layers);
-  assertOutsideSources(out, layerTable(out, layers));
+  assertOutsideSources(out, runInputs(layers, options.localPackages));
   resetOutput(out);
   const isVerbose = isVerboseRun();
   const context: VerificationContext = {

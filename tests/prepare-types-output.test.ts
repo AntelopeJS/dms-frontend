@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,6 +17,7 @@ import {
   assertOutsideSources,
   outputProblems,
   resetOutput,
+  runInputs,
   TYPES_MARKER,
 } from "../src/prepare-types-output";
 
@@ -111,13 +113,70 @@ void describe("assertOutsideSources", () => {
     const out = directory();
     const source = join(out, "module");
     assert.throws(
-      () => assertOutsideSources(out, [{ id: "m", copy: "", source }]),
+      () => assertOutsideSources(out, [{ label: "m", path: source }]),
       /holds the sources/,
     );
     assert.doesNotThrow(() =>
       assertOutsideSources(join(source, ".types"), [
-        { id: "m", copy: "", source },
+        { label: "m", path: source },
       ]),
+    );
+  });
+
+  void it("refuses an output that is the source tree itself", () => {
+    const out = directory();
+    assert.throws(
+      () => assertOutsideSources(out, [{ label: "m", path: out }]),
+      /holds the sources/,
+    );
+  });
+
+  void it("resolves symlinks on both sides", () => {
+    const root = directory();
+    const source = join(root, "module");
+    mkdirSync(source);
+    const outLink = join(directory(), "out");
+    symlinkSync(root, outLink);
+    const sourceLink = join(directory(), "module");
+    symlinkSync(source, sourceLink);
+    assert.throws(
+      () => assertOutsideSources(outLink, [{ label: "m", path: source }]),
+      /holds the sources/,
+    );
+    assert.throws(
+      () => assertOutsideSources(root, [{ label: "m", path: sourceLink }]),
+      /holds the sources/,
+    );
+  });
+
+  void it("reads a directory whose name starts with two dots as inside", () => {
+    const out = directory();
+    assert.throws(
+      () =>
+        assertOutsideSources(out, [{ label: "m", path: join(out, "..mod") }]),
+      /holds the sources/,
+    );
+    assert.doesNotThrow(() =>
+      assertOutsideSources(out, [{ label: "m", path: join(out, "..", "m") }]),
+    );
+  });
+});
+
+void describe("runInputs", () => {
+  void it("lists a module without a package name and every local package", () => {
+    assert.deepEqual(
+      runInputs(
+        [
+          { path: "/copy/a", sourcePath: "/src/a", packageName: "a" },
+          { path: "/src/unnamed" },
+        ],
+        { probe: "/pkg/probe" },
+      ),
+      [
+        { label: "a", path: "/src/a" },
+        { label: "/src/unnamed", path: "/src/unnamed" },
+        { label: "probe", path: "/pkg/probe" },
+      ],
     );
   });
 });

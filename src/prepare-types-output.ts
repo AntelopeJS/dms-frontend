@@ -2,6 +2,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -18,7 +19,6 @@ import {
   relocateAutoImports,
   relocateTsconfig,
   sharedDependencies,
-  type RelocatedLayer,
   type Tsconfig,
   VUE_SHIMS,
   VUE_SHIMS_FILE,
@@ -87,18 +87,57 @@ export function outputProblems(
   return problems;
 }
 
-/** Whether a module's sources hold `out`, which a reset would then empty. */
-export function assertOutsideSources(
-  out: string,
-  layers: RelocatedLayer[],
-): void {
-  const holder = layers.find(({ source }) => {
-    const rel = nativePath.relative(out, source);
-    return !rel.startsWith("..") && !nativePath.isAbsolute(rel);
-  });
+/** A directory a run reads from: a module's sources or a local package. */
+export interface RunInput {
+  /** What the input is named in the error, a package name or its path. */
+  label: string;
+  path: string;
+}
+
+/** Every directory a run reads: each module's sources, named or not, and each local package. */
+export function runInputs(
+  layers: ResolvedLayer[],
+  localPackages: Record<string, string>,
+): RunInput[] {
+  return [
+    ...layers.map((layer) => ({
+      label: layer.packageName ?? layer.path,
+      path: layer.sourcePath ?? layer.path,
+    })),
+    ...Object.entries(localPackages).map(([label, path]) => ({ label, path })),
+  ];
+}
+
+/** `path` with every symlink resolved, or `path` itself when it is missing. */
+function realPath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return nativePath.resolve(path);
+  }
+}
+
+/** Whether `path` is `directory` or lies below it. */
+function isAtOrBelow(directory: string, path: string): boolean {
+  const rel = nativePath.relative(directory, path);
+  return (
+    rel === "" ||
+    (rel !== ".." &&
+      !rel.startsWith(`..${nativePath.sep}`) &&
+      !nativePath.isAbsolute(rel))
+  );
+}
+
+/**
+ * Refuses an `out` that is or holds an input of the run, which a reset would
+ * then empty. Both sides are compared with their symlinks resolved.
+ */
+export function assertOutsideSources(out: string, inputs: RunInput[]): void {
+  const target = realPath(out);
+  const holder = inputs.find(({ path }) => isAtOrBelow(target, realPath(path)));
   if (holder)
     throw new CliError({
-      title: `--out holds the sources of ${holder.id}: ${holder.source}`,
+      title: `--out holds the sources of ${holder.label}: ${holder.path}`,
       reason: "Writing it again would empty the sources.",
       fixes: ["Pass a directory outside the sources, or below them"],
     });
