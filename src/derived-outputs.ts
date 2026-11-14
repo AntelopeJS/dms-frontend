@@ -136,6 +136,7 @@ function writeFrontendTypePaths(
     "#dms/frontend-module": ["./frontend-module.ts"],
     "#dms/frontend-build": ["./frontend-build.ts"],
     "#dms/server": ["./server-module.ts"],
+    "#shortcuts-aggregated": ["./shortcuts-aggregated.generated.ts"],
     "@frontend/*": ["./frontend-modules/*"],
     ...frontendLayerTypePaths(
       [...registry.modules].reverse().map((module) => module.root),
