@@ -83,8 +83,9 @@ function parseOutcomes(output: string): string[] {
 
 /**
  * `RACERS` processes lock each target in turn, all of them at the same
- * instant, and keep what they took until every trial is over. Resolves with
- * what each process got, per target.
+ * instant. Each keeps what it took until every one of them has reported, so
+ * a process that lags behind the others never takes a lock another one let
+ * go of. Resolves with what each process got, per target.
  */
 async function race(targets: string[]): Promise<string[][]> {
   const startAt = Date.now() + RACE_DELAY_MS;
@@ -102,28 +103,43 @@ async function race(targets: string[]): Promise<string[][]> {
           outcomes.push(error.message.includes("is already running") ? "refused" : error.message);
         }
       });
-      while (Date.now() < ${startAt} + ${targets.length + 1} * ${TRIAL_MS});
-      for (const release of releases) release();
-      process.stdout.write(JSON.stringify(outcomes));
+      process.stdout.write(JSON.stringify(outcomes) + "\\n");
+      process.stdin.on("end", () => {
+        for (const release of releases) release();
+      });
+      process.stdin.resume();
     }, ${startAt} - Date.now() - 20);
   `;
-  const racers = await Promise.all(
-    Array.from({ length: RACERS }, async () => {
-      const child = spawn(process.execPath, ["--import", "tsx", "-e", script], {
-        stdio: ["ignore", "pipe", "inherit"],
-        timeout: RACE_DELAY_MS + 10_000,
-        killSignal: "SIGKILL",
-      });
-      let output = "";
-      child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
-        output += chunk;
-      });
-      await once(child, "close");
-      return parseOutcomes(output);
+  const racers = Array.from({ length: RACERS }, () =>
+    spawn(process.execPath, ["--import", "tsx", "-e", script], {
+      stdio: ["pipe", "pipe", "inherit"],
+      timeout: RACE_DELAY_MS + 60_000,
+      killSignal: "SIGKILL",
     }),
   );
+  const reports = await Promise.all(
+    racers.map(
+      (racer) =>
+        new Promise<string>((resolve) => {
+          let output = "";
+          racer.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+            output += chunk;
+            if (output.endsWith("\n")) resolve(output);
+          });
+          racer.once("close", () => resolve(output));
+        }),
+    ),
+  );
+  await Promise.all(
+    racers.map(async (racer) => {
+      const closed = once(racer, "close");
+      racer.stdin.end();
+      await closed;
+    }),
+  );
+  const outcomes = reports.map(parseOutcomes);
   return targets.map((_, trial) =>
-    racers.map((outcomes) => outcomes[trial] ?? "missing").sort(),
+    outcomes.map((got) => got[trial] ?? "missing").sort(),
   );
 }
 
