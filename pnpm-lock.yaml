@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@antelopejs/tooling-configs': file:.tgz-deps/antelopejs-tooling-configs-4679ba0.tgz
+
 packageExtensionsChecksum: sha256-+6hIgQNZo+HA8YcaUlnbyZOd4PX8qddITi5vK+5VUGI=
 
 patchedDependencies:
@@ -41,8 +44,8 @@ importers:
         specifier: '>=0.13.3 <0.14.0'
         version: 0.13.3(78573533daadd756eb1bcc6f58f53c56)
       '@antelopejs/tooling-configs':
-        specifier: '>=0.6.0 <0.7.0'
-        version: 0.6.0(@nuxt/eslint-config@1.15.2(@typescript-eslint/utils@8.71.2(eslint@8.57.1)(typescript@6.0.3))(@vue/compiler-sfc@3.5.25)(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)(typescript@6.0.3))(knip@6.34.0)(mongodb-memory-server@11.3.0(bare-buffer@3.7.1)(socks@2.8.7))(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))(pixelmatch@8.0.0)(playwright-core@1.65.0)(sharp@0.35.5(@types/node@24.8.1))
+        specifier: file:.tgz-deps/antelopejs-tooling-configs-4679ba0.tgz
+        version: file:.tgz-deps/antelopejs-tooling-configs-4679ba0.tgz(@nuxt/eslint-config@1.15.2(@typescript-eslint/utils@8.71.2(eslint@8.57.1)(typescript@6.0.3))(@vue/compiler-sfc@3.5.25)(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)(typescript@6.0.3))(knip@6.34.0)(mongodb-memory-server@11.3.0(bare-buffer@3.7.1)(socks@2.8.7))(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))(pixelmatch@8.0.0)(playwright-core@1.65.0)(sharp@0.35.5(@types/node@24.8.1))
       '@iconify/utils':
         specifier: ^3.1.0
         version: 3.1.7
@@ -221,8 +224,9 @@ packages:
     peerDependencies:
       '@antelopejs/interface-core': '>=0.2.4 <1.0.0'
 
-  '@antelopejs/tooling-configs@0.6.0':
-    resolution: {integrity: sha512-DtGbS8grU8KKoB/HcvxKfwQy2AqQh7OUF2it85zf4czzZPodgdsw1/Ajj4onJvOYygqNgcd7D7EdDFtmY7FuDA==}
+  '@antelopejs/tooling-configs@file:.tgz-deps/antelopejs-tooling-configs-4679ba0.tgz':
+    resolution: {integrity: sha512-enHvPdEkLCi7MlQdSb9ljlliGAdFBtsRx2HWAWb0js/z4t3oIvRffEd4Pt17+IRJPxCUJUje78qshRfWOnFuXA==, tarball: file:.tgz-deps/antelopejs-tooling-configs-4679ba0.tgz}
+    version: 0.7.1
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -5613,7 +5617,7 @@ snapshots:
     dependencies:
       '@antelopejs/interface-core': 0.5.1
 
-  '@antelopejs/tooling-configs@0.6.0(@nuxt/eslint-config@1.15.2(@typescript-eslint/utils@8.71.2(eslint@8.57.1)(typescript@6.0.3))(@vue/compiler-sfc@3.5.25)(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)(typescript@6.0.3))(knip@6.34.0)(mongodb-memory-server@11.3.0(bare-buffer@3.7.1)(socks@2.8.7))(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))(pixelmatch@8.0.0)(playwright-core@1.65.0)(sharp@0.35.5(@types/node@24.8.1))':
+  '@antelopejs/tooling-configs@file:.tgz-deps/antelopejs-tooling-configs-4679ba0.tgz(@nuxt/eslint-config@1.15.2(@typescript-eslint/utils@8.71.2(eslint@8.57.1)(typescript@6.0.3))(@vue/compiler-sfc@3.5.25)(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)(typescript@6.0.3))(knip@6.34.0)(mongodb-memory-server@11.3.0(bare-buffer@3.7.1)(socks@2.8.7))(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))(pixelmatch@8.0.0)(playwright-core@1.65.0)(sharp@0.35.5(@types/node@24.8.1))':
     dependencies:
       '@oxlint/plugins': 1.81.0
       '@typescript/typescript6': 6.0.2
