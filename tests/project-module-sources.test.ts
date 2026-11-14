@@ -86,10 +86,18 @@ function writeVersionedProject(project: string): void {
       versions.map((version) => [`@fixture/versioned@${version}`, version]),
     ),
   );
+  writeModule(
+    join(project, "node_modules", "@fixture", "versioned"),
+    "@fixture/versioned-node-modules",
+  );
+  mkdirSync(join(project, "antelope-lock", "@fixture", "versioned@1.0.0"), {
+    recursive: true,
+  });
   writeConfig(
     project,
     `
-    ranged: { source: { type: "package", package: "@fixture/versioned", version: "^1.0.0" } },
+    locked: { source: { type: "package", package: "@fixture/versioned", version: "^1.0.0" } },
+    ranged: { source: { type: "package", package: "@fixture/versioned", version: "^1.1.0" } },
     pinned: { source: { type: "package", package: "@fixture/versioned", version: "2.0.0" } },`,
   );
 }
@@ -121,13 +129,17 @@ void describe("a module's frontend is found wherever AntelopeJS installs its sou
     );
   });
 
-  void it("loads each package module from the cached version its spec resolves to", async () => {
+  void it("loads each package module from the cached version its spec and the lock resolve to", async () => {
     const project = join(root, "versions");
     writeVersionedProject(project);
 
     assert.deepEqual(
       await layerNames(project),
-      new Set(["@fixture/versioned-1.2.0", "@fixture/versioned-2.0.0"]),
+      new Set([
+        "@fixture/versioned-1.0.0",
+        "@fixture/versioned-1.2.0",
+        "@fixture/versioned-2.0.0",
+      ]),
     );
   });
 });
