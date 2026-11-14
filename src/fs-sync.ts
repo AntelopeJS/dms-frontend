@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import ignore from "ignore";
 import { layerCopyIgnore, PNPM_LIFECYCLE_SCRIPTS } from "./config";
 import { isPlainObject } from "./internal/plain-object";
@@ -53,8 +53,9 @@ export function toPosixPath(path: string, separator: string = sep): string {
 /**
  * True when `srcPath` (an absolute path under `src`) matches any
  * gitignore-style pattern in `LAYER_COPY_BLOCKLIST`. Used by both
- * `copyLayerSource` (via `cpSync`'s filter) and the dev watcher (via
- * chokidar's `ignored`) to guarantee a single source of truth.
+ * `copyLayerSource` and the dev watcher (via chokidar's `ignored`) to
+ * guarantee a single source of truth. A path outside `src` is never
+ * blocklisted; one inside it under a folder named like `..b` is checked.
  *
  * `ignore` expects POSIX separators, while `relative()` yields `\` on Windows.
  */
@@ -63,7 +64,7 @@ export function isBlocklistedCopyPath(src: string, srcPath: string): boolean {
     resolve(stripExtendedLengthPrefix(src)),
     resolve(stripExtendedLengthPrefix(srcPath)),
   );
-  if (!rel || rel.startsWith("..")) return false;
+  if (!rel || rel.split(sep)[0] === ".." || isAbsolute(rel)) return false;
   return layerCopyIgnore.ignores(toPosixPath(rel));
 }
 

@@ -5,11 +5,12 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { getProcessUi } from "@antelopejs/core/cli";
 import {
   AUTH_ESTABLISH_FILE,
@@ -161,42 +162,39 @@ export function materializeLayers(
   }
 }
 
-/** Whether `path` lies strictly inside `directory`. */
-function isInside(directory: string, path: string): boolean {
-  const rel = relative(directory, path);
-  return rel !== "" && rel.split(sep)[0] !== ".." && !isAbsolute(rel);
-}
-
-/** Copies `src` to `dest` with the layer blocklist of `root` at any depth. */
-function copyLayerTree(root: string, src: string, dest: string): void {
-  cpSync(src, dest, {
-    recursive: true,
-    dereference: true,
-    filter: (srcPath) => !isBlocklistedCopyPath(root, srcPath),
-  });
+/**
+ * A layer being copied: its root as the layer names it, which the blocklist
+ * reads paths against, and the real path of the workspace it leaves out.
+ */
+interface LayerCopy {
+  readonly root: string;
+  readonly workspace: string;
 }
 
 /**
- * Copies the entries of `from`, a directory of the layer at `root` that holds
- * the workspace, into `to`, leaving the workspace out. A directory that holds
- * the workspace is walked rather than handed to `cpSync`, which rejects a
- * copy into its own source before any filter runs.
+ * Copies the entries of `from`, a directory of the layer, into `to`,
+ * following symlinks. Paths are compared by their real paths, so neither a
+ * symlink nor a layer reached through one leads the copy into the workspace.
+ * `ancestors` holds the real paths of the directories being copied: an entry
+ * that resolves to one of them is a cycle and is left out.
  */
-function copyLayerEntries(
-  root: string,
+function copyLayerDirectory(
+  copy: LayerCopy,
   from: string,
   to: string,
-  workspaceDir: string,
+  ancestors: readonly string[],
 ): void {
   mkdirSync(to, { recursive: true });
   for (const entry of readdirSync(from)) {
     const source = join(from, entry);
+    if (isBlocklistedCopyPath(copy.root, source)) continue;
+    const real = realpathSync.native(source);
+    if (real === copy.workspace || ancestors.includes(real)) continue;
     const target = join(to, entry);
-    if (isBlocklistedCopyPath(root, source)) continue;
-    if (relative(source, workspaceDir) === "") continue;
-    if (isInside(source, workspaceDir))
-      copyLayerEntries(root, source, target, workspaceDir);
-    else copyLayerTree(root, source, target);
+    const stats = statSync(real);
+    if (stats.isDirectory())
+      copyLayerDirectory(copy, source, target, [...ancestors, real]);
+    else if (stats.isFile()) copyFileSync(real, target);
   }
 }
 
@@ -224,9 +222,8 @@ function copyLayerSource(
   dest: string,
   workspaceDir: string,
 ): void {
-  if (isInside(src, workspaceDir))
-    copyLayerEntries(src, src, dest, workspaceDir);
-  else copyLayerTree(src, src, dest);
+  const copy = { root: src, workspace: realpathSync.native(workspaceDir) };
+  copyLayerDirectory(copy, src, dest, [realpathSync.native(src)]);
 
   sanitizeLayerPackage(join(dest, "package.json"));
   sanitizeBuildDeclaration(join(dest, FRONTEND_BUILD_ENTRY));
