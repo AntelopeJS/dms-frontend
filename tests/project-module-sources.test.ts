@@ -62,13 +62,21 @@ function writeProject(project: string): void {
     join(project, CACHE_FOLDER, "git_github_com_Fixture_Git_Module_git"),
     "@fixture/git",
   );
-  writeCache(project, { "@fixture/cached-module@1.0.0": "1.0.0" });
+  writeModule(
+    join(project, CACHE_FOLDER, "@fixture", "legacy-module"),
+    "@fixture/legacy",
+  );
+  writeCache(project, {
+    "@fixture/cached-module@1.0.0": "1.0.0",
+    "@fixture/legacy-module": "1.0.0",
+  });
   writeConfig(
     project,
     `
     local: { source: { type: "local", path: "modules/local-module" } },
     installed: { source: { type: "package", package: "@fixture/installed-module", version: "1.0.0" } },
     cached: { source: { type: "package", package: "@fixture/cached-module", version: "1.0.0" } },
+    legacy: { source: { type: "package", package: "@fixture/legacy-module", version: "1.0.0" } },
     git: { source: { type: "git", remote: "${GIT_REMOTE}" } },`,
   );
 }
@@ -114,7 +122,7 @@ void describe("a module's frontend is found wherever AntelopeJS installs its sou
   const root = mkdtempSync(join(tmpdir(), "dms-module-sources-"));
   after(() => rmSync(root, { recursive: true, force: true }));
 
-  void it("loads the frontend of a local, an installed, a cached and a git module", async () => {
+  void it("loads the frontend of a local, an installed, a cached, a core 1.23.0 cached and a git module", async () => {
     const project = join(root, "sources");
     writeProject(project);
 
@@ -124,6 +132,7 @@ void describe("a module's frontend is found wherever AntelopeJS installs its sou
         "@fixture/cached",
         "@fixture/git",
         "@fixture/installed",
+        "@fixture/legacy",
         "@fixture/local",
       ]),
     );
