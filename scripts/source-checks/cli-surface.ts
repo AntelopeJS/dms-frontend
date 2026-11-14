@@ -89,9 +89,9 @@ function manifestRequiresTheAntelopeJsCli(): Problem[] {
   return [
     ...(isJsonObject(peers) &&
     "@antelopejs/core" in peers &&
-    peers["@antelopejs/core"] === ">=1.16.0 <2"
+    peers["@antelopejs/core"] === "~1.23.0"
       ? []
-      : ["package.json must require @antelopejs/core >=1.16.0 <2 as a peer"]),
+      : ["package.json must require @antelopejs/core ~1.23.0 as a peer"]),
     ...(manifest.get("peerDependenciesMeta") === undefined
       ? []
       : ["package.json must not make a peer dependency optional"]),

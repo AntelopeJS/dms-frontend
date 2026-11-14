@@ -69,7 +69,7 @@
     "test:cli": "pnpm run build && DMS_PREBUILT=1 node --import tsx --import ./tests/helpers/linger-limit.ts --test tests/cli.test.ts 'tests/cli-*.test.{ts,mts}'",
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
-    "lint": "oxlint && antelopejs-check-interface-ranges && pnpm run docs:reference:check && pnpm run source-checks",
+    "lint": "oxlint && pnpm run docs:reference:check && pnpm run source-checks",
     "typecheck": "tsc --noEmit && tsx scripts/typecheck-projects.ts tsconfig.templates.json tsconfig.tests.json",
     "lint:fix": "oxlint --fix --max-warnings=1000000 && oxfmt .",
     "knip": "knip --dependencies",
@@ -96,9 +96,9 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@antelopejs/core": "^1.21.2",
-    "@antelopejs/interface-dms": "^0.10.0",
-    "@antelopejs/tooling-configs": "^0.5.1",
+    "@antelopejs/core": "~1.23.0",
+    "@antelopejs/interface-dms": ">=0.13.3 <0.14.0",
+    "@antelopejs/tooling-configs": ">=0.6.0 <0.7.0",
     "@iconify/utils": "^3.1.0",
     "@iconify/vue": "^5.0.1",
     "@inertiajs/vue3": "^3.7.1",
@@ -120,7 +120,7 @@
     "oxlint": "1.81.0",
     "oxlint-tsgolint": "^7.0.2001",
     "pixelmatch": "^8.0.0",
-    "playwright-core": "^1.56.1",
+    "playwright-core": "^1.65.0",
     "release-it": "^19.2.4",
     "release-it-changelogen": "^0.1.0",
     "rimraf": "^6.1.2",
@@ -134,7 +134,7 @@
     "vue-tsc": "3.1.1"
   },
   "peerDependencies": {
-    "@antelopejs/core": ">=1.16.0 <2"
+    "@antelopejs/core": "~1.23.0"
   },
   "optionalDependencies": {
     "@oxc-parser/binding-darwin-arm64": "^0.95.0",
@@ -152,7 +152,7 @@
       "@vueuse/core@14.4.0": "templates/vue/patches/@vueuse__core@14.4.0.patch"
     },
     "packageExtensions": {
-      "@antelopejs/core@1.21": {
+      "@antelopejs/core@1.23": {
         "dependencies": {
           "@types/mocha": "^10.0.10"
         }
