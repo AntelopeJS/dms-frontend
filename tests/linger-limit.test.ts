@@ -5,6 +5,7 @@ import { it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const TESTS = dirname(fileURLToPath(import.meta.url));
+const ROOT = dirname(TESTS);
 const FIXTURES = join(TESTS, "fixtures", "linger");
 
 interface RunOutcome {
@@ -19,13 +20,17 @@ function runSuite(files: readonly string[]): Promise<RunOutcome> {
     "--import",
     "tsx",
     "--import",
-    join(TESTS, "helpers", "linger-limit.ts"),
+    "./tests/helpers/linger-limit.ts",
     "--test",
     "--test-reporter=tap",
     ...files.map((file) => join(FIXTURES, file)),
   ];
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, args, { env, timeout: 60_000 });
+    const child = spawn(process.execPath, args, {
+      cwd: ROOT,
+      env,
+      timeout: 60_000,
+    });
     let output = "";
     child.stdout.on("data", (chunk) => (output += String(chunk)));
     child.stderr.on("data", (chunk) => (output += String(chunk)));
