@@ -53,7 +53,9 @@ function keepVueDeclarations(directory: string): number {
  * skipped: it is the module's own to run. `vue-tsc` exits with a diagnostic for
  * each declaration that names a private type and writes none for that file,
  * which keeps its shim; the run fails only when it writes no declaration at all
- * for sources that hold `.vue` files.
+ * for sources that hold `.vue` files. `vue-tsc` may write nothing outside
+ * `context.workspace`: the declaration of a `.ts` file a component imports from
+ * another drive than the sources is refused, not written beside that file.
  */
 export async function emitVueDeclarations(
   context: VerificationContext,
@@ -73,6 +75,8 @@ export async function emitVueDeclarations(
     )}\n`,
   );
   const typecheckArguments = [
+    "--import",
+    "./workspace-writes.mjs",
     "--import",
     "./typecheck-loader.mjs",
     "./node_modules/vue-tsc/bin/vue-tsc.js",

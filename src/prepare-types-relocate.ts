@@ -52,6 +52,8 @@ const COPY_GLOB_PREFIX = `${LAYERS_SUBDIR}/`;
 /** The directory under `outDir` that holds the declarations emitted for the `.vue` files of the sources. */
 export const VUE_DECLARATIONS_DIR = "vue-declarations";
 const VUE_DECLARATION_SUFFIX = ".vue.d.ts";
+/** The file under `outDir` that holds the global types the `.vue` declarations reference. */
+const VUE_GLOBAL_TYPES_FILE = "vue-global-types.d.ts";
 /** Excludes `outDir` itself: the directory a tsconfig `exclude` entry names, from its own directory. */
 const THIS_DIRECTORY = ".";
 
@@ -253,7 +255,9 @@ export function typesEntry(template: Pick<Tsconfig, "files">): string {
  * a file the emit reaches outside the sources is written under it too. It extends the
  * relocated one, so the excludes and the resolution carry over. A declaration
  * a file cannot have, one that names a type it does not export, is a
- * diagnostic, not a stop: `noEmitOnError` is off.
+ * diagnostic, not a stop: `noEmitOnError` is off. The global types of the
+ * `.vue` files are written to `outDir`, not to the `node_modules` of the
+ * sources that `vue-tsc` would otherwise find from each file.
  */
 export function vueDeclarationsConfig({
   layers,
@@ -272,6 +276,7 @@ export function vueDeclarationsConfig({
     include: layers.map(
       ({ source }) => `${configPath(outDir, source)}/**/*.vue`,
     ),
+    vueCompilerOptions: { globalTypesPath: `./${VUE_GLOBAL_TYPES_FILE}` },
   };
 }
 
