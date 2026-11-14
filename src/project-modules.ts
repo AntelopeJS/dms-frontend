@@ -5,6 +5,7 @@ import type { ConfigLoader } from "@antelopejs/core";
 import { CliError, getProcessUi } from "@antelopejs/core/cli";
 import { isCallable, isObjectLike, isText } from "./internal/guards";
 import { readLayerPackage } from "./layers";
+import { type ModuleSource, moduleFolder } from "./module-folders";
 import { emptiedOptions } from "./private-values";
 import type {
   BackendProxyDeclaration,
@@ -46,13 +47,6 @@ type FrontendModuleFunction = (
   config: unknown,
   context: FrontendModuleContext,
 ) => FrontendRegistration | undefined;
-
-interface ModuleSource {
-  type: string;
-  path?: string;
-  package?: string;
-  remote?: string;
-}
 
 interface ProjectModule {
   source: ModuleSource;
@@ -311,43 +305,6 @@ export async function loadProjectConfig(
   };
 }
 
-/** The folder AntelopeJS's git downloader clones a remote into, in its module cache. */
-function gitCloneName(remote: string): string {
-  return remote.replace(/[^a-zA-Z0-9_]/g, "_");
-}
-
-function moduleFolderCandidates(
-  projectDir: string,
-  cacheFolder: string,
-  source: ModuleSource,
-): string[] {
-  if (source.type === "local" && source.path)
-    return [resolve(projectDir, source.path)];
-  if (source.type === "git" && source.remote)
-    return [resolve(projectDir, cacheFolder, gitCloneName(source.remote))];
-  if (source.package)
-    return [
-      join(projectDir, "node_modules", source.package),
-      resolve(projectDir, cacheFolder, source.package),
-    ];
-  return [];
-}
-
-/**
- * Where a module's package is: a local source's path, a git source's clone in
- * AntelopeJS's module cache, or a package installed in the project's
- * node_modules, else in that cache.
- */
-function moduleFolder(
-  projectDir: string,
-  cacheFolder: string,
-  source: ModuleSource,
-): string | undefined {
-  return moduleFolderCandidates(projectDir, cacheFolder, source).find(
-    (folder) => existsSync(join(folder, "package.json")),
-  );
-}
-
 /** The name and version of the package shipping a frontend module. */
 export interface ShippingPackage {
   name?: string;
@@ -417,7 +374,6 @@ function warnUndeclaredFrontend(id: string, folder: string): void {
 function registrationOf(
   id: string,
   folder: string,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- the configuration is the module's own, handed unread to its `frontendModule`, which alone knows its shape.
   config: unknown,
   context: FrontendModuleContext,
 ): FrontendRegistration | undefined {

@@ -14,7 +14,7 @@ oxlint skips `templates/**/*.{ts,tsx,vue}` and knip skips `templates/**`: they r
 
 ## Versioning
 
-- `@antelopejs/core` is a peer dependency (`~1.23.0`).
+- `@antelopejs/core` is a peer dependency (`~1.23.1`).
 - `@vueuse/core` stays pinned at `14.4.0`: `templates/vue/patches/@vueuse__core@14.4.0.patch` is applied to that exact version.
 - `@nuxt/ui` stays pinned at `4.10.0` in `templates/vue/package.json`: `templates/vue/pnpm-workspace.yaml` applies `patches/@nuxt__ui@4.10.0.patch` to that exact version.
 - `pnpm lint` runs `docs:reference:check`, which fails when the environment table in `docs/4.configuration.md` differs from `ajs dms help environment`.

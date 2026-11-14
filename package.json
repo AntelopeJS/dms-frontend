@@ -96,7 +96,7 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@antelopejs/core": "~1.23.0",
+    "@antelopejs/core": "~1.23.1",
     "@antelopejs/interface-dms": ">=0.13.3 <0.14.0",
     "@antelopejs/tooling-configs": ">=0.6.0 <0.7.0",
     "@iconify/utils": "^3.1.0",
@@ -134,7 +134,7 @@
     "vue-tsc": "3.1.1"
   },
   "peerDependencies": {
-    "@antelopejs/core": "~1.23.0"
+    "@antelopejs/core": "~1.23.1"
   },
   "optionalDependencies": {
     "@oxc-parser/binding-darwin-arm64": "^0.95.0",
