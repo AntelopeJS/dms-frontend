@@ -71,9 +71,9 @@ function dieTakingOver(targets: string[]): void {
 }
 
 const RACERS = 8;
-const TRIALS = 40;
+const TRIALS = 120;
 const RACE_DELAY_MS = 3000;
-const TRIAL_MS = 25;
+const TRIAL_MS = 20;
 
 function parseOutcomes(output: string): string[] {
   const outcomes: unknown = JSON.parse(output);
@@ -143,9 +143,10 @@ void it("takes over the lock of a verification that died holding it", () => {
   assert.doesNotThrow(() => lockVerification(layer)());
 });
 
-void it("takes over the lock after a run died while taking it over", () => {
+void it("takes over the lock after two runs died while taking it over, one after the other", () => {
   const layer = temporaryDirectory("verify-source-lock-");
   dieHoldingLocks([layer]);
+  dieTakingOver([layer]);
   dieTakingOver([layer]);
   assert.doesNotThrow(() => lockVerification(layer)());
 });

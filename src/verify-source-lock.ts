@@ -26,9 +26,9 @@ const LOCK_DIRECTORY = join(
 );
 
 /**
- * Tries to create the lock: once, again after removing the lock of a dead
- * run, and once more after removing the takeover file of a run that died
- * while it removed one.
+ * Tries to create the lock: once, again after removing the files dead runs
+ * left, and once more when its holder let it go between the failed create
+ * and the read of its pid.
  */
 const LOCK_ATTEMPTS = 3;
 
@@ -77,7 +77,7 @@ function createHeld(path: string): boolean {
 function runningProblem(target: string, pid: number, path: string): CliError {
   return new CliError({
     title: `A verification of ${showPath(target)} is already running`,
-    reason: `Process ${pid} holds its lock, ${path}.`,
+    reason: `Process ${pid} holds ${path}.`,
     fixes: [
       `Wait for process ${pid} to end, or stop it with kill ${pid}`,
       `Remove ${path} if process ${pid} is not a verification`,
@@ -90,8 +90,9 @@ function runningProblem(target: string, pid: number, path: string): CliError {
  * takeover file of a run that died while it removed one. Of the runs that
  * found it, only the one that creates its takeover file removes it, and only
  * while it still holds `dead`, so no run removes the file of a live one. A
- * takeover file left by a dead run is removed the same way, so the next
- * attempt can take the lock over.
+ * takeover file left by a dead run is removed the same way first. Each
+ * repeat follows the removal of a file a killed run left, so the files on
+ * disk bound them.
  *
  * @throws CliError naming the run that is taking the lock over
  */
@@ -109,6 +110,7 @@ function removeDeadFile(path: string, dead: number, target: string): void {
   if (taker === undefined) return;
   if (isPidAlive(taker)) throw runningProblem(target, taker, takeover);
   removeDeadFile(takeover, taker, target);
+  removeDeadFile(path, dead, target);
 }
 
 /**
