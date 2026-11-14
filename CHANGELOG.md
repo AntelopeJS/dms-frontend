@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.11.1
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.0...v0.11.1)
+
+### 🩹 Fixes
+
+- **prepare-types:** Declare the .vue files when --out is a symlink at another depth ([#352](https://github.com/AntelopeJS/dms-frontend/pull/352))
+- **prepare-types:** Fail and list every .vue component left without a declaration ([#351](https://github.com/AntelopeJS/dms-frontend/pull/351))
+- **prepare-types:** Resolve #shortcuts-aggregated and @types-only packages in the prepared tsconfig ([#350](https://github.com/AntelopeJS/dms-frontend/pull/350))
+- **verify-source:** Kill the build tools and remove the workspace of a run killed with SIGKILL ([#353](https://github.com/AntelopeJS/dms-frontend/pull/353))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.11.0
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.6...v0.11.0)
