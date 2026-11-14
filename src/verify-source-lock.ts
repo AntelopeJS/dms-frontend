@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  linkSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CliError } from "@antelopejs/core/cli";
@@ -27,12 +33,60 @@ function lockHolder(path: string): number | undefined {
   }
 }
 
+/** Runs `action`: true when it failed with the error `code`, false when it succeeded. Any other failure is thrown. */
+function failsWith(code: string, action: () => void): boolean {
+  try {
+    action();
+    return false;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === code)
+      return true;
+    throw error;
+  }
+}
+
+/**
+ * Creates `path` holding this pid, false when it exists. It is linked from a
+ * file already written, so no other run ever reads it empty.
+ */
+function createHeld(path: string): boolean {
+  const own = `${path}.${process.pid}.new`;
+  writeFileSync(own, String(process.pid));
+  try {
+    return !failsWith("EEXIST", () => linkSync(own, path));
+  } finally {
+    rmSync(own, { force: true });
+  }
+}
+
 function runningProblem(target: string, pid: number, path: string): CliError {
   return new CliError({
     title: `A verification of ${showPath(target)} is already running`,
     reason: `Process ${pid} holds its lock, ${path}.`,
     fixes: [`Wait for process ${pid} to end, or stop it with kill ${pid}`],
   });
+}
+
+/**
+ * Removes the lock that the dead run `dead` left at `path`. Of the runs that
+ * found it, only the one that creates its takeover file removes it, and only
+ * while it still holds `dead`, so no run removes the lock of a live one.
+ *
+ * @throws CliError naming the run that is taking the lock over
+ */
+function removeDeadLock(path: string, dead: number, target: string): void {
+  const takeover = `${path}.${dead}.takeover`;
+  if (createHeld(takeover)) {
+    try {
+      if (lockHolder(path) === dead) rmSync(path, { force: true });
+    } finally {
+      rmSync(takeover, { force: true });
+    }
+    return;
+  }
+  const taker = lockHolder(takeover);
+  if (taker !== undefined && isPidAlive(taker))
+    throw runningProblem(target, taker, takeover);
 }
 
 /**
@@ -48,23 +102,20 @@ export function lockVerification(target: string): () => void {
   mkdirSync(LOCK_DIRECTORY, { recursive: true });
   const path = lockPath(target);
   for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
-    try {
-      writeFileSync(path, String(process.pid), { flag: "wx" });
-      return () => rmSync(path, { force: true });
-    } catch (error) {
-      if (
-        !(error instanceof Error && "code" in error && error.code === "EEXIST")
-      )
-        throw error;
-    }
+    if (createHeld(path))
+      return () => {
+        if (lockHolder(path) === process.pid) rmSync(path, { force: true });
+      };
     const holder = lockHolder(path);
-    if (holder !== undefined && isPidAlive(holder))
-      throw runningProblem(target, holder, path);
-    rmSync(path, { force: true });
+    if (holder === undefined) continue;
+    if (isPidAlive(holder)) throw runningProblem(target, holder, path);
+    removeDeadLock(path, holder, target);
   }
   throw new CliError({
     title: `Could not lock the verification of ${showPath(target)}`,
-    reason: `Another run took ${path} each of the ${LOCK_ATTEMPTS} times this one tried.`,
-    fixes: ["Run it again once the other verification has started"],
+    reason: `${path} was still taken after ${LOCK_ATTEMPTS} attempts.`,
+    fixes: [
+      `Remove ${path} and its .takeover files if no verification is running`,
+    ],
   });
 }

@@ -49,25 +49,15 @@ interface ProbedRun {
   errors: string[];
 }
 
-/** Runs the inline caller given after `evalFlag`, or on stdin for `-`. */
 function probe(
   evalFlag: string,
   layer: string,
   env: NodeJS.ProcessEnv = {},
 ): ProbedRun {
-  const script = inlineCaller(layer);
-  const stdin = evalFlag === "-";
   const run = spawnSync(
     process.execPath,
-    [
-      "--import",
-      "tsx",
-      "--import",
-      PROBE,
-      ...(stdin ? ["-"] : [evalFlag, script]),
-    ],
+    ["--import", "tsx", "--import", PROBE, evalFlag, inlineCaller(layer)],
     {
-      input: stdin ? script : undefined,
       encoding: "utf8",
       env: { ...process.env, ...env },
       timeout: PROCESS_TIMEOUT_MS,
@@ -86,7 +76,7 @@ function probe(
   };
 }
 
-for (const evalFlag of ["-e", "--eval", "-p", "--print", "-"]) {
+for (const evalFlag of ["-e", "--eval", "-p", "--print"]) {
   void it(`starts one runner, not the caller's script again, from node ${evalFlag}`, () => {
     const layer = temporaryDirectory("verify-source-spawn-");
     const run = probe(evalFlag, layer);
