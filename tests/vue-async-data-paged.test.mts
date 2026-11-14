@@ -26,9 +26,9 @@ type Runtime = ReturnType<typeof createDmsFrontendRuntime>;
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Waits until `reached` holds, however slow the machine, and fails after 5 s. */
+/** Waits until `reached` holds, however slow the machine, and fails after 1 s. */
 async function until(reached: () => boolean, message: () => string) {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 1_000;
   while (!reached()) {
     assert.ok(Date.now() < deadline, message());
     await sleep(5);
