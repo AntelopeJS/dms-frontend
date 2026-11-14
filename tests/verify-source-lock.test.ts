@@ -6,6 +6,7 @@ import { it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { lockVerification } from "../src/verify-source-lock";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
+import { isTextList } from "./helpers/guards";
 
 const LOCK = join(__dirname, "..", "src", "verify-source-lock.ts");
 
@@ -26,43 +27,87 @@ void it("refuses a second verification of a layer while the first runs, naming i
   lockVerification(layer)();
 });
 
-/** Leaves the lock of `layer` behind, held by a pid that is gone. */
-function dieHoldingLock(layer: string): void {
+/** Runs `script` in a process that dies before it releases any lock it took. */
+function dieAfter(script: string): void {
   const killed = spawnSync(
     process.execPath,
     [
       "--import",
       "tsx",
       "-e",
-      `require(${JSON.stringify(LOCK)}).lockVerification(${JSON.stringify(layer)});
-      process.kill(process.pid, "SIGKILL");`,
+      `${script}\nprocess.kill(process.pid, "SIGKILL");`,
     ],
     { timeout: 10_000, killSignal: "SIGKILL" },
   );
-  assert.notEqual(killed.status, 0, "the run died before it released the lock");
+  assert.notEqual(
+    killed.status,
+    0,
+    "the run died before it released its locks",
+  );
 }
 
-const RACERS = 6;
-const RACE_DELAY_MS = 3000;
-const HOLD_MS = 1500;
+/** Leaves the lock of each target behind, held by a pid that is gone. */
+function dieHoldingLocks(targets: string[]): void {
+  dieAfter(`
+    const { lockVerification } = require(${JSON.stringify(LOCK)});
+    for (const target of ${JSON.stringify(targets)}) lockVerification(target);
+  `);
+}
 
-/** Starts `RACERS` processes that lock `layer` at the same instant; resolves with what each one got. */
-async function race(layer: string): Promise<string[]> {
+/** Leaves, beside the dead lock of each target, the takeover file of a run that died while it removed the lock. */
+function dieTakingOver(targets: string[]): void {
+  dieAfter(`
+    const fs = require("node:fs");
+    const rmSync = fs.rmSync;
+    fs.rmSync = (path, options) =>
+      String(path).endsWith(".new") ? rmSync(path, options) : undefined;
+    const { lockVerification } = require(${JSON.stringify(LOCK)});
+    for (const target of ${JSON.stringify(targets)}) {
+      try {
+        lockVerification(target);
+      } catch {}
+    }
+  `);
+}
+
+const RACERS = 8;
+const TRIALS = 40;
+const RACE_DELAY_MS = 3000;
+const TRIAL_MS = 25;
+
+function parseOutcomes(output: string): string[] {
+  const outcomes: unknown = JSON.parse(output);
+  assert.ok(isTextList(outcomes), `a list of outcomes: ${output}`);
+  return outcomes;
+}
+
+/**
+ * `RACERS` processes lock each target in turn, all of them at the same
+ * instant, and keep what they took until every trial is over. Resolves with
+ * what each process got, per target.
+ */
+async function race(targets: string[]): Promise<string[][]> {
   const startAt = Date.now() + RACE_DELAY_MS;
   const script = `
     const { lockVerification } = require(${JSON.stringify(LOCK)});
+    const outcomes = [];
+    const releases = [];
     setTimeout(() => {
-      while (Date.now() < ${startAt});
-      try {
-        const release = lockVerification(${JSON.stringify(layer)});
-        process.stdout.write("held");
-        setTimeout(release, ${HOLD_MS});
-      } catch (error) {
-        process.stdout.write(error.message.includes("is already running") ? "refused" : error.message);
-      }
+      ${JSON.stringify(targets)}.forEach((target, trial) => {
+        while (Date.now() < ${startAt} + trial * ${TRIAL_MS});
+        try {
+          releases.push(lockVerification(target));
+          outcomes.push("held");
+        } catch (error) {
+          outcomes.push(error.message.includes("is already running") ? "refused" : error.message);
+        }
+      });
+      while (Date.now() < ${startAt} + ${targets.length + 1} * ${TRIAL_MS});
+      for (const release of releases) release();
+      process.stdout.write(JSON.stringify(outcomes));
     }, ${startAt} - Date.now() - 20);
   `;
-  return Promise.all(
+  const racers = await Promise.all(
     Array.from({ length: RACERS }, async () => {
       const child = spawn(process.execPath, ["--import", "tsx", "-e", script], {
         stdio: ["ignore", "pipe", "inherit"],
@@ -74,48 +119,54 @@ async function race(layer: string): Promise<string[]> {
         output += chunk;
       });
       await once(child, "close");
-      return output;
+      return parseOutcomes(output);
     }),
+  );
+  return targets.map((_, trial) =>
+    racers.map((outcomes) => outcomes[trial] ?? "missing").sort(),
   );
 }
 
+function trialTargets(): string[] {
+  const root = temporaryDirectory("verify-source-lock-");
+  return Array.from({ length: TRIALS }, (_, trial) => join(root, `${trial}`));
+}
+
+const ONE_HOLDER = [
+  "held",
+  ...Array.from({ length: RACERS - 1 }, () => "refused"),
+];
+
 void it("takes over the lock of a verification that died holding it", () => {
   const layer = temporaryDirectory("verify-source-lock-");
-  dieHoldingLock(layer);
+  dieHoldingLocks([layer]);
   assert.doesNotThrow(() => lockVerification(layer)());
 });
 
 void it("takes over the lock after a run died while taking it over", () => {
   const layer = temporaryDirectory("verify-source-lock-");
-  dieHoldingLock(layer);
-  const killed = spawnSync(
-    process.execPath,
-    [
-      "--import",
-      "tsx",
-      "-e",
-      `const fs = require("node:fs");
-      const rmSync = fs.rmSync;
-      fs.rmSync = (path, options) => {
-        if (String(path).endsWith(".pid")) process.kill(process.pid, "SIGKILL");
-        return rmSync(path, options);
-      };
-      require(${JSON.stringify(LOCK)}).lockVerification(${JSON.stringify(layer)});`,
-    ],
-    { timeout: 10_000, killSignal: "SIGKILL" },
-  );
-  assert.notEqual(killed.status, 0, "the run died before it released the lock");
+  dieHoldingLocks([layer]);
+  dieTakingOver([layer]);
   assert.doesNotThrow(() => lockVerification(layer)());
 });
 
 void it("gives the lock of a dead verification to one of the runs that race for it", async () => {
-  const layer = temporaryDirectory("verify-source-lock-");
-  dieHoldingLock(layer);
-  const outcomes = await race(layer);
-  assert.deepEqual(outcomes.toSorted(), [
-    "held",
-    ...Array.from({ length: RACERS - 1 }, () => "refused"),
-  ]);
+  const targets = trialTargets();
+  dieHoldingLocks(targets);
+  assert.deepEqual(
+    await race(targets),
+    targets.map(() => ONE_HOLDER),
+  );
+});
+
+void it("gives the lock to one racing run after a run died while taking it over", async () => {
+  const targets = trialTargets();
+  dieHoldingLocks(targets);
+  dieTakingOver(targets);
+  assert.deepEqual(
+    await race(targets),
+    targets.map(() => ONE_HOLDER),
+  );
 });
 
 void it("lets verifications of different layers run side by side", () => {

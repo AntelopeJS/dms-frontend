@@ -86,15 +86,16 @@ function runningProblem(target: string, pid: number, path: string): CliError {
 }
 
 /**
- * Removes the lock that the dead run `dead` left at `path`. Of the runs that
+ * Removes the file that the dead run `dead` left at `path`: a lock, or the
+ * takeover file of a run that died while it removed one. Of the runs that
  * found it, only the one that creates its takeover file removes it, and only
- * while it still holds `dead`, so no run removes the lock of a live one.
- * The takeover file of a run that died before removing it is removed, so the
- * next attempt can take the lock over.
+ * while it still holds `dead`, so no run removes the file of a live one. A
+ * takeover file left by a dead run is removed the same way, so the next
+ * attempt can take the lock over.
  *
  * @throws CliError naming the run that is taking the lock over
  */
-function removeDeadLock(path: string, dead: number, target: string): void {
+function removeDeadFile(path: string, dead: number, target: string): void {
   const takeover = `${path}.${dead}.takeover`;
   if (createHeld(takeover)) {
     try {
@@ -107,7 +108,7 @@ function removeDeadLock(path: string, dead: number, target: string): void {
   const taker = lockHolder(takeover);
   if (taker === undefined) return;
   if (isPidAlive(taker)) throw runningProblem(target, taker, takeover);
-  rmSync(takeover, { force: true });
+  removeDeadFile(takeover, taker, target);
 }
 
 /**
@@ -130,7 +131,7 @@ export function lockVerification(target: string): () => void {
     const holder = lockHolder(path);
     if (holder === undefined) continue;
     if (isPidAlive(holder)) throw runningProblem(target, holder, path);
-    removeDeadLock(path, holder, target);
+    removeDeadFile(path, holder, target);
   }
   throw new CliError({
     title: `Could not lock the verification of ${showPath(target)}`,
