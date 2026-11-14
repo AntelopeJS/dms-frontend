@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.11.2
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.1...v0.11.2)
+
+### 🩹 Fixes
+
+- **verify-source:** Stop the runner and its build when the CLI is killed with SIGKILL ([#356](https://github.com/AntelopeJS/dms-frontend/pull/356))
+- **test:** Count only idle time against the linger limit of a test file ([#355](https://github.com/AntelopeJS/dms-frontend/pull/355))
+- **project-modules:** Find modules in the versioned cache folders of core 1.23.1 ([#359](https://github.com/AntelopeJS/dms-frontend/pull/359))
+
+### ✅ Tests
+
+- **verify-source:** Run the lock race tests on Windows ([#354](https://github.com/AntelopeJS/dms-frontend/pull/354))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.11.1
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.0...v0.11.1)
