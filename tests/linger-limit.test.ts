@@ -23,6 +23,7 @@ function runSuite(files: readonly string[]): Promise<RunOutcome> {
     "./tests/helpers/linger-limit.ts",
     "--test",
     "--test-reporter=tap",
+    "--test-concurrency=4",
     ...files.map((file) => join(FIXTURES, file)),
   ];
   return new Promise((resolve) => {
