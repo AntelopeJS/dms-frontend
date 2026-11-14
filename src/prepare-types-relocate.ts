@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CliError } from "@antelopejs/core/cli";
 import type { ResolvedLayer } from "./common";
@@ -5,6 +6,7 @@ import { LAYERS_SUBDIR } from "./config";
 import { toPosixPath } from "./fs-sync";
 import type { JsonValue } from "./internal/json";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
+import { type InstalledPackage, packagePaths } from "./prepare-types-packages";
 
 /** A module of the workspace: its copy there, and the sources it came from. */
 export interface RelocatedLayer {
@@ -12,11 +14,16 @@ export interface RelocatedLayer {
   id: string;
   /** Absolute path of the copy in the workspace. */
   copy: string;
-  /** Absolute path of the module's source tree. */
+  /** Absolute path of the module's source tree, with its symlinks resolved. */
   source: string;
 }
 
-/** The modules that have a copy in `workspace`, with where each came from. */
+/**
+ * The modules that have a copy in `workspace`, with where each came from.
+ * Each source is its real path: TypeScript names a file it reaches through a
+ * symlink, such as a module pnpm installed, by its real path, so any other
+ * path to it would miss the declarations of its `.vue` files.
+ */
 export function layerTable(
   workspace: string,
   layers: ResolvedLayer[],
@@ -26,7 +33,7 @@ export function layerTable(
     .map((layer) => ({
       id: getLayerSafeName(layer),
       copy: getLayerWorkspacePath(workspace, layer),
-      source: layer.sourcePath ?? layer.path,
+      source: realpathSync.native(layer.sourcePath ?? layer.path),
     }));
 }
 
@@ -36,6 +43,8 @@ export const VUE_SHIMS = `declare module "*.vue" {\n  const component: import("v
 
 /** The Vite client types, listed as a file: `types` resolves from the extending config. */
 const VITE_CLIENT_TYPES = "node_modules/vite/client.d.ts";
+/** The declaration that references every other one, the single file a config that lists its own `files` adds. */
+export const TYPES_ENTRY_FILE = "types.d.ts";
 const COPY_ROOT = `./${LAYERS_SUBDIR}/`;
 const GENERATED_FRONTEND_ALIAS = "@frontend/*";
 const EVERY_DIRECTORY = "**/";
@@ -88,12 +97,14 @@ function withDeclarations(
   return [own, configPath(outDir, mirror)];
 }
 
-function dependencyPaths(dependencies: string[]): Record<string, string[]> {
+function dependencyPaths(
+  dependencies: InstalledPackage[],
+  outDir: string,
+): Record<string, string[]> {
   return Object.fromEntries(
-    dependencies.flatMap((name): [string, string[]][] => [
-      [name, [`./node_modules/${name}`]],
-      [`${name}/*`, [`./node_modules/${name}/*`]],
-    ]),
+    dependencies.flatMap(({ name, root, manifest }) =>
+      packagePaths(name, configPath(outDir, root), manifest),
+    ),
   );
 }
 
@@ -147,18 +158,6 @@ export function commonAncestor(paths: string[]): string {
   return prefix.length === 1 ? `${prefix[0]}${sep}` : prefix.join(sep);
 }
 
-/**
- * The dependencies of the workspace that no module owns. The modules are
- * `workspace:*` there and their copies are removed, so they resolve from their
- * sources; every other one resolves from the workspace.
- */
-export function sharedDependencies(
-  dependencies: string[],
-  packageNames: (string | undefined)[],
-): string[] {
-  return dependencies.filter((name) => !packageNames.includes(name));
-}
-
 /** Whether `file` is the declaration `vue-tsc` emits for a `.vue` file. */
 export function isVueDeclaration(file: string): boolean {
   return file.endsWith(VUE_DECLARATION_SUFFIX);
@@ -183,8 +182,8 @@ export interface TypesRelocation {
   outDir: string;
   /** The common ancestor of the sources: the root the `.vue` declarations are emitted under. */
   rootDir: string;
-  /** The dependencies of the workspace that no module owns: each resolves from the workspace's `node_modules`. */
-  dependencies: string[];
+  /** The dependencies that no module owns, each resolved from where it is installed. */
+  dependencies: InstalledPackage[];
 }
 
 /**
@@ -195,8 +194,9 @@ export interface TypesRelocation {
  *
  * Every alias into the sources also lists where the declarations of their
  * `.vue` files are emitted, and `rootDirs` joins the two trees for relative
- * imports. Each dependency resolves from the workspace, so the sources and the
- * generated declarations share one copy of it.
+ * imports. Each dependency resolves from where the workspace installed it, as
+ * its `exports` map it, so the sources and the generated declarations share one
+ * copy of it. `files` lists the entry declaration only.
  */
 export function relocateTsconfig({
   template,
@@ -218,11 +218,11 @@ export function relocateTsconfig({
         configPath(outDir, resolve(outDir, VUE_DECLARATIONS_DIR)),
       ],
       paths: {
-        ...dependencyPaths(dependencies),
+        ...dependencyPaths(dependencies, outDir),
         ...remapPaths(paths, { layers, outDir, rootDir }),
       },
     },
-    files: [...template.files, VITE_CLIENT_TYPES, VUE_SHIMS_FILE],
+    files: [TYPES_ENTRY_FILE],
     include: template.include.flatMap((glob) =>
       glob.startsWith(COPY_GLOB_PREFIX)
         ? sources.map(
@@ -239,6 +239,16 @@ export function relocateTsconfig({
       ...(insideSources ? [THIS_DIRECTORY] : []),
     ],
   };
+}
+
+/**
+ * The text of the entry declaration: a reference to each file the workspace's
+ * tsconfig lists, then to the Vite client types and the `.vue` shims.
+ */
+export function typesEntry(template: Pick<Tsconfig, "files">): string {
+  return [...template.files, VITE_CLIENT_TYPES, VUE_SHIMS_FILE]
+    .map((file) => `/// <reference path="./${file}" />\n`)
+    .join("");
 }
 
 /**

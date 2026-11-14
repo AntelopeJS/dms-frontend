@@ -18,11 +18,13 @@ import {
   layerTable,
   relocateAutoImports,
   relocateTsconfig,
-  sharedDependencies,
   type Tsconfig,
+  TYPES_ENTRY_FILE,
+  typesEntry,
   VUE_SHIMS,
   VUE_SHIMS_FILE,
 } from "./prepare-types-relocate";
+import { dependencyRoots, readManifest } from "./prepare-types-packages";
 import type { ResolvedLayer } from "./common";
 
 type PathApi = typeof nativePath.win32;
@@ -33,7 +35,7 @@ export const TYPES_MARKER = "dms-types.json";
 /** The variable `ajs dms prepare-types` passes the runner its `--out` in. */
 export const PREPARE_TYPES_OUT_VARIABLE = "DMS_PREPARE_TYPES_OUT";
 
-const KEPT_ON_RESET = "node_modules";
+const INSTALL_DIRECTORY = "node_modules";
 const GENERATED_PATHS = "frontend-paths.generated.json";
 const WORKSPACE_TSCONFIG = "tsconfig.json";
 const AUTO_IMPORTS = "auto-imports.d.ts";
@@ -143,6 +145,16 @@ export function assertOutsideSources(out: string, inputs: RunInput[]): void {
     });
 }
 
+/** Removes everything in `directory` but its `node_modules`. */
+function emptyButInstall(directory: string): void {
+  for (const entry of readdirSync(directory))
+    if (entry !== INSTALL_DIRECTORY)
+      rmSync(nativePath.join(directory, entry), {
+        recursive: true,
+        force: true,
+      });
+}
+
 /**
  * Empties `out` but for its `node_modules`, which a new run installs into, and
  * writes the marker that lets a later run empty it again. The marker comes
@@ -150,9 +162,7 @@ export function assertOutsideSources(out: string, inputs: RunInput[]): void {
  */
 export function resetOutput(out: string): void {
   mkdirSync(out, { recursive: true });
-  for (const entry of readdirSync(out))
-    if (entry !== KEPT_ON_RESET)
-      rmSync(nativePath.join(out, entry), { recursive: true, force: true });
+  emptyButInstall(out);
   writeFileSync(
     nativePath.join(out, TYPES_MARKER),
     `${JSON.stringify({ command: "ajs dms prepare-types" }, null, 2)}\n`,
@@ -194,9 +204,11 @@ function readGeneratedPaths(path: string): Record<string, string[]> {
   throw new CliError({ title: `${GENERATED_PATHS} holds no paths` });
 }
 
-/** The names in the `dependencies` of the `package.json` at `path`. */
-function readDependencyNames(path: string): string[] {
-  const config: unknown = JSON.parse(readFileSync(path, "utf8"));
+/** The names in the `dependencies` of the `package.json` in `directory`. */
+function readDependencyNames(directory: string): string[] {
+  const config: unknown = JSON.parse(
+    readFileSync(nativePath.join(directory, WORKSPACE_PACKAGE), "utf8"),
+  );
   return isPlainObject(config) && isPlainObject(config.dependencies)
     ? Object.keys(config.dependencies)
     : [];
@@ -204,25 +216,38 @@ function readDependencyNames(path: string): string[] {
 
 /**
  * Turns the workspace at `out` into the tsconfig and auto-imports of the
- * sources: writes `tsconfig.json`, `vue-shims.d.ts` and the relocated
- * `auto-imports.d.ts`, and removes the copies of the modules, so nothing
- * resolves a stale one.
+ * sources: writes `tsconfig.json`, `types.d.ts`, `vue-shims.d.ts` and the
+ * relocated `auto-imports.d.ts`, and removes the copied sources of the
+ * modules, so nothing resolves a stale one. Each copy keeps its
+ * `node_modules`, where the dependencies of its module are installed.
  */
 export function writeRelocatedTypes(
   out: string,
   layers: ResolvedLayer[],
 ): void {
   const table = layerTable(out, layers);
+  const template = readWorkspaceTsconfig(
+    nativePath.join(out, WORKSPACE_TSCONFIG),
+  );
+  const roots = dependencyRoots({
+    outDir: out,
+    workspace: readDependencyNames(out),
+    layers: table.map(({ id, copy }) => ({
+      id,
+      dependencies: readDependencyNames(copy),
+    })),
+    modules: layers.map(({ packageName }) => packageName),
+  });
   const tsconfig = relocateTsconfig({
-    template: readWorkspaceTsconfig(nativePath.join(out, WORKSPACE_TSCONFIG)),
+    template,
     paths: readGeneratedPaths(nativePath.join(out, GENERATED_PATHS)),
     layers: table,
     outDir: out,
     rootDir: commonAncestor(table.map(({ source }) => source)),
-    dependencies: sharedDependencies(
-      readDependencyNames(nativePath.join(out, WORKSPACE_PACKAGE)),
-      layers.map(({ packageName }) => packageName),
-    ),
+    dependencies: roots.map((root) => ({
+      ...root,
+      manifest: readManifest(root.root),
+    })),
   });
   const autoImports = nativePath.join(out, AUTO_IMPORTS);
   writeFileSync(
@@ -230,9 +255,12 @@ export function writeRelocatedTypes(
     relocateAutoImports(readFileSync(autoImports, "utf8"), table, out),
   );
   writeFileSync(nativePath.join(out, VUE_SHIMS_FILE), VUE_SHIMS);
+  writeFileSync(nativePath.join(out, TYPES_ENTRY_FILE), typesEntry(template));
   writeFileSync(
     nativePath.join(out, WORKSPACE_TSCONFIG),
     `${JSON.stringify(tsconfig, null, 2)}\n`,
   );
-  rmSync(nativePath.join(out, LAYERS_SUBDIR), { recursive: true, force: true });
+  const copies = nativePath.join(out, LAYERS_SUBDIR);
+  for (const copy of readdirSync(copies, { withFileTypes: true }))
+    if (copy.isDirectory()) emptyButInstall(nativePath.join(copies, copy.name));
 }

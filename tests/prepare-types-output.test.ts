@@ -20,6 +20,7 @@ import {
   runInputs,
   TYPES_MARKER,
 } from "../src/prepare-types-output";
+import { layerTable } from "../src/prepare-types-relocate";
 
 const roots: string[] = [];
 after(() => {
@@ -158,6 +159,27 @@ void describe("assertOutsideSources", () => {
     );
     assert.doesNotThrow(() =>
       assertOutsideSources(out, [{ label: "m", path: join(out, "..", "m") }]),
+    );
+  });
+});
+
+void describe("layerTable", () => {
+  void it("names each source by its real path, not the symlink it was given as", () => {
+    const real = join(directory(), "frontend-vue");
+    mkdirSync(real);
+    const link = join(directory(), "installed");
+    symlinkSync(real, link);
+    const out = directory();
+    assert.deepEqual(
+      layerTable(out, [
+        { path: link, packageName: "@scope/core" },
+        { path: join(out, "copy"), sourcePath: link, packageName: "shop" },
+        { path: real },
+      ]).map(({ id, source }) => [id, source]),
+      [
+        ["scope__core", real],
+        ["shop", real],
+      ],
     );
   });
 });

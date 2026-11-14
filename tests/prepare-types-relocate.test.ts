@@ -9,10 +9,11 @@ import {
   relocateAutoImports,
   relocateTsconfig,
   type RelocatedLayer,
-  sharedDependencies,
   type Tsconfig,
+  typesEntry,
   vueDeclarationsConfig,
 } from "../src/prepare-types-relocate";
+import type { InstalledPackage } from "../src/prepare-types-packages";
 
 const OUT = resolve("/work/project/.dms-types");
 
@@ -47,7 +48,7 @@ function pathEntries(config: Tsconfig): [string, unknown][] {
 function relocate(
   layers: RelocatedLayer[],
   outDir = OUT,
-  dependencies: string[] = [],
+  dependencies: InstalledPackage[] = [],
 ) {
   return relocateTsconfig({
     template: TEMPLATE,
@@ -79,7 +80,7 @@ void describe("relocateTsconfig", () => {
     });
   });
 
-  void it("sets the options the sources need, lists the shims, drops the extends", () => {
+  void it("sets the options the sources need, lists the entry declaration, drops the extends", () => {
     const config = relocate([CORE]);
     const { paths: _paths, ...options } = config.compilerOptions;
     assert.deepEqual(options, {
@@ -94,12 +95,7 @@ void describe("relocateTsconfig", () => {
       "include",
       "exclude",
     ]);
-    assert.deepEqual(config.files, [
-      "globals.d.ts",
-      "auto-imports.d.ts",
-      "node_modules/vite/client.d.ts",
-      "vue-shims.d.ts",
-    ]);
+    assert.deepEqual(config.files, ["types.d.ts"]);
   });
 
   void it("globs each source tree, not the copies, with its own excludes", () => {
@@ -118,17 +114,36 @@ void describe("relocateTsconfig", () => {
     ]);
   });
 
-  void it("resolves each dependency of the workspace from it, bare and with a subpath", () => {
-    const entries = pathEntries(relocate([CORE], OUT, ["vue", "@vueuse/core"]));
+  void it("resolves each dependency from where it is installed, as its exports map it", () => {
+    const entries = pathEntries(
+      relocate([CORE], OUT, [
+        { name: "vue", root: join(OUT, "node_modules", "vue"), manifest: {} },
+        {
+          name: "apexcharts",
+          root: join(
+            OUT,
+            "frontend-modules",
+            "core",
+            "node_modules",
+            "apexcharts",
+          ),
+          manifest: { exports: { "./locales/*": "./dist/locales/*" } },
+        },
+      ]),
+    );
     assert.deepEqual(
       entries.filter(([, targets]) =>
-        JSON.stringify(targets).includes("./node_modules/"),
+        JSON.stringify(targets).includes("/node_modules/"),
       ),
       [
         ["vue", ["./node_modules/vue"]],
         ["vue/*", ["./node_modules/vue/*"]],
-        ["@vueuse/core", ["./node_modules/@vueuse/core"]],
-        ["@vueuse/core/*", ["./node_modules/@vueuse/core/*"]],
+        [
+          "apexcharts/locales/*",
+          ["./frontend-modules/core/node_modules/apexcharts/dist/locales/*"],
+        ],
+        ["apexcharts", ["./frontend-modules/core/node_modules/apexcharts"]],
+        ["apexcharts/*", ["./frontend-modules/core/node_modules/apexcharts/*"]],
       ],
     );
   });
@@ -240,14 +255,17 @@ void describe("isVueDeclaration", () => {
   });
 });
 
-void describe("sharedDependencies", () => {
-  void it("leaves out the packages of the modules, which resolve from their sources", () => {
-    assert.deepEqual(
-      sharedDependencies(
-        ["vue", "@antelopejs/dms", "@antelopejs/dms-ui", "nuxt"],
-        ["@antelopejs/dms", undefined, "@antelopejs/dms-ui"],
-      ),
-      ["vue", "nuxt"],
+void describe("typesEntry", () => {
+  void it("references each file of the workspace, the Vite client types and the shims, from its own directory", () => {
+    assert.equal(
+      typesEntry(TEMPLATE),
+      [
+        '/// <reference path="./globals.d.ts" />',
+        '/// <reference path="./auto-imports.d.ts" />',
+        '/// <reference path="./node_modules/vite/client.d.ts" />',
+        '/// <reference path="./vue-shims.d.ts" />',
+        "",
+      ].join("\n"),
     );
   });
 });
