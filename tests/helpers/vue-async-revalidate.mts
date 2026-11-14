@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { renderToString } from "@vue/server-renderer";
 import {
   type Component,
@@ -17,6 +18,15 @@ type Runtime = ReturnType<typeof createDmsFrontendRuntime>;
 export const settle = () => new Promise((resolve) => setImmediate(resolve));
 export const sleep = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Waits until `reached` holds, however slow the machine, and fails after 1 s. */
+export async function until(reached: () => boolean, message: () => string) {
+  const deadline = Date.now() + 1_000;
+  while (!reached()) {
+    assert.ok(Date.now() < deadline, message());
+    await sleep(5);
+  }
+}
 
 export function deferred<T>() {
   let resolve!: (value: T) => void;
