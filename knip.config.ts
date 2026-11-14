@@ -28,9 +28,15 @@ const SHIPPED_TEMPLATE_DEPENDENCIES = [
   "vue-i18n",
 ];
 
+/** Run by path from a test workspace that links this package's `node_modules`, as the shipped workspace runs it. */
+const LINKED_TEST_DEPENDENCIES = ["vue-tsc"];
+
 export default antelopeKnipConfig({
   entry: [...TEST_SUITE_ENTRIES, ...FORMAL_CHECK_ENTRIES],
   project: [...TEST_SUITE_FILES, ...FORMAL_CHECK_FILES],
   ignore: CONSUMER_COMPILED_TEMPLATES,
-  ignoreDependencies: SHIPPED_TEMPLATE_DEPENDENCIES,
+  ignoreDependencies: [
+    ...SHIPPED_TEMPLATE_DEPENDENCIES,
+    ...LINKED_TEST_DEPENDENCIES,
+  ],
 });
