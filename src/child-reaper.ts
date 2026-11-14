@@ -54,6 +54,7 @@ export function reapChildrenOnDeath(): void {
     stdio: ["pipe", "ignore", "ignore"],
     windowsHide: true,
   });
+  child.on("error", () => {});
   child.unref();
   const { stdin } = child;
   stdin.on("error", () => {});

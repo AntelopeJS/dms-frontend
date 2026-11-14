@@ -1,7 +1,6 @@
 import * as assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, parse, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
@@ -57,8 +56,10 @@ void describe("createTemporaryWorkspace", () => {
 
   void it("removes the workspace a dead process left, and keeps a live one's", () => {
     const dead = spawnSync(process.execPath, ["-e", ""]).pid;
-    const left = join(tmpdir(), `${PREFIX}${dead}-killed`);
-    const live = join(tmpdir(), `${PREFIX}${process.pid}-running`);
+    const parent = temporaryWorkspaceParent(process.cwd());
+    mkdirSync(parent, { recursive: true });
+    const left = join(parent, `${PREFIX}${dead}-killed`);
+    const live = join(parent, `${PREFIX}${process.pid}-running`);
     mkdirSync(left);
     mkdirSync(live);
     try {
