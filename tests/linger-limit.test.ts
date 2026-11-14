@@ -46,6 +46,7 @@ const LINGERING = ["leaked-interval.test.ts", "top-level-interval.test.ts"];
 const HEALTHY = [
   "finished.test.ts",
   "slow-after-cleanup.test.ts",
+  "slow-test-cleanup.test.ts",
   "late-registered.test.mts",
 ];
 
