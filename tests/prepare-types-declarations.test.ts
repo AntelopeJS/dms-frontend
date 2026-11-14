@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, parse, relative, resolve, sep } from "node:path";
 import { after, describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
 import { emitVueDeclarations } from "../src/prepare-types-declarations";
 import { ViteWarnings } from "../src/vite-output";
 import { listTree } from "./helpers/files";
@@ -179,7 +180,7 @@ void describe("workspace-writes.mjs", () => {
       process.execPath,
       [
         "--import",
-        join(TEMPLATE, "workspace-writes.mjs"),
+        pathToFileURL(join(TEMPLATE, "workspace-writes.mjs")).href,
         "--input-type=module",
         "-e",
         probe,
