@@ -96,6 +96,9 @@ void describe("generated workspace type paths", () => {
       "#dms/server": [
         "./server-module.ts"
       ],
+      "#shortcuts-aggregated": [
+        "./shortcuts-aggregated.generated.ts"
+      ],
       "@frontend/*": [
         "./frontend-modules/*"
       ],

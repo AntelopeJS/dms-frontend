@@ -100,6 +100,37 @@ function pickTarget(entry: JsonValue | undefined): string | undefined {
     .find(isText);
 }
 
+/** Whether an `exports` entry has a `types` condition at any depth. */
+function hasTypesCondition(entry: JsonValue | undefined): boolean {
+  if (Array.isArray(entry)) return entry.some(hasTypesCondition);
+  if (!isJsonObject(entry)) return false;
+  return (
+    hasOwn(entry, CONDITIONS[0]) || Object.values(entry).some(hasTypesCondition)
+  );
+}
+
+/** The name of the DefinitelyTyped package that declares the types of `name`. */
+function definitelyTypedName(name: string): string {
+  return `@types/${name.startsWith("@") ? name.slice(1).replace("/", "__") : name}`;
+}
+
+/**
+ * The package whose files declare the types of `dependency`: the package
+ * itself when its manifest declares types, otherwise its `@types` package when
+ * `dependencies` holds one. A path aimed at a package that declares none would
+ * resolve its JavaScript and never fall back to `@types`.
+ */
+export function typesSource(
+  dependency: InstalledPackage,
+  dependencies: InstalledPackage[],
+): InstalledPackage {
+  const { manifest } = dependency;
+  if (manifest.types !== undefined || hasTypesCondition(manifest.exports))
+    return dependency;
+  const typesName = definitelyTypedName(dependency.name);
+  return dependencies.find(({ name }) => name === typesName) ?? dependency;
+}
+
 /** The subpaths of `exports`, a bare target or condition map being that of `.`. */
 function subpaths(exports: JsonValue | undefined): [string, JsonValue][] {
   if (exports === undefined) return [];

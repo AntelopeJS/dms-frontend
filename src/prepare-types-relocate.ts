@@ -6,7 +6,11 @@ import { LAYERS_SUBDIR } from "./config";
 import { toPosixPath } from "./fs-sync";
 import type { JsonValue } from "./internal/json";
 import { getLayerSafeName, getLayerWorkspacePath } from "./layers";
-import { type InstalledPackage, packagePaths } from "./prepare-types-packages";
+import {
+  type InstalledPackage,
+  packagePaths,
+  typesSource,
+} from "./prepare-types-packages";
 
 /** A module of the workspace: its copy there, and the sources it came from. */
 export interface RelocatedLayer {
@@ -98,9 +102,10 @@ function dependencyPaths(
   outDir: string,
 ): Record<string, string[]> {
   return Object.fromEntries(
-    dependencies.flatMap(({ name, root, manifest }) =>
-      packagePaths(name, configPath(outDir, root), manifest),
-    ),
+    dependencies.flatMap((dependency) => {
+      const { root, manifest } = typesSource(dependency, dependencies);
+      return packagePaths(dependency.name, configPath(outDir, root), manifest);
+    }),
   );
 }
 

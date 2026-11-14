@@ -165,6 +165,40 @@ void describe("relocateTsconfig", () => {
   });
 });
 
+void describe("relocateTsconfig with @types packages", () => {
+  void it("resolves a package that declares no types from its @types package, and one that does from itself", () => {
+    const installed = (
+      name: string,
+      manifest: InstalledPackage["manifest"],
+    ) => ({
+      name,
+      root: join(OUT, "node_modules", name),
+      manifest,
+    });
+    const paths = Object.fromEntries(
+      pathEntries(
+        relocate([CORE], OUT, [
+          installed("sortablejs", {}),
+          installed("@types/sortablejs", { types: "index.d.ts" }),
+          installed("@scope/untyped", {}),
+          installed("@types/scope__untyped", {}),
+          installed("typed", { exports: { ".": { types: "./a.d.ts" } } }),
+          installed("@types/typed", {}),
+        ]),
+      ),
+    );
+    assert.deepEqual(
+      [paths.sortablejs, paths["sortablejs/*"], paths["@scope/untyped"]],
+      [
+        ["./node_modules/@types/sortablejs"],
+        ["./node_modules/@types/sortablejs/*"],
+        ["./node_modules/@types/scope__untyped"],
+      ],
+    );
+    assert.deepEqual(paths.typed, ["./node_modules/typed/a.d.ts"]);
+  });
+});
+
 const AUTO_IMPORTS = [
   "export {}",
   "declare global {",
