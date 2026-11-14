@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { it } from "node:test";
+import { RUNNER_VARIABLE } from "../src/commands/verify-source-action";
 import { showPath } from "../src/output";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { isTextList } from "./helpers/guards";
@@ -101,3 +102,12 @@ for (const evalFlag of ["-e", "--eval", "-p", "--print", "-"]) {
     assert.deepEqual(run.errors, [`No frontend package in ${showPath(layer)}`]);
   });
 }
+
+void it("starts no runner inside a runner, and says why", () => {
+  const layer = temporaryDirectory("verify-source-spawn-");
+  const run = probe("-e", layer, { [RUNNER_VARIABLE]: "4242" });
+  assert.equal(run.starts.length, 1, "no runner started");
+  assert.deepEqual(run.errors, [
+    "A verification cannot start inside another one",
+  ]);
+});
