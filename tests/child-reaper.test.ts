@@ -9,11 +9,9 @@ import { isPidAlive } from "../src/discovery";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
 
-const FIXTURE = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "fixtures",
-  "reaped-command-cli.ts",
-);
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+const FIXTURE = join(FIXTURES, "reaped-command-cli.ts");
+const RUNNER_CLI_FIXTURE = join(FIXTURES, "source-runner-cli.ts");
 const POLL_MS = 50;
 const START_TIMEOUT_MS = 20_000;
 const REAP_TIMEOUT_MS = 5000;
@@ -122,6 +120,56 @@ void describe(
       await killRun(run);
       assert.deepEqual(run.tree.filter(isPidAlive), []);
       assert.equal(existsSync(run.workspace), true);
+    });
+  },
+);
+
+void describe(
+  "a CLI killed with SIGKILL while its source runner builds",
+  { skip: process.platform === "win32" },
+  () => {
+    void it("loses its runner, the runner's children and its workspace within 5 s", async () => {
+      const files = temporaryDirectory("child-reaper-");
+      const pidFile = join(files, "tree.pid");
+      const workspaceFile = join(files, "workspace");
+      const cli = spawn(
+        process.execPath,
+        ["--import", "tsx", RUNNER_CLI_FIXTURE],
+        {
+          stdio: "ignore",
+          env: {
+            ...process.env,
+            DMS_TEST_PID_FILE: pidFile,
+            DMS_TEST_WORKSPACE_FILE: workspaceFile,
+          },
+        },
+      );
+      assert.ok(cli.pid !== undefined, "the CLI started");
+      started.push(cli.pid);
+      const tree = await poll(
+        () =>
+          existsSync(pidFile)
+            ? readText(pidFile).split(" ").map(Number)
+            : undefined,
+        START_TIMEOUT_MS,
+      );
+      assert.ok(tree, "the runner's child and grandchild started");
+      started.push(...tree);
+      const [runnerPid, workspace] = readText(workspaceFile).split(" ");
+      const runner = Number(runnerPid);
+      started.push(runner);
+      workspaces.push(workspace);
+      process.kill(cli.pid, "SIGKILL");
+      const processes = [runner, ...tree];
+      await poll(
+        () =>
+          processes.some(isPidAlive) || existsSync(workspace)
+            ? undefined
+            : true,
+        REAP_TIMEOUT_MS,
+      );
+      assert.deepEqual(processes.filter(isPidAlive), []);
+      assert.equal(existsSync(workspace), false);
     });
   },
 );

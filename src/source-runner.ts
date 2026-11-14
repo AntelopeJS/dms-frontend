@@ -31,6 +31,15 @@ function problemOf(error: Error | string): CliProblem {
 }
 
 /**
+ * Ends a runner whose CLI is gone, SIGKILL included: the IPC channel closes
+ * with the CLI, and exiting stops the children `runCommand` started and lets
+ * the reaper remove the workspace.
+ */
+function exitWithoutCli(): void {
+  process.exit(1);
+}
+
+/**
  * Runs a source runner under the error boundary: `run` on the workspace
  * tools' own Node options, not those the runner was started with.
  * The children it starts die with it, even when it is killed with SIGKILL.
@@ -48,6 +57,7 @@ export function startSourceRunner<Success extends { ok: true }>(
     const startedAt = Date.now();
     delete process.env.NODE_OPTIONS;
     reapChildrenOnDeath();
+    process.once("disconnect", exitWithoutCli);
     let result: Success | FailedRun;
     try {
       result = await run();
@@ -72,6 +82,7 @@ export function startSourceRunner<Success extends { ok: true }>(
     report(result, Date.now() - startedAt);
   }
   void runWithErrorBoundary(main, { verbose: isVerboseRun() }).then(() => {
+    process.off("disconnect", exitWithoutCli);
     if (process.connected) process.disconnect();
   });
 }
