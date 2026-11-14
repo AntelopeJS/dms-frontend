@@ -98,7 +98,7 @@
   "devDependencies": {
     "@antelopejs/core": "~1.23.0",
     "@antelopejs/interface-dms": ">=0.14.0 <0.15.0",
-    "@antelopejs/tooling-configs": "file:.tgz-deps/antelopejs-tooling-configs-4679ba0.tgz",
+    "@antelopejs/tooling-configs": ">=0.7.2 <0.8.0",
     "@iconify/utils": "^3.1.0",
     "@iconify/vue": "^5.0.1",
     "@inertiajs/vue3": "^3.7.1",
@@ -157,9 +157,6 @@
           "@types/mocha": "^10.0.10"
         }
       }
-    },
-    "overrides": {
-      "@antelopejs/tooling-configs": "file:.tgz-deps/antelopejs-tooling-configs-4679ba0.tgz"
     }
   },
   "antelopeJs": {
