@@ -1,11 +1,18 @@
 import type { ChildProcess } from "node:child_process";
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
-import { type CliProblem, getProcessUi, type Ui } from "@antelopejs/core/cli";
+import {
+  CliError,
+  type CliProblem,
+  getProcessUi,
+  type Ui,
+} from "@antelopejs/core/cli";
 import { runCommand, UsageError } from "../common";
+import { lockVerification } from "../verify-source-lock";
 import {
   LAYER_PATH_FIX,
   reportVerification,
+  VERIFY_SOURCE_COMMAND,
   type VerificationResult,
 } from "../verify-source-result";
 
@@ -81,6 +88,47 @@ export function assertValidUsage(
 /** The output flags the core reads from the command line, for the runner. */
 const FORWARDED_FLAGS = ["--no-color", "--verbose"];
 
+/**
+ * The Node.js flags of this process the runner starts with: the loaders and
+ * preloads that let it run from source, such as those of tsx. Each takes a
+ * value. Every other flag stays here: `-e` or `-p` would make the runner
+ * evaluate the caller's script again instead of running.
+ */
+const LOADER_FLAGS = new Set([
+  "--import",
+  "--require",
+  "-r",
+  "--loader",
+  "--experimental-loader",
+]);
+
+/** The loader flags in `execArgv`, each with its value. */
+function loaderFlags(execArgv: readonly string[]): string[] {
+  return execArgv.flatMap((flag, index) => {
+    const separator = flag.indexOf("=");
+    if (separator > 0)
+      return LOADER_FLAGS.has(flag.slice(0, separator)) ? [flag] : [];
+    const value = execArgv[index + 1];
+    return LOADER_FLAGS.has(flag) && value !== undefined ? [flag, value] : [];
+  });
+}
+
+/** Set in the runner's environment to the pid of the process that started it. */
+export const RUNNER_VARIABLE = "DMS_VERIFY_SOURCE_RUNNER";
+
+/** A verification started from inside a runner, which would start a runner within a runner. */
+function assertOutsideRunner(): void {
+  const parent = process.env[RUNNER_VARIABLE];
+  if (parent === undefined) return;
+  throw new CliError({
+    title: "A verification cannot start inside another one",
+    reason: `${RUNNER_VARIABLE} is set: this process runs under the verification started by process ${parent}.`,
+    fixes: [
+      `Run ${VERIFY_SOURCE_COMMAND} from a shell outside the verification`,
+    ],
+  });
+}
+
 /** How long the result may take to arrive once the runner has exited. */
 const RESULT_TIMEOUT_MS = 2000;
 
@@ -98,12 +146,28 @@ function channelClosed(child: ChildProcess): Promise<void> {
  *
  * The runner is next to this module: the compiled one, or its source under tsx.
  * Without `-l`, it resolves the installed core layer.
+ *
+ * It starts one runner and never retries. It stops before starting one when
+ * it runs inside a runner, or while another verification of the same layer,
+ * or of the same project without `-l`, is running.
  */
 export async function runVerifySource(
   options: VerifySourceOptions,
 ): Promise<void> {
-  const startedAt = Date.now();
+  assertOutsideRunner();
   assertValidUsage(usageProblems(options));
+  const release = lockVerification(
+    realpathSync.native(options.layer ?? process.cwd()),
+  );
+  try {
+    await verify(options);
+  } finally {
+    release();
+  }
+}
+
+async function verify(options: VerifySourceOptions): Promise<void> {
+  const startedAt = Date.now();
   const modules = options.module ?? [];
   const localPackages = parseLocalPackages(options.localPackage ?? []);
   const runner = join(
@@ -116,12 +180,13 @@ export async function runVerifySource(
   let closed: Promise<void> = Promise.resolve();
   const code = await runCommand(
     process.execPath,
-    [...process.execArgv, runner, ...flags],
+    [...loaderFlags(process.execArgv), runner, ...flags],
     {
       shell: false,
       stdio: ["inherit", "inherit", "inherit", "ipc"],
       env: {
         ...process.env,
+        [RUNNER_VARIABLE]: String(process.pid),
         DMS_LAYER_SOURCE:
           options.layer === undefined ? undefined : resolve(options.layer),
         DMS_MODULE_SOURCES: JSON.stringify(
