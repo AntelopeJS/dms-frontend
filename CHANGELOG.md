@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.11.0
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.6...v0.11.0)
+
+### 🚀 Enhancements
+
+- **prepare-types:** Write a module's typecheck tsconfig and auto-imports to a stable directory ([#344](https://github.com/AntelopeJS/dms-frontend/pull/344))
+
+### 🩹 Fixes
+
+- **verify-source:** Build the workspace on the project's drive ([#336](https://github.com/AntelopeJS/dms-frontend/pull/336))
+- **auth:** ⚠️  Expire sealed sessions after 30 days and revoke them within 5 minutes of a sign-out ([#335](https://github.com/AntelopeJS/dms-frontend/pull/335))
+- **verify-source:** Keep the cross-drive workspace out of node_modules ([#337](https://github.com/AntelopeJS/dms-frontend/pull/337))
+- **auth:** ⚠️  Keep the sealed session only for a sign-out route, never after a refused renewal ([#339](https://github.com/AntelopeJS/dms-frontend/pull/339))
+- **verify-source:** Copy layers by real path, through symlinks and dot-named folders ([#340](https://github.com/AntelopeJS/dms-frontend/pull/340))
+- **tests:** Wait for what the flaky tests observe, not for a timer race ([#342](https://github.com/AntelopeJS/dms-frontend/pull/342))
+- **verify-source:** Start one runner, never the caller's inline script ([#343](https://github.com/AntelopeJS/dms-frontend/pull/343))
+- **auto-imports:** Leave declaration files out of the modules' auto-import scan ([#345](https://github.com/AntelopeJS/dms-frontend/pull/345))
+- **prepare-types:** Write nothing outside --out when declaring the .vue files ([#348](https://github.com/AntelopeJS/dms-frontend/pull/348))
+
+### 💅 Refactors
+
+- **server:** ⚠️  Answer backend() and readJson() as unknown ([#338](https://github.com/AntelopeJS/dms-frontend/pull/338))
+
+### 📖 Documentation
+
+- Name @antelopejs/dms-assistant-frontend-vue as the owner of the /ai/** proxy ([#341](https://github.com/AntelopeJS/dms-frontend/pull/341))
+
+### 📦 Build
+
+- **deps:** ⚠️  Cap @antelopejs ranges below the next minor and move to tooling-configs 0.6 ([#349](https://github.com/AntelopeJS/dms-frontend/pull/349))
+
+### ✅ Tests
+
+- **async-data:** Wait for the polled reads and always stop the interval ([#346](https://github.com/AntelopeJS/dms-frontend/pull/346))
+- Fail a test file whose leaked handle keeps it running after its tests ([#347](https://github.com/AntelopeJS/dms-frontend/pull/347))
+
+#### ⚠️ Breaking Changes
+
+- **auth:** ⚠️  Expire sealed sessions after 30 days and revoke them within 5 minutes of a sign-out ([#335](https://github.com/AntelopeJS/dms-frontend/pull/335))
+- **auth:** ⚠️  Keep the sealed session only for a sign-out route, never after a refused renewal ([#339](https://github.com/AntelopeJS/dms-frontend/pull/339))
+- **server:** ⚠️  Answer backend() and readJson() as unknown ([#338](https://github.com/AntelopeJS/dms-frontend/pull/338))
+- **deps:** ⚠️  Cap @antelopejs ranges below the next minor and move to tooling-configs 0.6 ([#349](https://github.com/AntelopeJS/dms-frontend/pull/349))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.10.6
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.10.5...v0.10.6)
