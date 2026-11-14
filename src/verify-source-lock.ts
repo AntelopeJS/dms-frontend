@@ -6,23 +6,31 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir, userInfo } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CliError } from "@antelopejs/core/cli";
 import { isPidAlive } from "./discovery";
 import { showPath } from "./output";
 
 /**
- * Where the lock files live: one directory per user, since another user could
- * not create a file in a directory this one created.
+ * Where the lock files live: one directory per uid on POSIX, since another
+ * user could not create a file in a directory this one created. The uid needs
+ * no passwd entry, which a container user often lacks. Windows has a
+ * temporary directory per user.
  */
 const LOCK_DIRECTORY = join(
   tmpdir(),
-  `ajs-dms-verify-source-${userInfo().username}`,
+  process.getuid === undefined
+    ? "ajs-dms-verify-source"
+    : `ajs-dms-verify-source-${process.getuid()}`,
 );
 
-/** Tries to create the lock: once, then once more after removing the lock of a dead run. */
-const LOCK_ATTEMPTS = 2;
+/**
+ * Tries to create the lock: once, again after removing the lock of a dead
+ * run, and once more after removing the takeover file of a run that died
+ * while it removed one.
+ */
+const LOCK_ATTEMPTS = 3;
 
 function lockPath(target: string): string {
   const key = createHash("sha256").update(target).digest("hex").slice(0, 16);
@@ -80,6 +88,8 @@ function runningProblem(target: string, pid: number, path: string): CliError {
  * Removes the lock that the dead run `dead` left at `path`. Of the runs that
  * found it, only the one that creates its takeover file removes it, and only
  * while it still holds `dead`, so no run removes the lock of a live one.
+ * The takeover file of a run that died before removing it is removed, so the
+ * next attempt can take the lock over.
  *
  * @throws CliError naming the run that is taking the lock over
  */
@@ -94,8 +104,9 @@ function removeDeadLock(path: string, dead: number, target: string): void {
     return;
   }
   const taker = lockHolder(takeover);
-  if (taker !== undefined && isPidAlive(taker))
-    throw runningProblem(target, taker, takeover);
+  if (taker === undefined) return;
+  if (isPidAlive(taker)) throw runningProblem(target, taker, takeover);
+  rmSync(takeover, { force: true });
 }
 
 /**

@@ -85,6 +85,29 @@ void it("takes over the lock of a verification that died holding it", () => {
   assert.doesNotThrow(() => lockVerification(layer)());
 });
 
+void it("takes over the lock after a run died while taking it over", () => {
+  const layer = temporaryDirectory("verify-source-lock-");
+  dieHoldingLock(layer);
+  const killed = spawnSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "-e",
+      `const fs = require("node:fs");
+      const rmSync = fs.rmSync;
+      fs.rmSync = (path, options) => {
+        if (String(path).endsWith(".pid")) process.kill(process.pid, "SIGKILL");
+        return rmSync(path, options);
+      };
+      require(${JSON.stringify(LOCK)}).lockVerification(${JSON.stringify(layer)});`,
+    ],
+    { timeout: 10_000, killSignal: "SIGKILL" },
+  );
+  assert.equal(killed.signal, "SIGKILL");
+  assert.doesNotThrow(() => lockVerification(layer)());
+});
+
 void it("gives the lock of a dead verification to one of the runs that race for it", async () => {
   const layer = temporaryDirectory("verify-source-lock-");
   dieHoldingLock(layer);
