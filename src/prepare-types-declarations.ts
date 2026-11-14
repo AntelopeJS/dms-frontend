@@ -5,7 +5,6 @@ import { describeChildFailure } from "./child-output";
 import { runFramedCommand } from "./common";
 import type { ResolvedLayer } from "./common";
 import {
-  commonAncestor,
   isVueDeclaration,
   layerTable,
   VUE_DECLARATIONS_DIR,
@@ -68,7 +67,6 @@ export async function emitVueDeclarations(
       vueDeclarationsConfig({
         layers: table,
         outDir: context.workspace,
-        rootDir: commonAncestor(table.map(({ source }) => source)),
       }),
       null,
       2,

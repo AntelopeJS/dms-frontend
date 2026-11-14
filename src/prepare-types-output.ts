@@ -14,7 +14,6 @@ import { isJsonObject } from "./internal/json";
 import { isPlainObject } from "./internal/plain-object";
 import { isTextList } from "./internal/text-list";
 import {
-  commonAncestor,
   layerTable,
   relocateAutoImports,
   relocateTsconfig,
@@ -243,7 +242,6 @@ export function writeRelocatedTypes(
     paths: readGeneratedPaths(nativePath.join(out, GENERATED_PATHS)),
     layers: table,
     outDir: out,
-    rootDir: commonAncestor(table.map(({ source }) => source)),
     dependencies: roots.map((root) => ({
       ...root,
       manifest: readManifest(root.root),

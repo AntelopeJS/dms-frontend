@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { CliError } from "@antelopejs/core/cli";
 import type { ResolvedLayer } from "./common";
 import { LAYERS_SUBDIR } from "./config";
@@ -80,13 +80,7 @@ function toSource(path: string, layers: RelocatedLayer[]): string {
  */
 function withDeclarations(
   target: string,
-  {
-    layers,
-    outDir,
-    rootDir,
-  }: Pick<TypesRelocation, "layers" | "outDir"> & {
-    rootDir: string;
-  },
+  { layers, outDir, rootDir }: Mirroring,
 ): string[] {
   const own = configPath(outDir, target);
   if (!layers.some(({ source }) => isWithin(source, target))) return [own];
@@ -110,7 +104,7 @@ function dependencyPaths(
 
 function remapPaths(
   paths: Record<string, string[]>,
-  context: Pick<TypesRelocation, "layers" | "outDir" | "rootDir">,
+  context: Mirroring,
 ): Record<string, string[]> {
   const { layers, outDir } = context;
   return Object.fromEntries(
@@ -136,26 +130,30 @@ function remapPaths(
 }
 
 /**
- * The deepest directory that holds every one of `paths`: the `rootDir` that
- * keeps the declarations emitted for several modules in their own layout.
+ * The filesystem root the sources lie on: the `rootDir` of the `.vue`
+ * declarations. TypeScript writes the declaration of a file outside `rootDir`
+ * beside that file, so a narrower root would let a `.ts` file a component
+ * imports from outside the sources be emitted outside `vue-declarations/`.
+ * From the root, every file of the drive has its place under it.
  */
-export function commonAncestor(paths: string[]): string {
-  const [first, ...rest] = paths.map((path) => resolve(path).split(sep));
-  if (!first)
+function declarationsRoot(layers: RelocatedLayer[]): string {
+  const [root, ...others] = layers.map(({ source }) => parse(source).root);
+  if (root === undefined)
     throw new CliError({ title: "There is no module to find a directory for" });
-  let length = 0;
-  while (
-    length < first.length &&
-    rest.every((other) => other[length] === first[length])
-  )
-    length += 1;
-  const prefix = first.slice(0, length);
-  if (prefix.length === 0)
+  if (others.some((other) => other.toLowerCase() !== root.toLowerCase()))
     throw new CliError({
       title: "The modules share no directory",
       reason: "They lie on different drives.",
     });
-  return prefix.length === 1 ? `${prefix[0]}${sep}` : prefix.join(sep);
+  return root;
+}
+
+/** Where the declarations of the `.vue` files of `layers` mirror their sources. */
+interface Mirroring {
+  layers: RelocatedLayer[];
+  outDir: string;
+  /** The directory the mirror is laid out from: the filesystem root of the sources. */
+  rootDir: string;
 }
 
 /** Whether `file` is the declaration `vue-tsc` emits for a `.vue` file. */
@@ -180,8 +178,6 @@ export interface TypesRelocation {
   layers: RelocatedLayer[];
   /** The workspace the tsconfig is written to. */
   outDir: string;
-  /** The common ancestor of the sources: the root the `.vue` declarations are emitted under. */
-  rootDir: string;
   /** The dependencies that no module owns, each resolved from where it is installed. */
   dependencies: InstalledPackage[];
 }
@@ -203,9 +199,9 @@ export function relocateTsconfig({
   paths,
   layers,
   outDir,
-  rootDir,
   dependencies,
 }: TypesRelocation): Tsconfig {
+  const rootDir = declarationsRoot(layers);
   const sources = layers.map(({ source }) => configPath(outDir, source));
   const insideSources = layers.some(({ source }) => isWithin(source, outDir));
   return {
@@ -253,7 +249,8 @@ export function typesEntry(template: Pick<Tsconfig, "files">): string {
 
 /**
  * The throwaway tsconfig that emits one declaration per `.vue` file of the
- * sources, under `vue-declarations/` and laid out from `rootDir`. It extends the
+ * sources, under `vue-declarations/` and laid out from the filesystem root, so
+ * a file the emit reaches outside the sources is written under it too. It extends the
  * relocated one, so the excludes and the resolution carry over. A declaration
  * a file cannot have, one that names a type it does not export, is a
  * diagnostic, not a stop: `noEmitOnError` is off.
@@ -261,8 +258,7 @@ export function typesEntry(template: Pick<Tsconfig, "files">): string {
 export function vueDeclarationsConfig({
   layers,
   outDir,
-  rootDir,
-}: Pick<TypesRelocation, "layers" | "outDir" | "rootDir">) {
+}: Pick<TypesRelocation, "layers" | "outDir">) {
   return {
     extends: "./tsconfig.json",
     compilerOptions: {
@@ -271,7 +267,7 @@ export function vueDeclarationsConfig({
       emitDeclarationOnly: true,
       noEmitOnError: false,
       outDir: configPath(outDir, resolve(outDir, VUE_DECLARATIONS_DIR)),
-      rootDir: configPath(outDir, rootDir),
+      rootDir: configPath(outDir, declarationsRoot(layers)),
     },
     include: layers.map(
       ({ source }) => `${configPath(outDir, source)}/**/*.vue`,

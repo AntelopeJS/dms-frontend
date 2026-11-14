@@ -1,10 +1,9 @@
 import * as assert from "node:assert/strict";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { isPlainObject } from "../src/internal/plain-object";
 import {
-  commonAncestor,
   isVueDeclaration,
   relocateAutoImports,
   relocateTsconfig,
@@ -55,7 +54,6 @@ function relocate(
     paths: PATHS,
     layers,
     outDir,
-    rootDir: commonAncestor(layers.map(({ source }) => source)),
     dependencies,
   });
 }
@@ -67,15 +65,15 @@ void describe("relocateTsconfig", () => {
       "#dms/frontend-module": ["./frontend-module.ts"],
       "@frontend/antelopejs__dms-frontend-vue/*": [
         "../../dms/core/*",
-        "./vue-declarations/dms/core/*",
+        "./vue-declarations/work/dms/core/*",
       ],
       "@frontend/shop-vue/*": [
         "../shop-vue/*",
-        "./vue-declarations/project/shop-vue/*",
+        "./vue-declarations/work/project/shop-vue/*",
       ],
       "#dms-core/*": [
         "../../dms/core/layers/dms-core/*",
-        "./vue-declarations/dms/core/layers/dms-core/*",
+        "./vue-declarations/work/dms/core/layers/dms-core/*",
       ],
     });
   });
@@ -87,7 +85,7 @@ void describe("relocateTsconfig", () => {
       strict: true,
       types: [],
       allowArbitraryExtensions: true,
-      rootDirs: ["../../dms/core", "./vue-declarations"],
+      rootDirs: ["../../..", "./vue-declarations"],
     });
     assert.deepEqual(Object.keys(config), [
       "compilerOptions",
@@ -199,13 +197,9 @@ void describe("relocateAutoImports", () => {
 });
 
 void describe("vueDeclarationsConfig", () => {
-  void it("emits only declarations, for the .vue files of every source, from their common root", () => {
+  void it("emits only declarations, for the .vue files of every source, from the filesystem root", () => {
     assert.deepEqual(
-      vueDeclarationsConfig({
-        layers: [CORE, SHOP],
-        outDir: OUT,
-        rootDir: resolve("/work"),
-      }),
+      vueDeclarationsConfig({ layers: [CORE, SHOP], outDir: OUT }),
       {
         extends: "./tsconfig.json",
         compilerOptions: {
@@ -214,7 +208,7 @@ void describe("vueDeclarationsConfig", () => {
           emitDeclarationOnly: true,
           noEmitOnError: false,
           outDir: "./vue-declarations",
-          rootDir: "../..",
+          rootDir: "../../..",
         },
         include: ["../../dms/core/**/*.vue", "../shop-vue/**/*.vue"],
       },
@@ -222,25 +216,34 @@ void describe("vueDeclarationsConfig", () => {
   });
 });
 
-void describe("commonAncestor", () => {
-  void it("is the deepest directory that holds every path", () => {
-    assert.equal(
-      commonAncestor([
-        resolve("/work/dms/core"),
-        resolve("/work/project/shop"),
-      ]),
-      resolve("/work"),
-    );
-  });
+/**
+ * Where TypeScript writes the declaration of `file` under `config`: below
+ * `outDir` at its path from `rootDir`, or beside `file` when it lies outside
+ * `rootDir`.
+ */
+function emittedTo(
+  config: ReturnType<typeof vueDeclarationsConfig>,
+  file: string,
+): string {
+  const { outDir, rootDir } = config.compilerOptions;
+  const path = relative(resolve(OUT, rootDir), file);
+  return path.startsWith("..") || isAbsolute(path)
+    ? file
+    : join(resolve(OUT, outDir), path);
+}
 
-  void it("is the path itself for one path, and does not split a name in two", () => {
-    assert.deepEqual(
-      [
-        commonAncestor([resolve("/work/shop")]),
-        commonAncestor([resolve("/work/shop"), resolve("/work/shop-vue")]),
-      ],
-      [resolve("/work/shop"), resolve("/work")],
-    );
+void describe("the .vue declarations emit", () => {
+  void it("writes the declaration of any file of the drive under vue-declarations, one outside the sources included", () => {
+    const config = vueDeclarationsConfig({ layers: [CORE, SHOP], outDir: OUT });
+    const declarations = join(OUT, "vue-declarations");
+    for (const file of [
+      join(CORE.source, "app", "Table.vue"),
+      resolve("/work/shared/util.ts"),
+      resolve("/elsewhere/util.ts"),
+    ]) {
+      const path = relative(declarations, emittedTo(config, file));
+      assert.ok(!path.startsWith("..") && !isAbsolute(path), file);
+    }
   });
 });
 
