@@ -117,7 +117,7 @@ function loaderFlags(execArgv: readonly string[]): string[] {
 export const RUNNER_VARIABLE = "DMS_VERIFY_SOURCE_RUNNER";
 
 /** A verification started from inside a runner, which would start a runner within a runner. */
-function assertOutsideRunner(): void {
+export function assertOutsideRunner(): void {
   const parent = process.env[RUNNER_VARIABLE];
   if (parent === undefined) return;
   throw new CliError({
@@ -166,17 +166,30 @@ export async function runVerifySource(
   }
 }
 
-async function verify(options: VerifySourceOptions): Promise<void> {
-  const startedAt = Date.now();
+/** What a runner ended with: its result, if it sent one, and its exit code. */
+export interface RunnerOutcome<Result> {
+  result: Result | undefined;
+  code: number;
+}
+
+/**
+ * Runs the source runner `name` (`verify-source-runner`) on the sources
+ * `options` select, with `extraEnvironment` added to its inputs. It starts
+ * one runner, with only the loader flags of this process, and never retries.
+ *
+ * The runner is next to this module: the compiled one, or its source under tsx.
+ * Without `-l`, it resolves the installed core layer.
+ */
+export async function runSourceRunner<Result>(
+  name: string,
+  options: VerifySourceOptions,
+  extraEnvironment: Record<string, string> = {},
+): Promise<RunnerOutcome<Result>> {
   const modules = options.module ?? [];
   const localPackages = parseLocalPackages(options.localPackage ?? []);
-  const runner = join(
-    __dirname,
-    "..",
-    `verify-source-runner${extname(__filename)}`,
-  );
+  const runner = join(__dirname, "..", `${name}${extname(__filename)}`);
   const flags = FORWARDED_FLAGS.filter((flag) => process.argv.includes(flag));
-  let result: VerificationResult | undefined;
+  let result: Result | undefined;
   let closed: Promise<void> = Promise.resolve();
   const code = await runCommand(
     process.execPath,
@@ -186,6 +199,7 @@ async function verify(options: VerifySourceOptions): Promise<void> {
       stdio: ["inherit", "inherit", "inherit", "ipc"],
       env: {
         ...process.env,
+        ...extraEnvironment,
         [RUNNER_VARIABLE]: String(process.pid),
         DMS_LAYER_SOURCE:
           options.layer === undefined ? undefined : resolve(options.layer),
@@ -196,13 +210,22 @@ async function verify(options: VerifySourceOptions): Promise<void> {
       },
     },
     (child) => {
-      child.on("message", (message: VerificationResult) => {
+      child.on("message", (message: Result) => {
         result = message;
       });
       closed = channelClosed(child);
     },
   );
   await closed;
+  return { result, code };
+}
+
+async function verify(options: VerifySourceOptions): Promise<void> {
+  const startedAt = Date.now();
+  const { result, code } = await runSourceRunner<VerificationResult>(
+    "verify-source-runner",
+    options,
+  );
   reportVerification(
     result ?? {
       ok: false,

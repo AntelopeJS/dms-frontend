@@ -1,35 +1,25 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  CliError,
-  type CliProblem,
   getProcessTasks,
   isVerboseRun,
   pluralize,
-  runWithErrorBoundary,
   getProcessUi,
 } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
 import { ensure } from "./internal/ensure";
 import { isObjectLike, isText } from "./internal/guards";
 import { parseViteManifest } from "./internal/vite-manifest";
-import {
-  assertLayersSupportRenderer,
-  CancelledError,
-  installDeps,
-} from "./common";
-import {
-  exitOnBrokenPipe,
-  formatSize,
-  reportStopped,
-  writeHeader,
-} from "./output";
+import { assertLayersSupportRenderer, installDeps } from "./common";
+import { formatSize, writeHeader } from "./output";
+import { startSourceRunner } from "./source-runner";
 import { createTemporaryWorkspace } from "./temporary-workspace";
 import { materializeWorkspace } from "./verify-source-workspace";
 import { checkClientBundle } from "./verify-source-client-bundle";
 import {
   buildAndTypeCheck,
-  prepareTypes,
+  generateTypeDeclarations,
+  snapshotTypeDeclarations,
   type VerificationContext,
 } from "./verify-source-build";
 import {
@@ -231,9 +221,6 @@ async function checkEmailContracts(workspace: string): Promise<string> {
   ].join(getProcessUi().symbols.separator);
 }
 
-const LINE_BREAK = /\r?\n/;
-const STACK_TRACE_HINT = "Run with --verbose for the full trace.";
-
 /**
  * The renderer range is asserted before the first task, so its notice does
  * not land inside one.
@@ -263,7 +250,8 @@ async function verifySources(): Promise<VerificationResult> {
     { done: `Materialized ${pluralize(layers.length, "module")}` },
   );
   await installDeps(workspace, context.mapLine, ["--ignore-scripts"]);
-  await prepareTypes(context);
+  await generateTypeDeclarations(context);
+  snapshotTypeDeclarations(workspace);
   await buildAndTypeCheck(context);
   await tasks.run(
     "Checking the client bundle",
@@ -283,59 +271,10 @@ async function verifySources(): Promise<VerificationResult> {
   return { ok: true, modules: layers.length };
 }
 
-function sendResult(result: VerificationResult): Promise<void> {
-  return new Promise((settle) => {
-    process.send?.(result, undefined, undefined, () => settle());
-  });
-}
-
 /**
  * Builds and type-checks unpublished frontend packages in a temporary
  * workspace, one task per check. Started by `ajs dms verify-source`, it
  * sends its result over IPC for the CLI to report; run on its own (`pnpm
  * test:real-source`), it reports the result itself.
- *
- * The workspace tools run on their own Node options, not on those this
- * runner was started with.
- *
- * When started by the CLI, the CLI reports the stop itself.
  */
-async function main(): Promise<void> {
-  exitOnBrokenPipe();
-  const startedAt = Date.now();
-  delete process.env.NODE_OPTIONS;
-  let result: VerificationResult;
-  try {
-    result = await verifySources();
-  } catch (error) {
-    if (error instanceof CancelledError) {
-      if (!process.send) reportStopped(error);
-      process.exitCode = error.exitCode;
-      return;
-    }
-    let problem: CliProblem;
-    if (error instanceof CliError) {
-      problem = error.problem;
-    } else if (error instanceof Error) {
-      const [title] = error.message.split(LINE_BREAK);
-      const stack = (error.stack ?? "").split(LINE_BREAK);
-      problem = {
-        title: title || error.name,
-        details: isVerboseRun() ? stack : [STACK_TRACE_HINT],
-      };
-    } else {
-      problem = { title: String(error) };
-    }
-    result = { ok: false, problem };
-  }
-  if (process.send) {
-    process.exitCode = result.ok ? 0 : 1;
-    await sendResult(result);
-    return;
-  }
-  reportVerification(result, Date.now() - startedAt);
-}
-
-void runWithErrorBoundary(main, { verbose: isVerboseRun() }).then(() => {
-  if (process.connected) process.disconnect();
-});
+startSourceRunner(verifySources, reportVerification);
