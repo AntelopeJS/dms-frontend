@@ -10,9 +10,9 @@ const SELF = fileURLToPath(import.meta.url);
 const { setTimeout, clearTimeout } = globalThis;
 
 const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-if (major < 24 || (major === 24 && minor < 16)) {
+if (major !== 24 || minor < 16) {
   throw new Error(
-    `tests/helpers/linger-limit.ts needs the node.test tracing channel of Node 24.16 or later, not ${process.version}`,
+    `tests/helpers/linger-limit.ts needs the node.test tracing channel of Node 24.16 or a later Node 24, not ${process.version}`,
   );
 }
 
@@ -22,10 +22,11 @@ interface TestSpan {
 }
 
 let lingerTimer: NodeJS.Timeout | undefined;
+let testStartedInRoot = false;
 
 function failLingering(): void {
   process.stderr.write(
-    `${process.argv[1]} still runs ${LINGER_LIMIT_MS} ms after its tests and root hooks finished, held by: ${process.getActiveResourcesInfo().join(", ")}\n`,
+    `${process.argv[1]} still runs ${LINGER_LIMIT_MS} ms with no test running, held by: ${process.getActiveResourcesInfo().join(", ")}\n`,
   );
   process.exit(1);
 }
@@ -48,12 +49,13 @@ function namesSelf(argument: string | undefined): boolean {
 
 /**
  * Preloaded with `--import` into each test file's process, it fails the file, naming it and what still
- * runs, when the process stays alive {@link LINGER_LIMIT_MS} after the `<root>` span of `node.test` ends,
- * which Node publishes once every known test and root `after` hook finished, again after each batch of
- * tests registered after a top-level `await`. A test that starts clears the limit. The limit also runs
- * from load until the first test starts, so a file that registers no test fails, and so does a file
- * whose root `before`, `beforeEach` or top-level `await` holds its first test back past the limit. It
- * drops itself from `process.execArgv`, so the processes a test forks, from any directory,
+ * runs, when the process stays alive {@link LINGER_LIMIT_MS} after a `<root>` span of `node.test` ends
+ * with no test started inside it. Node opens that span after each batch of tests to run the root `after`
+ * hooks; a test that starts inside it makes Node run another batch and another `<root>` span. A test that
+ * starts clears the limit. The limit also runs from load until the first test or suite starts, so a file
+ * that registers no test fails, and so does a file whose top-level `await`, or root `before` or
+ * `beforeEach` with no `describe` around its tests, holds its first test back past the limit. It drops
+ * itself from `process.execArgv`, so the processes a test forks, from any directory,
  * neither load it nor fail to resolve its relative path.
  */
 process.execArgv = process.execArgv.filter(
@@ -63,11 +65,12 @@ process.execArgv = process.execArgv.filter(
 );
 
 tracingChannel<string, TestSpan>("node.test").subscribe({
-  start: () => {
+  start: (span) => {
     clearTimeout(lingerTimer);
+    testStartedInRoot = !isRoot(span);
   },
   end: (span) => {
-    if (isRoot(span)) {
+    if (isRoot(span) && !testStartedInRoot) {
       arm();
     }
   },
