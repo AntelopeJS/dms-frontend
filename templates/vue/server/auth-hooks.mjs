@@ -1,4 +1,8 @@
-import { readSession, setRequestSession } from "./auth/session.mjs";
+import {
+  clearedSession,
+  readSession,
+  setRequestSession,
+} from "./auth/session.mjs";
 import { createServerEvent } from "./module-event.mjs";
 import { compilePathPattern, PATH_PATTERN_FORMS } from "./path-patterns.mjs";
 import { isFunction, isRecord, isString } from "./type-guards.mjs";
@@ -10,14 +14,12 @@ const HOOK_ROUTE = Object.freeze({ bodyLimit: 0 });
 
 /**
  * How long a sealed session is used without the module that owns sign-in
- * confirming it. An older one is renewed through `refreshSession` before a
- * request uses it, so a session the backend revoked, at a sign-out for
- * instance, is cleared on every instance within this delay.
+ * confirming it. An older one, or one stamped ahead of this instance's clock,
+ * is renewed through `refreshSession` before a request uses it, so a session
+ * the backend revoked, at a sign-out for instance, is cleared on every
+ * instance within this delay.
  */
 export const SESSION_RECONFIRM_AFTER_MS = 5 * 60 * 1000;
-
-/** The methods that read: a request with another one changes state. */
-const READ_METHODS = new Set(["GET", "HEAD"]);
 
 /**
  * The pages a signed-out visit reaches when the provider names none: the
@@ -143,33 +145,36 @@ export function serverAuth(provider, context) {
     refresh,
     /**
      * Renews the request's session when it was written longer ago than
-     * `SESSION_RECONFIRM_AFTER_MS`. A renewal that throws runs the request
-     * signed out; without a `refreshSession` hook the session stays. A
-     * request that changes state on a route of the module owning sign-in, a
-     * sign-out for instance, runs with the sealed session when the renewal
-     * gives none: a sign-out then still revokes it on the backend, and with
-     * a renewed one it does so with a live access token.
+     * `SESSION_RECONFIRM_AFTER_MS`, or stamped ahead of this instance's
+     * clock. A renewal that gives no session, or throws, runs the request
+     * signed out; without a `refreshSession` hook the session stays. The
+     * sign-out route of the module owning sign-in (`signOut: true`) runs
+     * with the sealed session when the renewal gives none without clearing
+     * it, or throws, the backend being unreachable for instance, so it still
+     * revokes the session on the backend. After a renewal that cleared the session, the
+     * backend's refusal, it runs signed out too.
      *
      * @param {import("./request-target.mjs").ServerRequest} request
      * @param {import("node:http").ServerResponse} response
-     * @param {string | undefined} routeModule The module whose route answers
-     *   the request, if any
+     * @param {Pick<import("./module-route-types.mjs").ServerRoute, "id" | "signOut"> | undefined} route
+     *   The module route that answers the request, if any
      */
-    async reconfirm(request, response, routeModule) {
+    async reconfirm(request, response, route) {
       const session = readSession(request);
+      const age = Date.now() - (session?.updatedAt ?? 0);
       if (
         !refreshSession ||
         !session ||
-        Date.now() - (session.updatedAt ?? 0) <= SESSION_RECONFIRM_AFTER_MS
+        (age >= 0 && age <= SESSION_RECONFIRM_AFTER_MS)
       )
         return;
       const renewed = await refresh(request, response).catch(() => undefined);
       if (renewed) return;
-      const ownsSession =
-        routeModule !== undefined &&
-        routeModule === provider?.id &&
-        !READ_METHODS.has(request.method);
-      setRequestSession(request, ownsSession ? session : undefined);
+      const keepsSealed =
+        route?.signOut === true &&
+        route.id === provider?.id &&
+        !clearedSession(response);
+      setRequestSession(request, keepsSealed ? session : undefined);
     },
   };
 }

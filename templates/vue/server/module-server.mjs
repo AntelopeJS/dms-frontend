@@ -342,8 +342,9 @@ export async function loadServerModules(devServer) {
 
 /**
  * Has the module that owns sign-in reconfirm the request's session before
- * anything answers it (see `serverAuth.reconfirm`), naming the module whose
- * route answers the request's method, if any.
+ * anything answers it (see `serverAuth.reconfirm`), naming the module route
+ * that answers the request's method, if any. A request that a `404` or a
+ * `405` answers uses no session, so it is not reconfirmed.
  *
  * @param {import("./request-target.mjs").ServerRequest} request The Node request
  * @param {import("node:http").ServerResponse} response The Node response
@@ -351,12 +352,20 @@ export async function loadServerModules(devServer) {
  * @param {string} pathname The request's normalized path
  * @param {ServerModules} modules What `loadServerModules` or `createServerModules` returned
  */
-export function reconfirmSession(request, response, owner, pathname, modules) {
+export async function reconfirmSession(
+  request,
+  response,
+  owner,
+  pathname,
+  modules,
+) {
+  if (owner.kind === "not-found") return;
   const answering =
     owner.kind === "module"
       ? matchModuleRoute(modules.routes, request.method, pathname)
       : undefined;
-  return modules.serverAuth.reconfirm(request, response, answering?.route.id);
+  if (owner.kind === "module" && !answering) return;
+  await modules.serverAuth.reconfirm(request, response, answering?.route);
 }
 
 /**

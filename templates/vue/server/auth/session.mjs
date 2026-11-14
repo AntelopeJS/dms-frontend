@@ -8,6 +8,8 @@ import { isBoolean, isNumber, isRecord, isString } from "../type-guards.mjs";
 
 export const SESSION_COOKIE = "dms_session";
 const REQUEST_SESSION = Symbol("dms-request-session");
+/** @type {WeakSet<import("node:http").ServerResponse>} */
+const CLEARED = new WeakSet();
 const MAX_AGE = 60 * 60 * 24 * 30;
 /** How far ahead of this instance's clock another instance may stamp a session. */
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -255,7 +257,17 @@ export function writeSession(response, session) {
 
 /** @param {import("node:http").ServerResponse} response */
 export function clearSession(response) {
+  CLEARED.add(response);
   appendCookie(response, SESSION_COOKIE, "", attributes(0));
+}
+
+/**
+ * Whether `clearSession` cleared the session on `response`.
+ *
+ * @param {import("node:http").ServerResponse} response
+ */
+export function clearedSession(response) {
+  return CLEARED.has(response);
 }
 
 /**

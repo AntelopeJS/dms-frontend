@@ -65,6 +65,17 @@ void describe("reconfirming a session", () => {
     );
   });
 
+  void it("renews a session stamped up to 5 minutes ahead, and no fresh one", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: START });
+    const renew: Renewal = (session) => Promise.resolve(session);
+    const renewals = [];
+    for (const offset of [-SESSION_RECONFIRM_AFTER_MS, -1, 0])
+      renewals.push(
+        (await reconfirmedAt(offset, renew, t.mock.timers)).renewals,
+      );
+    assert.deepEqual(renewals, [1, 1, 0]);
+  });
+
   void it("keeps the session when no module registers refreshSession", async (t) => {
     t.mock.timers.enable({ apis: ["Date"], now: START });
     assert.deepEqual(
