@@ -1,4 +1,10 @@
-import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { CliError } from "@antelopejs/core/cli";
 import { describeChildFailure } from "./child-output";
@@ -61,14 +67,15 @@ export async function emitVueDeclarations(
   context: VerificationContext,
   layers: ResolvedLayer[],
 ): Promise<void> {
-  const table = layerTable(context.workspace, layers);
-  const config = join(context.workspace, DECLARATIONS_CONFIG);
+  const workspace = realpathSync.native(context.workspace);
+  const table = layerTable(workspace, layers);
+  const config = join(workspace, DECLARATIONS_CONFIG);
   writeFileSync(
     config,
     `${JSON.stringify(
       vueDeclarationsConfig({
         layers: table,
-        outDir: context.workspace,
+        outDir: workspace,
       }),
       null,
       2,
@@ -92,12 +99,12 @@ export async function emitVueDeclarations(
       : ["-u", "NODE_OPTIONS", process.execPath, ...typecheckArguments],
     {
       name: "vue-tsc",
-      cwd: context.workspace,
+      cwd: workspace,
       mapLine: context.mapLine,
     },
   );
   rmSync(config, { force: true });
-  const emitted = join(context.workspace, VUE_DECLARATIONS_DIR);
+  const emitted = join(workspace, VUE_DECLARATIONS_DIR);
   const written = keepVueDeclarations(emitted);
   if (written > 0 || !table.some(({ source }) => holdsVueFile(source))) return;
   throw new CliError(
