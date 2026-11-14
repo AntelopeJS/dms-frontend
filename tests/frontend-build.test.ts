@@ -60,6 +60,7 @@ void describe("Module build declarations", () => {
       },
       { glob: `${normalizePath(root)}/app/utils/**/*`, types: true },
       { glob: `!${normalizePath(root)}/**/app/build/**`, types: true },
+      { glob: `!${normalizePath(root)}/**/*.d.ts`, types: true },
     ]);
     assert.deepEqual(warnings, []);
   });
@@ -79,6 +80,7 @@ void describe("Module build declarations", () => {
       [
         `${normalizePath(root)}/app/types/**/*`,
         `!${normalizePath(root)}/**/app/build/**`,
+        `!${normalizePath(root)}/**/*.d.ts`,
       ],
     );
     assert.equal(warnings.length, rejected.length);
@@ -102,31 +104,47 @@ void describe("Module build declarations", () => {
       "layers/ui/app/build/composables/usePrivate.ts",
       "export function usePrivate() {}",
     );
-    const { dirs } = scanned(module, [declaring("layers/*/app")]);
-    const unimport = createRequire(
-      require.resolve("unplugin-auto-import/package.json"),
-    ).resolve("unimport");
-    const unimportModule: unknown = await import(pathToFileURL(unimport).href);
-    assert.ok(
-      isObjectLike(unimportModule) &&
-        "scanDirExports" in unimportModule &&
-        isFunction(unimportModule.scanDirExports),
-      "unimport exports scanDirExports",
-    );
-    const { scanDirExports } = unimportModule;
+    assert.deepEqual(await scannedNames(module, "layers/*/app"), ["usePublic"]);
+  });
 
-    const exports: unknown = await scanDirExports(dirs, { cwd: module });
-
-    assert.ok(Array.isArray(exports), "the scan lists the exports it found");
-    const entries: unknown[] = exports;
-    assert.deepEqual(
-      entries.map((entry) =>
-        isObjectLike(entry) && "name" in entry ? entry.name : undefined,
-      ),
-      ["usePublic"],
+  void it("leave declaration files out of a declared directory", async () => {
+    const module = temporaryDirectory("dms-build-declarations-");
+    writeFixture(
+      module,
+      "app/types/shortcuts.d.ts",
+      "export interface Shortcut { key: string }\ndeclare const shortcuts: Shortcut[];\nexport default shortcuts;\n",
     );
+    writeFixture(
+      module,
+      "app/types/order.ts",
+      "export interface Order { id: string }\n",
+    );
+    assert.deepEqual(await scannedNames(module, "app/types"), ["Order"]);
   });
 });
+
+async function scannedNames(module: string, directory: string) {
+  const { dirs } = scanned(module, [declaring(directory)]);
+  const unimport = createRequire(
+    require.resolve("unplugin-auto-import/package.json"),
+  ).resolve("unimport");
+  const unimportModule: unknown = await import(pathToFileURL(unimport).href);
+  assert.ok(
+    isObjectLike(unimportModule) &&
+      "scanDirExports" in unimportModule &&
+      isFunction(unimportModule.scanDirExports),
+    "unimport exports scanDirExports",
+  );
+  const { scanDirExports } = unimportModule;
+
+  const exports: unknown = await scanDirExports(dirs, { cwd: module });
+
+  assert.ok(Array.isArray(exports), "the scan lists the exports it found");
+  const entries: unknown[] = exports;
+  return entries.map((entry) =>
+    isObjectLike(entry) && "as" in entry ? entry.as : undefined,
+  );
+}
 
 function sources() {
   const billing = temporaryDirectory("dms-build-billing-");
@@ -243,6 +261,7 @@ void describe("The generated build declarations loader", () => {
       assert.deepEqual(loaded.config.dirs, [
         { glob: `${normalizePath(root)}/app/composables/**/*`, types: true },
         { glob: `!${normalizePath(root)}/**/app/build/**`, types: true },
+        { glob: `!${normalizePath(root)}/**/*.d.ts`, types: true },
       ]);
       const { config } = loaded;
       assert.ok("warnings" in config && Array.isArray(config.warnings));
