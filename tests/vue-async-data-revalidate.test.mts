@@ -239,9 +239,9 @@ void describe("Page refresh", () => {
       () => calls >= 3,
       () => `read ${calls} times`,
     );
+    const polled = calls;
     visible.value = false;
     await nextTick();
-    const polled = calls;
     await sleep(30);
     assert.equal(calls, polled, "no read once unmounted");
   });
