@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, describe, it } from "node:test";
 import { OWNER_FILE } from "../src/child-reaper";
@@ -89,6 +89,12 @@ void describe(
   () => {
     void it("loses its children and its workspace within 5 s, and a run beside it keeps its own", async () => {
       const [killed, other] = await Promise.all([startRun(), startRun()]);
+      const ownerless = join(
+        dirname(killed.workspace),
+        `${basename(killed.workspace)}-ownerless`,
+      );
+      mkdirSync(ownerless);
+      workspaces.push(ownerless);
       await killRun(killed);
       await poll(
         () => (existsSync(killed.workspace) ? undefined : true),
@@ -99,11 +105,20 @@ void describe(
       assert.deepEqual(other.tree.filter(isPidAlive), other.tree);
       assert.equal(isPidAlive(other.pid), true);
       assert.equal(existsSync(other.workspace), true);
+      assert.equal(existsSync(ownerless), true);
     });
 
     void it("keeps a workspace whose owner file no longer holds its token", async () => {
       const run = await startRun();
       writeFileSync(join(run.workspace, OWNER_FILE), "another run");
+      await killRun(run);
+      assert.deepEqual(run.tree.filter(isPidAlive), []);
+      assert.equal(existsSync(run.workspace), true);
+    });
+
+    void it("keeps a workspace whose owner file is gone", async () => {
+      const run = await startRun();
+      rmSync(join(run.workspace, OWNER_FILE));
       await killRun(run);
       assert.deepEqual(run.tree.filter(isPidAlive), []);
       assert.equal(existsSync(run.workspace), true);

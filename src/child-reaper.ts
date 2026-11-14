@@ -22,8 +22,7 @@ type ReaperEntry =
 /**
  * The reaper reads one JSON line per {@link ReaperEntry}. When its standard
  * input closes, which happens when the process that started it ends, however
- * it ends, it kills the tree of every child still listed: the process group
- * the child leads on POSIX, the `taskkill /T` tree on Windows. Then it removes
+ * it ends, it kills the process group of every child still listed. Then it removes
  * each directory listed whose owner file still holds its token, and nothing
  * else.
  */
@@ -35,10 +34,7 @@ const directories = [];
 let rest = "";
 const killTree = (pid) => {
   try {
-    if (process.platform === "win32")
-      require("node:child_process").spawnSync(
-        "taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
-    else process.kill(-pid, "SIGKILL");
+    process.kill(-pid, "SIGKILL");
   } catch {}
 };
 const isOwned = ({ directory, token }) => {
@@ -51,7 +47,7 @@ const isOwned = ({ directory, token }) => {
 const read = (line) => {
   try {
     const entry = JSON.parse(line);
-    if (Number.isInteger(entry.started)) children.add(entry.started);
+    if (Number.isInteger(entry.started) && entry.started > 1) children.add(entry.started);
     else if (Number.isInteger(entry.exited)) children.delete(entry.exited);
     else if (typeof entry.directory === "string" && typeof entry.token === "string")
       directories.push(entry);
@@ -104,10 +100,14 @@ export function reapChildrenOnDeath(): void {
   reaper = stdin;
 }
 
-/** Lists `child` with the reaper of this process, if it has one, until it exits. */
+/**
+ * Lists `child` with the reaper of this process, if it has one, until it
+ * exits. Not on Windows: a pid there is no process group, and can be reused
+ * once this process, which holds the child's handle, is gone.
+ */
 export function reapOnDeath(child: ChildProcess): void {
   const { pid } = child;
-  if (!reaper || pid === undefined) return;
+  if (!reaper || pid === undefined || process.platform === "win32") return;
   tell({ started: pid });
   child.once("exit", () => tell({ exited: pid }));
 }
