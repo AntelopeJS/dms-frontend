@@ -60,7 +60,7 @@ void describe("Module build declarations", () => {
       },
       { glob: `${normalizePath(root)}/app/utils/**/*`, types: true },
       { glob: `!${normalizePath(root)}/**/app/build/**`, types: true },
-      { glob: `!${normalizePath(root)}/**/*.d.ts`, types: true },
+      { glob: `!${normalizePath(root)}/**/*.d.{ts,mts,cts}`, types: true },
     ]);
     assert.deepEqual(warnings, []);
   });
@@ -80,7 +80,7 @@ void describe("Module build declarations", () => {
       [
         `${normalizePath(root)}/app/types/**/*`,
         `!${normalizePath(root)}/**/app/build/**`,
-        `!${normalizePath(root)}/**/*.d.ts`,
+        `!${normalizePath(root)}/**/*.d.{ts,mts,cts}`,
       ],
     );
     assert.equal(warnings.length, rejected.length);
@@ -109,11 +109,12 @@ void describe("Module build declarations", () => {
 
   void it("leave declaration files out of a declared directory", async () => {
     const module = temporaryDirectory("dms-build-declarations-");
-    writeFixture(
-      module,
-      "app/types/shortcuts.d.ts",
-      "export interface Shortcut { key: string }\ndeclare const shortcuts: Shortcut[];\nexport default shortcuts;\n",
-    );
+    for (const extension of ["d.ts", "d.mts", "d.cts"])
+      writeFixture(
+        module,
+        `app/types/shortcuts.${extension}`,
+        "export interface Shortcut { key: string }\ndeclare const shortcuts: Shortcut[];\nexport default shortcuts;\n",
+      );
     writeFixture(
       module,
       "app/types/order.ts",
@@ -261,7 +262,7 @@ void describe("The generated build declarations loader", () => {
       assert.deepEqual(loaded.config.dirs, [
         { glob: `${normalizePath(root)}/app/composables/**/*`, types: true },
         { glob: `!${normalizePath(root)}/**/app/build/**`, types: true },
-        { glob: `!${normalizePath(root)}/**/*.d.ts`, types: true },
+        { glob: `!${normalizePath(root)}/**/*.d.{ts,mts,cts}`, types: true },
       ]);
       const { config } = loaded;
       assert.ok("warnings" in config && Array.isArray(config.warnings));

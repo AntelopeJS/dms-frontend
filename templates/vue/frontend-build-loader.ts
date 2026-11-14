@@ -64,7 +64,7 @@ function rejection(directory: string): string | undefined {
 /**
  * The directories the modules declared in their `dms.frontend.build.ts`, as
  * the auto-importer's scan globs. Each module's `app/build/` directories and
- * `.d.ts` files are excluded even from a broader declaration: a declaration
+ * declaration files (`.d.ts`, `.d.mts`, `.d.cts`) are excluded even from a broader declaration: a declaration
  * file has no runtime value to import. A declaration naming an `app/build/`
  * directory, or leaving the module, is ignored with a warning.
  *
@@ -96,7 +96,7 @@ export function autoImportDirectories(
         types: true,
       })),
       { glob: `!${scan("**/app/build/**")}`, types: true },
-      { glob: `!${scan("**/*.d.ts")}`, types: true },
+      { glob: `!${scan("**/*.d.{ts,mts,cts}")}`, types: true },
     ];
   });
 }

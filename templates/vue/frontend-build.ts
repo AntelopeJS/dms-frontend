@@ -26,7 +26,8 @@ export interface DmsFrontendBuild {
    * patterns: `layers/*\/app/composables` covers that directory of every
    * layer. Nothing under an `app/build/` directory is ever auto-imported: it
    * holds the module's private code, which its own files import by path.
-   * A `.d.ts` file is never auto-imported either: it has no runtime value.
+   * A declaration file (`.d.ts`, `.d.mts`, `.d.cts`) is never auto-imported
+   * either: it has no runtime value.
    */
   registerAutoImports(directories: readonly string[]): void;
 
