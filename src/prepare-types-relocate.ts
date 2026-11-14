@@ -40,6 +40,9 @@ const COPY_ROOT = `./${LAYERS_SUBDIR}/`;
 const GENERATED_FRONTEND_ALIAS = "@frontend/*";
 const EVERY_DIRECTORY = "**/";
 const COPY_GLOB_PREFIX = `${LAYERS_SUBDIR}/`;
+/** The directory under `outDir` that holds the declarations emitted for the `.vue` files of the sources. */
+export const VUE_DECLARATIONS_DIR = "vue-declarations";
+const VUE_DECLARATION_SUFFIX = ".vue.d.ts";
 /** Excludes `outDir` itself: the directory a tsconfig `exclude` entry names, from its own directory. */
 const THIS_DIRECTORY = ".";
 
@@ -61,28 +64,104 @@ function toSource(path: string, layers: RelocatedLayer[]): string {
   return layer ? `${layer.source}${path.slice(layer.copy.length)}` : path;
 }
 
+/**
+ * `target`, an absolute path inside a module's sources, followed by where the
+ * declarations emitted for the `.vue` files of those sources mirror it.
+ * Anything else, such as a file of the workspace, has no such mirror.
+ */
+function withDeclarations(
+  target: string,
+  {
+    layers,
+    outDir,
+    rootDir,
+  }: Pick<TypesRelocation, "layers" | "outDir"> & {
+    rootDir: string;
+  },
+): string[] {
+  const own = configPath(outDir, target);
+  if (!layers.some(({ source }) => isWithin(source, target))) return [own];
+  const mirror = join(
+    resolve(outDir, VUE_DECLARATIONS_DIR),
+    relative(rootDir, target),
+  );
+  return [own, configPath(outDir, mirror)];
+}
+
+function dependencyPaths(dependencies: string[]): Record<string, string[]> {
+  return Object.fromEntries(
+    dependencies.flatMap((name): [string, string[]][] => [
+      [name, [`./node_modules/${name}`]],
+      [`${name}/*`, [`./node_modules/${name}/*`]],
+    ]),
+  );
+}
+
 function remapPaths(
   paths: Record<string, string[]>,
-  layers: RelocatedLayer[],
-  outDir: string,
+  context: Pick<TypesRelocation, "layers" | "outDir" | "rootDir">,
 ): Record<string, string[]> {
+  const { layers, outDir } = context;
   return Object.fromEntries(
     Object.entries(paths).flatMap(([alias, targets]) =>
       alias === GENERATED_FRONTEND_ALIAS
         ? layers.map(({ id, source }): [string, string[]] => [
             `@frontend/${id}/*`,
-            [`${configPath(outDir, source)}/*`],
+            withDeclarations(join(source, "*"), context),
           ])
         : [
             [
               alias,
-              targets.map((target) =>
-                configPath(outDir, toSource(resolve(outDir, target), layers)),
+              targets.flatMap((target) =>
+                withDeclarations(
+                  toSource(resolve(outDir, target), layers),
+                  context,
+                ),
               ),
             ],
           ],
     ),
   );
+}
+
+/**
+ * The deepest directory that holds every one of `paths`: the `rootDir` that
+ * keeps the declarations emitted for several modules in their own layout.
+ */
+export function commonAncestor(paths: string[]): string {
+  const [first, ...rest] = paths.map((path) => resolve(path).split(sep));
+  if (!first)
+    throw new CliError({ title: "There is no module to find a directory for" });
+  let length = 0;
+  while (
+    length < first.length &&
+    rest.every((other) => other[length] === first[length])
+  )
+    length += 1;
+  const prefix = first.slice(0, length);
+  if (prefix.length === 0)
+    throw new CliError({
+      title: "The modules share no directory",
+      reason: "They lie on different drives.",
+    });
+  return prefix.length === 1 ? `${prefix[0]}${sep}` : prefix.join(sep);
+}
+
+/**
+ * The dependencies of the workspace that no module owns. The modules are
+ * `workspace:*` there and their copies are removed, so they resolve from their
+ * sources; every other one resolves from the workspace.
+ */
+export function sharedDependencies(
+  dependencies: string[],
+  packageNames: (string | undefined)[],
+): string[] {
+  return dependencies.filter((name) => !packageNames.includes(name));
+}
+
+/** Whether `file` is the declaration `vue-tsc` emits for a `.vue` file. */
+export function isVueDeclaration(file: string): boolean {
+  return file.endsWith(VUE_DECLARATION_SUFFIX);
 }
 
 /** The parts of a tsconfig.json that `relocateTsconfig` reads and writes. */
@@ -102,6 +181,10 @@ export interface TypesRelocation {
   layers: RelocatedLayer[];
   /** The workspace the tsconfig is written to. */
   outDir: string;
+  /** The common ancestor of the sources: the root the `.vue` declarations are emitted under. */
+  rootDir: string;
+  /** The dependencies of the workspace that no module owns: each resolves from the workspace's `node_modules`. */
+  dependencies: string[];
 }
 
 /**
@@ -109,12 +192,19 @@ export interface TypesRelocation {
  * generated files: the workspace's own, with its `paths` inlined and aimed at
  * the sources, one `@frontend/<id>/*` entry per module, and the globs of the
  * copies replaced by those of the sources.
+ *
+ * Every alias into the sources also lists where the declarations of their
+ * `.vue` files are emitted, and `rootDirs` joins the two trees for relative
+ * imports. Each dependency resolves from the workspace, so the sources and the
+ * generated declarations share one copy of it.
  */
 export function relocateTsconfig({
   template,
   paths,
   layers,
   outDir,
+  rootDir,
+  dependencies,
 }: TypesRelocation): Tsconfig {
   const sources = layers.map(({ source }) => configPath(outDir, source));
   const insideSources = layers.some(({ source }) => isWithin(source, outDir));
@@ -123,7 +213,14 @@ export function relocateTsconfig({
       ...template.compilerOptions,
       types: [],
       allowArbitraryExtensions: true,
-      paths: remapPaths(paths, layers, outDir),
+      rootDirs: [
+        configPath(outDir, rootDir),
+        configPath(outDir, resolve(outDir, VUE_DECLARATIONS_DIR)),
+      ],
+      paths: {
+        ...dependencyPaths(dependencies),
+        ...remapPaths(paths, { layers, outDir, rootDir }),
+      },
     },
     files: [...template.files, VITE_CLIENT_TYPES, VUE_SHIMS_FILE],
     include: template.include.flatMap((glob) =>
@@ -141,6 +238,34 @@ export function relocateTsconfig({
       ),
       ...(insideSources ? [THIS_DIRECTORY] : []),
     ],
+  };
+}
+
+/**
+ * The throwaway tsconfig that emits one declaration per `.vue` file of the
+ * sources, under `vue-declarations/` and laid out from `rootDir`. It extends the
+ * relocated one, so the excludes and the resolution carry over. A declaration
+ * a file cannot have, one that names a type it does not export, is a
+ * diagnostic, not a stop: `noEmitOnError` is off.
+ */
+export function vueDeclarationsConfig({
+  layers,
+  outDir,
+  rootDir,
+}: Pick<TypesRelocation, "layers" | "outDir" | "rootDir">) {
+  return {
+    extends: "./tsconfig.json",
+    compilerOptions: {
+      noEmit: false,
+      declaration: true,
+      emitDeclarationOnly: true,
+      noEmitOnError: false,
+      outDir: configPath(outDir, resolve(outDir, VUE_DECLARATIONS_DIR)),
+      rootDir: configPath(outDir, rootDir),
+    },
+    include: layers.map(
+      ({ source }) => `${configPath(outDir, source)}/**/*.vue`,
+    ),
   };
 }
 

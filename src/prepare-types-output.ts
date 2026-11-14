@@ -13,9 +13,11 @@ import { isJsonObject } from "./internal/json";
 import { isPlainObject } from "./internal/plain-object";
 import { isTextList } from "./internal/text-list";
 import {
+  commonAncestor,
   layerTable,
   relocateAutoImports,
   relocateTsconfig,
+  sharedDependencies,
   type RelocatedLayer,
   type Tsconfig,
   VUE_SHIMS,
@@ -35,6 +37,7 @@ const KEPT_ON_RESET = "node_modules";
 const GENERATED_PATHS = "frontend-paths.generated.json";
 const WORKSPACE_TSCONFIG = "tsconfig.json";
 const AUTO_IMPORTS = "auto-imports.d.ts";
+const WORKSPACE_PACKAGE = "package.json";
 
 function isEmptyDirectory(path: string): boolean {
   return readdirSync(path).length === 0;
@@ -152,6 +155,14 @@ function readGeneratedPaths(path: string): Record<string, string[]> {
   throw new CliError({ title: `${GENERATED_PATHS} holds no paths` });
 }
 
+/** The names in the `dependencies` of the `package.json` at `path`. */
+function readDependencyNames(path: string): string[] {
+  const config: unknown = JSON.parse(readFileSync(path, "utf8"));
+  return isPlainObject(config) && isPlainObject(config.dependencies)
+    ? Object.keys(config.dependencies)
+    : [];
+}
+
 /**
  * Turns the workspace at `out` into the tsconfig and auto-imports of the
  * sources: writes `tsconfig.json`, `vue-shims.d.ts` and the relocated
@@ -168,6 +179,11 @@ export function writeRelocatedTypes(
     paths: readGeneratedPaths(nativePath.join(out, GENERATED_PATHS)),
     layers: table,
     outDir: out,
+    rootDir: commonAncestor(table.map(({ source }) => source)),
+    dependencies: sharedDependencies(
+      readDependencyNames(nativePath.join(out, WORKSPACE_PACKAGE)),
+      layers.map(({ packageName }) => packageName),
+    ),
   });
   const autoImports = nativePath.join(out, AUTO_IMPORTS);
   writeFileSync(

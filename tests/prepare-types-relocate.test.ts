@@ -2,11 +2,16 @@ import * as assert from "node:assert/strict";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
+import { isPlainObject } from "../src/internal/plain-object";
 import {
+  commonAncestor,
+  isVueDeclaration,
   relocateAutoImports,
   relocateTsconfig,
   type RelocatedLayer,
+  sharedDependencies,
   type Tsconfig,
+  vueDeclarationsConfig,
 } from "../src/prepare-types-relocate";
 
 const OUT = resolve("/work/project/.dms-types");
@@ -33,17 +38,44 @@ const PATHS = {
   ],
 };
 
-function relocate(layers: RelocatedLayer[], outDir = OUT) {
-  return relocateTsconfig({ template: TEMPLATE, paths: PATHS, layers, outDir });
+function pathEntries(config: Tsconfig): [string, unknown][] {
+  const { paths } = config.compilerOptions;
+  assert.ok(isPlainObject(paths));
+  return Object.entries(paths);
+}
+
+function relocate(
+  layers: RelocatedLayer[],
+  outDir = OUT,
+  dependencies: string[] = [],
+) {
+  return relocateTsconfig({
+    template: TEMPLATE,
+    paths: PATHS,
+    layers,
+    outDir,
+    rootDir: commonAncestor(layers.map(({ source }) => source)),
+    dependencies,
+  });
 }
 
 void describe("relocateTsconfig", () => {
   void it("aims a layer alias at the source tree and keeps a runtime file's", () => {
-    assert.deepEqual(relocate([CORE, SHOP]).compilerOptions.paths, {
+    const { paths } = relocate([CORE, SHOP]).compilerOptions;
+    assert.deepEqual(paths, {
       "#dms/frontend-module": ["./frontend-module.ts"],
-      "@frontend/antelopejs__dms-frontend-vue/*": ["../../dms/core/*"],
-      "@frontend/shop-vue/*": ["../shop-vue/*"],
-      "#dms-core/*": ["../../dms/core/layers/dms-core/*"],
+      "@frontend/antelopejs__dms-frontend-vue/*": [
+        "../../dms/core/*",
+        "./vue-declarations/dms/core/*",
+      ],
+      "@frontend/shop-vue/*": [
+        "../shop-vue/*",
+        "./vue-declarations/project/shop-vue/*",
+      ],
+      "#dms-core/*": [
+        "../../dms/core/layers/dms-core/*",
+        "./vue-declarations/dms/core/layers/dms-core/*",
+      ],
     });
   });
 
@@ -54,6 +86,7 @@ void describe("relocateTsconfig", () => {
       strict: true,
       types: [],
       allowArbitraryExtensions: true,
+      rootDirs: ["../../dms/core", "./vue-declarations"],
     });
     assert.deepEqual(Object.keys(config), [
       "compilerOptions",
@@ -83,6 +116,30 @@ void describe("relocateTsconfig", () => {
       "../../dms/core/**/tests",
       "../shop-vue/**/tests",
     ]);
+  });
+
+  void it("resolves each dependency of the workspace from it, bare and with a subpath", () => {
+    const entries = pathEntries(relocate([CORE], OUT, ["vue", "@vueuse/core"]));
+    assert.deepEqual(
+      entries.filter(([, targets]) =>
+        JSON.stringify(targets).includes("./node_modules/"),
+      ),
+      [
+        ["vue", ["./node_modules/vue"]],
+        ["vue/*", ["./node_modules/vue/*"]],
+        ["@vueuse/core", ["./node_modules/@vueuse/core"]],
+        ["@vueuse/core/*", ["./node_modules/@vueuse/core/*"]],
+      ],
+    );
+  });
+
+  void it("mirrors no target outside the sources, such as a runtime entry of the workspace", () => {
+    assert.deepEqual(
+      pathEntries(relocate([CORE])).find(
+        ([alias]) => alias === "#dms/frontend-module",
+      ),
+      ["#dms/frontend-module", ["./frontend-module.ts"]],
+    );
   });
 
   void it("excludes the output when it lies inside a source tree", () => {
@@ -122,6 +179,75 @@ void describe("relocateAutoImports", () => {
       (error) =>
         error instanceof CliError &&
         /shop-vue/.test(error.problem.reason ?? ""),
+    );
+  });
+});
+
+void describe("vueDeclarationsConfig", () => {
+  void it("emits only declarations, for the .vue files of every source, from their common root", () => {
+    assert.deepEqual(
+      vueDeclarationsConfig({
+        layers: [CORE, SHOP],
+        outDir: OUT,
+        rootDir: resolve("/work"),
+      }),
+      {
+        extends: "./tsconfig.json",
+        compilerOptions: {
+          noEmit: false,
+          declaration: true,
+          emitDeclarationOnly: true,
+          noEmitOnError: false,
+          outDir: "./vue-declarations",
+          rootDir: "../..",
+        },
+        include: ["../../dms/core/**/*.vue", "../shop-vue/**/*.vue"],
+      },
+    );
+  });
+});
+
+void describe("commonAncestor", () => {
+  void it("is the deepest directory that holds every path", () => {
+    assert.equal(
+      commonAncestor([
+        resolve("/work/dms/core"),
+        resolve("/work/project/shop"),
+      ]),
+      resolve("/work"),
+    );
+  });
+
+  void it("is the path itself for one path, and does not split a name in two", () => {
+    assert.deepEqual(
+      [
+        commonAncestor([resolve("/work/shop")]),
+        commonAncestor([resolve("/work/shop"), resolve("/work/shop-vue")]),
+      ],
+      [resolve("/work/shop"), resolve("/work")],
+    );
+  });
+});
+
+void describe("isVueDeclaration", () => {
+  void it("keeps the declaration of a component and drops that of a .ts source", () => {
+    assert.deepEqual(
+      ["Table.vue.d.ts", "table.d.ts", "Table.vue", "x.d.vue.ts"].map(
+        isVueDeclaration,
+      ),
+      [true, false, false, false],
+    );
+  });
+});
+
+void describe("sharedDependencies", () => {
+  void it("leaves out the packages of the modules, which resolve from their sources", () => {
+    assert.deepEqual(
+      sharedDependencies(
+        ["vue", "@antelopejs/dms", "@antelopejs/dms-ui", "nuxt"],
+        ["@antelopejs/dms", undefined, "@antelopejs/dms-ui"],
+      ),
+      ["vue", "nuxt"],
     );
   });
 });

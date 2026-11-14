@@ -9,6 +9,7 @@ import {
   resetOutput,
   writeRelocatedTypes,
 } from "./prepare-types-output";
+import { emitVueDeclarations } from "./prepare-types-declarations";
 import { layerTable } from "./prepare-types-relocate";
 import {
   type PreparationResult,
@@ -55,6 +56,11 @@ async function prepareTypes(): Promise<PreparationResult> {
     "Pointing the types at the sources",
     async () => writeRelocatedTypes(out, layers),
     { done: "Pointed the types at the sources" },
+  );
+  await tasks.run(
+    "Declaring the .vue files",
+    async () => emitVueDeclarations(context, layers),
+    { done: "Declared the .vue files" },
   );
   return {
     ok: true,
