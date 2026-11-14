@@ -139,6 +139,23 @@ void describe("emitVueDeclarations", () => {
     assert.ok(existsSync(declaration), declaration);
   });
 
+  void it("writes the declarations when the output is a symlink at another depth than its real path", async () => {
+    const out = workspace();
+    const link = join(directory(), "nested", "deeper", "out");
+    mkdirSync(join(link, ".."), { recursive: true });
+    symlinkSync(out, link, "junction");
+    const source = moduleImporting(directory());
+    await emit(link, source);
+    const declaration = join(
+      out,
+      "vue-declarations",
+      relative(parse(source).root, source),
+      "app",
+      "Cart.vue.d.ts",
+    );
+    assert.ok(existsSync(declaration), declaration);
+  });
+
   const shared = otherDrive();
   const requireSecondDrive =
     process.platform === "win32" && process.env.CI === "true";
