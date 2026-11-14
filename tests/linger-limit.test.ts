@@ -23,6 +23,7 @@ function runSuite(files: readonly string[]): Promise<RunOutcome> {
     "./tests/helpers/linger-limit.ts",
     "--test",
     "--test-reporter=tap",
+    "--test-concurrency=4",
     ...files.map((file) => join(FIXTURES, file)),
   ];
   return new Promise((resolve) => {
@@ -38,17 +39,38 @@ function runSuite(files: readonly string[]): Promise<RunOutcome> {
   });
 }
 
-void it("fails a test file that leaves an interval running, naming the file, and passes the others", async () => {
-  const outcome = await runSuite([
-    "leaked-interval.test.ts",
-    "finished.test.ts",
-  ]);
+function escaped(file: string): string {
+  return file.replaceAll(".", String.raw`\.`);
+}
+
+const LINGERING = ["leaked-interval.test.ts", "top-level-interval.test.ts"];
+const HEALTHY = [
+  "finished.test.ts",
+  "slow-after-cleanup.test.ts",
+  "slow-test-cleanup.test.ts",
+  "late-registered.test.mts",
+];
+
+void it("fails each test file that leaves an interval running, naming it, and passes the files whose tests or hooks run past the limit", async () => {
+  const outcome = await runSuite([...LINGERING, ...HEALTHY]);
 
   assert.equal(outcome.code, 1, outcome.output);
-  assert.match(outcome.output, /^not ok \d+ - .*leaked-interval\.test\.ts$/mu);
+  for (const name of LINGERING.map(escaped)) {
+    assert.match(outcome.output, new RegExp(`^not ok \\d+ - .*${name}$`, "mu"));
+    assert.match(
+      outcome.output,
+      new RegExp(`${name} still runs .* held by: .*Timeout`, "u"),
+    );
+  }
+  for (const name of HEALTHY.map(escaped)) {
+    assert.doesNotMatch(
+      outcome.output,
+      new RegExp(`^not ok \\d+ - .*${name}$`, "mu"),
+    );
+  }
+  assert.match(outcome.output, /^ok \d+ - runs after the top-level await$/mu);
   assert.match(
     outcome.output,
-    /leaked-interval\.test\.ts still runs .* held by: .*Timeout/u,
+    /^ok \d+ - cleans up for longer than the linger limit$/mu,
   );
-  assert.doesNotMatch(outcome.output, /^not ok \d+ - .*finished\.test\.ts$/mu);
 });
