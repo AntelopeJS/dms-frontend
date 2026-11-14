@@ -4,6 +4,7 @@ import {
   isVerboseRun,
   runWithErrorBoundary,
 } from "@antelopejs/core/cli";
+import { reapChildrenOnDeath } from "./child-reaper";
 import { CancelledError } from "./common";
 import { exitOnBrokenPipe, reportStopped } from "./output";
 
@@ -32,6 +33,7 @@ function problemOf(error: Error | string): CliProblem {
 /**
  * Runs a source runner under the error boundary: `run` on the workspace
  * tools' own Node options, not those the runner was started with.
+ * The children it starts die with it, even when it is killed with SIGKILL.
  *
  * Started by a CLI command, the runner sends its result over IPC for the CLI
  * to report, and the CLI reports a stop itself. Run on its own, it reports
@@ -45,6 +47,7 @@ export function startSourceRunner<Success extends { ok: true }>(
     exitOnBrokenPipe();
     const startedAt = Date.now();
     delete process.env.NODE_OPTIONS;
+    reapChildrenOnDeath();
     let result: Success | FailedRun;
     try {
       result = await run();

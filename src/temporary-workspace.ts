@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as nativePath from "node:path";
+import { removeOnDeath } from "./child-reaper";
 
 type PathApi = typeof nativePath.win32;
 
@@ -36,7 +37,8 @@ export function temporaryWorkspaceParent(
  * process.exit(). There is deliberately no signal handler: callers that run a
  * child through runCommand already handle the signal there, and a handler
  * here would keep any other caller alive instead of letting the default
- * action terminate it.
+ * action terminate it. A process killed with SIGKILL runs no exit handler:
+ * its reaper, if it started one, removes the workspace instead.
  */
 export function createTemporaryWorkspace(
   prefix: string,
@@ -50,5 +52,6 @@ export function createTemporaryWorkspace(
   process.on("exit", () => {
     rmSync(workspace, { recursive: true, force: true });
   });
+  removeOnDeath(workspace);
   return workspace;
 }
