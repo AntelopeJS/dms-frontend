@@ -39,7 +39,7 @@ const VERIFY_BUILD_STEPS = BUILD_STEPS.filter(
  * above all, so the type check can start with the builds instead of after
  * the client bundle.
  */
-export async function prepareTypes(
+export async function generateTypeDeclarations(
   context: VerificationContext,
 ): Promise<void> {
   await getProcessTasks().run(
@@ -69,7 +69,6 @@ export async function prepareTypes(
     },
     { done: "Generated the type declarations" },
   );
-  snapshotTypeDeclarations(context.workspace);
 }
 
 const AUTO_IMPORTS_DECLARATIONS = "auto-imports.d.ts";
@@ -81,7 +80,7 @@ const TYPECHECK_CONFIG = "tsconfig.verify.json";
  * reads it: the type check reads a copy taken before they start, through a
  * tsconfig of its own, so it never sees a half-written file.
  */
-function snapshotTypeDeclarations(workspace: string): void {
+export function snapshotTypeDeclarations(workspace: string): void {
   cpSync(
     join(workspace, AUTO_IMPORTS_DECLARATIONS),
     join(workspace, AUTO_IMPORTS_SNAPSHOT),

@@ -35,6 +35,7 @@ tags: [frontend, cli, renderer, vue, inertia, ssr, deployment, dms-module]
 - Declare `engines["@antelopejs/dms-frontend"]`, capped below the next minor (`">=0.6.0 <0.7.0"`); a range that excludes the installed loader stops `dev`, `build` and `verify-source`.
 - Give every server-rendered `useDmsAsyncData` / `useDmsFetch` call a key, and replace `data` instead of mutating it (shallow by default).
 - Check a module with `ajs dms verify-source` from the project: no backend needed.
+- Write the type-check configuration of the modules for type-aware lint with `ajs dms prepare-types --out <dir>`, then `extends` it from the module's `tsconfig.json`.
 
 ## Where the details are
 

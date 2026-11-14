@@ -5,10 +5,8 @@ import {
   type ComputedRef,
   type MaybeRefOrGetter,
   type Ref,
-  watch,
 } from "vue";
 import type { Composer } from "vue-i18n";
-import { type $fetch } from "./fetch";
 
 export interface DmsPageRoute {
   displayName?: string;

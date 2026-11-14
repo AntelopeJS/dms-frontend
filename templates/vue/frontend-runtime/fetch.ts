@@ -1,5 +1,5 @@
 import { type FetchOptions, ofetch } from "ofetch";
-import { isRef, type MaybeRefOrGetter, toValue, watch } from "vue";
+import { isRef, type MaybeRefOrGetter, toValue } from "vue";
 import { type DmsFrontendRuntime } from "./module-registration";
 import { useDmsRuntime } from "./state";
 import {
