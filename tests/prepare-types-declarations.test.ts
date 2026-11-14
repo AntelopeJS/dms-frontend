@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -10,14 +11,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, parse, relative, resolve } from "node:path";
+import { join, parse, relative, resolve, sep } from "node:path";
 import { after, describe, it } from "node:test";
 import { emitVueDeclarations } from "../src/prepare-types-declarations";
 import { ViteWarnings } from "../src/vite-output";
 import { listTree } from "./helpers/files";
 
 const TEMPLATE = resolve("templates", "vue");
-const PRELOADS = ["typecheck-loader.mjs", "app-config-stub.mjs"];
+const PRELOADS = [
+  "typecheck-loader.mjs",
+  "app-config-stub.mjs",
+  "workspace-writes.mjs",
+];
 
 const roots: string[] = [];
 after(() => {
@@ -147,4 +152,51 @@ void describe("emitVueDeclarations", () => {
       assert.deepEqual(files(shared), ["util.ts"]);
     },
   );
+});
+
+void describe("workspace-writes.mjs", () => {
+  void it("refuses every write outside the working directory and allows those inside it", () => {
+    const root = directory();
+    const cwd = join(root, "out");
+    mkdirSync(cwd);
+    const probe = [
+      'import fs from "node:fs";',
+      "const tries = {",
+      '  write: (path) => fs.writeFileSync(path, "x"),',
+      '  open: (path) => fs.closeSync(fs.openSync(path, "w")),',
+      "  mkdir: (path) => fs.mkdirSync(path),",
+      "};",
+      "const results = {};",
+      "for (const [name, write] of Object.entries(tries))",
+      '  for (const where of ["inside", "outside"]) {',
+      '    const path = where === "inside" ? `${name}-in` : `../out-${name}`;',
+      "    try { write(path); results[`${name} ${where}`] = true; }",
+      "    catch { results[`${name} ${where}`] = false; }",
+      "  }",
+      "console.log(JSON.stringify(results));",
+    ].join("\n");
+    const output = execFileSync(
+      process.execPath,
+      [
+        "--import",
+        join(TEMPLATE, "workspace-writes.mjs"),
+        "--input-type=module",
+        "-e",
+        probe,
+      ],
+      { cwd, encoding: "utf8" },
+    );
+    assert.deepEqual(JSON.parse(output), {
+      "write inside": true,
+      "write outside": false,
+      "open inside": true,
+      "open outside": false,
+      "mkdir inside": true,
+      "mkdir outside": false,
+    });
+    assert.deepEqual(files(root), [
+      "out",
+      ...["mkdir-in", "open-in", "write-in"].map((name) => `out${sep}${name}`),
+    ]);
+  });
 });

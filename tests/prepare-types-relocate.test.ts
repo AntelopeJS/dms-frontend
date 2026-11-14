@@ -197,7 +197,7 @@ void describe("relocateAutoImports", () => {
 });
 
 void describe("vueDeclarationsConfig", () => {
-  void it("emits only declarations, for the .vue files of every source, from the filesystem root", () => {
+  void it("emits only declarations, for the .vue files of every source, from the filesystem root, with the global types in the output", () => {
     assert.deepEqual(
       vueDeclarationsConfig({ layers: [CORE, SHOP], outDir: OUT }),
       {
@@ -211,6 +211,7 @@ void describe("vueDeclarationsConfig", () => {
           rootDir: "../../..",
         },
         include: ["../../dms/core/**/*.vue", "../shop-vue/**/*.vue"],
+        vueCompilerOptions: { globalTypesPath: "./vue-global-types.d.ts" },
       },
     );
   });
