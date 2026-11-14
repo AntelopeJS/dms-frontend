@@ -167,39 +167,24 @@ void it("takes over the lock after two runs died while taking it over, one after
   assert.doesNotThrow(() => lockVerification(layer)());
 });
 
-/** Windows keeps the name of a file removed while another process reads it, so racers there can all be refused. */
-const RACE_OPTIONS = {
-  skip:
-    process.platform === "win32" &&
-    "a removed lock keeps its name on Windows while another racer reads it",
-};
+void it("gives the lock of a dead verification to one of the runs that race for it", async () => {
+  const targets = trialTargets();
+  dieHoldingLocks(targets);
+  assert.deepEqual(
+    await race(targets),
+    targets.map(() => ONE_HOLDER),
+  );
+});
 
-void it(
-  "gives the lock of a dead verification to one of the runs that race for it",
-  RACE_OPTIONS,
-  async () => {
-    const targets = trialTargets();
-    dieHoldingLocks(targets);
-    assert.deepEqual(
-      await race(targets),
-      targets.map(() => ONE_HOLDER),
-    );
-  },
-);
-
-void it(
-  "gives the lock to one racing run after a run died while taking it over",
-  RACE_OPTIONS,
-  async () => {
-    const targets = trialTargets();
-    dieHoldingLocks(targets);
-    dieTakingOver(targets);
-    assert.deepEqual(
-      await race(targets),
-      targets.map(() => ONE_HOLDER),
-    );
-  },
-);
+void it("gives the lock to one racing run after a run died while taking it over", async () => {
+  const targets = trialTargets();
+  dieHoldingLocks(targets);
+  dieTakingOver(targets);
+  assert.deepEqual(
+    await race(targets),
+    targets.map(() => ONE_HOLDER),
+  );
+});
 
 void it("lets verifications of different layers run side by side", () => {
   const release = lockVerification(temporaryDirectory("verify-source-lock-"));
