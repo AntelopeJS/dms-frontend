@@ -1,9 +1,10 @@
 import * as assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { after, it } from "node:test";
+import { after, describe, it } from "node:test";
+import { OWNER_FILE } from "../src/child-reaper";
 import { isPidAlive } from "../src/discovery";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 import { readText } from "./helpers/files";
@@ -14,12 +15,15 @@ const FIXTURE = join(
   "reaped-command-cli.ts",
 );
 const POLL_MS = 50;
-const TREE_TIMEOUT_MS = 20_000;
+const START_TIMEOUT_MS = 20_000;
 const REAP_TIMEOUT_MS = 5000;
 
 const started: number[] = [];
+const workspaces: string[] = [];
 after(() => {
   for (const pid of started) if (isPidAlive(pid)) process.kill(pid, "SIGKILL");
+  for (const workspace of workspaces)
+    rmSync(workspace, { recursive: true, force: true });
 });
 
 async function poll<T>(
@@ -34,37 +38,75 @@ async function poll<T>(
   }
 }
 
-/**
- * Starts the fixture, which runs a child and grandchild with `runCommand`,
- * kills it with SIGKILL once both are up, and returns those still alive
- * after the reap timeout.
- */
-async function survivorsOfKill(): Promise<number[]> {
-  const pidFile = join(temporaryDirectory("child-reaper-"), "tree.pid");
-  const parent = spawn(process.execPath, ["--import", "tsx", FIXTURE], {
+interface Run {
+  pid: number;
+  /** The child and grandchild the run started with `runCommand`. */
+  tree: number[];
+  workspace: string;
+}
+
+/** Starts the fixture: a run with a reaper, a workspace and a process tree in it. */
+async function startRun(): Promise<Run> {
+  const files = temporaryDirectory("child-reaper-");
+  const pidFile = join(files, "tree.pid");
+  const workspaceFile = join(files, "workspace");
+  const run = spawn(process.execPath, ["--import", "tsx", FIXTURE], {
     stdio: "ignore",
-    env: { ...process.env, DMS_TEST_PID_FILE: pidFile },
+    env: {
+      ...process.env,
+      DMS_TEST_PID_FILE: pidFile,
+      DMS_TEST_WORKSPACE_FILE: workspaceFile,
+    },
   });
-  assert.ok(parent.pid !== undefined, "the fixture started");
-  started.push(parent.pid);
+  assert.ok(run.pid !== undefined, "the run started");
+  started.push(run.pid);
   const tree = await poll(
     () =>
       existsSync(pidFile)
         ? readText(pidFile).split(" ").map(Number)
         : undefined,
-    TREE_TIMEOUT_MS,
+    START_TIMEOUT_MS,
   );
   assert.ok(tree, "the child and grandchild started");
   started.push(...tree);
-  parent.kill("SIGKILL");
-  await poll(() => (tree.some(isPidAlive) ? undefined : true), REAP_TIMEOUT_MS);
-  return tree.filter(isPidAlive);
+  const workspace = readText(workspaceFile);
+  workspaces.push(workspace);
+  return { pid: run.pid, tree, workspace };
 }
 
-void it(
-  "kills the children of a process killed with SIGKILL within 5 s",
+/** Kills `run` with SIGKILL and waits up to 5 s for its tree to end. */
+async function killRun(run: Run): Promise<void> {
+  process.kill(run.pid, "SIGKILL");
+  await poll(
+    () => (run.tree.some(isPidAlive) ? undefined : true),
+    REAP_TIMEOUT_MS,
+  );
+}
+
+void describe(
+  "a run killed with SIGKILL",
   { skip: process.platform === "win32" },
-  async () => {
-    assert.deepEqual(await survivorsOfKill(), []);
+  () => {
+    void it("loses its children and its workspace within 5 s, and a run beside it keeps its own", async () => {
+      const [killed, other] = await Promise.all([startRun(), startRun()]);
+      await killRun(killed);
+      await poll(
+        () => (existsSync(killed.workspace) ? undefined : true),
+        REAP_TIMEOUT_MS,
+      );
+      assert.deepEqual(killed.tree.filter(isPidAlive), []);
+      assert.equal(existsSync(killed.workspace), false);
+      assert.deepEqual(other.tree.filter(isPidAlive), other.tree);
+      assert.equal(isPidAlive(other.pid), true);
+      assert.equal(existsSync(other.workspace), true);
+    });
+
+    void it("keeps a workspace whose owner file no longer holds its token", async () => {
+      const run = await startRun();
+      writeFileSync(join(run.workspace, OWNER_FILE), "another run");
+      await killRun(run);
+      assert.deepEqual(run.tree.filter(isPidAlive), []);
+      assert.equal(existsSync(run.workspace), true);
+    });
   },
 );
