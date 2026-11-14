@@ -1,11 +1,13 @@
 import * as assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, parse, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { temporaryWorkspaceParent } from "../src/temporary-workspace";
 
+const PREFIX = "dms-frontend-workspace-test-";
 const FIXTURE = join(
   dirname(fileURLToPath(import.meta.url)),
   "fixtures",
@@ -51,6 +53,22 @@ void describe("createTemporaryWorkspace", () => {
   void it("names the workspace by its real path, with no Windows short name", () => {
     const { workspace, realWorkspace } = runFixture("succeed");
     assert.equal(workspace, realWorkspace);
+  });
+
+  void it("removes the workspace a dead process left, and keeps a live one's", () => {
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    const left = join(tmpdir(), `${PREFIX}${dead}-killed`);
+    const live = join(tmpdir(), `${PREFIX}${process.pid}-running`);
+    mkdirSync(left);
+    mkdirSync(live);
+    try {
+      runFixture("succeed");
+      assert.equal(existsSync(left), false);
+      assert.equal(existsSync(live), true);
+    } finally {
+      rmSync(left, { recursive: true, force: true });
+      rmSync(live, { recursive: true, force: true });
+    }
   });
 
   void it("removes the workspace when a promise rejects", () => {

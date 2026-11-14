@@ -18,6 +18,7 @@ import {
   stripAnsi,
   writeChildLine,
 } from "./child-output";
+import { reapOnDeath } from "./child-reaper";
 import { assertLayerPathsServed, buildLayersFromPaths } from "./layers";
 import {
   assertCachedLayerPathsExist,
@@ -232,6 +233,7 @@ export function runCommand(
       ...options,
       detached: !isWindows,
     });
+    reapOnDeath(child);
     onSpawn?.(child);
 
     let escalation: NodeJS.Timeout | undefined;
