@@ -65,7 +65,8 @@ function failsWith(code: string, action: () => void): boolean {
  */
 function createHeld(path: string): boolean {
   const own = `${path}.${process.pid}.new`;
-  writeFileSync(own, String(process.pid));
+  rmSync(own, { force: true });
+  writeFileSync(own, String(process.pid), { flag: "wx" });
   try {
     return !failsWith("EEXIST", () => linkSync(own, path));
   } finally {
