@@ -184,6 +184,8 @@ void describe("relocateTsconfig with @types packages", () => {
           installed("@types/scope__untyped", {}),
           installed("typed", { exports: { ".": { types: "./a.d.ts" } } }),
           installed("@types/typed", {}),
+          installed("declared", { types: "index.d.ts" }),
+          installed("@types/declared", {}),
         ]),
       ),
     );
@@ -195,7 +197,10 @@ void describe("relocateTsconfig with @types packages", () => {
         ["./node_modules/@types/scope__untyped"],
       ],
     );
-    assert.deepEqual(paths.typed, ["./node_modules/typed/a.d.ts"]);
+    assert.deepEqual(
+      [paths.typed, paths.declared],
+      [["./node_modules/typed/a.d.ts"], ["./node_modules/declared"]],
+    );
   });
 });
 
