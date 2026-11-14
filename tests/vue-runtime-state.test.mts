@@ -55,40 +55,50 @@ function registerIsolationTests(): void {
     }
   });
 
-  void it("isolates overlapping transport, state, async data and hooks", async () => {
-    const first = application("first");
-    const second = application("second");
-    const calls: string[] = [];
-    const pending = [first, second].map(({ app }, index) =>
-      app.runWithContext(() => {
-        useDmsState("identity", () => index);
-        const hooks = useDmsRuntimeHooks();
-        hooks.hook("changed", () => {
-          calls.push(String(index));
-        });
-        const request = useDmsFetch<string>(`/request/${index}`, {
-          immediate: false,
-        });
-        return useDmsAsyncData("same-key", async () => {
-          await request.execute();
-          await hooks.callHook("changed");
-          return request.data.value;
-        });
-      }),
-    );
-    const [a, b] = await Promise.all(pending);
-    assert.equal(a.data.value, "first");
-    assert.equal(b.data.value, "second");
-    assert.deepEqual(calls, ["1", "0"]);
-    assert.deepEqual(first.requests, ["/request/0"]);
-    assert.deepEqual(second.requests, ["/request/1"]);
-    assert.equal(first.runtime.sharedState.get("identity")?.value, 0);
-    assert.equal(second.runtime.sharedState.get("identity")?.value, 1);
-    const transferred = serializeDmsAsyncData(first.runtime);
-    assert.equal(transferred["same-key"], "first");
-    assert.deepEqual(new Set(Object.values(transferred)), new Set(["first"]));
-    assert.throws(() => useDmsState("identity"), /outside a Vue application/);
-  });
+  void it(
+    "isolates overlapping transport, state, async data and hooks",
+    { timeout: 5_000 },
+    async () => {
+      const first = application("first");
+      const second = application("second");
+      const calls: string[] = [];
+      let secondChanged!: () => void;
+      const secondHasChanged = new Promise<void>(
+        (settle) => (secondChanged = settle),
+      );
+      const pending = [first, second].map(({ app }, index) =>
+        app.runWithContext(() => {
+          useDmsState("identity", () => index);
+          const hooks = useDmsRuntimeHooks();
+          hooks.hook("changed", () => {
+            calls.push(String(index));
+          });
+          const request = useDmsFetch<string>(`/request/${index}`, {
+            immediate: false,
+          });
+          return useDmsAsyncData("same-key", async () => {
+            await request.execute();
+            if (index === 0) await secondHasChanged;
+            await hooks.callHook("changed");
+            if (index === 1) secondChanged();
+            return request.data.value;
+          });
+        }),
+      );
+      const [a, b] = await Promise.all(pending);
+      assert.equal(a.data.value, "first");
+      assert.equal(b.data.value, "second");
+      assert.deepEqual(calls, ["1", "0"]);
+      assert.deepEqual(first.requests, ["/request/0"]);
+      assert.deepEqual(second.requests, ["/request/1"]);
+      assert.equal(first.runtime.sharedState.get("identity")?.value, 0);
+      assert.equal(second.runtime.sharedState.get("identity")?.value, 1);
+      const transferred = serializeDmsAsyncData(first.runtime);
+      assert.equal(transferred["same-key"], "first");
+      assert.deepEqual(new Set(Object.values(transferred)), new Set(["first"]));
+      assert.throws(() => useDmsState("identity"), /outside a Vue application/);
+    },
+  );
 
   void it("hydrates falsy async data without fetching twice and refreshes explicitly", async () => {
     const { app } = application("client", { empty: null });
