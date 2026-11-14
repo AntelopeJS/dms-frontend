@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import {
   existsSync,
   readdirSync,
@@ -5,8 +6,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
-import { CliError } from "@antelopejs/core/cli";
+import { join, parse, relative, resolve } from "node:path";
+import { promisify } from "node:util";
+import { CliError, pluralize } from "@antelopejs/core/cli";
 import { describeChildFailure } from "./child-output";
 import { runFramedCommand } from "./common";
 import type { ResolvedLayer } from "./common";
@@ -19,8 +21,9 @@ import {
 import type { VerificationContext } from "./verify-source-build";
 
 const DECLARATIONS_CONFIG = "tsconfig.vue-declarations.json";
-const VUE_FILE_SUFFIX = ".vue";
-const SKIPPED_DIRECTORY = "node_modules";
+const COMPONENTS_SCRIPT = "./vue-components.mjs";
+const DECLARATION_SUFFIX = ".d.ts";
+const runFile = promisify(execFile);
 
 /** The files under `directory`, none when it does not exist. */
 function listFiles(directory: string): string[] {
@@ -30,26 +33,47 @@ function listFiles(directory: string): string[] {
     .map((entry) => join(entry.parentPath, entry.name));
 }
 
-/** Whether a `.vue` file lies under `directory`, outside any `node_modules`. */
-function holdsVueFile(directory: string): boolean {
-  return readdirSync(directory, { withFileTypes: true }).some((entry) =>
-    entry.isDirectory()
-      ? entry.name !== SKIPPED_DIRECTORY &&
-        holdsVueFile(join(directory, entry.name))
-      : entry.name.endsWith(VUE_FILE_SUFFIX),
-  );
+/**
+ * The absolute path of every `.vue` file the declarations config of
+ * `workspace` includes, as TypeScript reads that config.
+ */
+async function listComponents(workspace: string): Promise<string[]> {
+  const unlisted = (reason: string) =>
+    new CliError({
+      title: "The .vue files of the sources could not be listed",
+      reason,
+    });
+  let stdout: string;
+  try {
+    ({ stdout } = await runFile(
+      process.execPath,
+      [COMPONENTS_SCRIPT, DECLARATIONS_CONFIG],
+      { cwd: workspace },
+    ));
+  } catch (error) {
+    throw unlisted(error instanceof Error ? error.message : String(error));
+  }
+  const files: unknown = JSON.parse(stdout);
+  if (
+    !Array.isArray(files) ||
+    !files.every((file): file is string => typeof file === "string")
+  )
+    throw unlisted(`${COMPONENTS_SCRIPT} printed no list of paths.`);
+  return files.map((file) => resolve(file));
+}
+
+/** Where `vue-tsc` writes the declaration of `component` under `emitted`. */
+function declarationOf(emitted: string, component: string): string {
+  return `${join(emitted, relative(parse(component).root, component))}${DECLARATION_SUFFIX}`;
 }
 
 /**
  * Deletes every emitted file that is not the declaration of a `.vue` file: the
  * `.ts` sources must keep resolving to themselves, not to a copy of them.
- * Returns how many declarations are left.
  */
-function keepVueDeclarations(directory: string): number {
-  const files = listFiles(directory);
-  for (const file of files)
+function keepVueDeclarations(directory: string): void {
+  for (const file of listFiles(directory))
     if (!isVueDeclaration(file)) rmSync(file, { force: true });
-  return files.filter(isVueDeclaration).length;
 }
 
 /**
@@ -57,9 +81,9 @@ function keepVueDeclarations(directory: string): number {
  * `vue-declarations/` of `context.workspace`, with `vue-tsc`, so that the named
  * types a `.ts` file imports from a component resolve. The type check is
  * skipped: it is the module's own to run. `vue-tsc` exits with a diagnostic for
- * each declaration that names a private type and writes none for that file,
- * which keeps its shim; the run fails only when it writes no declaration at all
- * for sources that hold `.vue` files. `vue-tsc` may write nothing outside
+ * each declaration that names a private type and writes none for that file;
+ * the run fails when any `.vue` file the config includes is left without a
+ * declaration, and lists each of them. `vue-tsc` may write nothing outside
  * `context.workspace`: the declaration of a `.ts` file a component imports from
  * another drive than the sources is refused, not written beside that file.
  */
@@ -103,17 +127,25 @@ export async function emitVueDeclarations(
       mapLine: context.mapLine,
     },
   );
-  rmSync(config, { force: true });
   const emitted = join(workspace, VUE_DECLARATIONS_DIR);
-  const written = keepVueDeclarations(emitted);
-  if (written > 0 || !table.some(({ source }) => holdsVueFile(source))) return;
-  throw new CliError(
-    describeChildFailure({
-      title: "No declaration was written for the .vue files",
-      command: "vue-tsc --noCheck",
-      code: result.code,
-      lines: result.lines,
-      isVerbose: context.isVerbose,
-    }),
+  keepVueDeclarations(emitted);
+  const components = await listComponents(workspace).finally(() =>
+    rmSync(config, { force: true }),
   );
+  const missing = components.filter(
+    (component) => !existsSync(declarationOf(emitted, component)),
+  );
+  if (missing.length === 0) return;
+  const failure = describeChildFailure({
+    title: `No declaration was written for ${pluralize(missing.length, ".vue component")}`,
+    command: "vue-tsc --noCheck",
+    code: result.code,
+    lines: result.lines,
+    isVerbose: context.isVerbose,
+  });
+  throw new CliError({
+    ...failure,
+    reason: `vue-tsc --noCheck exited with code ${result.code} and wrote no declaration for these components.${context.isVerbose ? " Its output is above." : ""}`,
+    details: [...missing, ...(failure.details ?? [])],
+  });
 }

@@ -128,6 +128,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["tsconfig.json", "tsconfig.json"],
   ["typecheck-loader.mjs", "typecheck-loader.mjs"],
   ["workspace-writes.mjs", "workspace-writes.mjs"],
+  ["vue-components.mjs", "vue-components.mjs"],
   ["prepare-types.mjs", "prepare-types.mjs"],
   ["app-config-stub.mjs", "app-config-stub.mjs"],
   ["DmsDynamicPage.vue", "DmsDynamicPage.vue"],
