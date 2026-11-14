@@ -73,8 +73,11 @@ export interface DmsServerEvent {
   url: URL;
   /** The values of the route's `:name` segments. */
   params: Readonly<Record<string, string>>;
-  /** The body as JSON, `{}` when empty; a 400 when it is not JSON. */
-  readJson<T = Record<string, unknown>>(): Promise<T>;
+  /**
+   * The body as JSON, `{}` when empty; a 400 when it is not JSON. The client
+   * sent it, so the handler checks its shape before reading it.
+   */
+  readJson(): Promise<unknown>;
   session: {
     read(): DmsSession | undefined;
     /**
@@ -124,9 +127,10 @@ export interface DmsServerEvent {
    * Calls the backend, JSON in and out. A refusal throws an error carrying
    * the status and the backend's public `error.*` message, which the server
    * answers as is when the handler lets it through. A redirect is not
-   * followed: it throws a 502.
+   * followed: it throws a 502. The answer is the backend's JSON, which the
+   * handler checks before reading it.
    */
-  backend<T = unknown>(path: string, init?: DmsBackendRequest): Promise<T>;
+  backend(path: string, init?: DmsBackendRequest): Promise<unknown>;
   /**
    * The backend URL of an absolute path, for a call `backend` cannot make (a
    * raw response, no relayed header): always on the backend's origin,

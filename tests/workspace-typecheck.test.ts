@@ -165,7 +165,7 @@ void describe("generated workspace typecheck", () => {
       "dms.server.ts":
         'import { defineDmsServer } from "#dms/server";\nimport { digest } from "./server/digest";\n\nexport default defineDmsServer((server) => {\n  server.registerRoute("POST", "/api/_fixture/digest", digest);\n});\n',
       "server/digest.ts":
-        'import { createHash } from "node:crypto";\nimport type { DmsServerEvent } from "#dms/server";\n\nexport async function digest(event: DmsServerEvent): Promise<Response> {\n  const { text } = await event.readJson<{ text: string }>();\n  return Response.json({ digest: createHash("sha256").update(text).digest("hex"), id: event.module.id });\n}\n',
+        'import { createHash } from "node:crypto";\nimport type { DmsServerEvent } from "#dms/server";\n\nexport async function digest(event: DmsServerEvent): Promise<Response> {\n  const input = await event.readJson();\n  const text = typeof input === "object" && input !== null && "text" in input && typeof input.text === "string" ? input.text : "";\n  return Response.json({ digest: createHash("sha256").update(text).digest("hex"), id: event.module.id });\n}\n',
     });
     cpSync(
       join(repoRoot, "templates", "vue", "server-module.ts"),

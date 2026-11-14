@@ -7,7 +7,7 @@
   },
   "tsExpectError": 0,
   "tsIgnore": 0,
-  "safety": 8,
+  "safety": 7,
   "config": {
     "eslint/max-lines for tests/**/*.test.mts": 0,
     "eslint/max-lines for tests/**/*.test.ts": 0,
