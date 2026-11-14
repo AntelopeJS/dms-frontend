@@ -10,6 +10,7 @@ import {
   settle,
   sleep,
   toggled,
+  until,
 } from "./helpers/vue-async-revalidate.mts";
 
 const { createDmsFrontendRuntime, useDmsAsyncData } = runtimeModule;
@@ -219,7 +220,7 @@ void describe("Page refresh", () => {
     assert.equal(entry.data.value, 2);
   });
 
-  void it("reads again on an interval while shown", async () => {
+  void it("reads again on an interval while shown", async (context) => {
     let calls = 0;
     const visible = ref(true);
     const Poller = defineComponent({
@@ -233,13 +234,15 @@ void describe("Page refresh", () => {
     const app = mountRuntime(createDmsFrontendRuntime(), {
       render: () => (visible.value ? h(Poller) : null),
     });
-    await sleep(45);
-    const polled = calls;
-    assert.ok(polled >= 3, `read ${polled} times`);
+    context.after(() => app.unmount());
+    await until(
+      () => calls >= 3,
+      () => `read ${calls} times`,
+    );
     visible.value = false;
     await nextTick();
+    const polled = calls;
     await sleep(30);
     assert.equal(calls, polled, "no read once unmounted");
-    app.unmount();
   });
 });
