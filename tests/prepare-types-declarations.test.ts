@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, parse, relative, resolve, sep } from "node:path";
 import { after, describe, it } from "node:test";
+import { CliError } from "@antelopejs/core/cli";
 import { pathToFileURL } from "node:url";
 import { emitVueDeclarations } from "../src/prepare-types-declarations";
 import { ViteWarnings } from "../src/vite-output";
@@ -23,6 +24,7 @@ const PRELOADS = [
   "typecheck-loader.mjs",
   "app-config-stub.mjs",
   "workspace-writes.mjs",
+  "vue-components.mjs",
 ];
 
 const roots: string[] = [];
@@ -50,7 +52,7 @@ function otherDrive(): string | undefined {
 }
 
 /** A workspace that runs the repository's `vue-tsc` with the shipped preloads. */
-function workspace(): string {
+function workspace(exclude: string[] = []): string {
   const out = directory();
   for (const file of PRELOADS)
     copyFileSync(join(TEMPLATE, file), join(out, file));
@@ -68,6 +70,7 @@ function workspace(): string {
         types: [],
       },
       files: [],
+      exclude,
     })}\n`,
   );
   return out;
@@ -154,6 +157,44 @@ void describe("emitVueDeclarations", () => {
       "Cart.vue.d.ts",
     );
     assert.ok(existsSync(declaration), declaration);
+  });
+
+  void it("fails and lists every component left without a declaration, and no component the configuration excludes", async () => {
+    const source = moduleImporting(directory());
+    const out = workspace([`${source}/**/tests`]);
+    const undeclarable = (...path: string[]) => {
+      mkdirSync(join(source, ...path.slice(0, -1)), { recursive: true });
+      writeFileSync(
+        join(source, ...path),
+        [
+          '<script setup lang="ts" generic="T">',
+          "const count = 1;",
+          "interface Props { item: T; count: number }",
+          "defineProps<Props>();",
+          "</script>",
+          "<template><p>{{ count }}</p></template>",
+          "",
+        ].join("\n"),
+      );
+    };
+    undeclarable("app", "List.vue");
+    undeclarable("app", "nested", "Grid.vue");
+    undeclarable("tests", "Fixture.vue");
+    await assert.rejects(emit(out, source), (error: Error) => {
+      assert.ok(error instanceof CliError);
+      assert.equal(
+        error.problem.title,
+        "No declaration was written for 2 .vue components",
+      );
+      assert.deepEqual(
+        error.problem.details?.filter((line) => line.endsWith(".vue")),
+        [
+          join(source, "app", "List.vue"),
+          join(source, "app", "nested", "Grid.vue"),
+        ],
+      );
+      return true;
+    });
   });
 
   const shared = otherDrive();
