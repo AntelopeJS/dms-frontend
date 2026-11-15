@@ -113,7 +113,6 @@ function moduleFolderCandidates(
     ...(version
       ? [join(cache, packageCacheEntry(source.package, version))]
       : []),
-    join(cache, source.package),
     join(projectDir, "node_modules", source.package),
   ];
 }
@@ -121,8 +120,8 @@ function moduleFolderCandidates(
 /**
  * Where a module's package is: a local source's path, a git source's clone in
  * AntelopeJS's module cache, or the version of a package that cache holds for
- * the source's version spec, else the single folder core 1.23.0 installs a
- * package in, else the package installed in the project's node_modules.
+ * the source's version spec, else the package installed in the project's
+ * node_modules.
  */
 export function moduleFolder(
   projectDir: string,
