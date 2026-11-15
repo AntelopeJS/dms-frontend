@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import {
   existsSync,
   readdirSync,
-  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -19,7 +18,7 @@ import {
   filesystemRoot,
   isVueDeclaration,
   layerTable,
-  relativeImports,
+  relativelyReached,
   VUE_DECLARATIONS_DIR,
   vueDeclarationsConfig,
 } from "./prepare-types-relocate";
@@ -28,33 +27,43 @@ import type { VerificationContext } from "./verify-source-build";
 const DECLARATIONS_CONFIG = "tsconfig.vue-declarations.json";
 const COMPONENTS_SCRIPT = "./vue-components.mjs";
 const DECLARATION_SUFFIX = ".d.ts";
-/** The extensions TypeScript tries after a module specifier, `.vue` among them. */
-const MODULE_EXTENSIONS = [
-  ".ts",
-  ".tsx",
-  ".d.ts",
-  ".mts",
-  ".cts",
-  ".d.mts",
-  ".d.cts",
-  ".js",
-  ".mjs",
-  ".cjs",
-  ".vue",
-];
+/** Room for the output of `--explainFiles`, a few lines per file of the program. */
+const EXPLANATION_BUFFER = 512 * 1024 * 1024;
+const runFile = promisify(execFile);
 
 /**
- * Whether a module specifier resolved to `path` names a file or directory
- * that exists, so a specifier only a comment of a declaration holds, such as
- * an example in a prop's documentation, names nothing.
+ * The files the declarations config of `workspace` reaches from `sources` by
+ * relative imports and references, as `vue-tsc --explainFiles` lists them.
  */
-function isModule(path: string): boolean {
-  return (
-    existsSync(path) ||
-    MODULE_EXTENSIONS.some((extension) => existsSync(`${path}${extension}`))
-  );
+async function listReached(
+  workspace: string,
+  sources: string[],
+): Promise<string[]> {
+  const { NODE_OPTIONS: _nodeOptions, ...env } = process.env;
+  let stdout: string;
+  try {
+    ({ stdout } = await runFile(
+      process.execPath,
+      [
+        "--import",
+        "./typecheck-loader.mjs",
+        "./node_modules/vue-tsc/bin/vue-tsc.js",
+        "--project",
+        DECLARATIONS_CONFIG,
+        "--listFilesOnly",
+        "--explainFiles",
+      ],
+      { cwd: workspace, env, maxBuffer: EXPLANATION_BUFFER },
+    ));
+  } catch (error) {
+    throw new CliError({
+      title:
+        "The files the .vue files of the sources import could not be listed",
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return relativelyReached(stdout, workspace, sources);
 }
-const runFile = promisify(execFile);
 
 /** The files under `directory`, none when it does not exist. */
 function listFiles(directory: string): string[] {
@@ -134,9 +143,9 @@ function keepVueDeclarations(directory: string): void {
  * the run fails when any `.vue` file the config includes is left without a
  * declaration, and lists each of them. The tree is emitted from the
  * filesystem root, then lifted to the `declarationsRoot` of the sources, of
- * every file it holds a declaration for and of every file a `.vue`
- * declaration imports by relative path, and `writeTsconfig` writes the
- * tsconfig laid out from that directory. `vue-tsc` may write nothing outside
+ * every `.vue` declaration it holds and of every file the sources reach by
+ * relative imports and references, and `writeTsconfig` writes the tsconfig
+ * laid out from that directory. `vue-tsc` may write nothing outside
  * `context.workspace`: the declaration of a `.ts` file a component imports from
  * another drive than the sources is refused, not written beside that file.
  */
@@ -181,26 +190,27 @@ export async function emitVueDeclarations(
       mapLine: context.mapLine,
     },
   );
+  const sources = table.map(({ source }) => source);
+  let reached: string[];
+  let components: string[];
+  try {
+    reached = await listReached(workspace, sources);
+    components = await listComponents(workspace);
+  } finally {
+    rmSync(config, { force: true });
+  }
   const emitted = join(workspace, VUE_DECLARATIONS_DIR);
   const fromRoot = filesystemRoot(table);
-  const files = listFiles(emitted);
-  const origin = (file: string) => join(fromRoot, relative(emitted, file));
-  const rootDir = declarationsRoot([
-    ...table.map(({ source }) => source),
-    ...files.map((file) => dirname(origin(file))),
-    ...files.filter(isVueDeclaration).flatMap((file) =>
-      relativeImports(readFileSync(file, "utf8"))
-        .map((specifier) => resolve(dirname(origin(file)), specifier))
-        .filter(isModule)
-        .map((target) => dirname(target)),
-    ),
-  ]);
   keepVueDeclarations(emitted);
+  const rootDir = declarationsRoot([
+    ...sources,
+    ...listFiles(emitted).map((file) =>
+      dirname(join(fromRoot, relative(emitted, file))),
+    ),
+    ...reached.map((file) => dirname(file)),
+  ]);
   liftTree(emitted, relative(fromRoot, rootDir));
   writeTsconfig(rootDir);
-  const components = await listComponents(workspace).finally(() =>
-    rmSync(config, { force: true }),
-  );
   const missing = components.filter(
     (component) => !existsSync(declarationOf(emitted, rootDir, component)),
   );

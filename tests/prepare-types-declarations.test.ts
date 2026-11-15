@@ -3,7 +3,6 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   cpSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
@@ -154,14 +153,10 @@ void describe("emitVueDeclarations", () => {
     await emit(out, source);
     assert.deepEqual(files(source), before);
     assert.deepEqual(files(shared), ["util.ts"]);
-    const declaration = join(
-      out,
-      "vue-declarations",
-      basename(source),
+    assert.deepEqual(files(join(out, "vue-declarations")), [
       "app",
-      "Cart.vue.d.ts",
-    );
-    assert.ok(existsSync(declaration), declaration);
+      join("app", "Cart.vue.d.ts"),
+    ]);
   });
 
   void it("writes the declarations when the output is a symlink at another depth than its real path", async () => {
@@ -171,14 +166,10 @@ void describe("emitVueDeclarations", () => {
     symlinkSync(out, link, "junction");
     const source = moduleImporting(directory());
     await emit(link, source);
-    const declaration = join(
-      out,
-      "vue-declarations",
-      basename(source),
+    assert.deepEqual(files(join(out, "vue-declarations")), [
       "app",
-      "Cart.vue.d.ts",
-    );
-    assert.ok(existsSync(declaration), declaration);
+      join("app", "Cart.vue.d.ts"),
+    ]);
   });
 
   void it("fails and lists every component left without a declaration, and no component the configuration excludes", async () => {
@@ -281,7 +272,7 @@ async function preparedProject(
       '<script setup lang="ts">',
       'import type { Id } from "../../../shared/ids";',
       'import type { Tone } from "../../../shared-ui/Badge.vue";',
-      'import type { Flag } from "../../../../typings/flags";',
+      'import type { Flag } from "../../../../typings/flags.js";',
       "export interface Row { id: Id; tone: Tone; flag: Flag }",
       "defineProps<{",
       `  /** Formatted as with: import { fmt } from "${"../".repeat(24)}shared/fmt" */`,

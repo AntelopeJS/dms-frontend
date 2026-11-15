@@ -328,20 +328,48 @@ export function vueDeclarationsConfig({
 }
 
 const MODULE_SPECIFIER = /(import\(|\bfrom )(['"])([^'"\n]*)\2/g;
-const IMPORTED_SPECIFIER =
-  /(?:\bimport\(\s*|\bfrom\s+|\bimport\s+)(['"])([^'"\n]*)\1/g;
+const REACHED_BY =
+  /^\s+(?:Imported|Referenced) via (['"])(.*?)\1 from file '(.*)'/;
 const RELATIVE_SPECIFIER = /^\.\.?(\/|$)/;
 
 /**
- * The relative module specifiers of the `import(…)`, `from` and side-effect
- * `import` clauses of `text`.
+ * The files that `explanation`, the output of `tsc --explainFiles`, shows the
+ * sources reach through relative imports and references alone: each file a
+ * file under `sources`, or such a file, imports or references by a relative
+ * path. A package imported by name, and every file it imports, is not reached.
+ * The paths in `explanation` are relative to `cwd`.
  */
-export function relativeImports(text: string): string[] {
-  return [...text.matchAll(IMPORTED_SPECIFIER)].flatMap(([, , specifier]) =>
-    specifier !== undefined && RELATIVE_SPECIFIER.test(specifier)
-      ? [specifier]
-      : [],
-  );
+export function relativelyReached(
+  explanation: string,
+  cwd: string,
+  sources: string[],
+): string[] {
+  const edges: [from: string, to: string][] = [];
+  let file: string | undefined;
+  for (const line of explanation.split(/\r?\n/)) {
+    if (line !== "" && !/^\s/.test(line)) file = resolve(cwd, line);
+    const [, , specifier, importer] = REACHED_BY.exec(line) ?? [];
+    if (
+      file !== undefined &&
+      specifier !== undefined &&
+      importer !== undefined &&
+      RELATIVE_SPECIFIER.test(specifier)
+    )
+      edges.push([resolve(cwd, importer), file]);
+  }
+  const reached = new Set<string>();
+  const isReachedFrom = (path: string) =>
+    reached.has(path) || sources.some((source) => isAtOrBelow(source, path));
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [from, to] of edges)
+      if (!reached.has(to) && isReachedFrom(from)) {
+        reached.add(to);
+        grew = true;
+      }
+  }
+  return [...reached];
 }
 
 const COPY_SPECIFIER = /(['"])\.\/frontend-modules\/[^'"\n]*/g;

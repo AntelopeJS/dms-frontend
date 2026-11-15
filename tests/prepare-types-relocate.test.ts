@@ -6,7 +6,7 @@ import { isPlainObject } from "../src/internal/plain-object";
 import {
   declarationsRoot,
   isVueDeclaration,
-  relativeImports,
+  relativelyReached,
   relocateAutoImports,
   relocateTsconfig,
   type RelocatedLayer,
@@ -194,28 +194,32 @@ void describe("relocateTsconfig with the declarations lifted to a directory", ()
   });
 });
 
-void describe("relativeImports", () => {
-  void it("lists the relative specifiers of every import form a declaration keeps, and no package", () => {
+void describe("relativelyReached", () => {
+  void it("follows relative imports and references from the sources, and no package or what it imports", () => {
+    const cwd = resolve("/work/project/.dms-types");
+    const explanation = [
+      "../shop/app/Cart.vue",
+      "  Matched by include pattern '../shop/**/*.vue' in 'tsconfig.vue-declarations.json'",
+      "../../shared/ids.d.ts",
+      "  Imported via \"../../../shared/ids.js\" from file '../shop/app/Cart.vue'",
+      "../../shared/more.d.ts",
+      "  Imported via './more' from file '../../shared/ids.d.ts'",
+      "../../typings/globals.d.ts",
+      "  Referenced via '../../../typings/globals.d.ts' from file '../shop/app/Cart.vue'",
+      "node_modules/vue/dist/vue.d.ts",
+      "  Imported via \"vue\" from file '../shop/app/Cart.vue' with packageId 'vue/dist/vue.d.ts@3.5.0'",
+      "node_modules/vue/dist/runtime.d.ts",
+      "  Imported via './runtime' from file 'node_modules/vue/dist/vue.d.ts'",
+      "",
+    ].join("\n");
     assert.deepEqual(
-      relativeImports(
-        [
-          'import "../../typings/globals";',
-          'import type { Row } from "./rows";',
-          'export * from "../shared";',
-          'export type { Id } from "..";',
-          'export declare const tone: import("./Badge.vue").Tone;',
-          'import { ref } from "vue";',
-          'import "#layer/setup";',
-          'declare const flag: typeof import(".");',
-        ].join("\n"),
-      ),
+      relativelyReached(explanation, cwd, [
+        resolve("/work/project/shop"),
+      ]).sort(),
       [
-        "../../typings/globals",
-        "./rows",
-        "../shared",
-        "..",
-        "./Badge.vue",
-        ".",
+        resolve("/work/shared/ids.d.ts"),
+        resolve("/work/shared/more.d.ts"),
+        resolve("/work/typings/globals.d.ts"),
       ],
     );
   });
