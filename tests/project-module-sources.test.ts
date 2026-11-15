@@ -122,7 +122,7 @@ void describe("a module's frontend is found wherever AntelopeJS installs its sou
   const root = mkdtempSync(join(tmpdir(), "dms-module-sources-"));
   after(() => rmSync(root, { recursive: true, force: true }));
 
-  void it("loads the frontend of a local, an installed, a cached, a core 1.23.0 cached and a git module", async () => {
+  void it("loads the frontend of a local, an installed, a cached and a git module, and none from an unversioned cache folder", async () => {
     const project = join(root, "sources");
     writeProject(project);
 
@@ -132,7 +132,6 @@ void describe("a module's frontend is found wherever AntelopeJS installs its sou
         "@fixture/cached",
         "@fixture/git",
         "@fixture/installed",
-        "@fixture/legacy",
         "@fixture/local",
       ]),
     );
