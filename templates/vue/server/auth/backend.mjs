@@ -1,6 +1,11 @@
 import { REDIRECT_STATUSES } from "../proxy-redirects.mjs";
 import { isObjectLike, isString } from "../type-guards.mjs";
-import { clientCountryHeader, clientIp, clientIpHeader } from "./client-ip.mjs";
+import {
+  clientCountryHeader,
+  clientIp,
+  clientIpHeader,
+  isSameOrigin,
+} from "./client-ip.mjs";
 
 /**
  * The client headers every backend request carries, the proxy's and a module
@@ -13,6 +18,48 @@ export const CLIENT_HEADERS = [
   "x-realtime-session",
   "x-realtime-connection",
 ];
+
+/**
+ * The prefix of the request headers a module's client code sets on its own
+ * requests, which every backend request carries as the browser sent them: no
+ * HTML form can set a header, so a backend route can require one to refuse a
+ * submission a page built from blocks makes with the user's session.
+ */
+export const UI_HEADER_PREFIX = "x-dms-ui-";
+
+/**
+ * Whether the browser marked `request` as sent from another origin: an
+ * `Origin` that is not this server's, or a `Sec-Fetch-Site` other than
+ * `same-origin`. A request with neither, from a client that is no browser,
+ * is not.
+ *
+ * @param {import("./client-ip.mjs").ForwardedRequest} request
+ */
+function isCrossOrigin(request) {
+  const site = request.headers["sec-fetch-site"];
+  return (
+    (request.headers.origin !== undefined && !isSameOrigin(request)) ||
+    (site !== undefined && site !== "same-origin")
+  );
+}
+
+/**
+ * The `x-dms-ui-*` headers of a client request, none when the browser sent it
+ * from another origin.
+ *
+ * @param {import("./client-ip.mjs").ForwardedRequest} request
+ * @returns {Record<string, string>}
+ */
+function uiHeaders(request) {
+  if (isCrossOrigin(request)) return {};
+  return Object.fromEntries(
+    Object.entries(request.headers).flatMap(([name, value]) =>
+      name.startsWith(UI_HEADER_PREFIX) && value !== undefined
+        ? [[name, String(value)]]
+        : [],
+    ),
+  );
+}
 
 export class UpstreamError extends Error {
   /**
@@ -52,11 +99,14 @@ export function publicBackendMessage(data) {
  *   request
  * @param {readonly string[]} names Lowercase names of the request headers to
  *   copy when present
- * @returns The client country header, then the copied headers
+ * @returns The client country header, the `x-dms-ui-*` headers of a request
+ *   the browser did not mark as sent from another origin, then the copied
+ *   headers
  */
 export function relayedHeaders(request, names) {
   return {
     ...clientCountryHeader(request),
+    ...uiHeaders(request),
     ...Object.fromEntries(
       names.flatMap((name) =>
         request.headers[name] ? [[name, String(request.headers[name])]] : [],
@@ -69,7 +119,9 @@ export function relayedHeaders(request, names) {
  * Calls the backend for a server route, JSON in and out.
  *
  * `options.headers` adds request headers; the client's address and the
- * relayed client headers are set after them, so no caller replaces those.
+ * relayed client headers are set after them, so no caller replaces those, and
+ * an `x-dms-ui-*` header among them is dropped: the backend sees one only when
+ * the client sent it.
  * A redirect is not followed: it is no JSON answer, so it fails with a 502.
  *
  * @param {string} path
@@ -88,10 +140,11 @@ export function relayedHeaders(request, names) {
 export async function backend(path, request, options = {}) {
   /** @type {Record<string, string>} */
   const headers = Object.fromEntries(
-    Object.entries(options.headers ?? {}).map(([name, value]) => [
-      name.toLowerCase(),
-      String(value),
-    ]),
+    Object.entries(options.headers ?? {}).flatMap(([name, value]) =>
+      name.toLowerCase().startsWith(UI_HEADER_PREFIX)
+        ? []
+        : [[name.toLowerCase(), String(value)]],
+    ),
   );
   Object.assign(headers, relayedHeaders(request, CLIENT_HEADERS));
   headers["x-forwarded-for"] = clientIp(request);
