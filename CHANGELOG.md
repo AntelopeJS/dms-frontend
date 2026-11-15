@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.11.6
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.5...v0.11.6)
+
+### 🚀 Enhancements
+
+- **relay:** Forward the x-dms-ui-* headers a module's client code sets ([#365](https://github.com/AntelopeJS/dms-frontend/pull/365))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.11.5
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.4...v0.11.5)
