@@ -42,5 +42,6 @@
     "@types/node": "^24.0.0",
     "typescript": "^5.8.2",
     "vue-tsc": "3.1.1"
-  }
+  },
+  "packageManager": "pnpm@10.6.5"
 }

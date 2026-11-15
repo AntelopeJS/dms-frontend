@@ -14,7 +14,6 @@ import {
 import { reapOnDeath } from "./child-reaper";
 import { CancelledError, exitCodeForSignal } from "./cancellation";
 import { isVerboseRun } from "@antelopejs/core/cli";
-import { basename } from "node:path";
 
 /** Signals the CLI forwards to the child instead of dying on its own. */
 const FORWARDED_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
@@ -164,41 +163,19 @@ function drainTimeout(): Promise<void> {
   });
 }
 
-const JAVASCRIPT_FILE = /\.[cm]?js$/i;
-
 /**
- * The command that runs the pnpm which started this process, read from the
- * `npm_execpath` a package manager sets for its scripts: its JavaScript entry
- * under this Node.js, or its executable. A bare `pnpm` when no pnpm started
- * it, such as under npm, yarn or a shell.
- */
-function callerPnpm(env: NodeJS.ProcessEnv): string[] {
-  const execPath = env.npm_execpath;
-  if (!execPath || !basename(execPath).toLowerCase().startsWith("pnpm"))
-    return ["pnpm"];
-  return JAVASCRIPT_FILE.test(execPath)
-    ? [process.execPath, execPath]
-    : [execPath];
-}
-
-/**
- * Runs pnpm in a generated workspace as `runFramedCommand` runs a child. The
- * workspace pins no package manager and the pnpm is the caller's, so a project
- * run by `corepack pnpm@<version>` installs with that version: pnpm under
- * corepack refuses a pin it does not match, and the `pnpm` on `PATH` can be
- * another one. Corepack's strict check is off, so its `pnpm` shim also runs in
- * a project that pins npm or yarn.
+ * Runs pnpm in a generated workspace as `runFramedCommand` runs a child,
+ * without the `COREPACK_ROOT` of a project that corepack runs. The workspace
+ * pins the pnpm its patches and settings need, and pnpm switches itself to
+ * that version unless it sees `COREPACK_ROOT`, under which it refuses a pin it
+ * does not match.
  */
 export function runWorkspacePnpm(
   args: string[],
   options: FramedCommandOptions,
 ): Promise<FramedCommandResult> {
-  const env = options.env ?? process.env;
-  const [command = "pnpm", ...prefix] = callerPnpm(env);
-  return runFramedCommand(command, [...prefix, ...args], {
-    ...options,
-    env: { ...env, COREPACK_ENABLE_STRICT: "0" },
-  });
+  const { COREPACK_ROOT: _corepackRoot, ...env } = options.env ?? process.env;
+  return runFramedCommand("pnpm", args, { ...options, env });
 }
 
 /**
