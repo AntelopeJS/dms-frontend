@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { reapChildrenOnDeath } from "../../src/child-reaper";
 import { createTemporaryWorkspace } from "../../src/temporary-workspace";
-import { runCommand } from "../../src/workspace-setup";
+import { runCommand } from "../../src/child-command";
 
 const child = join(dirname(fileURLToPath(import.meta.url)), "process-tree.mjs");
 reapChildrenOnDeath();

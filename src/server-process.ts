@@ -11,7 +11,7 @@ import {
 import type { PathMapper } from "./child-output";
 import type { ReadyLine } from "./output";
 import { CancelledError } from "./cancellation";
-import { runCommand } from "./workspace-setup";
+import { runCommand } from "./child-command";
 import { isNumber, isObjectLike, isText } from "./internal/guards";
 
 const READY_MESSAGE = "dms:ready";

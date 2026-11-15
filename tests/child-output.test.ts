@@ -15,7 +15,7 @@ import {
   VERBOSE_OUTPUT_HINT,
 } from "../src/child-output";
 import type { ResolvedLayer } from "../src/workspace";
-import { runFramedCommand } from "../src/workspace-setup";
+import { runFramedCommand } from "../src/child-command";
 
 const WORKSPACE = "/home/user/.antelopejs/dms-frontend/f6af15c7221e3402";
 

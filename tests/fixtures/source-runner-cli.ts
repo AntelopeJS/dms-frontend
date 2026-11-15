@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runCommand } from "../../src/workspace-setup";
+import { runCommand } from "../../src/child-command";
 
 const runner = join(
   dirname(fileURLToPath(import.meta.url)),

@@ -8,7 +8,7 @@ import {
 } from "@antelopejs/core/cli";
 import { describeChildFailure, type PathMapper } from "./child-output";
 import { BUILD_STEPS, buildStepFailure } from "./commands/build-action";
-import { runFramedCommand } from "./common";
+import { runFramedCommand, runWorkspacePnpm } from "./common";
 import { isTextList } from "./internal/text-list";
 import { isPlainObject } from "./internal/plain-object";
 import {
@@ -45,8 +45,7 @@ export async function generateTypeDeclarations(
   await getProcessTasks().run(
     "Generating the type declarations",
     async (task) => {
-      const result = await runFramedCommand(
-        "pnpm",
+      const result = await runWorkspacePnpm(
         ["--silent", "run", "build:types"],
         {
           name: "types",
@@ -122,17 +121,13 @@ async function buildBundle(
   await getProcessTasks().run(
     step.running,
     async (task) => {
-      const result = await runFramedCommand(
-        "pnpm",
-        ["--silent", "run", step.script],
-        {
-          name: step.name,
-          cwd: context.workspace,
-          env: context.env,
-          mapLine: context.mapLine,
-          onLine: (line) => warnings.read(line),
-        },
-      );
+      const result = await runWorkspacePnpm(["--silent", "run", step.script], {
+        name: step.name,
+        cwd: context.workspace,
+        env: context.env,
+        mapLine: context.mapLine,
+        onLine: (line) => warnings.read(line),
+      });
       if (result.code === 0) return;
       task.fail(step.failed);
       throw buildStepFailure(
