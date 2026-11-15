@@ -23,7 +23,7 @@ import {
 import {
   CancelledError,
   type FramedCommandResult,
-  runFramedCommand,
+  runWorkspacePnpm,
 } from "../common";
 import {
   endInterruptedTask,
@@ -279,7 +279,7 @@ async function runBuildStep(
   const task = getProcessTasks().start(step.running);
   let result: FramedCommandResult;
   try {
-    result = await runFramedCommand("pnpm", ["--silent", "run", step.script], {
+    result = await runWorkspacePnpm(["--silent", "run", step.script], {
       name: step.name,
       cwd: context.workspaceDir,
       env: context.env,

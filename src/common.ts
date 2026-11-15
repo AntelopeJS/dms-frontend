@@ -13,3 +13,4 @@ export * from "./app-configs";
 export * from "./renderer-range";
 export * from "./workspace";
 export * from "./workspace-setup";
+export * from "./child-command";

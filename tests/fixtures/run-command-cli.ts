@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runCommand } from "../../src/workspace-setup";
+import { runCommand } from "../../src/child-command";
 
 const child = join(dirname(fileURLToPath(import.meta.url)), "process-tree.mjs");
 void runCommand(process.execPath, [child], { stdio: "ignore" });
