@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { isPlainObject } from "../src/internal/plain-object";
 import {
+  declarationsRoot,
   isVueDeclaration,
   relocateAutoImports,
   relocateTsconfig,
@@ -48,6 +49,7 @@ function relocate(
   layers: RelocatedLayer[],
   outDir = OUT,
   dependencies: InstalledPackage[] = [],
+  rootDir = resolve("/"),
 ) {
   return relocateTsconfig({
     template: TEMPLATE,
@@ -55,6 +57,7 @@ function relocate(
     layers,
     outDir,
     dependencies,
+    rootDir,
   });
 }
 
@@ -65,15 +68,15 @@ void describe("relocateTsconfig", () => {
       "#dms/frontend-module": ["./frontend-module.ts"],
       "@frontend/antelopejs__dms-frontend-vue/*": [
         "../../dms/core/*",
-        "./vue-declarations/dms/core/*",
+        "./vue-declarations/work/dms/core/*",
       ],
       "@frontend/shop-vue/*": [
         "../shop-vue/*",
-        "./vue-declarations/project/shop-vue/*",
+        "./vue-declarations/work/project/shop-vue/*",
       ],
       "#dms-core/*": [
         "../../dms/core/layers/dms-core/*",
-        "./vue-declarations/dms/core/layers/dms-core/*",
+        "./vue-declarations/work/dms/core/layers/dms-core/*",
       ],
     });
   });
@@ -85,7 +88,7 @@ void describe("relocateTsconfig", () => {
       strict: true,
       types: [],
       allowArbitraryExtensions: true,
-      rootDirs: ["../..", "./vue-declarations"],
+      rootDirs: ["../../..", "./vue-declarations"],
     });
     assert.deepEqual(Object.keys(config), [
       "compilerOptions",
@@ -165,6 +168,62 @@ void describe("relocateTsconfig", () => {
   });
 });
 
+void describe("relocateTsconfig with the declarations lifted to a directory", () => {
+  void it("aims each mirror target and rootDirs at that directory, naming none above it", () => {
+    const config = relocate([CORE, SHOP], OUT, [], resolve("/work"));
+    assert.deepEqual(config.compilerOptions.paths, {
+      "#dms/frontend-module": ["./frontend-module.ts"],
+      "@frontend/antelopejs__dms-frontend-vue/*": [
+        "../../dms/core/*",
+        "./vue-declarations/dms/core/*",
+      ],
+      "@frontend/shop-vue/*": [
+        "../shop-vue/*",
+        "./vue-declarations/project/shop-vue/*",
+      ],
+      "#dms-core/*": [
+        "../../dms/core/layers/dms-core/*",
+        "./vue-declarations/dms/core/layers/dms-core/*",
+      ],
+    });
+    assert.deepEqual(config.compilerOptions.rootDirs, [
+      "../..",
+      "./vue-declarations",
+    ]);
+  });
+});
+
+void describe("declarationsRoot", () => {
+  void it("is the deepest directory that holds every path", () => {
+    assert.equal(
+      declarationsRoot([
+        resolve("/work/project/shop-vue"),
+        resolve("/work/project/node_modules/dms/core"),
+        resolve("/work/shared"),
+      ]),
+      resolve("/work"),
+    );
+    assert.equal(
+      declarationsRoot([
+        resolve("/work/project"),
+        resolve("/work/project/app"),
+      ]),
+      resolve("/work/project"),
+    );
+  });
+
+  void it(
+    "refuses paths on different drives",
+    { skip: process.platform !== "win32" && "drives are a Windows notion" },
+    () => {
+      assert.throws(
+        () => declarationsRoot(["C:\\work\\shop", "D:\\work\\core"]),
+        (error) => error instanceof CliError,
+      );
+    },
+  );
+});
+
 void describe("relocateTsconfig with @types packages", () => {
   void it("resolves a package that declares no types from its @types package, and one that does from itself", () => {
     const installed = (
@@ -236,7 +295,7 @@ void describe("relocateAutoImports", () => {
 });
 
 void describe("vueDeclarationsConfig", () => {
-  void it("emits only declarations, for the .vue files of every source, from the directory that holds them and the output, with the global types in the output", () => {
+  void it("emits only declarations, for the .vue files of every source, from the filesystem root, with the global types in the output", () => {
     assert.deepEqual(
       vueDeclarationsConfig({ layers: [CORE, SHOP], outDir: OUT }),
       {
@@ -247,7 +306,7 @@ void describe("vueDeclarationsConfig", () => {
           emitDeclarationOnly: true,
           noEmitOnError: false,
           outDir: "./vue-declarations",
-          rootDir: "../..",
+          rootDir: "../../..",
         },
         include: ["../../dms/core/**/*.vue", "../shop-vue/**/*.vue"],
         vueCompilerOptions: { globalTypesPath: "./vue-global-types.d.ts" },
@@ -273,12 +332,13 @@ function emittedTo(
 }
 
 void describe("the .vue declarations emit", () => {
-  void it("writes the declaration of any file below the directory that holds the output and the sources under vue-declarations, one outside the sources included", () => {
+  void it("writes the declaration of any file of the drive under vue-declarations, one outside the sources included", () => {
     const config = vueDeclarationsConfig({ layers: [CORE, SHOP], outDir: OUT });
     const declarations = join(OUT, "vue-declarations");
     for (const file of [
       join(CORE.source, "app", "Table.vue"),
       resolve("/work/shared/util.ts"),
+      resolve("/elsewhere/util.ts"),
     ]) {
       const path = relative(declarations, emittedTo(config, file));
       assert.ok(!path.startsWith("..") && !isAbsolute(path), file);

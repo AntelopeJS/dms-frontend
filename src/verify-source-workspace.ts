@@ -15,6 +15,7 @@ import {
   writeFrontendModuleRegistry,
   writeWorkspacePackageJson,
 } from "./common";
+import { toPosixPath } from "./fs-sync";
 import { ensure } from "./internal/ensure";
 import { isText } from "./internal/guards";
 import { isPlainObject } from "./internal/plain-object";
@@ -121,6 +122,18 @@ function resolveSpec(root: string, spec: string): string {
 }
 
 /**
+ * `spec` with an absolute `file:` or `link:` path made relative to
+ * `workspace`, which pnpm resolves its overrides from, so the workspace names
+ * no path of the machine. A path on another drive stays absolute.
+ */
+function workspaceSpec(workspace: string, spec: string): string {
+  const protocol = PATH_PROTOCOLS.find((prefix) => spec.startsWith(prefix));
+  if (!protocol) return spec;
+  const path = relative(workspace, spec.slice(protocol.length));
+  return isAbsolute(path) ? spec : `${protocol}${toPosixPath(path)}`;
+}
+
+/**
  * Fills `workspace` with the renderer template and `layers`, carries the
  * overrides the layers were installed with, and points the layers and `localPackages` at
  * their copies through `pnpm.overrides`, over any layer override.
@@ -157,22 +170,28 @@ export function materializeWorkspace(
     isPlainObject(workspacePackage),
     "The workspace package.json is not a JSON object",
   );
+  const overrides = {
+    ...Object.fromEntries(layers.flatMap(readLayerOverrides)),
+    ...Object.fromEntries(
+      layers.map((layer): [string, string] => [
+        String(layer.packageName),
+        "workspace:*",
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(localPackages).map(([name, path]) => [
+        name,
+        `link:${resolve(path)}`,
+      ]),
+    ),
+  };
   workspacePackage.pnpm = {
-    overrides: {
-      ...Object.fromEntries(layers.flatMap(readLayerOverrides)),
-      ...Object.fromEntries(
-        layers.map((layer): [string, string] => [
-          String(layer.packageName),
-          "workspace:*",
-        ]),
-      ),
-      ...Object.fromEntries(
-        Object.entries(localPackages).map(([name, path]) => [
-          name,
-          `link:${resolve(path)}`,
-        ]),
-      ),
-    },
+    overrides: Object.fromEntries(
+      Object.entries(overrides).map(([name, spec]) => [
+        name,
+        workspaceSpec(workspace, spec),
+      ]),
+    ),
   };
   writeFileSync(packagePath, `${JSON.stringify(workspacePackage, null, 2)}\n`);
 }

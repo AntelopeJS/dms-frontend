@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { getProcessTasks, isVerboseRun, pluralize } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
@@ -37,37 +38,39 @@ async function prepareTypes(): Promise<PreparationResult> {
   assertLayersSupportRenderer(layers);
   assertOutsideSources(out, runInputs(layers, options.localPackages));
   resetOutput(out);
+  const workspace = realpathSync.native(out);
   const isVerbose = isVerboseRun();
   const context: VerificationContext = {
-    workspace: out,
+    workspace,
     isVerbose,
-    mapLine: createPathMapper(out, layers),
+    mapLine: createPathMapper(workspace, layers),
     warnings: new ViteWarnings(),
     env: { ...process.env, [VITE_LOG_LEVEL_VARIABLE]: viteLogLevel(isVerbose) },
   };
   const tasks = getProcessTasks();
   await tasks.run(
     `Materializing ${pluralize(layers.length, "module")}`,
-    async () => materializeWorkspace(out, layers, options.localPackages),
+    async () => materializeWorkspace(workspace, layers, options.localPackages),
     { done: `Materialized ${pluralize(layers.length, "module")}` },
   );
-  await installDeps(out, context.mapLine, ["--ignore-scripts"]);
+  await installDeps(workspace, context.mapLine, ["--ignore-scripts"]);
   await generateTypeDeclarations(context);
-  await tasks.run(
+  const writeTsconfig = await tasks.run(
     "Pointing the types at the sources",
-    async () => writeRelocatedTypes(out, layers),
+    async () => writeRelocatedTypes(workspace, layers),
     { done: "Pointed the types at the sources" },
   );
-  await tasks.run(
+  const rootDir = await tasks.run(
     "Declaring the .vue files",
     async () => emitVueDeclarations(context, layers),
     { done: "Declared the .vue files" },
   );
+  writeTsconfig(rootDir);
   return {
     ok: true,
     modules: layers.length,
     out,
-    sources: layerTable(out, layers).map(({ source }) => source),
+    sources: layerTable(workspace, layers).map(({ source }) => source),
   };
 }
 

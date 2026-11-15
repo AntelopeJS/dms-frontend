@@ -7,12 +7,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import type { ResolvedLayer } from "../src/common";
 import { materializeWorkspace } from "../src/verify-source-workspace";
 import { jsonAt, readJson } from "./helpers/json";
+import { isText } from "./helpers/guards";
+import { isPlainObject } from "../src/internal/plain-object";
 
 const roots: string[] = [];
 after(() => {
@@ -68,14 +70,50 @@ function layer(
   return { path, packageName };
 }
 
-/** The `pnpm.overrides` of the workspace verify-source installs. */
-function workspaceOverrides(
+/** The `pnpm.overrides` the workspace verify-source installs writes, as written. */
+function writtenOverrides(
   layers: ResolvedLayer[],
   localPackages: Record<string, string> = {},
 ) {
   const workspace = directory("dms-verify-workspace-");
   materializeWorkspace(workspace, layers, localPackages);
-  return jsonAt(readJson(join(workspace, "package.json")), "pnpm", "overrides");
+  const overrides = jsonAt(
+    readJson(join(workspace, "package.json")),
+    "pnpm",
+    "overrides",
+  );
+  assert.ok(isPlainObject(overrides));
+  return {
+    workspace,
+    overrides: Object.fromEntries(
+      Object.entries(overrides).map(([name, spec]) => {
+        assert.ok(isText(spec));
+        return [name, spec];
+      }),
+    ),
+  };
+}
+
+const PATH_SPEC = /^(file:|link:)(.*)$/;
+
+/**
+ * The `pnpm.overrides` of the workspace verify-source installs, each `file:`
+ * and `link:` path resolved from the workspace as pnpm resolves it.
+ */
+function workspaceOverrides(
+  layers: ResolvedLayer[],
+  localPackages: Record<string, string> = {},
+): Record<string, string> {
+  const { workspace, overrides } = writtenOverrides(layers, localPackages);
+  return Object.fromEntries(
+    Object.entries(overrides).map(([name, spec]) => {
+      const match = PATH_SPEC.exec(spec);
+      return [
+        name,
+        match ? `${match[1]}${resolve(workspace, match[2] ?? "")}` : spec,
+      ];
+    }),
+  );
 }
 
 void describe("the workspace verify-source installs", () => {
@@ -196,6 +234,29 @@ void describe("the workspace verify-source installs", () => {
         "demo-frontend-vue": "workspace:*",
         "@antelopejs/dms": `link:${local}`,
       },
+    );
+  });
+});
+
+void describe("the overrides of the workspace verify-source installs", () => {
+  void it("writes every file: and link: path relative to the workspace, so it names no path of the machine", () => {
+    const local = directory("dms-local-");
+    const module = layer("demo-frontend-vue", {
+      [`${MODULE}/pnpm-lock.yaml`]: lockfile(
+        "is-odd: file:../.tgz-deps/is-odd-abc1234.tgz",
+      ),
+    });
+    const { overrides } = writtenOverrides([module], {
+      "@antelopejs/dms": local,
+    });
+    const paths = Object.values(overrides).flatMap((spec) => {
+      const match = PATH_SPEC.exec(spec);
+      return match ? [match[2] ?? ""] : [];
+    });
+    assert.equal(paths.length, 2);
+    assert.deepEqual(
+      paths.filter((path) => isAbsolute(path) || path.includes("\\")),
+      [],
     );
   });
 });

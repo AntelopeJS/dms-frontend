@@ -12,18 +12,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, parse, resolve, sep } from "node:path";
+import { basename, dirname, join, parse, resolve, sep } from "node:path";
 import { after, describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { pathToFileURL } from "node:url";
 import { emitVueDeclarations } from "../src/prepare-types-declarations";
 import {
+  filesystemRoot,
   layerTable,
   relocateTsconfig,
-  type Tsconfig,
 } from "../src/prepare-types-relocate";
 import { ViteWarnings } from "../src/vite-output";
-import { listTree } from "./helpers/files";
+import { listTree, readText } from "./helpers/files";
 
 const TEMPLATE = resolve("templates", "vue");
 const PRELOADS = [
@@ -111,8 +111,8 @@ function moduleImporting(shared: string): string {
   return source;
 }
 
-async function emit(out: string, source: string): Promise<void> {
-  await emitVueDeclarations(
+async function emit(out: string, source: string): Promise<string> {
+  return emitVueDeclarations(
     {
       workspace: out,
       isVerbose: false,
@@ -230,70 +230,110 @@ void describe("emitVueDeclarations", () => {
   );
 });
 
-/** A project with its module `shop` and the types `prepare-types` writes for it in `.dms-types`. */
-async function preparedProject(): Promise<{
-  project: string;
-  tsconfig: Tsconfig;
-}> {
-  const project = directory();
+/**
+ * A directory holding a project, `proj`, with its module `shop` and the types
+ * `prepare-types` writes for it in `.dms-types`, and the siblings `shared` and
+ * `shared-ui` that the module imports from by relative path. `files` are more
+ * files of the module, by path from its root.
+ */
+async function preparedProject(
+  files: Record<string, string> = {},
+): Promise<{ top: string; project: string }> {
+  const top = directory();
+  const project = join(top, "proj");
   const out = workspace([], join(project, ".dms-types"));
   const source = join(project, "shop");
-  mkdirSync(join(source, "app"), { recursive: true });
-  symlinkSync(
-    resolve("node_modules"),
-    join(project, "node_modules"),
-    "junction",
+  const write = (path: string, text: string) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, text);
+  };
+  symlinkSync(resolve("node_modules"), join(top, "node_modules"), "junction");
+  write(join(top, "shared", "ids.ts"), "export type Id = string;\n");
+  write(
+    join(top, "shared-ui", "Badge.vue"),
+    [
+      '<script setup lang="ts">',
+      'export type Tone = "info" | "alert";',
+      "defineProps<{ tone: Tone }>();",
+      "</script>",
+      "<template><b>{{ tone }}</b></template>",
+      "",
+    ].join("\n"),
   );
-  writeFileSync(
+  write(
     join(source, "app", "Cart.vue"),
     [
       '<script setup lang="ts">',
-      "export interface Row { id: string }",
+      'import type { Id } from "../../../shared/ids";',
+      'import type { Tone } from "../../../shared-ui/Badge.vue";',
+      "export interface Row { id: Id; tone: Tone }",
       "defineProps<{ rows: Row[] }>();",
       "</script>",
       "<template><p>{{ rows.length }}</p></template>",
       "",
     ].join("\n"),
   );
-  writeFileSync(
+  write(
     join(source, "app", "rows.ts"),
-    'import type { Row } from "./Cart.vue";\nexport const rows: Row[] = [{ id: "a" }];\n',
+    'import type { Row } from "./Cart.vue";\nimport type { Tone } from "../../../shared-ui/Badge.vue";\nconst tone: Tone = "info";\nexport const rows: Row[] = [{ id: "a", tone }];\n',
   );
+  for (const [path, text] of Object.entries(files))
+    write(join(source, path), text);
   const layers = [{ path: source, packageName: "@test/shop" }];
-  const tsconfig = relocateTsconfig({
-    template: {
-      compilerOptions: {
-        strict: true,
-        target: "ESNext",
-        module: "ESNext",
-        moduleResolution: "Bundler",
-        skipLibCheck: true,
-        noEmit: true,
-      },
-      files: [],
-      include: ["frontend-modules/**/*.ts"],
-      exclude: [],
-    },
-    paths: { "@frontend/*": ["./frontend-modules/*"] },
-    layers: layerTable(out, layers),
-    outDir: out,
-    dependencies: [],
-  });
-  writeFileSync(join(out, "tsconfig.json"), JSON.stringify(tsconfig));
+  const table = layerTable(out, layers);
+  const writeTsconfig = (rootDir: string) =>
+    writeFileSync(
+      join(out, "tsconfig.json"),
+      JSON.stringify(
+        relocateTsconfig({
+          template: {
+            compilerOptions: {
+              strict: true,
+              target: "ESNext",
+              module: "ESNext",
+              moduleResolution: "Bundler",
+              skipLibCheck: true,
+              noEmit: true,
+            },
+            files: [],
+            include: ["frontend-modules/**/*.ts"],
+            exclude: [],
+          },
+          paths: { "@frontend/*": ["./frontend-modules/*"] },
+          layers: table,
+          outDir: out,
+          dependencies: [],
+          rootDir,
+        }),
+      ),
+    );
+  writeTsconfig(filesystemRoot(table));
   writeFileSync(join(out, "types.d.ts"), "export {};\n");
-  await emit(out, source);
-  return { project, tsconfig };
+  writeTsconfig(await emit(out, source));
+  return { top, project };
 }
 
 void describe("a prepared project", () => {
-  void it("type-checks a component's named type after it moves", async () => {
-    const { project, tsconfig } = await preparedProject();
+  void it("type-checks the named types of its own and its siblings' components, in place and after it moves with them", async () => {
+    const { top, project } = await preparedProject();
     assert.equal(typecheck(join(project, ".dms-types")), "");
     const moved = join(directory(), "checked", "out", "elsewhere");
-    cpSync(project, moved, { recursive: true, verbatimSymlinks: true });
-    rmSync(project, { recursive: true, force: true });
-    assert.equal(typecheck(join(moved, ".dms-types")), "");
-    assert.ok(!JSON.stringify(tsconfig).includes(basename(project)));
+    cpSync(top, moved, { recursive: true, verbatimSymlinks: true });
+    rmSync(top, { recursive: true, force: true });
+    assert.equal(typecheck(join(moved, "proj", ".dms-types")), "");
+    assert.ok(
+      !readText(join(moved, "proj", ".dms-types", "tsconfig.json")).includes(
+        basename(top),
+      ),
+    );
+  });
+
+  void it("keeps the types a component imports from a sibling, so a wrong value is reported", async () => {
+    const { project } = await preparedProject({
+      "app/wrong.ts":
+        'import type { Row } from "./Cart.vue";\nexport const wrong: Row = { id: 1, tone: "info" };\n',
+    });
+    assert.match(typecheck(join(project, ".dms-types")), /wrong\.ts.*TS2322/);
   });
 });
 

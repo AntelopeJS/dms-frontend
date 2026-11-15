@@ -12,13 +12,14 @@ import { join, win32 } from "node:path";
 import { after, describe, it } from "node:test";
 import { runPrepareTypes } from "../src/commands/prepare-types-action";
 import { UsageError } from "../src/common";
-import { listNames } from "./helpers/files";
+import { listNames, listTree, readText } from "./helpers/files";
 import {
   assertOutsideSources,
   outputProblems,
   resetOutput,
   runInputs,
   TYPES_MARKER,
+  writeRelocatedTypes,
 } from "../src/prepare-types-output";
 import { layerTable } from "../src/prepare-types-relocate";
 
@@ -199,6 +200,45 @@ void describe("runInputs", () => {
         { label: "/src/unnamed", path: "/src/unnamed" },
         { label: "probe", path: "/pkg/probe" },
       ],
+    );
+  });
+});
+
+void describe("writeRelocatedTypes", () => {
+  void it("removes the files that name the copies by their absolute path, and writes none that names the output", () => {
+    const project = directory();
+    const source = join(project, "shop");
+    const out = join(project, ".dms-types");
+    const copy = join(out, "frontend-modules", "shop");
+    mkdirSync(source, { recursive: true });
+    mkdirSync(copy, { recursive: true });
+    const files = {
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { strict: true },
+        files: ["auto-imports.d.ts"],
+        include: ["frontend-modules/**/*.ts"],
+        exclude: [],
+      }),
+      "frontend-paths.generated.json": JSON.stringify({
+        compilerOptions: { paths: { "@frontend/*": ["./frontend-modules/*"] } },
+      }),
+      "package.json": JSON.stringify({ name: "workspace", dependencies: {} }),
+      "auto-imports.d.ts": "export {};\n",
+      "generated-frontend-modules.json": JSON.stringify({ root: copy }),
+      "sfc-global-types.generated.d.ts": `declare type Row = import(${JSON.stringify(copy)}).Row;\n`,
+      [join("frontend-modules", "shop", "package.json")]: JSON.stringify({
+        name: "shop",
+      }),
+    };
+    for (const [file, text] of Object.entries(files))
+      writeFileSync(join(out, file), text);
+    writeRelocatedTypes(out, [{ path: source, packageName: "shop" }])(project);
+    const written = listTree(out).filter((file) => /\.(json|ts)$/.test(file));
+    assert.ok(!written.includes("generated-frontend-modules.json"));
+    assert.ok(!written.includes("sfc-global-types.generated.d.ts"));
+    assert.deepEqual(
+      written.filter((file) => readText(join(out, file)).includes(project)),
+      [],
     );
   });
 });

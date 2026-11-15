@@ -14,6 +14,8 @@ import { isJsonObject } from "./internal/json";
 import { isPlainObject } from "./internal/plain-object";
 import { isTextList } from "./internal/text-list";
 import {
+  filesystemRoot,
+  isAtOrBelow,
   layerTable,
   relocateAutoImports,
   relocateTsconfig,
@@ -123,17 +125,6 @@ function realPath(path: string): string {
   }
 }
 
-/** Whether `path` is `directory` or lies below it. */
-function isAtOrBelow(directory: string, path: string): boolean {
-  const rel = nativePath.relative(directory, path);
-  return (
-    rel === "" ||
-    (rel !== ".." &&
-      !rel.startsWith(`..${nativePath.sep}`) &&
-      !nativePath.isAbsolute(rel))
-  );
-}
-
 /**
  * Refuses an `out` that is or holds an input of the run, which a reset would
  * then empty. Both sides are compared with their symlinks resolved.
@@ -225,11 +216,16 @@ function readDependencyNames(directory: string): string[] {
  * modules and the files that name them by their absolute path, so nothing
  * resolves a stale one and no path of the machine stays. Each copy keeps its
  * `node_modules`, where the dependencies of its module are installed.
+ *
+ * The `tsconfig.json` it writes lays `vue-declarations/` out from the
+ * filesystem root, as the declarations emit does. It returns the function
+ * that writes it again with the mirror laid out from another directory, the
+ * one the emitted tree is lifted to.
  */
 export function writeRelocatedTypes(
   out: string,
   layers: ResolvedLayer[],
-): void {
+): (rootDir: string) => void {
   const table = layerTable(out, layers);
   const template = readWorkspaceTsconfig(
     nativePath.join(out, WORKSPACE_TSCONFIG),
@@ -243,16 +239,27 @@ export function writeRelocatedTypes(
     })),
     modules: layers.map(({ packageName }) => packageName),
   });
-  const tsconfig = relocateTsconfig({
-    template,
-    paths: readGeneratedPaths(nativePath.join(out, GENERATED_PATHS)),
-    layers: table,
-    outDir: out,
-    dependencies: roots.map((root) => ({
-      ...root,
-      manifest: readManifest(root.root),
-    })),
-  });
+  const paths = readGeneratedPaths(nativePath.join(out, GENERATED_PATHS));
+  const dependencies = roots.map((root) => ({
+    ...root,
+    manifest: readManifest(root.root),
+  }));
+  const writeTsconfig = (rootDir: string) =>
+    writeFileSync(
+      nativePath.join(out, WORKSPACE_TSCONFIG),
+      `${JSON.stringify(
+        relocateTsconfig({
+          template,
+          paths,
+          layers: table,
+          outDir: out,
+          dependencies,
+          rootDir,
+        }),
+        null,
+        2,
+      )}\n`,
+    );
   const autoImports = nativePath.join(out, AUTO_IMPORTS);
   writeFileSync(
     autoImports,
@@ -260,13 +267,11 @@ export function writeRelocatedTypes(
   );
   writeFileSync(nativePath.join(out, VUE_SHIMS_FILE), VUE_SHIMS);
   writeFileSync(nativePath.join(out, TYPES_ENTRY_FILE), typesEntry(template));
-  writeFileSync(
-    nativePath.join(out, WORKSPACE_TSCONFIG),
-    `${JSON.stringify(tsconfig, null, 2)}\n`,
-  );
+  writeTsconfig(filesystemRoot(table));
   const copies = nativePath.join(out, LAYERS_SUBDIR);
   for (const copy of readdirSync(copies, { withFileTypes: true }))
     if (copy.isDirectory()) emptyButInstall(nativePath.join(copies, copy.name));
   for (const file of COPY_DESCRIPTIONS)
     rmSync(nativePath.join(out, file), { force: true });
+  return writeTsconfig;
 }
