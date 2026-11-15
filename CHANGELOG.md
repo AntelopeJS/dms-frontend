@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.11.4
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.3...v0.11.4)
+
+### 🩹 Fixes
+
+- **workspace:** Run the workspace's pnpm without corepack's root, so it switches to its pin ([#363](https://github.com/AntelopeJS/dms-frontend/pull/363))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.11.3
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.2...v0.11.3)
