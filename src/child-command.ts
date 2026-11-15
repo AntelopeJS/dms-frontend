@@ -166,9 +166,9 @@ function drainTimeout(): Promise<void> {
 /**
  * Runs pnpm in a generated workspace as `runFramedCommand` runs a child,
  * without the `COREPACK_ROOT` of a project that corepack runs. The workspace
- * pins the pnpm its patches and settings need, and pnpm switches itself to
- * that version unless it sees `COREPACK_ROOT`, under which it refuses a pin it
- * does not match.
+ * pins the pnpm its patches and settings need, and pnpm 10 and later switch
+ * themselves to that version unless they see `COREPACK_ROOT`: pnpm 11 and
+ * later then refuse a pin they do not match, and pnpm 10 runs as itself.
  */
 export function runWorkspacePnpm(
   args: string[],

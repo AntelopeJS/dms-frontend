@@ -133,8 +133,8 @@ const PNPM_INSTALL_ARGS = ["install", "--reporter=append-only"];
  * behind a gutter in a verbose run. `extraArgs` follow pnpm's own, e.g.
  * `--ignore-scripts`.
  *
- * Disables npm's update notifier: a DMS user has no reason to upgrade the pnpm
- * that installs a generated workspace.
+ * Disables npm's update notifier: the workspace pins its own pnpm, which a DMS
+ * user has no reason to upgrade.
  */
 export async function installDeps(
   workspaceDir: string,
