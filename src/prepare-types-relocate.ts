@@ -329,7 +329,7 @@ export function vueDeclarationsConfig({
 
 const MODULE_SPECIFIER = /(import\(|\bfrom )(['"])([^'"\n]*)\2/g;
 const REACHED_BY =
-  /^\s+(?:Imported|Referenced) via (['"])(.*?)\1 from file '(.*?)'(?: with packageId '.*')?$/;
+  /^\s+(Imported|Referenced) via (['"`])(.*?)\2 from file '(.*?)'(?: with packageId '.*')?$/;
 const RELATIVE_SPECIFIER = /^\.\.?(\/|$)/;
 
 /** Where `relativelyReached` starts from. */
@@ -357,12 +357,12 @@ export function relativelyReached(
   let file: string | undefined;
   for (const line of explanation.split(/\r?\n/)) {
     if (line !== "" && !/^\s/.test(line)) file = resolve(cwd, line);
-    const [, , specifier, importer] = REACHED_BY.exec(line) ?? [];
+    const [, verb, , specifier, importer] = REACHED_BY.exec(line) ?? [];
     if (
       file !== undefined &&
       specifier !== undefined &&
       importer !== undefined &&
-      RELATIVE_SPECIFIER.test(specifier)
+      (verb === "Referenced" || RELATIVE_SPECIFIER.test(specifier))
     )
       edges.push([resolve(cwd, importer), file]);
   }

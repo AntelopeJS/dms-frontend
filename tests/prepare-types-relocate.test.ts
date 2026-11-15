@@ -216,6 +216,10 @@ void describe("relativelyReached", () => {
       "  Imported via \"@ui/Badge.vue\" from file '../shop/app/Cart.vue'",
       "../../ui/tones.d.ts",
       "  Imported via './tones' from file '../../ui/Badge.vue'",
+      "../../lazy/thing.d.ts",
+      "  Imported via `../../../lazy/thing` from file '../shop/app/Cart.vue'",
+      "../../lazy/g.d.ts",
+      "  Referenced via 'g.d.ts' from file '../../lazy/thing.d.ts'",
       "",
     ].join("\n");
     assert.deepEqual(
@@ -224,6 +228,8 @@ void describe("relativelyReached", () => {
         declared: [resolve("/work/ui/Badge.vue")],
       }).sort(),
       [
+        resolve("/work/lazy/g.d.ts"),
+        resolve("/work/lazy/thing.d.ts"),
         resolve("/work/shared/ids.d.ts"),
         resolve("/work/shared/level/index.d.ts"),
         resolve("/work/shared/more.d.ts"),
