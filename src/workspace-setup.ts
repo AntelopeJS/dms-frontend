@@ -125,7 +125,11 @@ export function saveDepsHash(workspaceDir: string, layerPaths: string[]): void {
 }
 
 /** Append-only: the CLI reads pnpm's output line by line. */
-const PNPM_INSTALL_ARGS = ["install", "--reporter=append-only"];
+const PNPM_INSTALL_ARGS = [
+  "install",
+  "--no-frozen-lockfile",
+  "--reporter=append-only",
+];
 
 /**
  * Run pnpm install in the workspace directory, as one task whose label follows
