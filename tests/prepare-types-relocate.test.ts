@@ -210,16 +210,26 @@ void describe("relativelyReached", () => {
       "  Imported via \"vue\" from file '../shop/app/Cart.vue' with packageId 'vue/dist/vue.d.ts@3.5.0'",
       "node_modules/vue/dist/runtime.d.ts",
       "  Imported via './runtime' from file 'node_modules/vue/dist/vue.d.ts'",
+      "../../shared/level/index.d.ts",
+      "  Imported via \"./level\" from file '../../shared/more.d.ts' with packageId 'level/index.d.ts@1.0.0'",
+      "../../ui/Badge.vue",
+      "  Imported via \"@ui/Badge.vue\" from file '../shop/app/Cart.vue'",
+      "../../ui/tones.d.ts",
+      "  Imported via './tones' from file '../../ui/Badge.vue'",
       "",
     ].join("\n");
     assert.deepEqual(
-      relativelyReached(explanation, cwd, [
-        resolve("/work/project/shop"),
-      ]).sort(),
+      relativelyReached(explanation, cwd, {
+        sources: [resolve("/work/project/shop")],
+        declared: [resolve("/work/ui/Badge.vue")],
+      }).sort(),
       [
         resolve("/work/shared/ids.d.ts"),
+        resolve("/work/shared/level/index.d.ts"),
         resolve("/work/shared/more.d.ts"),
         resolve("/work/typings/globals.d.ts"),
+        resolve("/work/ui/Badge.vue"),
+        resolve("/work/ui/tones.d.ts"),
       ],
     );
   });

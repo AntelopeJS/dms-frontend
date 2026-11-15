@@ -329,20 +329,29 @@ export function vueDeclarationsConfig({
 
 const MODULE_SPECIFIER = /(import\(|\bfrom )(['"])([^'"\n]*)\2/g;
 const REACHED_BY =
-  /^\s+(?:Imported|Referenced) via (['"])(.*?)\1 from file '(.*)'/;
+  /^\s+(?:Imported|Referenced) via (['"])(.*?)\1 from file '(.*?)'(?: with packageId '.*')?$/;
 const RELATIVE_SPECIFIER = /^\.\.?(\/|$)/;
+
+/** Where `relativelyReached` starts from. */
+export interface Reach {
+  /** The directories of the module sources. */
+  sources: string[];
+  /** The components a `.vue` declaration was emitted for, wherever they lie. */
+  declared: string[];
+}
 
 /**
  * The files that `explanation`, the output of `tsc --explainFiles`, shows the
- * sources reach through relative imports and references alone: each file a
- * file under `sources`, or such a file, imports or references by a relative
- * path. A package imported by name, and every file it imports, is not reached.
- * The paths in `explanation` are relative to `cwd`.
+ * sources and the declared components reach through relative imports and
+ * references alone: each file that a file under `sources`, a declared
+ * component, or such a file imports or references by a relative path. A
+ * package imported by name, and every file it imports, is not reached. The
+ * paths in `explanation` are relative to `cwd`.
  */
 export function relativelyReached(
   explanation: string,
   cwd: string,
-  sources: string[],
+  { sources, declared }: Reach,
 ): string[] {
   const edges: [from: string, to: string][] = [];
   let file: string | undefined;
@@ -357,7 +366,7 @@ export function relativelyReached(
     )
       edges.push([resolve(cwd, importer), file]);
   }
-  const reached = new Set<string>();
+  const reached = new Set<string>(declared);
   const isReachedFrom = (path: string) =>
     reached.has(path) || sources.some((source) => isAtOrBelow(source, path));
   let grew = true;

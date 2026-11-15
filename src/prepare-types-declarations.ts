@@ -11,6 +11,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { CliError, pluralize } from "@antelopejs/core/cli";
 import { describeChildFailure } from "./child-output";
+import { isObjectLike, isText } from "./internal/guards";
 import { runFramedCommand } from "./common";
 import type { ResolvedLayer } from "./common";
 import {
@@ -31,18 +32,22 @@ const DECLARATION_SUFFIX = ".d.ts";
 const EXPLANATION_BUFFER = 512 * 1024 * 1024;
 const runFile = promisify(execFile);
 
+/** The output of `error`, a failed `execFile`, when it printed any. */
+function printedOutput(error: unknown): string | undefined {
+  if (!isObjectLike(error) || !("stdout" in error)) return undefined;
+  return isText(error.stdout) && error.stdout !== "" ? error.stdout : undefined;
+}
+
 /**
- * The files the declarations config of `workspace` reaches from `sources` by
- * relative imports and references, as `vue-tsc --explainFiles` lists them.
+ * Why each file is in the program of the declarations config of `workspace`,
+ * as `vue-tsc --listFilesOnly --explainFiles` prints it. A syntax error in a
+ * component exits 1 with the listing printed: the type check is the module's
+ * own to run, so only a run that printed nothing fails.
  */
-async function listReached(
-  workspace: string,
-  sources: string[],
-): Promise<string[]> {
+async function explainFiles(workspace: string): Promise<string> {
   const { NODE_OPTIONS: _nodeOptions, ...env } = process.env;
-  let stdout: string;
   try {
-    ({ stdout } = await runFile(
+    const { stdout } = await runFile(
       process.execPath,
       [
         "--import",
@@ -54,15 +59,17 @@ async function listReached(
         "--explainFiles",
       ],
       { cwd: workspace, env, maxBuffer: EXPLANATION_BUFFER },
-    ));
+    );
+    return stdout;
   } catch (error) {
+    const printed = printedOutput(error);
+    if (printed !== undefined) return printed;
     throw new CliError({
       title:
         "The files the .vue files of the sources import could not be listed",
       reason: error instanceof Error ? error.message : String(error),
     });
   }
-  return relativelyReached(stdout, workspace, sources);
 }
 
 /** The files under `directory`, none when it does not exist. */
@@ -191,10 +198,10 @@ export async function emitVueDeclarations(
     },
   );
   const sources = table.map(({ source }) => source);
-  let reached: string[];
+  let explanation: string;
   let components: string[];
   try {
-    reached = await listReached(workspace, sources);
+    explanation = await explainFiles(workspace);
     components = await listComponents(workspace);
   } finally {
     rmSync(config, { force: true });
@@ -202,12 +209,18 @@ export async function emitVueDeclarations(
   const emitted = join(workspace, VUE_DECLARATIONS_DIR);
   const fromRoot = filesystemRoot(table);
   keepVueDeclarations(emitted);
+  const declared = listFiles(emitted).map((file) =>
+    join(fromRoot, relative(emitted, file)).slice(
+      0,
+      -DECLARATION_SUFFIX.length,
+    ),
+  );
   const rootDir = declarationsRoot([
     ...sources,
-    ...listFiles(emitted).map((file) =>
-      dirname(join(fromRoot, relative(emitted, file))),
+    ...declared.map((component) => dirname(component)),
+    ...relativelyReached(explanation, workspace, { sources, declared }).map(
+      (file) => dirname(file),
     ),
-    ...reached.map((file) => dirname(file)),
   ]);
   liftTree(emitted, relative(fromRoot, rootDir));
   writeTsconfig(rootDir);

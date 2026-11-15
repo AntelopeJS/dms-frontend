@@ -159,6 +159,29 @@ void describe("emitVueDeclarations", () => {
     ]);
   });
 
+  void it("declares a component whose script holds a syntax error, the type check being the module's own", async () => {
+    const out = workspace();
+    const source = directory();
+    mkdirSync(join(source, "app"));
+    writeFileSync(
+      join(source, "app", "Cart.vue"),
+      [
+        '<script setup lang="ts">',
+        "export interface Row { id: string }",
+        "defineProps<{ rows: Row[] }>();",
+        "function oops() { let x = ; }",
+        "</script>",
+        "<template><p>{{ rows.length }}</p></template>",
+        "",
+      ].join("\n"),
+    );
+    await emit(out, source);
+    assert.deepEqual(files(join(out, "vue-declarations")), [
+      "app",
+      join("app", "Cart.vue.d.ts"),
+    ]);
+  });
+
   void it("writes the declarations when the output is a symlink at another depth than its real path", async () => {
     const out = workspace();
     const link = join(directory(), "nested", "deeper", "out");
