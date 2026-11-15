@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, parse, relative, resolve, sep } from "node:path";
+import { basename, join, parse, resolve, sep } from "node:path";
 import { after, describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { pathToFileURL } from "node:url";
@@ -152,7 +152,7 @@ void describe("emitVueDeclarations", () => {
     const declaration = join(
       out,
       "vue-declarations",
-      relative(parse(source).root, source),
+      basename(source),
       "app",
       "Cart.vue.d.ts",
     );
@@ -169,7 +169,7 @@ void describe("emitVueDeclarations", () => {
     const declaration = join(
       out,
       "vue-declarations",
-      relative(parse(source).root, source),
+      basename(source),
       "app",
       "Cart.vue.d.ts",
     );

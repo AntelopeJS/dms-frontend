@@ -39,6 +39,11 @@ const GENERATED_PATHS = "frontend-paths.generated.json";
 const WORKSPACE_TSCONFIG = "tsconfig.json";
 const AUTO_IMPORTS = "auto-imports.d.ts";
 const WORKSPACE_PACKAGE = "package.json";
+/** The files the workspace build writes that name the removed copies by their absolute path, which no type check reads. */
+const COPY_DESCRIPTIONS = [
+  "generated-frontend-modules.json",
+  "sfc-global-types.generated.d.ts",
+];
 
 function isEmptyDirectory(path: string): boolean {
   return readdirSync(path).length === 0;
@@ -217,7 +222,8 @@ function readDependencyNames(directory: string): string[] {
  * Turns the workspace at `out` into the tsconfig and auto-imports of the
  * sources: writes `tsconfig.json`, `types.d.ts`, `vue-shims.d.ts` and the
  * relocated `auto-imports.d.ts`, and removes the copied sources of the
- * modules, so nothing resolves a stale one. Each copy keeps its
+ * modules and the files that name them by their absolute path, so nothing
+ * resolves a stale one and no path of the machine stays. Each copy keeps its
  * `node_modules`, where the dependencies of its module are installed.
  */
 export function writeRelocatedTypes(
@@ -261,4 +267,6 @@ export function writeRelocatedTypes(
   const copies = nativePath.join(out, LAYERS_SUBDIR);
   for (const copy of readdirSync(copies, { withFileTypes: true }))
     if (copy.isDirectory()) emptyButInstall(nativePath.join(copies, copy.name));
+  for (const file of COPY_DESCRIPTIONS)
+    rmSync(nativePath.join(out, file), { force: true });
 }

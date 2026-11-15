@@ -6,13 +6,14 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join, parse, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { CliError, pluralize } from "@antelopejs/core/cli";
 import { describeChildFailure } from "./child-output";
 import { runFramedCommand } from "./common";
 import type { ResolvedLayer } from "./common";
 import {
+  declarationsRoot,
   isVueDeclaration,
   layerTable,
   VUE_DECLARATIONS_DIR,
@@ -62,9 +63,13 @@ async function listComponents(workspace: string): Promise<string[]> {
   return files.map((file) => resolve(file));
 }
 
-/** Where `vue-tsc` writes the declaration of `component` under `emitted`. */
-function declarationOf(emitted: string, component: string): string {
-  return `${join(emitted, relative(parse(component).root, component))}${DECLARATION_SUFFIX}`;
+/** Where `vue-tsc` writes the declaration of `component` under `emitted`, laid out from `rootDir`. */
+function declarationOf(
+  emitted: string,
+  rootDir: string,
+  component: string,
+): string {
+  return `${join(emitted, relative(rootDir, component))}${DECLARATION_SUFFIX}`;
 }
 
 /**
@@ -85,7 +90,7 @@ function keepVueDeclarations(directory: string): void {
  * the run fails when any `.vue` file the config includes is left without a
  * declaration, and lists each of them. `vue-tsc` may write nothing outside
  * `context.workspace`: the declaration of a `.ts` file a component imports from
- * another drive than the sources is refused, not written beside that file.
+ * outside `declarationsRoot` is refused, not written beside that file.
  */
 export async function emitVueDeclarations(
   context: VerificationContext,
@@ -132,8 +137,9 @@ export async function emitVueDeclarations(
   const components = await listComponents(workspace).finally(() =>
     rmSync(config, { force: true }),
   );
+  const rootDir = declarationsRoot(table, workspace);
   const missing = components.filter(
-    (component) => !existsSync(declarationOf(emitted, component)),
+    (component) => !existsSync(declarationOf(emitted, rootDir, component)),
   );
   if (missing.length === 0) return;
   const failure = describeChildFailure({
