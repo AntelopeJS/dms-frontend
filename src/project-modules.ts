@@ -374,7 +374,7 @@ function warnUndeclaredFrontend(id: string, folder: string): void {
 function registrationOf(
   id: string,
   folder: string,
-  config: unknown,
+  config: Parameters<FrontendModuleFunction>[0],
   context: FrontendModuleContext,
 ): FrontendRegistration | undefined {
   const declaration = readLayerPackage(folder)?.[FRONTEND_DECLARATION_FIELD];
