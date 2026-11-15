@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.11.3
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.2...v0.11.3)
+
+### 🩹 Fixes
+
+- ⚠️  Require @antelopejs/core ~1.23.1 and stop reading core 1.23.0's cache folder ([#361](https://github.com/AntelopeJS/dms-frontend/pull/361))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Require @antelopejs/core ~1.23.1 and stop reading core 1.23.0's cache folder ([#361](https://github.com/AntelopeJS/dms-frontend/pull/361))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.11.2
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.1...v0.11.2)
