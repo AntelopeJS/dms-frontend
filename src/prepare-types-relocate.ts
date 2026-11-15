@@ -328,16 +328,22 @@ export function vueDeclarationsConfig({
 }
 
 const MODULE_SPECIFIER = /(import\(|\bfrom )(['"])([^'"\n]*)\2/g;
+const IMPORTED_SPECIFIER =
+  /(?:\bimport\(\s*|\bfrom\s+|\bimport\s+)(['"])([^'"\n]*)\1/g;
 const RELATIVE_SPECIFIER = /^\.\.?(\/|$)/;
 
-/** The relative module specifiers of the `import(…)` and `from` clauses of `text`. */
+/**
+ * The relative module specifiers of the `import(…)`, `from` and side-effect
+ * `import` clauses of `text`.
+ */
 export function relativeImports(text: string): string[] {
-  return [...text.matchAll(MODULE_SPECIFIER)].flatMap(([, , , specifier]) =>
+  return [...text.matchAll(IMPORTED_SPECIFIER)].flatMap(([, , specifier]) =>
     specifier !== undefined && RELATIVE_SPECIFIER.test(specifier)
       ? [specifier]
       : [],
   );
 }
+
 const COPY_SPECIFIER = /(['"])\.\/frontend-modules\/[^'"\n]*/g;
 
 /**

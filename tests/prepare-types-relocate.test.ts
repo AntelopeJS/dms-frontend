@@ -6,6 +6,7 @@ import { isPlainObject } from "../src/internal/plain-object";
 import {
   declarationsRoot,
   isVueDeclaration,
+  relativeImports,
   relocateAutoImports,
   relocateTsconfig,
   type RelocatedLayer,
@@ -190,6 +191,33 @@ void describe("relocateTsconfig with the declarations lifted to a directory", ()
       "../..",
       "./vue-declarations",
     ]);
+  });
+});
+
+void describe("relativeImports", () => {
+  void it("lists the relative specifiers of every import form a declaration keeps, and no package", () => {
+    assert.deepEqual(
+      relativeImports(
+        [
+          'import "../../typings/globals";',
+          'import type { Row } from "./rows";',
+          'export * from "../shared";',
+          'export type { Id } from "..";',
+          'export declare const tone: import("./Badge.vue").Tone;',
+          'import { ref } from "vue";',
+          'import "#layer/setup";',
+          'declare const flag: typeof import(".");',
+        ].join("\n"),
+      ),
+      [
+        "../../typings/globals",
+        "./rows",
+        "../shared",
+        "..",
+        "./Badge.vue",
+        ".",
+      ],
+    );
   });
 });
 
