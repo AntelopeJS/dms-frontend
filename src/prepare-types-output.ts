@@ -14,6 +14,8 @@ import { isJsonObject } from "./internal/json";
 import { isPlainObject } from "./internal/plain-object";
 import { isTextList } from "./internal/text-list";
 import {
+  filesystemRoot,
+  isAtOrBelow,
   layerTable,
   relocateAutoImports,
   relocateTsconfig,
@@ -39,6 +41,11 @@ const GENERATED_PATHS = "frontend-paths.generated.json";
 const WORKSPACE_TSCONFIG = "tsconfig.json";
 const AUTO_IMPORTS = "auto-imports.d.ts";
 const WORKSPACE_PACKAGE = "package.json";
+/** The files the workspace build writes that name the removed copies by their absolute path, which no type check reads. */
+const COPY_DESCRIPTIONS = [
+  "generated-frontend-modules.json",
+  "sfc-global-types.generated.d.ts",
+];
 
 function isEmptyDirectory(path: string): boolean {
   return readdirSync(path).length === 0;
@@ -116,17 +123,6 @@ function realPath(path: string): string {
   } catch {
     return nativePath.resolve(path);
   }
-}
-
-/** Whether `path` is `directory` or lies below it. */
-function isAtOrBelow(directory: string, path: string): boolean {
-  const rel = nativePath.relative(directory, path);
-  return (
-    rel === "" ||
-    (rel !== ".." &&
-      !rel.startsWith(`..${nativePath.sep}`) &&
-      !nativePath.isAbsolute(rel))
-  );
 }
 
 /**
@@ -217,13 +213,19 @@ function readDependencyNames(directory: string): string[] {
  * Turns the workspace at `out` into the tsconfig and auto-imports of the
  * sources: writes `tsconfig.json`, `types.d.ts`, `vue-shims.d.ts` and the
  * relocated `auto-imports.d.ts`, and removes the copied sources of the
- * modules, so nothing resolves a stale one. Each copy keeps its
+ * modules and the files that name them by their absolute path, so nothing
+ * resolves a stale one and no path of the machine stays. Each copy keeps its
  * `node_modules`, where the dependencies of its module are installed.
+ *
+ * The `tsconfig.json` it writes lays `vue-declarations/` out from the
+ * filesystem root, as the declarations emit does. It returns the function
+ * that writes it again with the mirror laid out from another directory, the
+ * one the emitted tree is lifted to.
  */
 export function writeRelocatedTypes(
   out: string,
   layers: ResolvedLayer[],
-): void {
+): (rootDir: string) => void {
   const table = layerTable(out, layers);
   const template = readWorkspaceTsconfig(
     nativePath.join(out, WORKSPACE_TSCONFIG),
@@ -237,16 +239,27 @@ export function writeRelocatedTypes(
     })),
     modules: layers.map(({ packageName }) => packageName),
   });
-  const tsconfig = relocateTsconfig({
-    template,
-    paths: readGeneratedPaths(nativePath.join(out, GENERATED_PATHS)),
-    layers: table,
-    outDir: out,
-    dependencies: roots.map((root) => ({
-      ...root,
-      manifest: readManifest(root.root),
-    })),
-  });
+  const paths = readGeneratedPaths(nativePath.join(out, GENERATED_PATHS));
+  const dependencies = roots.map((root) => ({
+    ...root,
+    manifest: readManifest(root.root),
+  }));
+  const writeTsconfig = (rootDir: string) =>
+    writeFileSync(
+      nativePath.join(out, WORKSPACE_TSCONFIG),
+      `${JSON.stringify(
+        relocateTsconfig({
+          template,
+          paths,
+          layers: table,
+          outDir: out,
+          dependencies,
+          rootDir,
+        }),
+        null,
+        2,
+      )}\n`,
+    );
   const autoImports = nativePath.join(out, AUTO_IMPORTS);
   writeFileSync(
     autoImports,
@@ -254,11 +267,11 @@ export function writeRelocatedTypes(
   );
   writeFileSync(nativePath.join(out, VUE_SHIMS_FILE), VUE_SHIMS);
   writeFileSync(nativePath.join(out, TYPES_ENTRY_FILE), typesEntry(template));
-  writeFileSync(
-    nativePath.join(out, WORKSPACE_TSCONFIG),
-    `${JSON.stringify(tsconfig, null, 2)}\n`,
-  );
+  writeTsconfig(filesystemRoot(table));
   const copies = nativePath.join(out, LAYERS_SUBDIR);
   for (const copy of readdirSync(copies, { withFileTypes: true }))
     if (copy.isDirectory()) emptyButInstall(nativePath.join(copies, copy.name));
+  for (const file of COPY_DESCRIPTIONS)
+    rmSync(nativePath.join(out, file), { force: true });
+  return writeTsconfig;
 }

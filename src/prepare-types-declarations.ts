@@ -3,18 +3,23 @@ import {
   existsSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join, parse, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { CliError, pluralize } from "@antelopejs/core/cli";
 import { describeChildFailure } from "./child-output";
+import { isObjectLike, isText } from "./internal/guards";
 import { runFramedCommand } from "./common";
 import type { ResolvedLayer } from "./common";
 import {
+  declarationsRoot,
+  filesystemRoot,
   isVueDeclaration,
   layerTable,
+  relativelyReached,
   VUE_DECLARATIONS_DIR,
   vueDeclarationsConfig,
 } from "./prepare-types-relocate";
@@ -23,7 +28,49 @@ import type { VerificationContext } from "./verify-source-build";
 const DECLARATIONS_CONFIG = "tsconfig.vue-declarations.json";
 const COMPONENTS_SCRIPT = "./vue-components.mjs";
 const DECLARATION_SUFFIX = ".d.ts";
+/** Room for the output of `--explainFiles`, a few lines per file of the program. */
+const EXPLANATION_BUFFER = 512 * 1024 * 1024;
 const runFile = promisify(execFile);
+
+/** The output of `error`, a failed `execFile`, when it printed any. */
+function printedOutput(error: unknown): string | undefined {
+  if (!isObjectLike(error) || !("stdout" in error)) return undefined;
+  return isText(error.stdout) && error.stdout !== "" ? error.stdout : undefined;
+}
+
+/**
+ * Why each file is in the program of the declarations config of `workspace`,
+ * as `vue-tsc --listFilesOnly --explainFiles` prints it. A syntax error in a
+ * component exits 1 with the listing printed: the type check is the module's
+ * own to run, so only a run that printed nothing fails.
+ */
+async function explainFiles(workspace: string): Promise<string> {
+  const { NODE_OPTIONS: _nodeOptions, ...env } = process.env;
+  try {
+    const { stdout } = await runFile(
+      process.execPath,
+      [
+        "--import",
+        "./typecheck-loader.mjs",
+        "./node_modules/vue-tsc/bin/vue-tsc.js",
+        "--project",
+        DECLARATIONS_CONFIG,
+        "--listFilesOnly",
+        "--explainFiles",
+      ],
+      { cwd: workspace, env, maxBuffer: EXPLANATION_BUFFER },
+    );
+    return stdout;
+  } catch (error) {
+    const printed = printedOutput(error);
+    if (printed !== undefined) return printed;
+    throw new CliError({
+      title:
+        "The files the .vue files of the sources import could not be listed",
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 /** The files under `directory`, none when it does not exist. */
 function listFiles(directory: string): string[] {
@@ -62,9 +109,27 @@ async function listComponents(workspace: string): Promise<string[]> {
   return files.map((file) => resolve(file));
 }
 
-/** Where `vue-tsc` writes the declaration of `component` under `emitted`. */
-function declarationOf(emitted: string, component: string): string {
-  return `${join(emitted, relative(parse(component).root, component))}${DECLARATION_SUFFIX}`;
+/** Where the declaration of `component` lies under `emitted`, laid out from `rootDir`. */
+function declarationOf(
+  emitted: string,
+  rootDir: string,
+  component: string,
+): string {
+  return `${join(emitted, relative(rootDir, component))}${DECLARATION_SUFFIX}`;
+}
+
+/**
+ * Moves what `emitted` holds at `subtree` up to `emitted` itself, dropping the
+ * rest, which holds nothing but the directories above it.
+ */
+function liftTree(emitted: string, subtree: string): void {
+  if (subtree === "") return;
+  const lifted = join(emitted, subtree);
+  const holding = `${emitted}.lifted`;
+  rmSync(holding, { recursive: true, force: true });
+  if (existsSync(lifted)) renameSync(lifted, holding);
+  rmSync(emitted, { recursive: true, force: true });
+  if (existsSync(holding)) renameSync(holding, emitted);
 }
 
 /**
@@ -83,13 +148,18 @@ function keepVueDeclarations(directory: string): void {
  * skipped: it is the module's own to run. `vue-tsc` exits with a diagnostic for
  * each declaration that names a private type and writes none for that file;
  * the run fails when any `.vue` file the config includes is left without a
- * declaration, and lists each of them. `vue-tsc` may write nothing outside
+ * declaration, and lists each of them. The tree is emitted from the
+ * filesystem root, then lifted to the `declarationsRoot` of the sources, of
+ * every `.vue` declaration it holds and of every file the sources reach by
+ * relative imports and references, and `writeTsconfig` writes the tsconfig
+ * laid out from that directory. `vue-tsc` may write nothing outside
  * `context.workspace`: the declaration of a `.ts` file a component imports from
  * another drive than the sources is refused, not written beside that file.
  */
 export async function emitVueDeclarations(
   context: VerificationContext,
   layers: ResolvedLayer[],
+  writeTsconfig: (rootDir: string) => void,
 ): Promise<void> {
   const workspace = realpathSync.native(context.workspace);
   const table = layerTable(workspace, layers);
@@ -127,13 +197,35 @@ export async function emitVueDeclarations(
       mapLine: context.mapLine,
     },
   );
+  const sources = table.map(({ source }) => source);
+  let explanation: string;
+  let components: string[];
+  try {
+    explanation = await explainFiles(workspace);
+    components = await listComponents(workspace);
+  } finally {
+    rmSync(config, { force: true });
+  }
   const emitted = join(workspace, VUE_DECLARATIONS_DIR);
+  const fromRoot = filesystemRoot(table);
   keepVueDeclarations(emitted);
-  const components = await listComponents(workspace).finally(() =>
-    rmSync(config, { force: true }),
+  const declared = listFiles(emitted).map((file) =>
+    join(fromRoot, relative(emitted, file)).slice(
+      0,
+      -DECLARATION_SUFFIX.length,
+    ),
   );
+  const rootDir = declarationsRoot([
+    ...sources,
+    ...declared.map((component) => dirname(component)),
+    ...relativelyReached(explanation, workspace, { sources, declared }).map(
+      (file) => dirname(file),
+    ),
+  ]);
+  liftTree(emitted, relative(fromRoot, rootDir));
+  writeTsconfig(rootDir);
   const missing = components.filter(
-    (component) => !existsSync(declarationOf(emitted, component)),
+    (component) => !existsSync(declarationOf(emitted, rootDir, component)),
   );
   if (missing.length === 0) return;
   const failure = describeChildFailure({

@@ -53,14 +53,14 @@ async function prepareTypes(): Promise<PreparationResult> {
   );
   await installDeps(out, context.mapLine, ["--ignore-scripts"]);
   await generateTypeDeclarations(context);
-  await tasks.run(
+  const writeTsconfig = await tasks.run(
     "Pointing the types at the sources",
     async () => writeRelocatedTypes(out, layers),
     { done: "Pointed the types at the sources" },
   );
   await tasks.run(
     "Declaring the .vue files",
-    async () => emitVueDeclarations(context, layers),
+    async () => emitVueDeclarations(context, layers, writeTsconfig),
     { done: "Declared the .vue files" },
   );
   return {

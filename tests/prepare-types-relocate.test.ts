@@ -4,7 +4,9 @@ import { describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { isPlainObject } from "../src/internal/plain-object";
 import {
+  declarationsRoot,
   isVueDeclaration,
+  relativelyReached,
   relocateAutoImports,
   relocateTsconfig,
   type RelocatedLayer,
@@ -48,6 +50,7 @@ function relocate(
   layers: RelocatedLayer[],
   outDir = OUT,
   dependencies: InstalledPackage[] = [],
+  rootDir = resolve("/"),
 ) {
   return relocateTsconfig({
     template: TEMPLATE,
@@ -55,6 +58,7 @@ function relocate(
     layers,
     outDir,
     dependencies,
+    rootDir,
   });
 }
 
@@ -163,6 +167,109 @@ void describe("relocateTsconfig", () => {
       [true, false],
     );
   });
+});
+
+void describe("relocateTsconfig with the declarations lifted to a directory", () => {
+  void it("aims each mirror target and rootDirs at that directory, naming none above it", () => {
+    const config = relocate([CORE, SHOP], OUT, [], resolve("/work"));
+    assert.deepEqual(config.compilerOptions.paths, {
+      "#dms/frontend-module": ["./frontend-module.ts"],
+      "@frontend/antelopejs__dms-frontend-vue/*": [
+        "../../dms/core/*",
+        "./vue-declarations/dms/core/*",
+      ],
+      "@frontend/shop-vue/*": [
+        "../shop-vue/*",
+        "./vue-declarations/project/shop-vue/*",
+      ],
+      "#dms-core/*": [
+        "../../dms/core/layers/dms-core/*",
+        "./vue-declarations/dms/core/layers/dms-core/*",
+      ],
+    });
+    assert.deepEqual(config.compilerOptions.rootDirs, [
+      "../..",
+      "./vue-declarations",
+    ]);
+  });
+});
+
+void describe("relativelyReached", () => {
+  void it("follows relative imports and references from the sources, and no package or what it imports", () => {
+    const cwd = resolve("/work/project/.dms-types");
+    const explanation = [
+      "../shop/app/Cart.vue",
+      "  Matched by include pattern '../shop/**/*.vue' in 'tsconfig.vue-declarations.json'",
+      "../../shared/ids.d.ts",
+      "  Imported via \"../../../shared/ids.js\" from file '../shop/app/Cart.vue'",
+      "../../shared/more.d.ts",
+      "  Imported via './more' from file '../../shared/ids.d.ts'",
+      "../../typings/globals.d.ts",
+      "  Referenced via '../../../typings/globals.d.ts' from file '../shop/app/Cart.vue'",
+      "node_modules/vue/dist/vue.d.ts",
+      "  Imported via \"vue\" from file '../shop/app/Cart.vue' with packageId 'vue/dist/vue.d.ts@3.5.0'",
+      "node_modules/vue/dist/runtime.d.ts",
+      "  Imported via './runtime' from file 'node_modules/vue/dist/vue.d.ts'",
+      "../../shared/level/index.d.ts",
+      "  Imported via \"./level\" from file '../../shared/more.d.ts' with packageId 'level/index.d.ts@1.0.0'",
+      "../../ui/Badge.vue",
+      "  Imported via \"@ui/Badge.vue\" from file '../shop/app/Cart.vue'",
+      "../../ui/tones.d.ts",
+      "  Imported via './tones' from file '../../ui/Badge.vue'",
+      "../../lazy/thing.d.ts",
+      "  Imported via `../../../lazy/thing` from file '../shop/app/Cart.vue'",
+      "../../lazy/g.d.ts",
+      "  Referenced via 'g.d.ts' from file '../../lazy/thing.d.ts'",
+      "",
+    ].join("\n");
+    assert.deepEqual(
+      relativelyReached(explanation, cwd, {
+        sources: [resolve("/work/project/shop")],
+        declared: [resolve("/work/ui/Badge.vue")],
+      }).sort(),
+      [
+        resolve("/work/lazy/g.d.ts"),
+        resolve("/work/lazy/thing.d.ts"),
+        resolve("/work/shared/ids.d.ts"),
+        resolve("/work/shared/level/index.d.ts"),
+        resolve("/work/shared/more.d.ts"),
+        resolve("/work/typings/globals.d.ts"),
+        resolve("/work/ui/Badge.vue"),
+        resolve("/work/ui/tones.d.ts"),
+      ],
+    );
+  });
+});
+
+void describe("declarationsRoot", () => {
+  void it("is the deepest directory that holds every path", () => {
+    assert.equal(
+      declarationsRoot([
+        resolve("/work/project/shop-vue"),
+        resolve("/work/project/node_modules/dms/core"),
+        resolve("/work/shared"),
+      ]),
+      resolve("/work"),
+    );
+    assert.equal(
+      declarationsRoot([
+        resolve("/work/project"),
+        resolve("/work/project/app"),
+      ]),
+      resolve("/work/project"),
+    );
+  });
+
+  void it(
+    "refuses paths on different drives",
+    { skip: process.platform !== "win32" && "drives are a Windows notion" },
+    () => {
+      assert.throws(
+        () => declarationsRoot(["C:\\work\\shop", "D:\\work\\core"]),
+        (error) => error instanceof CliError,
+      );
+    },
+  );
 });
 
 void describe("relocateTsconfig with @types packages", () => {

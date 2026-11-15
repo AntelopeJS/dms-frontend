@@ -1,8 +1,8 @@
 import * as assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   copyFileSync,
-  existsSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
@@ -11,13 +11,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, parse, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, parse, resolve, sep } from "node:path";
 import { after, describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { pathToFileURL } from "node:url";
 import { emitVueDeclarations } from "../src/prepare-types-declarations";
+import {
+  filesystemRoot,
+  layerTable,
+  relocateTsconfig,
+} from "../src/prepare-types-relocate";
 import { ViteWarnings } from "../src/vite-output";
-import { listTree } from "./helpers/files";
+import { listTree, readText } from "./helpers/files";
 
 const TEMPLATE = resolve("templates", "vue");
 const PRELOADS = [
@@ -52,8 +57,8 @@ function otherDrive(): string | undefined {
 }
 
 /** A workspace that runs the repository's `vue-tsc` with the shipped preloads. */
-function workspace(exclude: string[] = []): string {
-  const out = directory();
+function workspace(exclude: string[] = [], out = directory()): string {
+  mkdirSync(out, { recursive: true });
   for (const file of PRELOADS)
     copyFileSync(join(TEMPLATE, file), join(out, file));
   symlinkSync(resolve("node_modules"), join(out, "node_modules"), "junction");
@@ -105,7 +110,11 @@ function moduleImporting(shared: string): string {
   return source;
 }
 
-async function emit(out: string, source: string): Promise<void> {
+async function emit(
+  out: string,
+  source: string,
+  writeTsconfig: (rootDir: string) => void = () => undefined,
+): Promise<void> {
   await emitVueDeclarations(
     {
       workspace: out,
@@ -115,7 +124,19 @@ async function emit(out: string, source: string): Promise<void> {
       env: process.env,
     },
     [{ path: source, packageName: "@test/shop" }],
+    writeTsconfig,
   );
+}
+
+/** The diagnostics `tsc` reports for the tsconfig in `out`, empty when it type-checks. */
+function typecheck(out: string): string {
+  const result = spawnSync(
+    process.execPath,
+    [resolve("node_modules", "typescript", "bin", "tsc"), "-p", out],
+    { cwd: out, encoding: "utf8" },
+  );
+  assert.equal(result.error, undefined);
+  return result.stdout;
 }
 
 /** Every path under `root`, relative to it. */
@@ -132,14 +153,33 @@ void describe("emitVueDeclarations", () => {
     await emit(out, source);
     assert.deepEqual(files(source), before);
     assert.deepEqual(files(shared), ["util.ts"]);
-    const declaration = join(
-      out,
-      "vue-declarations",
-      relative(parse(source).root, source),
+    assert.deepEqual(files(join(out, "vue-declarations")), [
       "app",
-      "Cart.vue.d.ts",
+      join("app", "Cart.vue.d.ts"),
+    ]);
+  });
+
+  void it("declares a component whose script holds a syntax error, the type check being the module's own", async () => {
+    const out = workspace();
+    const source = directory();
+    mkdirSync(join(source, "app"));
+    writeFileSync(
+      join(source, "app", "Cart.vue"),
+      [
+        '<script setup lang="ts">',
+        "export interface Row { id: string }",
+        "defineProps<{ rows: Row[] }>();",
+        "function oops() { let x = ; }",
+        "</script>",
+        "<template><p>{{ rows.length }}</p></template>",
+        "",
+      ].join("\n"),
     );
-    assert.ok(existsSync(declaration), declaration);
+    await emit(out, source);
+    assert.deepEqual(files(join(out, "vue-declarations")), [
+      "app",
+      join("app", "Cart.vue.d.ts"),
+    ]);
   });
 
   void it("writes the declarations when the output is a symlink at another depth than its real path", async () => {
@@ -149,14 +189,10 @@ void describe("emitVueDeclarations", () => {
     symlinkSync(out, link, "junction");
     const source = moduleImporting(directory());
     await emit(link, source);
-    const declaration = join(
-      out,
-      "vue-declarations",
-      relative(parse(source).root, source),
+    assert.deepEqual(files(join(out, "vue-declarations")), [
       "app",
-      "Cart.vue.d.ts",
-    );
-    assert.ok(existsSync(declaration), declaration);
+      join("app", "Cart.vue.d.ts"),
+    ]);
   });
 
   void it("fails and lists every component left without a declaration, and no component the configuration excludes", async () => {
@@ -180,21 +216,26 @@ void describe("emitVueDeclarations", () => {
     undeclarable("app", "List.vue");
     undeclarable("app", "nested", "Grid.vue");
     undeclarable("tests", "Fixture.vue");
-    await assert.rejects(emit(out, source), (error: Error) => {
-      assert.ok(error instanceof CliError);
-      assert.equal(
-        error.problem.title,
-        "No declaration was written for 2 .vue components",
-      );
-      assert.deepEqual(
-        error.problem.details?.filter((line) => line.endsWith(".vue")),
-        [
-          join(source, "app", "List.vue"),
-          join(source, "app", "nested", "Grid.vue"),
-        ],
-      );
-      return true;
-    });
+    const written: string[] = [];
+    await assert.rejects(
+      emit(out, source, (rootDir) => written.push(rootDir)),
+      (error: Error) => {
+        assert.ok(error instanceof CliError);
+        assert.equal(
+          error.problem.title,
+          "No declaration was written for 2 .vue components",
+        );
+        assert.deepEqual(
+          error.problem.details?.filter((line) => line.endsWith(".vue")),
+          [
+            join(source, "app", "List.vue"),
+            join(source, "app", "nested", "Grid.vue"),
+          ],
+        );
+        return true;
+      },
+    );
+    assert.equal(written.length, 1);
   });
 
   const shared = otherDrive();
@@ -211,6 +252,126 @@ void describe("emitVueDeclarations", () => {
       assert.deepEqual(files(shared), ["util.ts"]);
     },
   );
+});
+
+/**
+ * A directory holding a project, `proj`, with its module `shop` and the types
+ * `prepare-types` writes for it in `.dms-types`, the siblings `shared` and
+ * `shared-ui` and a hand-written declaration further up, `typings/flags.d.ts`,
+ * that the module imports from by relative path. `files` are more
+ * files of the module, by path from its root.
+ */
+async function preparedProject(
+  files: Record<string, string> = {},
+): Promise<{ top: string; project: string }> {
+  const top = directory();
+  const project = join(top, "ws", "proj");
+  const out = workspace([], join(project, ".dms-types"));
+  const source = join(project, "shop");
+  const write = (path: string, text: string) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, text);
+  };
+  symlinkSync(resolve("node_modules"), join(top, "node_modules"), "junction");
+  write(join(top, "ws", "shared", "ids.ts"), "export type Id = string;\n");
+  write(
+    join(top, "typings", "flags.d.ts"),
+    'export type Flag = "on" | "off";\n',
+  );
+  write(
+    join(top, "ws", "shared-ui", "Badge.vue"),
+    [
+      '<script setup lang="ts">',
+      'export type Tone = "info" | "alert";',
+      "defineProps<{ tone: Tone }>();",
+      "</script>",
+      "<template><b>{{ tone }}</b></template>",
+      "",
+    ].join("\n"),
+  );
+  write(
+    join(source, "app", "Cart.vue"),
+    [
+      '<script setup lang="ts">',
+      'import type { Id } from "../../../shared/ids";',
+      'import type { Tone } from "../../../shared-ui/Badge.vue";',
+      'import type { Flag } from "../../../../typings/flags.js";',
+      "export interface Row { id: Id; tone: Tone; flag: Flag }",
+      "defineProps<{",
+      `  /** Formatted as with: import { fmt } from "${"../".repeat(24)}shared/fmt" */`,
+      "  rows: Row[];",
+      "}>();",
+      "</script>",
+      "<template><p>{{ rows.length }}</p></template>",
+      "",
+    ].join("\n"),
+  );
+  write(
+    join(source, "app", "rows.ts"),
+    'import type { Row } from "./Cart.vue";\nimport type { Tone } from "../../../shared-ui/Badge.vue";\nconst tone: Tone = "info";\nexport const rows: Row[] = [{ id: "a", tone, flag: "on" }];\n',
+  );
+  for (const [path, text] of Object.entries(files))
+    write(join(source, path), text);
+  const layers = [{ path: source, packageName: "@test/shop" }];
+  const table = layerTable(out, layers);
+  const writeTsconfig = (rootDir: string) =>
+    writeFileSync(
+      join(out, "tsconfig.json"),
+      JSON.stringify(
+        relocateTsconfig({
+          template: {
+            compilerOptions: {
+              strict: true,
+              target: "ESNext",
+              module: "ESNext",
+              moduleResolution: "Bundler",
+              skipLibCheck: true,
+              noEmit: true,
+            },
+            files: [],
+            include: ["frontend-modules/**/*.ts"],
+            exclude: [],
+          },
+          paths: { "@frontend/*": ["./frontend-modules/*"] },
+          layers: table,
+          outDir: out,
+          dependencies: [],
+          rootDir,
+        }),
+      ),
+    );
+  writeTsconfig(filesystemRoot(table));
+  writeFileSync(join(out, "types.d.ts"), "export {};\n");
+  await emit(out, source, writeTsconfig);
+  return { top, project };
+}
+
+void describe("a prepared project", () => {
+  void it("type-checks the named types of its own and its siblings' components, in place and after it moves with them", async () => {
+    const { top, project } = await preparedProject();
+    assert.equal(typecheck(join(project, ".dms-types")), "");
+    const moved = join(directory(), "checked", "out", "elsewhere");
+    cpSync(top, moved, { recursive: true, verbatimSymlinks: true });
+    rmSync(top, { recursive: true, force: true });
+    assert.equal(typecheck(join(moved, "ws", "proj", ".dms-types")), "");
+    assert.ok(
+      !readText(
+        join(moved, "ws", "proj", ".dms-types", "tsconfig.json"),
+      ).includes(basename(top)),
+    );
+  });
+
+  void it("keeps the types a component imports from a sibling and from a hand-written declaration, so a wrong value is reported", async () => {
+    const { project } = await preparedProject({
+      "app/wrong-id.ts":
+        'import type { Row } from "./Cart.vue";\nexport const wrong: Row = { id: 1, tone: "info", flag: "on" };\n',
+      "app/wrong-flag.ts":
+        'import type { Row } from "./Cart.vue";\nexport const wrong: Row = { id: "a", tone: "info", flag: 1 };\n',
+    });
+    const diagnostics = typecheck(join(project, ".dms-types"));
+    assert.match(diagnostics, /wrong-id\.ts.*TS2322/);
+    assert.match(diagnostics, /wrong-flag\.ts.*TS2322/);
+  });
 });
 
 void describe("workspace-writes.mjs", () => {

@@ -1,5 +1,13 @@
 import { realpathSync } from "node:fs";
-import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  parse,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { CliError } from "@antelopejs/core/cli";
 import type { ResolvedLayer } from "./common";
 import { LAYERS_SUBDIR } from "./config";
@@ -138,12 +146,13 @@ function remapPaths(
 
 /**
  * The filesystem root the sources lie on: the `rootDir` of the `.vue`
- * declarations. TypeScript writes the declaration of a file outside `rootDir`
- * beside that file, so a narrower root would let a `.ts` file a component
- * imports from outside the sources be emitted outside `vue-declarations/`.
- * From the root, every file of the drive has its place under it.
+ * declarations emit. TypeScript writes the declaration of a file outside
+ * `rootDir` beside that file, so a narrower root would let a `.ts` file a
+ * component imports from outside the sources be emitted outside
+ * `vue-declarations/`. From the root, every file of the drive has its place
+ * under it. The emitted tree is then lifted to `declarationsRoot`.
  */
-function declarationsRoot(layers: RelocatedLayer[]): string {
+export function filesystemRoot(layers: RelocatedLayer[]): string {
   const [root, ...others] = layers.map(({ source }) => parse(source).root);
   if (root === undefined)
     throw new CliError({ title: "There is no module to find a directory for" });
@@ -155,11 +164,42 @@ function declarationsRoot(layers: RelocatedLayer[]): string {
   return root;
 }
 
+/** Whether `path` is `directory` or lies below it, as the platform compares paths. */
+export function isAtOrBelow(directory: string, path: string): boolean {
+  const rel = relative(directory, path);
+  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+/**
+ * The deepest directory that holds every one of `paths`: the directory the
+ * `.vue` declarations are laid out from, given every source and every file
+ * the emit wrote a declaration for. Laid out from it, the mirror and every
+ * path to it stay the same when the project moves with its sources, and name
+ * no directory of the machine above them.
+ */
+export function declarationsRoot(paths: string[]): string {
+  const [first, ...others] = paths;
+  if (first === undefined)
+    throw new CliError({ title: "There is no module to find a directory for" });
+  let root = first;
+  for (const path of others)
+    while (!isAtOrBelow(root, path)) {
+      const parent = dirname(root);
+      if (parent === root)
+        throw new CliError({
+          title: "The modules share no directory",
+          reason: "They lie on different drives.",
+        });
+      root = parent;
+    }
+  return root;
+}
+
 /** Where the declarations of the `.vue` files of `layers` mirror their sources. */
 interface Mirroring {
   layers: RelocatedLayer[];
   outDir: string;
-  /** The directory the mirror is laid out from: the filesystem root of the sources. */
+  /** The directory the mirror is laid out from. */
   rootDir: string;
 }
 
@@ -187,6 +227,8 @@ export interface TypesRelocation {
   outDir: string;
   /** The dependencies that no module owns, each resolved from where it is installed. */
   dependencies: InstalledPackage[];
+  /** The directory `vue-declarations/` mirrors: `filesystemRoot` before the emit, `declarationsRoot` after it. */
+  rootDir: string;
 }
 
 /**
@@ -207,8 +249,8 @@ export function relocateTsconfig({
   layers,
   outDir,
   dependencies,
+  rootDir,
 }: TypesRelocation): Tsconfig {
-  const rootDir = declarationsRoot(layers);
   const sources = layers.map(({ source }) => configPath(outDir, source));
   const insideSources = layers.some(({ source }) => isWithin(source, outDir));
   return {
@@ -276,7 +318,7 @@ export function vueDeclarationsConfig({
       emitDeclarationOnly: true,
       noEmitOnError: false,
       outDir: configPath(outDir, resolve(outDir, VUE_DECLARATIONS_DIR)),
-      rootDir: configPath(outDir, declarationsRoot(layers)),
+      rootDir: configPath(outDir, filesystemRoot(layers)),
     },
     include: layers.map(
       ({ source }) => `${configPath(outDir, source)}/**/*.vue`,
@@ -286,6 +328,59 @@ export function vueDeclarationsConfig({
 }
 
 const MODULE_SPECIFIER = /(import\(|\bfrom )(['"])([^'"\n]*)\2/g;
+const REACHED_BY =
+  /^\s+(Imported|Referenced) via (['"`])(.*?)\2 from file '(.*?)'(?: with packageId '.*')?$/;
+const RELATIVE_SPECIFIER = /^\.\.?(\/|$)/;
+
+/** Where `relativelyReached` starts from. */
+export interface Reach {
+  /** The directories of the module sources. */
+  sources: string[];
+  /** The components a `.vue` declaration was emitted for, wherever they lie. */
+  declared: string[];
+}
+
+/**
+ * The files that `explanation`, the output of `tsc --explainFiles`, shows the
+ * sources and the declared components reach through relative imports and
+ * references alone: each file that a file under `sources`, a declared
+ * component, or such a file imports or references by a relative path. A
+ * package imported by name, and every file it imports, is not reached. The
+ * paths in `explanation` are relative to `cwd`.
+ */
+export function relativelyReached(
+  explanation: string,
+  cwd: string,
+  { sources, declared }: Reach,
+): string[] {
+  const edges: [from: string, to: string][] = [];
+  let file: string | undefined;
+  for (const line of explanation.split(/\r?\n/)) {
+    if (line !== "" && !/^\s/.test(line)) file = resolve(cwd, line);
+    const [, verb, , specifier, importer] = REACHED_BY.exec(line) ?? [];
+    if (
+      file !== undefined &&
+      specifier !== undefined &&
+      importer !== undefined &&
+      (verb === "Referenced" || RELATIVE_SPECIFIER.test(specifier))
+    )
+      edges.push([resolve(cwd, importer), file]);
+  }
+  const reached = new Set<string>(declared);
+  const isReachedFrom = (path: string) =>
+    reached.has(path) || sources.some((source) => isAtOrBelow(source, path));
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [from, to] of edges)
+      if (!reached.has(to) && isReachedFrom(from)) {
+        reached.add(to);
+        grew = true;
+      }
+  }
+  return [...reached];
+}
+
 const COPY_SPECIFIER = /(['"])\.\/frontend-modules\/[^'"\n]*/g;
 
 /**
