@@ -17,6 +17,46 @@ function uiHeaders(headers: IncomingHttpHeaders): IncomingHttpHeaders {
   );
 }
 
+/** The `x-dms-ui-*` headers the backend gets from a server render's read that relays the client's header, then from one that sets its own. */
+async function checkServerRenderReads(
+  received: () => IncomingHttpHeaders,
+): Promise<[IncomingHttpHeaders, IncomingHttpHeaders]> {
+  const { serverComponentFetch } =
+    await import("../templates/vue/server/backend-request.mjs");
+  await serverComponentFetch(
+    requestOf({
+      headers: { "x-dms-ui-assistant": "1" },
+      remoteAddress: "127.0.0.1",
+    }),
+  )("/api/items", { headers: { "X-Dms-Ui-Other": "made up" } });
+  const relayed = uiHeaders(received());
+  await serverComponentFetch(requestOf({ remoteAddress: "127.0.0.1" }))(
+    "/api/items",
+    { headers: { "x-dms-ui-assistant": "made up" } },
+  );
+  return [relayed, uiHeaders(received())];
+}
+
+/** The `x-dms-ui-*` headers the backend gets from a server route that relays the client's header, then from one that sets its own. */
+async function checkServerRoutes(
+  received: () => IncomingHttpHeaders,
+): Promise<[IncomingHttpHeaders, IncomingHttpHeaders]> {
+  const { backend: callBackend } =
+    await import("../templates/vue/server/auth/backend.mjs");
+  const request = requestOf({
+    headers: { "x-dms-ui-assistant": "1" },
+    remoteAddress: "127.0.0.1",
+  });
+  await callBackend("/api/items", request, {
+    headers: { "X-Dms-Ui-Other": "made up" },
+  });
+  const relayed = uiHeaders(received());
+  await callBackend("/api/items", requestOf({ remoteAddress: "127.0.0.1" }), {
+    headers: { "x-dms-ui-assistant": "made up" },
+  });
+  return [relayed, uiHeaders(received())];
+}
+
 void describe("the relay forwards the x-dms-ui-* headers a module's client code sets", () => {
   const previous = {
     backend: process.env.DMS_API_BASE_URL,
@@ -117,20 +157,17 @@ void describe("the relay forwards the x-dms-ui-* headers a module's client code 
     assert.deepEqual(uiHeaders(received), {});
   });
 
+  void it("lets a server render's read relay the client's header and add none of its own", async () => {
+    assert.deepEqual(await checkServerRenderReads(() => received), [
+      { "x-dms-ui-assistant": "1" },
+      {},
+    ]);
+  });
+
   void it("lets a server route relay the client's header and add none of its own", async () => {
-    const { backend: callBackend } =
-      await import("../templates/vue/server/auth/backend.mjs");
-    const request = requestOf({
-      headers: { "x-dms-ui-assistant": "1" },
-      remoteAddress: "127.0.0.1",
-    });
-    await callBackend("/api/items", request, {
-      headers: { "X-Dms-Ui-Other": "made up" },
-    });
-    assert.deepEqual(uiHeaders(received), { "x-dms-ui-assistant": "1" });
-    await callBackend("/api/items", requestOf({ remoteAddress: "127.0.0.1" }), {
-      headers: { "x-dms-ui-assistant": "made up" },
-    });
-    assert.deepEqual(uiHeaders(received), {});
+    assert.deepEqual(await checkServerRoutes(() => received), [
+      { "x-dms-ui-assistant": "1" },
+      {},
+    ]);
   });
 });
