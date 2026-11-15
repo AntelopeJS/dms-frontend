@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { FakePnpmCli, projectHome } from "./fixtures/fake-pnpm-cli.mts";
 
-const INSTALL = ["install", "--reporter=append-only"];
+const INSTALL = ["install", "--no-frozen-lockfile", "--reporter=append-only"];
 const BUNDLES = [
   "build:client",
   "build:compress",
@@ -41,6 +41,25 @@ function registerSetupAndPreparedTests(): void {
     assert.match(
       run.stderr,
       /\nSet up the production workspace → \.\/\.dms-frontend · \S+\n\nNext steps\n {2}ajs dms build --prepared {2}builds this workspace as it is\n$/,
+    );
+  });
+
+  void it("installs without freezing the kept lockfile under CI", async () => {
+    const sandbox = await setUp();
+    writeFileSync(
+      join(sandbox, "frontend-vue/package.json"),
+      JSON.stringify({ name: "framed-layer", dependencies: { vue: "4" } }),
+    );
+
+    const run = await cli.run(["build", "--setup-only"], {
+      sandbox,
+      env: { CI: "1" },
+    });
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.deepEqual(
+      run.calls.map((call) => call.args),
+      [INSTALL],
     );
   });
 

@@ -92,7 +92,11 @@ function registerInstallAndBuildTests(): void {
     );
     assert.doesNotMatch(run.stderr, /Progress:|Scope:|DEP0169/);
     const [install] = run.calls;
-    assert.deepEqual(install.args, ["install", "--reporter=append-only"]);
+    assert.deepEqual(install.args, [
+      "install",
+      "--no-frozen-lockfile",
+      "--reporter=append-only",
+    ]);
     assert.equal(install.env.updateNotifier, "false");
   });
 
@@ -310,6 +314,7 @@ void describePosix("framing verify-source", () => {
     );
     assert.deepEqual(run.calls[0].args, [
       "install",
+      "--no-frozen-lockfile",
       "--reporter=append-only",
       "--ignore-scripts",
     ]);
