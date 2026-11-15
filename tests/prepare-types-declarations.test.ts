@@ -1,7 +1,8 @@
 import * as assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -11,11 +12,16 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, parse, relative, resolve, sep } from "node:path";
+import { basename, join, parse, relative, resolve, sep } from "node:path";
 import { after, describe, it } from "node:test";
 import { CliError } from "@antelopejs/core/cli";
 import { pathToFileURL } from "node:url";
 import { emitVueDeclarations } from "../src/prepare-types-declarations";
+import {
+  layerTable,
+  relocateTsconfig,
+  type Tsconfig,
+} from "../src/prepare-types-relocate";
 import { ViteWarnings } from "../src/vite-output";
 import { listTree } from "./helpers/files";
 
@@ -52,8 +58,8 @@ function otherDrive(): string | undefined {
 }
 
 /** A workspace that runs the repository's `vue-tsc` with the shipped preloads. */
-function workspace(exclude: string[] = []): string {
-  const out = directory();
+function workspace(exclude: string[] = [], out = directory()): string {
+  mkdirSync(out, { recursive: true });
   for (const file of PRELOADS)
     copyFileSync(join(TEMPLATE, file), join(out, file));
   symlinkSync(resolve("node_modules"), join(out, "node_modules"), "junction");
@@ -116,6 +122,17 @@ async function emit(out: string, source: string): Promise<void> {
     },
     [{ path: source, packageName: "@test/shop" }],
   );
+}
+
+/** The diagnostics `tsc` reports for the tsconfig in `out`, empty when it type-checks. */
+function typecheck(out: string): string {
+  const result = spawnSync(
+    process.execPath,
+    [resolve("node_modules", "typescript", "bin", "tsc"), "-p", out],
+    { cwd: out, encoding: "utf8" },
+  );
+  assert.equal(result.error, undefined);
+  return result.stdout;
 }
 
 /** Every path under `root`, relative to it. */
@@ -211,6 +228,73 @@ void describe("emitVueDeclarations", () => {
       assert.deepEqual(files(shared), ["util.ts"]);
     },
   );
+});
+
+/** A project with its module `shop` and the types `prepare-types` writes for it in `.dms-types`. */
+async function preparedProject(): Promise<{
+  project: string;
+  tsconfig: Tsconfig;
+}> {
+  const project = directory();
+  const out = workspace([], join(project, ".dms-types"));
+  const source = join(project, "shop");
+  mkdirSync(join(source, "app"), { recursive: true });
+  symlinkSync(
+    resolve("node_modules"),
+    join(project, "node_modules"),
+    "junction",
+  );
+  writeFileSync(
+    join(source, "app", "Cart.vue"),
+    [
+      '<script setup lang="ts">',
+      "export interface Row { id: string }",
+      "defineProps<{ rows: Row[] }>();",
+      "</script>",
+      "<template><p>{{ rows.length }}</p></template>",
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(source, "app", "rows.ts"),
+    'import type { Row } from "./Cart.vue";\nexport const rows: Row[] = [{ id: "a" }];\n',
+  );
+  const layers = [{ path: source, packageName: "@test/shop" }];
+  const tsconfig = relocateTsconfig({
+    template: {
+      compilerOptions: {
+        strict: true,
+        target: "ESNext",
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        skipLibCheck: true,
+        noEmit: true,
+      },
+      files: [],
+      include: ["frontend-modules/**/*.ts"],
+      exclude: [],
+    },
+    paths: { "@frontend/*": ["./frontend-modules/*"] },
+    layers: layerTable(out, layers),
+    outDir: out,
+    dependencies: [],
+  });
+  writeFileSync(join(out, "tsconfig.json"), JSON.stringify(tsconfig));
+  writeFileSync(join(out, "types.d.ts"), "export {};\n");
+  await emit(out, source);
+  return { project, tsconfig };
+}
+
+void describe("a prepared project", () => {
+  void it("type-checks a component's named type after it moves", async () => {
+    const { project, tsconfig } = await preparedProject();
+    assert.equal(typecheck(join(project, ".dms-types")), "");
+    const moved = join(directory(), "checked", "out", "elsewhere");
+    cpSync(project, moved, { recursive: true, verbatimSymlinks: true });
+    rmSync(project, { recursive: true, force: true });
+    assert.equal(typecheck(join(moved, ".dms-types")), "");
+    assert.ok(!JSON.stringify(tsconfig).includes(basename(project)));
+  });
 });
 
 void describe("workspace-writes.mjs", () => {
