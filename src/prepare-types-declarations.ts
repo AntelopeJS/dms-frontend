@@ -32,10 +32,10 @@ const DECLARATION_SUFFIX = ".d.ts";
 const EXPLANATION_BUFFER = 512 * 1024 * 1024;
 const runFile = promisify(execFile);
 
-/** The output of `error`, a failed `execFile`, when it printed any. */
-function printedOutput(error: unknown): string | undefined {
-  if (!isObjectLike(error) || !("stdout" in error)) return undefined;
-  return isText(error.stdout) && error.stdout !== "" ? error.stdout : undefined;
+/** The output of `cause`, a failed `execFile`, when it printed any. */
+function printedOutput(cause: unknown): string | undefined {
+  if (!isObjectLike(cause) || !("stdout" in cause)) return undefined;
+  return isText(cause.stdout) && cause.stdout !== "" ? cause.stdout : undefined;
 }
 
 /**
