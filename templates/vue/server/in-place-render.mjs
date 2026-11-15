@@ -1,4 +1,5 @@
 import { ofetch } from "ofetch";
+import { UI_HEADER_PREFIX } from "./auth/backend.mjs";
 
 /**
  * How many times one request renders a page in place of a same-path redirect
@@ -37,7 +38,8 @@ function reusableReadKey(path, options, headers) {
 
 /**
  * The backend reads of a request's server renders, sent with the request's
- * `backendHeaders()` and the read's own. After `reuseCompletedReads()`, a later
+ * `backendHeaders()` and the read's own, an `x-dms-ui-*` header among those
+ * dropped: the backend sees one only when the client sent it. After `reuseCompletedReads()`, a later
  * render of the same request is given a copy of each read a previous render
  * completed instead of reading the backend again.
  *
@@ -58,7 +60,7 @@ export function serverReads(backendHeaders) {
   const read = (path, options = {}) => {
     const headers = new Headers(backendHeaders());
     new Headers(options.headers).forEach((value, name) => {
-      headers.set(name, value);
+      if (!name.startsWith(UI_HEADER_PREFIX)) headers.set(name, value);
     });
     const key = reusableReadKey(path, options, headers);
     if (reuse && key && completed.has(key))
