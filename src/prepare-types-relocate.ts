@@ -328,7 +328,7 @@ export function vueDeclarationsConfig({
 }
 
 const MODULE_SPECIFIER = /(import\(|\bfrom )(['"])([^'"\n]*)\2/g;
-const RELATIVE_SPECIFIER = /^\.\.?\//;
+const RELATIVE_SPECIFIER = /^\.\.?(\/|$)/;
 
 /** The relative module specifiers of the `import(…)` and `from` clauses of `text`. */
 export function relativeImports(text: string): string[] {

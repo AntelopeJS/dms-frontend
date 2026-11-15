@@ -28,6 +28,32 @@ import type { VerificationContext } from "./verify-source-build";
 const DECLARATIONS_CONFIG = "tsconfig.vue-declarations.json";
 const COMPONENTS_SCRIPT = "./vue-components.mjs";
 const DECLARATION_SUFFIX = ".d.ts";
+/** The extensions TypeScript tries after a module specifier, `.vue` among them. */
+const MODULE_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".d.ts",
+  ".mts",
+  ".cts",
+  ".d.mts",
+  ".d.cts",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".vue",
+];
+
+/**
+ * Whether a module specifier resolved to `path` names a file or directory
+ * that exists, so a specifier only a comment of a declaration holds, such as
+ * an example in a prop's documentation, names nothing.
+ */
+function isModule(path: string): boolean {
+  return (
+    existsSync(path) ||
+    MODULE_EXTENSIONS.some((extension) => existsSync(`${path}${extension}`))
+  );
+}
 const runFile = promisify(execFile);
 
 /** The files under `directory`, none when it does not exist. */
@@ -162,13 +188,12 @@ export async function emitVueDeclarations(
   const rootDir = declarationsRoot([
     ...table.map(({ source }) => source),
     ...files.map((file) => dirname(origin(file))),
-    ...files
-      .filter(isVueDeclaration)
-      .flatMap((file) =>
-        relativeImports(readFileSync(file, "utf8")).map((specifier) =>
-          dirname(resolve(dirname(origin(file)), specifier)),
-        ),
-      ),
+    ...files.filter(isVueDeclaration).flatMap((file) =>
+      relativeImports(readFileSync(file, "utf8"))
+        .map((specifier) => resolve(dirname(origin(file)), specifier))
+        .filter(isModule)
+        .map((target) => dirname(target)),
+    ),
   ]);
   keepVueDeclarations(emitted);
   liftTree(emitted, relative(fromRoot, rootDir));

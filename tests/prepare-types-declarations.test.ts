@@ -202,21 +202,26 @@ void describe("emitVueDeclarations", () => {
     undeclarable("app", "List.vue");
     undeclarable("app", "nested", "Grid.vue");
     undeclarable("tests", "Fixture.vue");
-    await assert.rejects(emit(out, source), (error: Error) => {
-      assert.ok(error instanceof CliError);
-      assert.equal(
-        error.problem.title,
-        "No declaration was written for 2 .vue components",
-      );
-      assert.deepEqual(
-        error.problem.details?.filter((line) => line.endsWith(".vue")),
-        [
-          join(source, "app", "List.vue"),
-          join(source, "app", "nested", "Grid.vue"),
-        ],
-      );
-      return true;
-    });
+    const written: string[] = [];
+    await assert.rejects(
+      emit(out, source, (rootDir) => written.push(rootDir)),
+      (error: Error) => {
+        assert.ok(error instanceof CliError);
+        assert.equal(
+          error.problem.title,
+          "No declaration was written for 2 .vue components",
+        );
+        assert.deepEqual(
+          error.problem.details?.filter((line) => line.endsWith(".vue")),
+          [
+            join(source, "app", "List.vue"),
+            join(source, "app", "nested", "Grid.vue"),
+          ],
+        );
+        return true;
+      },
+    );
+    assert.equal(written.length, 1);
   });
 
   const shared = otherDrive();
@@ -278,7 +283,10 @@ async function preparedProject(
       'import type { Tone } from "../../../shared-ui/Badge.vue";',
       'import type { Flag } from "../../../../typings/flags";',
       "export interface Row { id: Id; tone: Tone; flag: Flag }",
-      "defineProps<{ rows: Row[] }>();",
+      "defineProps<{",
+      `  /** Formatted as with: import { fmt } from "${"../".repeat(24)}shared/fmt" */`,
+      "  rows: Row[];",
+      "}>();",
       "</script>",
       "<template><p>{{ rows.length }}</p></template>",
       "",
