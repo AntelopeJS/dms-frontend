@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.11.5
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.4...v0.11.5)
+
+### 🩹 Fixes
+
+- **prepare-types:** Write no path of the machine, so a moved project still type-checks ([#362](https://github.com/AntelopeJS/dms-frontend/pull/362))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.11.4
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.3...v0.11.4)
