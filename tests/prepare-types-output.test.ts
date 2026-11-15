@@ -13,6 +13,7 @@ import { after, describe, it } from "node:test";
 import { runPrepareTypes } from "../src/commands/prepare-types-action";
 import { UsageError } from "../src/common";
 import { listNames, listTree, readText } from "./helpers/files";
+import { jsonAt, readJson } from "./helpers/json";
 import {
   assertOutsideSources,
   outputProblems,
@@ -239,6 +240,14 @@ void describe("writeRelocatedTypes", () => {
     assert.deepEqual(
       written.filter((file) => readText(join(out, file)).includes(project)),
       [],
+    );
+    assert.deepEqual(
+      jsonAt(
+        readJson(join(out, "tsconfig.json")),
+        "compilerOptions",
+        "rootDirs",
+      ),
+      ["..", "./vue-declarations"],
     );
   });
 });

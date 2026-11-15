@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import {
   existsSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -18,6 +19,7 @@ import {
   filesystemRoot,
   isVueDeclaration,
   layerTable,
+  relativeImports,
   VUE_DECLARATIONS_DIR,
   vueDeclarationsConfig,
 } from "./prepare-types-relocate";
@@ -105,15 +107,18 @@ function keepVueDeclarations(directory: string): void {
  * each declaration that names a private type and writes none for that file;
  * the run fails when any `.vue` file the config includes is left without a
  * declaration, and lists each of them. The tree is emitted from the
- * filesystem root, then lifted to the `declarationsRoot` of the sources and of
- * every file it holds a declaration for, which it resolves to. `vue-tsc` may write nothing outside
+ * filesystem root, then lifted to the `declarationsRoot` of the sources, of
+ * every file it holds a declaration for and of every file a `.vue`
+ * declaration imports by relative path, and `writeTsconfig` writes the
+ * tsconfig laid out from that directory. `vue-tsc` may write nothing outside
  * `context.workspace`: the declaration of a `.ts` file a component imports from
  * another drive than the sources is refused, not written beside that file.
  */
 export async function emitVueDeclarations(
   context: VerificationContext,
   layers: ResolvedLayer[],
-): Promise<string> {
+  writeTsconfig: (rootDir: string) => void,
+): Promise<void> {
   const workspace = realpathSync.native(context.workspace);
   const table = layerTable(workspace, layers);
   const config = join(workspace, DECLARATIONS_CONFIG);
@@ -152,21 +157,29 @@ export async function emitVueDeclarations(
   );
   const emitted = join(workspace, VUE_DECLARATIONS_DIR);
   const fromRoot = filesystemRoot(table);
+  const files = listFiles(emitted);
+  const origin = (file: string) => join(fromRoot, relative(emitted, file));
   const rootDir = declarationsRoot([
     ...table.map(({ source }) => source),
-    ...listFiles(emitted).map((file) =>
-      dirname(join(fromRoot, relative(emitted, file))),
-    ),
+    ...files.map((file) => dirname(origin(file))),
+    ...files
+      .filter(isVueDeclaration)
+      .flatMap((file) =>
+        relativeImports(readFileSync(file, "utf8")).map((specifier) =>
+          dirname(resolve(dirname(origin(file)), specifier)),
+        ),
+      ),
   ]);
   keepVueDeclarations(emitted);
   liftTree(emitted, relative(fromRoot, rootDir));
+  writeTsconfig(rootDir);
   const components = await listComponents(workspace).finally(() =>
     rmSync(config, { force: true }),
   );
   const missing = components.filter(
     (component) => !existsSync(declarationOf(emitted, rootDir, component)),
   );
-  if (missing.length === 0) return rootDir;
+  if (missing.length === 0) return;
   const failure = describeChildFailure({
     title: `No declaration was written for ${pluralize(missing.length, ".vue component")}`,
     command: "vue-tsc --noCheck",

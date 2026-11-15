@@ -111,8 +111,12 @@ function moduleImporting(shared: string): string {
   return source;
 }
 
-async function emit(out: string, source: string): Promise<string> {
-  return emitVueDeclarations(
+async function emit(
+  out: string,
+  source: string,
+  writeTsconfig: (rootDir: string) => void = () => undefined,
+): Promise<void> {
+  await emitVueDeclarations(
     {
       workspace: out,
       isVerbose: false,
@@ -121,6 +125,7 @@ async function emit(out: string, source: string): Promise<string> {
       env: process.env,
     },
     [{ path: source, packageName: "@test/shop" }],
+    writeTsconfig,
   );
 }
 
@@ -232,15 +237,16 @@ void describe("emitVueDeclarations", () => {
 
 /**
  * A directory holding a project, `proj`, with its module `shop` and the types
- * `prepare-types` writes for it in `.dms-types`, and the siblings `shared` and
- * `shared-ui` that the module imports from by relative path. `files` are more
+ * `prepare-types` writes for it in `.dms-types`, the siblings `shared` and
+ * `shared-ui` and a hand-written declaration further up, `typings/flags.d.ts`,
+ * that the module imports from by relative path. `files` are more
  * files of the module, by path from its root.
  */
 async function preparedProject(
   files: Record<string, string> = {},
 ): Promise<{ top: string; project: string }> {
   const top = directory();
-  const project = join(top, "proj");
+  const project = join(top, "ws", "proj");
   const out = workspace([], join(project, ".dms-types"));
   const source = join(project, "shop");
   const write = (path: string, text: string) => {
@@ -248,9 +254,13 @@ async function preparedProject(
     writeFileSync(path, text);
   };
   symlinkSync(resolve("node_modules"), join(top, "node_modules"), "junction");
-  write(join(top, "shared", "ids.ts"), "export type Id = string;\n");
+  write(join(top, "ws", "shared", "ids.ts"), "export type Id = string;\n");
   write(
-    join(top, "shared-ui", "Badge.vue"),
+    join(top, "typings", "flags.d.ts"),
+    'export type Flag = "on" | "off";\n',
+  );
+  write(
+    join(top, "ws", "shared-ui", "Badge.vue"),
     [
       '<script setup lang="ts">',
       'export type Tone = "info" | "alert";',
@@ -266,7 +276,8 @@ async function preparedProject(
       '<script setup lang="ts">',
       'import type { Id } from "../../../shared/ids";',
       'import type { Tone } from "../../../shared-ui/Badge.vue";',
-      "export interface Row { id: Id; tone: Tone }",
+      'import type { Flag } from "../../../../typings/flags";',
+      "export interface Row { id: Id; tone: Tone; flag: Flag }",
       "defineProps<{ rows: Row[] }>();",
       "</script>",
       "<template><p>{{ rows.length }}</p></template>",
@@ -275,7 +286,7 @@ async function preparedProject(
   );
   write(
     join(source, "app", "rows.ts"),
-    'import type { Row } from "./Cart.vue";\nimport type { Tone } from "../../../shared-ui/Badge.vue";\nconst tone: Tone = "info";\nexport const rows: Row[] = [{ id: "a", tone }];\n',
+    'import type { Row } from "./Cart.vue";\nimport type { Tone } from "../../../shared-ui/Badge.vue";\nconst tone: Tone = "info";\nexport const rows: Row[] = [{ id: "a", tone, flag: "on" }];\n',
   );
   for (const [path, text] of Object.entries(files))
     write(join(source, path), text);
@@ -309,7 +320,7 @@ async function preparedProject(
     );
   writeTsconfig(filesystemRoot(table));
   writeFileSync(join(out, "types.d.ts"), "export {};\n");
-  writeTsconfig(await emit(out, source));
+  await emit(out, source, writeTsconfig);
   return { top, project };
 }
 
@@ -320,20 +331,24 @@ void describe("a prepared project", () => {
     const moved = join(directory(), "checked", "out", "elsewhere");
     cpSync(top, moved, { recursive: true, verbatimSymlinks: true });
     rmSync(top, { recursive: true, force: true });
-    assert.equal(typecheck(join(moved, "proj", ".dms-types")), "");
+    assert.equal(typecheck(join(moved, "ws", "proj", ".dms-types")), "");
     assert.ok(
-      !readText(join(moved, "proj", ".dms-types", "tsconfig.json")).includes(
-        basename(top),
-      ),
+      !readText(
+        join(moved, "ws", "proj", ".dms-types", "tsconfig.json"),
+      ).includes(basename(top)),
     );
   });
 
-  void it("keeps the types a component imports from a sibling, so a wrong value is reported", async () => {
+  void it("keeps the types a component imports from a sibling and from a hand-written declaration, so a wrong value is reported", async () => {
     const { project } = await preparedProject({
-      "app/wrong.ts":
-        'import type { Row } from "./Cart.vue";\nexport const wrong: Row = { id: 1, tone: "info" };\n',
+      "app/wrong-id.ts":
+        'import type { Row } from "./Cart.vue";\nexport const wrong: Row = { id: 1, tone: "info", flag: "on" };\n',
+      "app/wrong-flag.ts":
+        'import type { Row } from "./Cart.vue";\nexport const wrong: Row = { id: "a", tone: "info", flag: 1 };\n',
     });
-    assert.match(typecheck(join(project, ".dms-types")), /wrong\.ts.*TS2322/);
+    const diagnostics = typecheck(join(project, ".dms-types"));
+    assert.match(diagnostics, /wrong-id\.ts.*TS2322/);
+    assert.match(diagnostics, /wrong-flag\.ts.*TS2322/);
   });
 });
 
