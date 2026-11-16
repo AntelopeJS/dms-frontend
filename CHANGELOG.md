@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.11.7
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.6...v0.11.7)
+
+### 🩹 Fixes
+
+- **build:** Install the kept workspace without freezing its lockfile ([#368](https://github.com/AntelopeJS/dms-frontend/pull/368))
+- **deps:** Depend on the stable @antelopejs/dms, @antelopejs/interface-dms and @antelopejs/tooling-configs
+
+### 📦 Build
+
+- Move to @antelopejs/tooling-configs 0.8 and the three-tier CI ([#366](https://github.com/AntelopeJS/dms-frontend/pull/366))
+
+### ✅ Tests
+
+- **static-files:** Check the coding of a built file under any Accept-Encoding ([#369](https://github.com/AntelopeJS/dms-frontend/pull/369))
+- **e2e:** Run the verify skill's journeys as a Playwright suite in CI ([#370](https://github.com/AntelopeJS/dms-frontend/pull/370))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.11.6
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.5...v0.11.6)
