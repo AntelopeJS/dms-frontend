@@ -29,6 +29,7 @@ docs:
 - `verify-source-pass`: a module that builds and type-checks: the header counts two modules, the core layer's version, every step once (materialize, install, type declarations, server modules, e-mail bundle, client bundle, SSR bundle, type check), then the client bundle check, the e-mail contracts (8 templates, JS under 256 KB), the server module check, and `Verified 2 modules`; exit 0, the temporary workspace removed.
 - `verify-source-failures`: a type error exits 1 and names `./frontend-vue/app/components/Callout.vue:2:7  TS2322` with the code frame and the fix, not the workspace copy; `--verbose` streams more; a template that does not compile fails the client and SSR bundles and names the component; a `dms.server.ts` that imports `dms.frontend.ts` fails; the temporary workspace is removed after each failure.
 - `verify-source-local-package`: `-m` twice verifies three modules; a dependency the registry does not know fails the run unless `--local-package name=path` binds a local build.
+- `verify-source-dies-with-a-killed-cli`: `ajs dms verify-source`, then `node -e` calling `runVerifySource`, each SIGKILLed once `vite` or `vue-tsc` runs: one runner ever starts, no runner, pnpm, vite or vue-tsc process is left 5 seconds later, and no workspace stays in `TMPDIR` (#343, #353). The journey finds the run's processes by the `TMPDIR` in their environment under `/proc`, so it runs on Linux only, and it kills every process of the run at a second runner.
 - `verify-source-email-limit`: a module whose e-mail template adds about 90 KB keeps the bundle near 215 KB and passes; one adding about 140 KB fails naming a size above 256 KB and the limit.
 
 ## How to get to it (user POV)
@@ -58,3 +59,4 @@ The journeys write small modules inside the run's checkout (`root/packages/dms/v
 - A `-m` folder that has a `package.json` but no `dms.frontend.ts` is verified without complaint, although the hint of the path errors says the folder contains `dms.frontend.ts`.
 - Node's own compile cache can appear in `TMPDIR`; the checks ignore `node-compile-cache`.
 - A run takes 30 to 50 seconds; the four journeys run eleven of them.
+- A killed run leaves its lock in `ajs-dms-verify-source-<uid>`; the next run takes it over, so the journeys count it as no leftover.

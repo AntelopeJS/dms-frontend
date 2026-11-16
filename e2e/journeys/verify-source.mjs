@@ -1,3 +1,4 @@
-import { journeys } from "../verify-source-run.mjs";
+import { journeys as kill } from "../verify-source-kill.mjs";
+import { journeys as run } from "../verify-source-run.mjs";
 
-export { journeys };
+export const journeys = [...run, ...kill];
