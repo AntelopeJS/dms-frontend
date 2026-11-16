@@ -27,7 +27,7 @@ const LOCK_DIRECTORY = /^ajs-dms-verify-source(-\d+)?$/;
  * @param {string} tmp A temporary directory
  * @returns {string[]} What a run left in it, Node's own compile cache aside: the files in the lock directory, which itself stays for the next run
  */
-function leftovers(tmp) {
+export function leftovers(tmp) {
   return readdirSync(tmp).flatMap((name) => {
     if (name === "node-compile-cache") return [];
     if (LOCK_DIRECTORY.test(name)) return readdirSync(join(tmp, name)).map((lock) => `${name}/${lock}`);
