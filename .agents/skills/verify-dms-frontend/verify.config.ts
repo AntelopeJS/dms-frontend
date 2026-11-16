@@ -117,6 +117,16 @@ const config: VerifyConfig = {
       passing: /(?<=^holds +(?:\w+, )*)(\w+)(?=,| \()/gm,
       behaviour: { kind: "emit" },
     },
+    {
+      name: "formal-static-coding",
+      covers: ["templates/vue/server/built-files.mjs", "templates/vue/server/content.mjs", "templates/vue/server/static-files.mjs"],
+      files: [".agents/skills/formal-static-coding/**"],
+      command: ["node", ".agents/skills/formal-static-coding/check.mjs", "--full"],
+      baseCommand: ["node", ".agents/skills/formal-static-coding/check.mjs"],
+      violation: /^(?:finding|BROKEN|CHANGED|HOLDS) +(\w+)/gm,
+      passing: /(?<=^holds +(?:\w+, )*)(\w+)(?=,| \()/gm,
+      behaviour: { kind: "emit" },
+    },
   ],
 };
 
