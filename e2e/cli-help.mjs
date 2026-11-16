@@ -5,7 +5,7 @@ import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
-const COMMANDS = ["dev", "build", "start", "prepare", "workspaces", "clean", "verify-source"];
+const COMMANDS = ["dev", "build", "start", "prepare", "workspaces", "clean", "verify-source", "prepare-types"];
 /** @type {Record<string, string>} */
 const COMMAND_PAGES = {
   dev: "3.cli/2.dev.md",
@@ -15,6 +15,7 @@ const COMMAND_PAGES = {
   workspaces: "3.cli/6.workspaces.md",
   clean: "3.cli/7.clean.md",
   "verify-source": "3.cli/8.verify-source.md",
+  "prepare-types": "3.cli/9.prepare-types.md",
 };
 
 /**
@@ -142,7 +143,7 @@ export const journeys = [
         ctx.equal("every row of the page is in the topic with its description, in order", missing, []),
         ctx.holds("the heading names the shell, then .env.local, then .env", topic.stdout.startsWith("Environment (read from the shell, then ./.env.local, then ./.env)\n"), topic.stdout.split("\n")[0]),
         ctx.holds("the .env note: the shell wins and .env.local wins over .env", flat.includes("A variable set in the shell wins over both files, and .env.local wins over .env. Only the current directory is read: the generated workspace never loads a .env of its own."), flat.slice(-500)),
-        ctx.holds("the workspaces note", flat.includes("Workspaces live in ~/.antelopejs/dms-frontend, one per backend URL. dev without -b keys its own on the project directory instead; pass -b to share one with build and start. ajs dms workspaces lists them."), flat.slice(-500)),
+        ctx.holds("the workspaces note", flat.includes("dev and prepare keep their workspaces in ~/.antelopejs/dms-frontend, one per backend URL, and ajs dms workspaces lists them. dev without -b keys its own on the project directory instead. build and start use <project>/.dms-frontend, or --workspace."), flat.slice(-500)),
       ]);
       const quiet = await runCli(ctx, ["-q", "help", "environment"]);
       await ctx.verify("the topic is a result: -q keeps it", [sameText(ctx, "same text under -q", quiet.stdout, topic.stdout)]);

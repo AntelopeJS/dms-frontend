@@ -1,7 +1,7 @@
 /**
- * The part of dms-control's journey API these journeys use. dms-control lives
- * in the dms checkout, which this repository does not depend on, so the
- * shapes are declared here and the journeys type-check without it.
+ * The part of dms-control's journey API these journeys use, declared as
+ * narrowly as they use it. `@antelopejs/dms/e2e` exports the journey context,
+ * the tab and the check, but not the page, request and run shapes below.
  */
 
 /** Anything a check can observe or a JSON answer can hold. */

@@ -8,6 +8,7 @@ import { freePort, observe, runCli, scratch } from "./cli-run.mjs";
 import { workspacesRoot, writeModule } from "./workspace-fixtures.mjs";
 import { SKIPPED_HINT, NOT_GENERATED, workspaceFor } from "./workspace-prepare-output.mjs";
 import { standalone } from "./standalone.mjs";
+import { RENDERER_RANGE } from "./renderer-range.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -142,7 +143,7 @@ export const journeys = [
       }
       const gone = await runCli(ctx, ["prepare", "-b", backend.url], { home });
       const moduleDir = join(scratch(ctx, "module"), "mod");
-      const withModule = await startCliBackend({ modules: [writeModule(moduleDir, { engines: ">=0.10.0 <0.11.0" })] });
+      const withModule = await startCliBackend({ modules: [writeModule(moduleDir, { engines: RENDERER_RANGE })] });
       const second = await runCli(ctx, ["prepare", "-b", withModule.url, "--strict"], { home });
       await withModule.close();
       const { rmSync } = await import("node:fs");

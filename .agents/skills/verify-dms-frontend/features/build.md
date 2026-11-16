@@ -17,6 +17,9 @@ covers:
   - templates/vue/tsconfig.json
   - templates/vue/vite.config.ts
   - templates/vue/vite.server.config.ts
+  - src/child-command.ts
+  - src/internal/prepared-workspace.ts
+  - templates/vue/backend-boundary.mjs
 docs:
   - docs/3.cli/2.dev.md
   - docs/3.cli/3.build.md

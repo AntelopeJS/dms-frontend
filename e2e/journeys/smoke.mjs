@@ -5,6 +5,7 @@ import { signIn } from "../signin.mjs";
 export const journeys = [
   {
     id: "smoke",
+    tag: "@smoke",
     title: "the renderer serves onboarding, the admin signs in, reloads and stays signed in",
     entryPoint: "POST /api/onboarding/register, then the sign-in form served by `ajs dms start`",
     async run(/** @type {Ctx} */ ctx) {

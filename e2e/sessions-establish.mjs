@@ -55,9 +55,9 @@ export const journeys = [
             case "/api/saas/declared":
               return send(200, pair);
             case "/api/two/fa":
-              return send(200, { requires_2fa: true, two_factor_token: "tt-1" });
+              return send(200, { requires_2fa: true, two_factor_token: "tt-1", methods: ["totp"] });
             case "/api/tenant/assign":
-              return send(200, { requires_tenant_assignment: true });
+              return send(200, { requires_tenant_assignment: true, tenant_assignment_token: "ta-1" });
             case "/api/saas/denied":
               return send(403, "error.saas.denied");
             case "/api/auth/me":
@@ -89,9 +89,9 @@ export const journeys = [
           ctx.holds("the session cookie is set", setCookies(fromEnvironment).some((line) => line.startsWith("dms_session_")), setCookies(fromEnvironment).length),
           ctx.equal("the payload is forwarded to the backend as the body", [finalizeCalls.length, JSON.parse(finalizeCalls[0].body.toString())], [1, { code: "abc" }]),
           ctx.equal("an endpoint from the generated manifest file works too, with an empty payload by default", [fromManifest.status, JSON.parse(declaredCalls[0].body.toString())], [200, {}]),
-          ctx.equal("a second step is relayed as the backend answered it, without a session", [outcome(twoFactor), setCookies(twoFactor).some((line) => line.startsWith("dms_session_"))], [[200, { requires_2fa: true, two_factor_token: "tt-1" }], false]),
+          ctx.equal("a second step is relayed as the backend answered it, without a session", [outcome(twoFactor), setCookies(twoFactor).some((line) => line.startsWith("dms_session_"))], [[200, { requires_2fa: true, two_factor_token: "tt-1", methods: ["totp"] }], false]),
           ctx.equal("the pending login is a sealed cookie scoped to /auth/verify-2fa for 5 minutes", setCookies(twoFactor).filter((line) => line.startsWith("dms_pending_login_")).map((line) => line.replace(/=[^;]*/, "=VALUE").replace(/_[0-9a-f]{12}=/, "_SCOPE=")), ["dms_pending_login_SCOPE=VALUE; Path=/auth/verify-2fa; HttpOnly; SameSite=Lax; Max-Age=300"]),
-          ctx.equal("a tenant assignment is relayed without a session", [outcome(tenant), setCookies(tenant).some((line) => line.startsWith("dms_session_"))], [[200, { requires_tenant_assignment: true }], false]),
+          ctx.equal("a tenant assignment is relayed without a session", [outcome(tenant), setCookies(tenant).some((line) => line.startsWith("dms_session_"))], [[200, { requires_tenant_assignment: true, tenant_assignment_token: "ta-1" }], false]),
           ctx.equal("a backend refusal keeps its status and public message", outcome(denied), [403, { message: "error.saas.denied" }]),
           ctx.equal("malformed environment and manifest entries are dropped, not widened", dropped, { bad: 403, "/api/x?y=1": 403, "/api/x?y=2": 403, "/api/../etc": 403, "/other/api/x": 403, "not-valid": 403 }),
           ctx.equal("the duplicate environment entry is one endpoint: called once per request", finalizeCalls.length, 1),

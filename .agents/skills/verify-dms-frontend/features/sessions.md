@@ -6,6 +6,7 @@ covers:
   - templates/vue/server/auth/client-ip.mjs
   - templates/vue/server/auth/establish-endpoints.mjs
   - templates/vue/server/auth/session.mjs
+  - templates/vue/server/auth-declarations.mjs
 docs:
   - docs/5.frontend-modules/6.sessions-and-sign-in.md
   - docs/7.deployment/5.security.md
@@ -56,6 +57,8 @@ dms-control journey "$RUN" sessions
 
 | Behaviour | Why not |
 | --- | --- |
+| A session older than 5 minutes is confirmed with the backend before the request, and one older than 30 days, or stamped more than 5 minutes ahead, is refused (#335) | Needs a clock 5 minutes or 30 days ahead of the session's stamp; `tests/server-session-reconfirm.test.ts` and `tests/server-session-revocation.test.ts` cover it. |
+| A `signOut: true` module route keeps the sealed session through a refused, thrown or empty renewal, and no other route does (#339) | No fixture module declares a sign-out route; `tests/server-session-sealing.test.ts` covers it. |
 | A page restored from history or the prefetch cache with an older `session.updatedAt` keeps the session and language | Needs two sessions of one account and browser back/forward cache timing; a client rule of the Inertia plugin. |
 | `useDmsUserSession().fetch()` changes the language; `te()`, `tm()`, `getLocaleMessage()` on a page that holds only the rendered messages | Composable semantics inside the Vue app; the `dms-frontend-vue` tests own them. |
 | The CLI merges the locale files into one catalog per language | A build step of the `build` feature. |

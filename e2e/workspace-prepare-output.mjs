@@ -7,6 +7,7 @@ import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, runCli, scratch } from "./cli-run.mjs";
 import { META_FILE, sha256, workspacesRoot, writeModule } from "./workspace-fixtures.mjs";
 import { standalone } from "./standalone.mjs";
+import { RENDERER_RANGE } from "./renderer-range.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -103,7 +104,7 @@ export const journeys = [
       const home = scratch(ctx, "home");
       const moduleDir = join(scratch(ctx, "module"), "mod");
       const scripts = { preinstall: "echo a", install: "echo b", postinstall: "echo c", prepare: "echo d", prepublishOnly: "echo e", build: "echo build", test: "echo test" };
-      const served = writeModule(moduleDir, { engines: ">=0.10.0 <0.11.0", scripts, privateOptions: { apiKey: "sekret" } });
+      const served = writeModule(moduleDir, { engines: RENDERER_RANGE, scripts, privateOptions: { apiKey: "sekret" } });
       const backend = await startCliBackend({ modules: [served] });
       try {
         const dir = workspaceFor(home, backend.url);

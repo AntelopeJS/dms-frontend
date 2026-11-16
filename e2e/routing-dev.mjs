@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { closeSync, openSync, readFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { sleep } from "./proxy-satellite.mjs";
@@ -14,9 +14,10 @@ const STOP_TIMEOUT_MS = 15_000;
  * @param {import("./control.d.ts").JourneyContext} ctx The journey
  * @param {Record<string, string>} [extra] More variables
  * @param {string} [shell] A shell command to run first, such as `umask 022`
+ * @param {string} [cwd] The project to serve, the run's playground when absent
  * @returns {Promise<{ url: string, port: number, workspace: string, log: () => string, stop: () => Promise<void> }>} The running server
  */
-export async function startDev(ctx, extra = {}, shell = "") {
+export async function startDev(ctx, extra = {}, shell = "", cwd = ctx.state.runPlayground) {
   const state = ctx.state;
   const cache = process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache");
   /** @type {NodeJS.ProcessEnv} */
@@ -37,15 +38,16 @@ export async function startDev(ctx, extra = {}, shell = "") {
     ...state.secrets,
     ...extra,
   });
+  mkdirSync(join(state.dir, "satellites"), { recursive: true });
   const file = join(state.dir, "satellites", `dev-${ctx.journey}.log`);
   const out = openSync(file, "w");
   const dev = [join(state.renderer, "dist/index.js"), "dev", "-e", "docs", "-b", state.apiUrl, "-p", "0"];
   const child = (shell ? spawn("sh", ["-c", `${shell}; exec "$0" "$@"`, process.execPath, ...dev], {
-    cwd: state.runPlayground,
+    cwd,
     env,
     stdio: ["ignore", out, out],
   }) : spawn(process.execPath, dev, {
-    cwd: state.runPlayground,
+    cwd,
     env,
     stdio: ["ignore", out, out],
   }));

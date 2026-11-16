@@ -4,6 +4,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { RENDERER_RANGE } from "./renderer-range.mjs";
 
 const COMPONENT = `<script setup lang="ts">
 defineProps<{ title: string }>();
@@ -68,7 +69,7 @@ exports.frontendModule = () => ({
 });
 `,
   );
-  put(join(dir, "fx", "frontend-vue", "package.json"), JSON.stringify({ name: "fx-frontend-vue", version: "1.0.0", type: "module", engines: { "@antelopejs/dms-frontend": ">=0.10.0 <0.11.0" } }));
+  put(join(dir, "fx", "frontend-vue", "package.json"), JSON.stringify({ name: "fx-frontend-vue", version: "1.0.0", type: "module", engines: { "@antelopejs/dms-frontend": RENDERER_RANGE } }));
   put(
     join(dir, "fx", "frontend-vue", "dms.frontend.ts"),
     options.entry ??
@@ -97,7 +98,7 @@ exports.frontendModule = () => ({
 });
 `,
     );
-    put(join(dir, "gx", "frontend-vue", "package.json"), JSON.stringify({ name: "gx-frontend-vue", version: "1.0.0", type: "module", engines: { "@antelopejs/dms-frontend": ">=0.10.0 <0.11.0" } }));
+    put(join(dir, "gx", "frontend-vue", "package.json"), JSON.stringify({ name: "gx-frontend-vue", version: "1.0.0", type: "module", engines: { "@antelopejs/dms-frontend": RENDERER_RANGE } }));
     put(join(dir, "gx", "frontend-vue", "dms.frontend.ts"), "export default {};\n");
     put(join(dir, "gx", "frontend-vue", "app", "app.config.ts"), options.higher.appConfig);
   }

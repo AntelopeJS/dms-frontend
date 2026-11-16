@@ -44,6 +44,7 @@ export interface VerifyConfig {
   notUserFacing: string[];
   smoke: string;
   smokeJourney: string;
+  journeys: string;
   doors: Record<DoorKind, DoorRule | null>;
   formal: FormalCheck[];
 }
@@ -59,6 +60,7 @@ const config: VerifyConfig = {
   notUserFacing: ["templates/vue/patches/**", "templates/vue/gitignore", "templates/vue/npmrc", "skills/dms-frontend/cases.json"],
   smoke: "smoke",
   smokeJourney: "onboard, sign in through the rendered form, reload and stay signed in, sign out",
+  journeys: "e2e/journeys",
   doors: {
     data: null,
     format: {
@@ -113,6 +115,16 @@ const config: VerifyConfig = {
       files: [".agents/skills/formal-backend-exposure/**"],
       command: ["node", ".agents/skills/formal-backend-exposure/check.mjs", "--full"],
       baseCommand: ["node", ".agents/skills/formal-backend-exposure/check.mjs"],
+      violation: /^(?:finding|BROKEN|CHANGED|HOLDS) +(\w+)/gm,
+      passing: /(?<=^holds +(?:\w+, )*)(\w+)(?=,| \()/gm,
+      behaviour: { kind: "emit" },
+    },
+    {
+      name: "formal-static-coding",
+      covers: ["templates/vue/server/built-files.mjs", "templates/vue/server/content.mjs", "templates/vue/server/static-files.mjs"],
+      files: [".agents/skills/formal-static-coding/**"],
+      command: ["node", ".agents/skills/formal-static-coding/check.mjs", "--full"],
+      baseCommand: ["node", ".agents/skills/formal-static-coding/check.mjs"],
       violation: /^(?:finding|BROKEN|CHANGED|HOLDS) +(\w+)/gm,
       passing: /(?<=^holds +(?:\w+, )*)(\w+)(?=,| \()/gm,
       behaviour: { kind: "emit" },

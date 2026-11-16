@@ -4,8 +4,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-
-const ENGINES = ">=0.10.0 <0.11.0";
+import { RENDERER_RANGE } from "./renderer-range.mjs";
 
 const CALLOUT = `<script setup lang="ts">
 defineProps<{ title: string }>();
@@ -33,7 +32,7 @@ function put(file, text) {
  * @returns {string} The module root
  */
 export function writeModule(dir, options = {}) {
-  const engines = options.engines === undefined ? ENGINES : options.engines;
+  const engines = options.engines === undefined ? RENDERER_RANGE : options.engines;
   put(
     join(dir, "package.json"),
     JSON.stringify({ name: options.name ?? "fx-frontend-vue", version: "1.0.0", private: true, type: "module", dependencies: options.dependencies, engines: engines ? { "@antelopejs/dms-frontend": engines } : undefined }),
