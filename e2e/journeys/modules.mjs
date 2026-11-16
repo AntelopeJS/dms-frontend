@@ -1,6 +1,7 @@
 import { keysOf, parseJson, rowAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { cookieOf, get } from "../web.mjs";
+import { journeys as sources } from "../modules-sources.mjs";
 
 /** @typedef {import("../control.d.ts").JourneyContext} Ctx */
 
@@ -8,7 +9,7 @@ const PUBLIC_OPTIONS = /<script id="dms-public-options" type="application\/json"
 const DMS_MODULE = "antelopejs__dms-frontend-vue";
 const TOKEN_LIFETIME_SECONDS = 3600;
 
-export const journeys = [
+const publicOptions = [
   {
     id: "the-modules-public-options-reach-every-page-and-no-secret-does",
     tag: "@smoke",
@@ -44,3 +45,5 @@ export const journeys = [
     },
   },
 ];
+
+export const journeys = [...publicOptions, ...sources];

@@ -42,6 +42,7 @@ A frontend module is a package that registers pages, components, plugins, server
 ## Sub-features
 
 - `the-modules-public-options-reach-every-page-and-no-secret-does`: `dms-public-options` is keyed by module id and holds the manifest's public values (the dashboard's origin as `clientBaseUrl` and as `baseURL`, the homepage, the token lifetime, no OAuth provider, the playground module's own option), and none of the run's six secrets appears in a rendered page or the client entry.
+- `dev-serves-modules-from-the-core-cache-and-git`: a fresh project lists `@antelopejs/dms` from npm, at the version this checkout installs, and a module from a local git repository. `ajs project build` puts the first in core's versioned cache folder (`.antelope/cache/@antelopejs/dms@<version>`) and clones the second, then stops at its interface check, which the frontend does not need. `ajs dms dev` there, against the run's backend, reports no module as not installed, watches both module sources, routes the dms module's backend proxies, answers the git module's server route and renders the dms module's `/auth` page (#326, #359).
 
 ## How to get to it (user POV)
 
