@@ -113,6 +113,7 @@ export const journeys = [
   },
   {
     id: "one-sprite-draws-each-icon-once-and-no-third-party-is-asked",
+    tag: "@smoke",
     title: "a signed-in page carries one hidden sprite of symbols that every icon uses, and loads icons from no other origin",
     entryPoint: "GET /examples/features and the same page in the browser",
     async run(/** @type {Ctx} */ ctx) {

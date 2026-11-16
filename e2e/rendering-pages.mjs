@@ -13,6 +13,7 @@ export const journeys = [
     id: "the-data-a-page-read-is-drawn-by-the-server-and-handed-over",
     title: "the server waits for a page's data, draws it, carries it in the payload, and the browser does not read it again",
     entryPoint: "GET /table-view/table-view-users, then the same page in the browser",
+    knownFailures: { "requests for the users' data": "the dms table view at 1313dd7 reads /api/user/list again once it hydrates, although the server handed the list over in the payload" },
     async run(/** @type {Ctx} */ ctx) {
       const { tab, cookie } = await signedIn(ctx);
       const answer = await get(ctx, "/table-view/table-view-users", { cookie, headers: HTML });

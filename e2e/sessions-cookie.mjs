@@ -36,6 +36,7 @@ function withoutValue(line) {
 export const journeys = [
   {
     id: "sessions-cookie",
+    tag: "@smoke",
     title: "the session is a sealed HttpOnly SameSite=Lax cookie scoped to the backend, Secure under start, and the browser never sees a token",
     entryPoint: "POST /auth/login and /api/_auth/session on the run's frontend and on a second `ajs dms start`, and the signed-in dashboard in a browser",
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {

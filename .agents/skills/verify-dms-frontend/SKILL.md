@@ -5,14 +5,14 @@ description: "Drive the AntelopeJS DMS frontend renderer (@antelopejs/dms-fronte
 
 # Verify dms-frontend
 
-Every deterministic step is a `dms-control` command. You choose which journeys to run and judge what they show; you never write a multi-step shell recipe. When a journey you need does not exist, add it to `journeys/<feature>.mjs`, describe it in its feature file, and run it.
+Every deterministic step is a `dms-control` command. You choose which journeys to run and judge what they show; you never write a multi-step shell recipe. When a journey you need does not exist, add it to `e2e/journeys/<feature>.mjs`, describe it in its feature file, and run it.
 
 This repository is the renderer, not a module: it has no backend or playground. `dms-control up --renderer` serves this checkout as the dashboard of the dms playground, so a journey reaches the renderer through the dashboard in a browser, plain HTTP to the frontend server, and the `ajs dms` CLI spawned from this checkout.
 
-`dms-control` is the bin of `@antelopejs/dms` (`packages/dms/bin/dms-control.mjs`), from a dms checkout with Node 24. `verify.config.ts` names the playground in `DMS_PLAYGROUND` (default `~/code/dms/packages/dms/playground`) and `renderer: "."`.
+`dms-control` is the bin of `@antelopejs/dms`, a devDependency of this repository, run with Node 24. `verify.config.ts` names the playground in `DMS_PLAYGROUND` (default `~/code/dms/packages/dms/playground`) and `renderer: "."`.
 
 ```bash
-C="node $DMS/packages/dms/bin/dms-control.mjs"   # dms-control from @antelopejs/dms 0.17.0 or later
+C="pnpm exec dms-control"
 $C                       # lists every command
 ```
 
@@ -48,10 +48,22 @@ $C journey "$RUN" rendering [journey-id...]
 $C formal "$RUN"                         # the formal checks that cover the diff (verdict rule 5)
 ```
 
-- Each feature file in [features/](features/README.md) lists its source globs (`covers:`), its docs pages (`docs:`), its journeys and its "Not driven" rows; the journeys are in `journeys/<feature>.mjs`, with the helpers they share in `web.mjs` (HTTP against the frontend server, the Inertia page object and the payload) and `signin.mjs` (sign-in that survives a click before hydration), plus the helpers each feature names.
-- A journey starts on an empty database of the run with the administrator onboarded, unless it says otherwise. A journey that declares `...standalone` (`standalone.mjs`) keeps the database the run has and onboards nobody, so `dms-control` skips the backend restart: declare it only when the journey uses no account, token, tab, `ctx.api`, `ctx.mail` or state of the run's backend, such as one that spawns the `ajs dms` CLI against fixtures, scratch homes, fake backends or servers of its own. It reads each result through a second view: the response headers and body, the rendered HTML, a reload, the captured mail, the CLI's output or a file the CLI wrote.
+- Each feature file in [features/](features/README.md) lists its source globs (`covers:`), its docs pages (`docs:`), its journeys and its "Not driven" rows; the journeys are in `e2e/journeys/<feature>.mjs`, with the helpers they share in `e2e/web.mjs` (HTTP against the frontend server, the Inertia page object and the payload) and `e2e/signin.mjs` (sign-in that survives a click before hydration), plus the helpers each feature names.
+- A journey starts on an empty database of the run with the administrator onboarded, unless it says otherwise. A journey that declares `...standalone` (`e2e/standalone.mjs`) keeps the database the run has and onboards nobody, so `dms-control` skips the backend restart: declare it only when the journey uses no account, token, tab, `ctx.api`, `ctx.mail` or state of the run's backend, such as one that spawns the `ajs dms` CLI against fixtures, scratch homes, fake backends or servers of its own. It reads each result through a second view: the response headers and body, the rendered HTML, a reload, the captured mail, the CLI's output or a file the CLI wrote.
 - Journeys that need the frontend server in a state the run does not offer (another backend, no session secret, a closed port) start their own `ajs dms start` from this checkout on a kernel port and stop it by PID.
 - To look at the product yourself: `$C onboard "$RUN"`, `$C browser "$RUN" login`, `goto --path`, `snapshot`, `click --role --name`, `fill`, `press`, `screenshot`, `$C api "$RUN" <method> <path>`, `$C mail "$RUN"`, `$C reset "$RUN"`.
+
+## The suite
+
+`pnpm e2e` runs every journey as a Playwright test through `@antelopejs/dms/e2e`. Its global setup runs `prepare` and `dms-control up` once, each test drives one journey on a fresh database of that run, and the teardown runs `down`. Set `DMS_PLAYGROUND` first.
+
+```bash
+pnpm e2e --grep @smoke                # the smoke set the full CI tier runs
+pnpm e2e --grep '<journey-id>( @\S+)*$'   # one journey, tags or not
+DMS_E2E_RUN="$RUN" pnpm e2e           # drive a run of `up` and leave it running
+```
+
+A journey can carry `tag` (`@smoke`), `knownFailures` (check name to the finding that makes it fail today) and `last: true` (it changes the run's playground for later journeys). CI runs nothing on a draft or a pull request into `next`, the `@smoke` journeys on the full tier (a pull request into `main`, a push to `next`), and every journey in 2 shards each night, merged into one `playwright-report` artifact.
 
 ## Evidence
 
@@ -84,7 +96,7 @@ Write `$RUN/evidence/judgement.json` (`doors`, `docs`, `notVerified`, `attention
 
 ## Gotchas
 
-- The dashboard renders on the server and hydrates after `load`; a click that lands first does nothing. `signin.mjs` waits and tries again.
+- The dashboard renders on the server and hydrates after `load`; a click that lands first does nothing. `e2e/signin.mjs` waits and tries again.
 - The dashboard's realtime stream never lets the network go idle on a signed-in page; wait for an element, not `networkidle`.
 - The run serves a production build, so development behaviour (hot reload, the `x-dms-route-owner` header, the e-mail bundle watcher) is not driven.
 

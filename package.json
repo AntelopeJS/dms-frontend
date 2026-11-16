@@ -70,7 +70,7 @@
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
     "lint": "oxlint && pnpm run docs:reference:check && pnpm run source-checks",
-    "typecheck": "tsc --noEmit && tsx scripts/typecheck-projects.ts tsconfig.templates.json tsconfig.tests.json",
+    "typecheck": "tsc --noEmit && tsx scripts/typecheck-projects.ts tsconfig.templates.json tsconfig.tests.json e2e/tsconfig.json",
     "lint:fix": "oxlint --fix --max-warnings=1000000 && oxfmt .",
     "knip": "knip --dependencies",
     "knip:all": "knip",
@@ -85,7 +85,8 @@
     "sync:check": "antelopejs-sync --check",
     "format:check": "oxfmt --check .",
     "suppressions": "antelopejs-suppressions",
-    "suppressions:update": "antelopejs-suppressions --update"
+    "suppressions:update": "antelopejs-suppressions --update",
+    "e2e": "playwright test -c e2e"
   },
   "dependencies": {
     "@intlify/message-compiler": "^11.1.12",
@@ -97,11 +98,13 @@
   },
   "devDependencies": {
     "@antelopejs/core": "~1.24.0",
-    "@antelopejs/interface-dms": ">=0.14.0 <0.15.0",
-    "@antelopejs/tooling-configs": ">=0.8.0 <0.9.0",
+    "@antelopejs/dms": "0.20.8-next.936.g1313dd7",
+    "@antelopejs/interface-dms": "0.14.3-next.916.gd319141",
+    "@antelopejs/tooling-configs": "0.8.1-next.372.g1d7ef26",
     "@iconify/utils": "^3.1.0",
     "@iconify/vue": "^5.0.1",
     "@inertiajs/vue3": "^3.7.1",
+    "@playwright/test": "~1.65.0",
     "@types/node": "^24.8.1",
     "@types/semver": "^7.7.1",
     "@unhead/vue": "^2.1.4",
@@ -120,7 +123,7 @@
     "oxlint": "1.81.0",
     "oxlint-tsgolint": "^7.0.2001",
     "pixelmatch": "^8.0.0",
-    "playwright-core": "^1.65.0",
+    "playwright-core": "~1.65.1",
     "release-it": "^19.2.4",
     "release-it-changelogen": "^0.1.0",
     "rimraf": "^6.1.2",

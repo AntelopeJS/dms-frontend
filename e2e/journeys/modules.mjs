@@ -11,6 +11,7 @@ const TOKEN_LIFETIME_SECONDS = 3600;
 export const journeys = [
   {
     id: "the-modules-public-options-reach-every-page-and-no-secret-does",
+    tag: "@smoke",
     title: "each module's public options are written into the page by module id, and none of the run's secrets appears in a rendered page",
     entryPoint: "GET /auth, /settings, /dms-preview and /examples/features, and the client entry",
     async run(/** @type {Ctx} */ ctx) {
