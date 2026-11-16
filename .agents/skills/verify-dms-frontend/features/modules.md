@@ -23,6 +23,10 @@ covers:
   - templates/vue/frontend-build.ts
   - templates/vue/frontend-module.ts
   - templates/vue/layer-app-config.ts
+  - src/module-folders.ts
+  - templates/eslint-globals.mjs
+  - templates/eslint-globals.types.d.mts
+  - templates/vue/auto-imports.mjs
 docs:
   - docs/5.frontend-modules/1.anatomy.md
   - docs/5.frontend-modules/2.app-config.md
@@ -51,6 +55,7 @@ dms-control journey "$RUN" modules
 
 ## Gotchas
 
+- `ajs dms dev` finds a package module in core's versioned cache folder first, then in `node_modules`; a git module in the cache folder named after its remote.
 - Anatomy, supported releases, components, auto-imports and the app config merge are about authoring a module. The run serves two modules (the DMS frontend and the playground's), so only what they publish is observable.
 
 ## Not driven

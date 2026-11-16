@@ -22,6 +22,7 @@ const RUNS = { ci: 200, full: 2000 };
 const SESSIONS = new Map([
   ["none", "signed out"],
   ["valid", "signed in"],
+  ["expired", "a session sealed 31 days ago"],
   ["forged", "a session cookie that does not open"],
   ["foreign", "another instance's session cookie"],
 ]);
@@ -49,21 +50,24 @@ function parseArgs(args) {
 function describeCase({ deployment, visit }) {
   const origin = visit.origin === "absent" ? "no Origin" : `Origin ${visit.origin}`;
   const host = visit.host === "own" ? "its own Host" : "Host evil.example";
+  const site = visit.fetchSite === "absent" ? "" : `, Sec-Fetch-Site ${visit.fetchSite}`;
   const headers = visit.headers.length ? `, headers ${visit.headers.join(" ")}` : "";
   return [
     `  DMS_BACKEND_PROXIES=${JSON.stringify(deployment.proxies)}`,
     `  DMS_PUBLIC_ENDPOINTS=${JSON.stringify(deployment.endpoints)}`,
-    `  ${visit.method} ${visit.target} (${host}, ${origin}, ${SESSIONS.get(visit.session)}${headers})`,
+    `  ${visit.method} ${visit.target} (${host}, ${origin}${site}, ${SESSIONS.get(visit.session)}${headers})`,
   ].join("\n");
 }
 
 /**
  * The plainer sessions of each session, so that simplifying never cycles: an
- * odd cookie becomes none or a valid one, a valid one becomes none.
+ * odd cookie or an expired one becomes none or a valid one, a valid one
+ * becomes none.
  *
  * @type {Map<import("./inputs.mjs").SessionKind, import("./inputs.mjs").SessionKind[]>}
  */
 const PLAINER_SESSIONS = new Map([
+  ["expired", ["none", "valid"]],
   ["forged", ["none", "valid"]],
   ["foreign", ["none", "valid"]],
   ["valid", ["none"]],
@@ -72,7 +76,7 @@ const PLAINER_SESSIONS = new Map([
 
 /**
  * The cases one step simpler than `current`: a declaration or a header fewer,
- * or a plainer session, Origin or Host.
+ * or a plainer session, Origin, Sec-Fetch-Site or Host.
  *
  * @param {Case} current
  * @returns {Case[]}
@@ -85,6 +89,7 @@ function simpler({ deployment, visit }) {
     ...visit.headers.map((_, index) => ({ deployment, visit: { ...visit, headers: visit.headers.filter((__, at) => at !== index) } })),
     ...(visit.host === "own" ? [] : [{ deployment, visit: { ...visit, host: /** @type {const} */ ("own") } }]),
     ...(visit.origin === "absent" ? [] : [{ deployment, visit: { ...visit, origin: /** @type {const} */ ("absent") } }]),
+    ...(visit.fetchSite === "absent" ? [] : [{ deployment, visit: { ...visit, fetchSite: /** @type {const} */ ("absent") } }]),
     ...(PLAINER_SESSIONS.get(visit.session) ?? []).map((session) => ({ deployment, visit: { ...visit, session } })),
   ];
 }

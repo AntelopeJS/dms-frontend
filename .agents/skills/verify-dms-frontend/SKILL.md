@@ -18,9 +18,8 @@ $C                       # lists every command
 
 ## Before you launch
 
-- The dms checkout is installed and built: `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm --dir packages/dms build`, `pnpm --dir packages/dms/playground build`. `prepare` of this skill installs and builds the renderer in this checkout (`--prepare`).
+- The dms checkout is at the commit of the `@antelopejs/dms` this repository installs (`gitHead` in `node_modules/@antelopejs/dms/package.json`, or the tag `v<version>` when a release has none), as CI checks it out, and it is installed and built: `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm --dir packages/dms build`, `pnpm --dir packages/dms/playground build`. `prepare` of this skill installs and builds the renderer in this checkout (`--prepare`).
 - The renderer checkout's version must satisfy the playground's `@antelopejs/dms-frontend` range. When it does not, `frontend-build` fails with a range error.
-- The playground loads `@antelopejs/api ^1.5.0` from the registry, which answers controller routes (every page layout, the data API) as 500 (AntelopeJS/dms#620). Point its `api` module at the api tarball of the dms checkout (`type: "local"`, `path` to `node_modules/.pnpm/@antelopejs+api@file*/node_modules/@antelopejs/api`) in your own copy of the playground until that is fixed. Journeys that open a data page fail without it.
 - `mongod` comes from `DMS_CONTROL_MONGOD`, `PATH`, or the mongodb-memory-server cache (`~/.cache/mongodb-binaries`).
 
 ## Launch
@@ -29,7 +28,7 @@ $C                       # lists every command
 RUN=$($C up --prepare --skill "$PWD/.agents/skills/verify-dms-frontend")   # installs, builds, starts; prints the run folder
 ```
 
-`up` lays the playground out again under `$RUN/root`, links this checkout as `@antelopejs/dms-frontend`, builds the playground's dashboard with it (`ajs dms build -e docs`) and serves it (`ajs dms start -e docs -b <api>`) on kernel-chosen ports, with a `mongod` the run owns, `HOME` at `$RUN/home` and a mail sink. `headSha` and the HEAD that `doctor` and `verdict` compare are this checkout's.
+`up` lays the playground out again under `$RUN/root`, links this checkout as `@antelopejs/dms-frontend`, builds the playground's dashboard with it (`ajs dms build -e docs`) and serves it (`ajs dms start -e docs -b <api>`) on kernel-chosen ports, with a `mongod` the run owns, `HOME` at `$RUN/home` and a mail sink. `headSha` and the HEAD that `doctor` compares are this checkout's.
 
 ## Doctor
 
@@ -81,7 +80,7 @@ A journey that starts its own frontend server stops it itself; `down` stops ever
 
 1. **Run every feature whose `covers:` globs the diff touches, plus the smoke journey.** `plan` prints that list as `run`.
 2. **Unmapped surface fails the verdict.** User-facing code is `src/**`, `templates/**` (not the patches and the dotfile templates), `skills/**` and `package.json`. `map` checks the whole tree.
-3. **Every registered journey of a feature in `run` must have run and passed.** Known findings stay as failing journeys (see the feature files' Gotchas): they fail a verdict only when the diff touches their feature.
+3. **Every registered journey of a feature in `run` must have run and passed.** A known finding is listed in its journey's `knownFailures` (see the feature files' Gotchas): its check reads `known` and does not fail the journey. Name each one in the reply as a note.
 4. **Docs.** Judge every `docs:` page of each touched feature against what the journeys showed.
 5. **Formal checks.** `verify.config.ts` lists each formal check with the files it covers and its own files. Today there are two. [`formal-backend-exposure`](../formal-backend-exposure/SKILL.md) runs the real frontend server on generated deployments and visits, and checks which requests reach the backend, on which path, with whose session and headers. [`formal-static-coding`](../formal-static-coding/SKILL.md) sends a built file under generated `Accept-Encoding` headers, and checks which copy the server picks. Run `$C formal "$RUN"` before the verdict. It runs the full configuration of every check whose covered files or own files the diff touches, records it under `evidence/formal/<name>/`, and decides with `emit` whether the diff changed what the covered code does:
    - a covered check that did not run, or exits non-zero (a tool error, or a check that no longer matches its record), fails the verdict;
@@ -92,7 +91,7 @@ A journey that starts its own frontend server stops it itself; `down` stops ever
 6. **One-way doors.** The section comes right after the result line and is mandatory. `$C doors` prints the `One-way-door:` line for the diff.
 7. **Result.** FAIL if any of rules 1 to 6 fail. PASS+NOTES when something is not verified or needs the owner's attention. PASS otherwise.
 
-Write `$RUN/evidence/judgement.json` (`doors`, `docs`, `notVerified`, `attention`, `verifier`), then `$C verdict "$RUN" --pr <n>`, which writes `$RUN/evidence/verdict.md`. Report the verdict and what you saw in your own reply.
+State the verdict in your own reply: the result first, then the doors, then what each rule showed. A new push voids the verdict. Nothing is posted to GitHub.
 
 ## Gotchas
 

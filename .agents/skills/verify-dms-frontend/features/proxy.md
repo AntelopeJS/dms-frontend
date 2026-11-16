@@ -71,6 +71,7 @@ Most journeys start a second `ajs dms start` (`proxy-satellite.mjs`) on a free p
 
 | Behaviour | Why not |
 | --- | --- |
+| The `x-dms-ui-*` headers a module's client code sets reach the backend through the proxy and `event.backend` (#365) | No module of the playground sets one; `tests/proxy-ui-headers.test.mts` covers it. |
 | A request may take an hour, and the backend's answer may pause 5 minutes between two parts | Both limits are wall-clock timers of 3600 s and 300 s, set in Node's server options and undici. A run cannot wait an hour, and no assertion of `tests/` reads those option values either, so the figures are unverified. |
 | An event stream that sends nothing ends after 5 quiet minutes, and `EventSource` reconnects after its `retry` delay | Same 300 s timer, and the reconnect belongs to the browser. |
 | A client that left while its request was being routed opens no backend request | The window is the time between the socket closing and the first `await`, which a client cannot hit on purpose. |

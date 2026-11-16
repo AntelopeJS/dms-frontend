@@ -10,6 +10,10 @@ covers:
   - src/verify-source-sources.ts
   - templates/vue/server/module-testing.mjs
   - templates/vue/typecheck-loader.mjs
+  - src/child-reaper.ts
+  - src/source-runner.ts
+  - src/verify-source-lock.ts
+  - src/verify-source-workspace.ts
 docs:
   - docs/3.cli/8.verify-source.md
   - docs/5.frontend-modules/10.testing.md
@@ -21,7 +25,7 @@ docs:
 
 ## Sub-features
 
-- `verify-source-usage`: refusals before anything is installed, each in under a second: `--layer` / `-l` on a module that is not the core layer (exit 2 and the `-m` command), no `@antelopejs/dms` from the working directory (exit 2 and the command that adds it), a missing path, a folder without `package.json`, no module in the project, a module whose `engines` excludes this release (exit 1; the selected module shown as `./frontend-vue` from a project, `.` from the module, `./frontend-vue` with `-m`), `--local-package` without `name=path`; the temporary directory stays empty.
+- `verify-source-usage`: refusals before anything is installed, each in under a second: `--layer` / `-l` on a module that is not the core layer (exit 2 and the `-m` command), no `@antelopejs/dms` from the working directory (exit 2 and the command that adds it), a missing path, a folder without `package.json`, no module in the project, a module whose `engines` excludes this release (exit 1; the selected module shown as `./frontend-vue` from a project, `.` from the module, `./frontend-vue` with `-m`), `--local-package` without `name=path`; the temporary directory stays empty, but for the empty lock directory `ajs-dms-verify-source-<uid>` that a refusal of the runner (an excluded release) leaves.
 - `verify-source-pass`: a module that builds and type-checks: the header counts two modules, the core layer's version, every step once (materialize, install, type declarations, server modules, e-mail bundle, client bundle, SSR bundle, type check), then the client bundle check, the e-mail contracts (8 templates, JS under 256 KB), the server module check, and `Verified 2 modules`; exit 0, the temporary workspace removed.
 - `verify-source-failures`: a type error exits 1 and names `./frontend-vue/app/components/Callout.vue:2:7  TS2322` with the code frame and the fix, not the workspace copy; `--verbose` streams more; a template that does not compile fails the client and SSR bundles and names the component; a `dms.server.ts` that imports `dms.frontend.ts` fails; the temporary workspace is removed after each failure.
 - `verify-source-local-package`: `-m` twice verifies three modules; a dependency the registry does not know fails the run unless `--local-package name=path` binds a local build.

@@ -41,6 +41,9 @@ export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 /** The backend paths the server reads for a page visit. */
 export const PAGE_READS = new Set(["/dms/page", "/dms/sitelayout"]);
 
+/** The prefix of the headers a module's client code sets, which every backend request carries as the browser sent them (`5.security.md`, "Same-origin checks"). */
+const UI_HEADER_PREFIX = "x-dms-ui-";
+
 /** The visitor's headers every backend request may carry, as received. */
 export const RELAYED_HEADERS = new Set(["user-agent", "x-content-language", "x-realtime-session", "x-realtime-connection", "accept", "content-type", "if-match", "origin", "referer"]);
 
@@ -233,4 +236,23 @@ export function isOwnOrigin(origin, host) {
   } catch {
     return false;
   }
+}
+
+/** @param {string} name A lowercase header name */
+export function isUiHeader(name) {
+  return name.startsWith(UI_HEADER_PREFIX);
+}
+
+/**
+ * Whether the docs have the server drop the visit's `x-dms-ui-*` headers: the
+ * browser marked it as sent from another origin, by an Origin that is not the
+ * frontend's, or by a Sec-Fetch-Site other than `same-origin`. A visit with
+ * neither header, from a client that is no browser, is not.
+ *
+ * @param {string | undefined} origin The Origin the visit carried
+ * @param {string} host The Host it named
+ * @param {string} fetchSite The Sec-Fetch-Site it carried, `absent` for none
+ */
+export function isCrossOriginVisit(origin, host, fetchSite) {
+  return (origin !== undefined && !isOwnOrigin(origin, host)) || (fetchSite !== "absent" && fetchSite !== "same-origin");
 }

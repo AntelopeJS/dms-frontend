@@ -31,6 +31,9 @@ const DECLARING_FILES = ["generated-public-endpoints.json", "dist/server-modules
 /** The access token of the visitor's session. */
 const ACCESS_TOKEN = "session-access-token";
 
+/** How long before the visit a session sealed as `expired` was written: past the 30 days the server opens it for. */
+const EXPIRED_AFTER_MS = 31 * 24 * 60 * 60 * 1000;
+
 /** The `Authorization` the backend gets for the visitor's session. */
 export const SESSION_AUTHORIZATION = `Bearer ${ACCESS_TOKEN}`;
 
@@ -54,19 +57,36 @@ async function listen(server) {
 }
 
 /**
+ * The value of a session cookie sealed by the server's own code for this
+ * deployment, stamped `age` milliseconds ago: `writeSession` stamps it with
+ * the clock, so the clock reads that time for the call.
+ *
+ * @param {number} age
+ */
+function sealedSession(age) {
+  const response = new ServerResponse(new IncomingMessage(new Socket()));
+  const now = Date.now;
+  Date.now = () => now() - age;
+  try {
+    writeSession(response, { accessToken: ACCESS_TOKEN, refreshToken: "session-refresh-token", accountId: "account-a", persistent: false, user: { id: "account-a" } });
+  } finally {
+    Date.now = now;
+  }
+  const sealed = String([response.getHeader("set-cookie") ?? ""].flat()[0]).split(";")[0] ?? "";
+  return sealed.slice(sealed.indexOf("=") + 1);
+}
+
+/**
  * The cookie header for a visit: a session sealed by the server's own code
- * for this deployment, or one that does not open, or another instance's,
- * next to a cookie of the visitor's choosing.
+ * for this deployment, now or past its 30 days, or one that does not open, or
+ * another instance's, next to a cookie of the visitor's choosing.
  *
  * @param {import("./inputs.mjs").SessionKind} kind
  */
 function cookieFor(kind) {
-  const response = new ServerResponse(new IncomingMessage(new Socket()));
-  writeSession(response, { accessToken: ACCESS_TOKEN, refreshToken: "session-refresh-token", accountId: "account-a", persistent: false, user: { id: "account-a" } });
-  const sealed = String([response.getHeader("set-cookie") ?? ""].flat()[0]).split(";")[0] ?? "";
-  const value = sealed.slice(sealed.indexOf("=") + 1);
+  const value = sealedSession(kind === "expired" ? EXPIRED_AFTER_MS : 0);
   const visitor = `zqother=${MARK}-cookie`;
-  if (kind === "valid") return `${visitor}; ${scopedCookieName(SESSION_COOKIE)}=${value}`;
+  if (kind === "valid" || kind === "expired") return `${visitor}; ${scopedCookieName(SESSION_COOKIE)}=${value}`;
   if (kind === "forged") return `${visitor}; ${scopedCookieName(SESSION_COOKIE)}=${MARK}-forged`;
   if (kind === "foreign") return `${visitor}; ${SESSION_COOKIE}_000000000000=${value}`;
   return visitor;
@@ -84,8 +104,13 @@ function originFor(visit, host) {
   return undefined;
 }
 
-/** @param {string} name */
-function visitorValue(name) {
+/**
+ * The value of a header the visitor sends, which the backend side tells from
+ * the server's own by {@link MARK}.
+ *
+ * @param {string} name
+ */
+export function visitorValue(name) {
   if (name === "referer") return `http://${MARK}.example/referer`;
   if (name === "authorization") return `Bearer ${MARK}-authorization`;
   return `${MARK}-${name}`;
@@ -128,6 +153,7 @@ export async function startServers() {
     /** @type {Record<string, string>} */
     const headers = { host, cookie: cookieFor(sent.session) };
     if (origin) headers.origin = origin;
+    if (sent.fetchSite !== "absent") headers["sec-fetch-site"] = sent.fetchSite;
     for (const name of sent.headers) headers[name] = visitorValue(name);
     const body = BODY_METHODS.has(sent.method) ? "{}" : undefined;
     if (body) headers["content-length"] = String(body.length);
