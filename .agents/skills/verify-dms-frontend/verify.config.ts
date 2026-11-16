@@ -44,6 +44,7 @@ export interface VerifyConfig {
   notUserFacing: string[];
   smoke: string;
   smokeJourney: string;
+  journeys: string;
   doors: Record<DoorKind, DoorRule | null>;
   formal: FormalCheck[];
 }
@@ -59,6 +60,7 @@ const config: VerifyConfig = {
   notUserFacing: ["templates/vue/patches/**", "templates/vue/gitignore", "templates/vue/npmrc", "skills/dms-frontend/cases.json"],
   smoke: "smoke",
   smokeJourney: "onboard, sign in through the rendered form, reload and stay signed in, sign out",
+  journeys: "e2e/journeys",
   doors: {
     data: null,
     format: {

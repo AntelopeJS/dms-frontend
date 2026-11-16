@@ -107,7 +107,7 @@ export const journeys = [
       observe(ctx, "verbose adds the stack trace of the underlying error, and --verbose build still runs build", { terse, verbose }, [
         ctx.equal("without it: exit 1, the title, the fix, no stack", [terse.code, stack.test(terse.stderr), terse.stderr.includes(`Not a directory: ${blocker}/.dms-frontend`), terse.stderr.includes("→ Pass the path of a directory")], [1, false, true, true]),
         ...Object.entries(verbose).map(([name, result]) =>
-          ctx.equal(`${name}: exit 1 with a stack trace that names the failing call`, [result.code, stack.test(result.stderr), result.stderr.includes("ensureExplicitWorkspace"), result.stderr.startsWith("ajs dms build ")], [1, true, true, true]),
+          ctx.equal(`${name}: exit 1 with a stack trace that names the failing call in the renderer`, [result.code, stack.test(result.stderr), result.stderr.includes(join(ctx.state.renderer, "dist")), result.stderr.startsWith("ajs dms build ")], [1, true, true, true]),
         ),
       ]);
     },

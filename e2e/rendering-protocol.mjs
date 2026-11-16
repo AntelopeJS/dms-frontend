@@ -173,6 +173,7 @@ export const journeys = [
   },
   {
     id: "following-a-link-is-an-inertia-visit-without-the-layout",
+    tag: "@smoke",
     title: "after hydration a link click is an X-Inertia request that holds the layout and loads no document",
     entryPoint: "the sidebar's Feature index link on /examples/overview",
     async run(/** @type {Ctx} */ ctx) {

@@ -18,6 +18,7 @@ covers:
   - src/update-check.ts
 docs:
   - docs/3.cli/1.overview.md
+  - docs/3.cli/9.prepare-types.md
   - docs/4.configuration.md
   - docs/9.troubleshooting.md
 ---

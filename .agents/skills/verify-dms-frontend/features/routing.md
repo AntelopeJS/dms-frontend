@@ -63,6 +63,7 @@ A second `ajs dms start` runs from a hard-linked copy of the run's workspace in 
 
 | Behaviour | Why not |
 | --- | --- |
+| The `signOut` option of a module route (#339) | No fixture module declares one; the sessions feature lists it with its test. |
 | `serveModuleRoutes` and the Testing page | Test tooling of a module's own suite, not the frontend server; the satellites run the real server. |
 | An edited handler answers on the next request under `ajs dms dev` | Needs a watched module source and Vite's reload; `tests/dev-modules.test.ts` covers the mirroring. |
 | `renderEmail` | The e-mail templates belong to the `emails` feature. |

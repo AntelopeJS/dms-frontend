@@ -2,10 +2,11 @@ import fc from "fast-check";
 
 /** @typedef {import("./contract.mjs").Deployment} Deployment */
 /** @typedef {"absent" | "own" | "other" | "null" | "https-own"} OriginKind */
-/** @typedef {"none" | "valid" | "forged" | "foreign"} SessionKind */
+/** @typedef {"none" | "valid" | "expired" | "forged" | "foreign"} SessionKind */
+/** @typedef {"absent" | "same-origin" | "same-site" | "cross-site" | "none"} FetchSiteKind */
 /**
  * One request a visitor sends: its method and raw request target, the Origin
- * it carries against the Host it names, its session cookie, and the extra
+ * it carries against the Host it names, its Sec-Fetch-Site, its session cookie, and the extra
  * headers it sends, each valued with {@link MARK} so that the backend side
  * can tell them from the server's own.
  *
@@ -14,6 +15,7 @@ import fc from "fast-check";
  *   target: string,
  *   host: "own" | "other",
  *   origin: OriginKind,
+ *   fetchSite: FetchSiteKind,
  *   session: SessionKind,
  *   headers: string[],
  * }} Visit
@@ -43,8 +45,10 @@ const HOSTILE_TARGETS = ["//evil.example/api/a", "http://evil.example/api/a", "/
 const QUERIES = ["", "", "", "?q=1", "?next=%2F..%2Fapi", "#frag", "?a=1#b"];
 
 /**
- * Headers a visitor may send: the ones the docs relay, the ones a public
- * endpoint may declare, and ones the backend gives a meaning to.
+ * Headers a visitor may send: the ones the docs relay, the `x-dms-ui-*` ones a
+ * module's client code sets, the ones a public endpoint may declare, and ones
+ * the backend gives a meaning to, `x-dms-ui` without its trailing dash among
+ * them.
  */
 const VISITOR_HEADERS = [
   "user-agent",
@@ -65,6 +69,9 @@ const VISITOR_HEADERS = [
   "forwarded",
   "x-dms-bootstrap",
   "x-dms-tenant",
+  "x-dms-ui",
+  "x-dms-ui-assistant",
+  "x-dms-ui-other",
   "x-http-method-override",
   "x-inertia",
   "x-other",
@@ -190,7 +197,7 @@ function rawTarget(segments) {
 
 /**
  * A visit: a method and a raw target from `request`, a Host, an Origin, a
- * session cookie and extra headers.
+ * Sec-Fetch-Site, a session cookie and extra headers.
  *
  * @param {fc.Arbitrary<{ segments: string[], method: string }>} request
  * @returns {fc.Arbitrary<Visit>}
@@ -204,7 +211,8 @@ function visitOf(request) {
       sent,
       host: fc.constantFrom("own", "own", "own", "other"),
       origin: fc.constantFrom("absent", "own", "own", "other", "null", "https-own"),
-      session: fc.constantFrom("none", "valid", "valid", "forged", "foreign"),
+      fetchSite: fc.constantFrom("absent", "absent", "absent", "same-origin", "same-origin", "same-site", "cross-site", "none"),
+      session: fc.constantFrom("none", "valid", "valid", "expired", "forged", "foreign"),
       headers: fc.subarray(VISITOR_HEADERS),
     })
     .map(({ sent: { method, target }, ...others }) => ({ method, target, ...others }));

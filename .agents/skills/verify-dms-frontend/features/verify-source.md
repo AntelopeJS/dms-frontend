@@ -10,6 +10,10 @@ covers:
   - src/verify-source-sources.ts
   - templates/vue/server/module-testing.mjs
   - templates/vue/typecheck-loader.mjs
+  - src/child-reaper.ts
+  - src/source-runner.ts
+  - src/verify-source-lock.ts
+  - src/verify-source-workspace.ts
 docs:
   - docs/3.cli/8.verify-source.md
   - docs/5.frontend-modules/10.testing.md
@@ -21,10 +25,12 @@ docs:
 
 ## Sub-features
 
-- `verify-source-usage`: refusals before anything is installed, each in under a second: `--layer` / `-l` on a module that is not the core layer (exit 2 and the `-m` command), no `@antelopejs/dms` from the working directory (exit 2 and the command that adds it), a missing path, a folder without `package.json`, no module in the project, a module whose `engines` excludes this release (exit 1; the selected module shown as `./frontend-vue` from a project, `.` from the module, `./frontend-vue` with `-m`), `--local-package` without `name=path`; the temporary directory stays empty.
+- `verify-source-usage`: refusals before anything is installed, each in under a second: `--layer` / `-l` on a module that is not the core layer (exit 2 and the `-m` command), no `@antelopejs/dms` from the working directory (exit 2 and the command that adds it), a missing path, a folder without `package.json`, no module in the project, a module whose `engines` excludes this release (exit 1; the selected module shown as `./frontend-vue` from a project, `.` from the module, `./frontend-vue` with `-m`), `--local-package` without `name=path`; the temporary directory stays empty, but for the empty lock directory `ajs-dms-verify-source-<uid>` that a refusal of the runner (an excluded release) leaves.
 - `verify-source-pass`: a module that builds and type-checks: the header counts two modules, the core layer's version, every step once (materialize, install, type declarations, server modules, e-mail bundle, client bundle, SSR bundle, type check), then the client bundle check, the e-mail contracts (8 templates, JS under 256 KB), the server module check, and `Verified 2 modules`; exit 0, the temporary workspace removed.
 - `verify-source-failures`: a type error exits 1 and names `./frontend-vue/app/components/Callout.vue:2:7  TS2322` with the code frame and the fix, not the workspace copy; `--verbose` streams more; a template that does not compile fails the client and SSR bundles and names the component; a `dms.server.ts` that imports `dms.frontend.ts` fails; the temporary workspace is removed after each failure.
 - `verify-source-local-package`: `-m` twice verifies three modules; a dependency the registry does not know fails the run unless `--local-package name=path` binds a local build.
+- `verify-source-on-a-linked-workspace-layout`: a pnpm workspace root pins `fx-lib`, which no registry has, to a tarball beside it through `pnpm.overrides`; its `frontend-vue` member holds a symlink back to the root and a `..b` folder with a `node_modules`, and the run starts from a symlink to the root. The run exits 0 and its type check reads the tarball's `version` literal (#308, #340).
+- `verify-source-dies-with-a-killed-cli`: `ajs dms verify-source`, then `node -e` calling `runVerifySource`, each SIGKILLed once `vite` or `vue-tsc` runs: one runner ever starts, no runner, pnpm, vite or vue-tsc process is left 5 seconds later, and no workspace stays in `TMPDIR` (#343, #353). The journey finds the run's processes by the `TMPDIR` in their environment under `/proc`, so it runs on Linux only, and it kills every process of the run at a second runner.
 - `verify-source-email-limit`: a module whose e-mail template adds about 90 KB keeps the bundle near 215 KB and passes; one adding about 140 KB fails naming a size above 256 KB and the limit.
 
 ## How to get to it (user POV)
@@ -53,4 +59,6 @@ The journeys write small modules inside the run's checkout (`root/packages/dms/v
 
 - A `-m` folder that has a `package.json` but no `dms.frontend.ts` is verified without complaint, although the hint of the path errors says the folder contains `dms.frontend.ts`.
 - Node's own compile cache can appear in `TMPDIR`; the checks ignore `node-compile-cache`.
-- A run takes 30 to 50 seconds; the four journeys run eleven of them.
+- A run takes 30 to 50 seconds.
+- A killed run leaves its lock in `ajs-dms-verify-source-<uid>`; the next run takes it over, so the journeys count it as no leftover.
+- Before #340 the linked-layout journey stops at `ELOOP` on the `loop` symlink, before the overrides matter.

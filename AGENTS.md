@@ -9,6 +9,7 @@
 | `skills`    | The agent skill shipped in the package (`antelopeJs.skills`)                                   |
 | `docs`      | The user docs. `pnpm docs:reference` writes the environment table in `docs/4.configuration.md` |
 | `tests`     | The `node:test` suite                                                                          |
+| `e2e`       | The verify skill's journeys, run as a Playwright suite by `pnpm e2e`                           |
 
 oxlint skips `templates/**/*.{ts,tsx,vue}` and knip skips `templates/**`: they resolve against the consumer's dependencies. Their `.mjs` files stay linted.
 
@@ -29,6 +30,7 @@ The CLI and output tests compare Unicode symbols, so `pnpm test`, `pnpm test:cli
 
 - The CLI suites. CI runs them in its `cli` job. Run `pnpm test:cli`: it builds `dist`, then runs them with `DMS_PREBUILT=1`. `cli-startup`, `cli-signals` and `cli-framed-output` always spawn `dist/index.js`, so build before you run one of them on its own; `cli-sandbox` falls back to the sources without `DMS_PREBUILT`.
 - `pnpm test:real-source`. `tsconfig.json` covers only `src`, so this is the only check that type-checks the templates (vue-tsc) and builds them against a real DMS layer. Run it when a change touches `templates/` or `verify-source`: `DMS_LAYER_SOURCE=<dms checkout>/packages/dms/frontend-vue DMS_MODULE_SOURCES='["<module root>"]' pnpm test:real-source`, adding `DMS_LOCAL_PACKAGES='{"@antelopejs/dms":"<dms checkout>/packages/dms"}'` for an unpublished `@antelopejs/dms`.
+- The journeys. CI runs the `@smoke` set in its `e2e` job on a pull request into `main`, a push to `next` and a manual run, and every journey each night. Run `DMS_PLAYGROUND=<dms checkout>/packages/dms/playground pnpm e2e --grep @smoke` against a dms checkout that is installed and built.
 - Dead files and exports. `pnpm knip` checks dependencies only; `pnpm knip:all` also reports unused files and exports, which need a human to confirm.
 
 <!-- antelopejs-guardrails:start -->

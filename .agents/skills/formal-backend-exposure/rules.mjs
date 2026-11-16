@@ -1,5 +1,5 @@
-import { covers, declaredEndpoints, declaredProxies, isOwnOrigin, matchingEndpoints, ownerOf, PAGE_READS, RELAYED_HEADERS, SAFE_METHODS } from "./contract.mjs";
-import { SESSION_AUTHORIZATION } from "./drive.mjs";
+import { covers, declaredEndpoints, declaredProxies, isCrossOriginVisit, isOwnOrigin, isUiHeader, matchingEndpoints, ownerOf, PAGE_READS, RELAYED_HEADERS, SAFE_METHODS } from "./contract.mjs";
+import { SESSION_AUTHORIZATION, visitorValue } from "./drive.mjs";
 import { MARK } from "./inputs.mjs";
 
 /** @typedef {import("./inputs.mjs").Case} Case */
@@ -160,17 +160,41 @@ const forwardedByTheProxy = {
   },
 };
 
+/** @param {Seen} seen */
+const isCrossOrigin = (seen) => isCrossOriginVisit(seen.observation.origin, seen.observation.host, seen.case.visit.fetchSite);
+
 /** @type {Rule} */
 const listedHeadersOnly = {
   name: "ListedHeadersOnly",
-  broken: ({ owner, observation, proxied }) => {
+  broken: (seen) => {
+    const { owner, observation, proxied } = seen;
     const declared = new Set(owner.endpoints.flatMap((endpoint) => endpoint.headers));
+    const sent = new Set(seen.case.visit.headers);
     for (const received of observation.received) {
       for (const [name, value] of Object.entries(received.headers)) {
+        if (isUiHeader(name)) {
+          if (isCrossOrigin(seen)) return `the backend received ${shown(received)} with ${name}, though the browser marked the visit as sent from another origin`;
+          if (!sent.has(name) || String(value) !== visitorValue(name)) return `the backend received ${shown(received)} with ${name} "${String(value)}", which the visitor did not send`;
+          continue;
+        }
         if (FORWARDED.has(name) || CREDENTIALS.has(name) || !String(value).includes(MARK)) continue;
         if (RELAYED_HEADERS.has(name) || (proxied.includes(received) && declared.has(name))) continue;
         return `the backend received ${shown(received)} with the visitor's ${name}`;
       }
+    }
+    return undefined;
+  },
+};
+
+/** @type {Rule} */
+const uiHeadersRelayed = {
+  name: "UiHeadersRelayed",
+  broken: (seen) => {
+    if (isCrossOrigin(seen)) return undefined;
+    const sent = seen.case.visit.headers.filter(isUiHeader);
+    for (const received of seen.observation.received) {
+      const lost = sent.find((name) => received.headers[name] !== visitorValue(name));
+      if (lost) return `the backend received ${shown(received)} without the visitor's ${lost}`;
     }
     return undefined;
   },
@@ -230,6 +254,7 @@ export const RULES = [
   noVisitorCredentials,
   forwardedByTheProxy,
   listedHeadersOnly,
+  uiHeadersRelayed,
   declaredPrefixesReach,
   winningProxyDecides,
   publicEndpointsWork,

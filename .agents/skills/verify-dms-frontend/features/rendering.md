@@ -67,7 +67,7 @@ Journeys read the session cookie from the signed-in tab and request the frontend
 
 ## Gotchas
 
-- The Users table and every page layout need a backend that serves controller routes. The dms playground loads `@antelopejs/api ^1.5.0` from the registry, which answers those as 500 (AntelopeJS/dms#620); runs on a registry api fail `the-data-a-page-read-is-drawn-by-the-server-and-handed-over`.
+- Known finding, in `knownFailures`: the dms table view at 1313dd7 reads `/api/user/list` again once it hydrates, although the server handed the list over, so `the-data-a-page-read-is-drawn-by-the-server-and-handed-over` reads its `requests for the users' data` check as `known`.
 - Production builds print no hydration warning, so a mismatch between the server and the browser is not observable.
 
 ## Not driven
