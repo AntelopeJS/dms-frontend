@@ -11,6 +11,7 @@ covers:
   - templates/vue/server/module-route-types.mjs
   - templates/vue/server/module-routes.mjs
   - templates/vue/server/module-server.mjs
+  - templates/vue/server/page-render.mjs
   - templates/vue/server/request-routing.mjs
   - templates/vue/server/route-rules.mjs
   - templates/vue/server/ssr-module.mjs

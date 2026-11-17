@@ -60,12 +60,13 @@ import {
   propsForQuery,
 } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
-import { isNumber, isObjectLike, isString } from "./server/type-guards.mjs";
+import { isString } from "./server/type-guards.mjs";
 import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
 import { ssrRenderer } from "./server/ssr-module.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
 import { backendRetryScript } from "./server/backend-retry.mjs";
+import { clientRenderedShell, serverRendered } from "./server/page-render.mjs";
 import { proxy } from "./server/proxy-request.mjs";
 import {
   hasOriginFormTarget,
@@ -75,12 +76,10 @@ import { SERVER_OPTIONS } from "./server/proxy-transfers.mjs";
 import {
   createInertiaPage,
   htmlHeaders,
-  inertiaAppHtml,
   inertiaHeaders,
   isFrontendVisit,
   redirectFrontendVisit,
   handleAssetVersionMismatch,
-  isSsrPage,
 } from "./server/inertia.mjs";
 export * from "./server/inertia.mjs";
 
@@ -199,45 +198,6 @@ function serveAsset(pathname, request, response) {
     immutable: pathname.startsWith("/assets/"),
   });
   return true;
-}
-
-/**
- * @param {InertiaPage} page
- * @returns {import("./ssr-renderer.ts").DmsSsrResult}
- */
-function clientRenderedShell(page) {
-  return {
-    body: inertiaAppHtml(page),
-    head: { headTags: "", htmlAttrs: "", bodyAttrs: "" },
-    overlays: "",
-    modules: [],
-  };
-}
-
-/**
- * @param {InertiaPage} page
- * @param {ServerReads} serverFetch
- * @param {string | undefined} requestCookies
- * @param {ViteDevServer | undefined} devServer
- */
-async function serverRendered(page, serverFetch, requestCookies, devServer) {
-  try {
-    const renderer = await ssrRenderer(devServer);
-    if (!isSsrPage(page))
-      throw new TypeError("The page has no path and no page props to render");
-    return await renderer.renderDmsPage(page, serverFetch, requestCookies);
-  } catch (error) {
-    console.error(
-      "DMS SSR render failed; falling back to client rendering",
-      error,
-    );
-    const { error: pageError } = page.props;
-    const statusCode =
-      isObjectLike(pageError) && isNumber(pageError.statusCode)
-        ? pageError.statusCode
-        : 500;
-    return { ...clientRenderedShell(page), error: { statusCode } };
-  }
 }
 
 /**
