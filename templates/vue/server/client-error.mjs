@@ -1,6 +1,13 @@
 const HEADER_OVERFLOW = "HPE_HEADER_OVERFLOW";
+const HEADER_OVERFLOW_BODY =
+  '<!doctype html><meta charset="utf-8"><title>Request header too large</title>' +
+  "<h1>431 Request Header Fields Too Large</h1>" +
+  "<p>This site's cookies are too large: clear the cookies for localhost (or this host) and reload.</p>";
 const HEADER_OVERFLOW_RESPONSE =
-  "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\n\r\n";
+  "HTTP/1.1 431 Request Header Fields Too Large\r\n" +
+  "Content-Type: text/html; charset=utf-8\r\n" +
+  `Content-Length: ${Buffer.byteLength(HEADER_OVERFLOW_BODY)}\r\n` +
+  `Connection: close\r\n\r\n${HEADER_OVERFLOW_BODY}`;
 const BAD_REQUEST_RESPONSE =
   "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n";
 /**

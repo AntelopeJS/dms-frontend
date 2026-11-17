@@ -21,9 +21,14 @@ const REQUEST_TIMEOUT_MS = 60 * 60 * 1000;
  * The frontend server's options. Node's default request timeout (5 minutes to
  * receive a whole request) cut off a large upload on a slow link: an hour lets
  * 500 MiB through at about 150 KB/s. Headers keep Node's own minute.
+ *
+ * A browser sends every cookie it holds for `localhost` to every port, and
+ * Node's 16 KiB header limit refuses the page. The backend proxy never
+ * forwards the Cookie header, so a larger limit here does not 431 in turn.
  */
 export const SERVER_OPTIONS = Object.freeze({
   requestTimeout: REQUEST_TIMEOUT_MS,
+  maxHeaderSize: 64 * 1024,
 });
 
 class BodyTooLargeError extends Error {}

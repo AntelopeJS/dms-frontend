@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { maxHeaderSize } from "node:http";
+import { SERVER_OPTIONS } from "../templates/vue/server/proxy-transfers.mjs";
 import { connect } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,9 +13,14 @@ const SERVER = resolve(
 const READY = /✓ Server ready on http:\/\/127\.0\.0\.1:(\d+)/;
 const HINT = /headers exceed the \d+-byte limit[^]*clear this site's cookies/;
 /** Cookies a browser piled up on localhost, past what Node parses. */
-const OVERSIZED_REQUEST =
-  "GET / HTTP/1.1\r\nHost: localhost\r\n" +
-  `Cookie: stale=${"x".repeat(maxHeaderSize)}\r\n\r\n`;
+const OVERSIZED_REQUEST = cookieRequest(SERVER_OPTIONS.maxHeaderSize);
+
+function cookieRequest(cookieBytes: number) {
+  return (
+    "GET /healthz-not-a-route HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n" +
+    `Cookie: stale=${"x".repeat(cookieBytes)}\r\n\r\n`
+  );
+}
 
 async function startServer(context: TestContext) {
   const server = spawn(process.execPath, [SERVER], {
@@ -63,6 +68,11 @@ void describe("requests Node rejects before the frontend handler", () => {
           answer,
           /^HTTP\/1\.1 431 Request Header Fields Too Large\r\n/,
         );
+        assert.match(answer, /Content-Type: text\/html/);
+        assert.match(
+          answer,
+          /clear the cookies for localhost \(or this host\)/,
+        );
       }
       assert.match(output.stderr, HINT);
       assert.equal(
@@ -70,6 +80,17 @@ void describe("requests Node rejects before the frontend handler", () => {
         1,
         "a retried page logs the hint once",
       );
+    },
+  );
+
+  void it(
+    "serves a request carrying 60 KiB of cookies",
+    { timeout: 15_000 },
+    async (context) => {
+      const { port } = await startServer(context);
+      const answer = await exchange(port, cookieRequest(60 * 1024));
+      assert.match(answer, /^HTTP\/1\.1 \d{3} /);
+      assert.doesNotMatch(answer, /^HTTP\/1\.1 (431|400) /);
     },
   );
 
