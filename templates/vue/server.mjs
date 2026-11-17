@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { createServer, maxHeaderSize } from "node:http";
+import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RequestBodyError, UpstreamError } from "./server/auth/backend.mjs";
@@ -65,6 +65,8 @@ import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
 import { ssrRenderer } from "./server/ssr-module.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
+import { backendRetryScript } from "./server/backend-retry.mjs";
+import { clientRenderedShell, serverRendered } from "./server/page-render.mjs";
 import { proxy } from "./server/proxy-request.mjs";
 import {
   hasOriginFormTarget,
@@ -74,12 +76,10 @@ import { SERVER_OPTIONS } from "./server/proxy-transfers.mjs";
 import {
   createInertiaPage,
   htmlHeaders,
-  inertiaAppHtml,
   inertiaHeaders,
   isFrontendVisit,
   redirectFrontendVisit,
   handleAssetVersionMismatch,
-  isSsrPage,
 } from "./server/inertia.mjs";
 export * from "./server/inertia.mjs";
 
@@ -201,40 +201,6 @@ function serveAsset(pathname, request, response) {
 }
 
 /**
- * @param {InertiaPage} page
- * @returns {import("./ssr-renderer.ts").DmsSsrResult}
- */
-function clientRenderedShell(page) {
-  return {
-    body: inertiaAppHtml(page),
-    head: { headTags: "", htmlAttrs: "", bodyAttrs: "" },
-    overlays: "",
-    modules: [],
-  };
-}
-
-/**
- * @param {InertiaPage} page
- * @param {ServerReads} serverFetch
- * @param {string | undefined} requestCookies
- * @param {ViteDevServer | undefined} devServer
- */
-async function serverRendered(page, serverFetch, requestCookies, devServer) {
-  try {
-    const renderer = await ssrRenderer(devServer);
-    if (!isSsrPage(page))
-      throw new TypeError("The page has no path and no page props to render");
-    return await renderer.renderDmsPage(page, serverFetch, requestCookies);
-  } catch (error) {
-    console.error(
-      "DMS SSR render failed; falling back to client rendering",
-      error,
-    );
-    return { ...clientRenderedShell(page), error: { statusCode: 500 } };
-  }
-}
-
-/**
  * Renders a page document. With `{ ssr: false }` (a route rule), the client
  * renders the page from the shell instead.
  *
@@ -265,10 +231,12 @@ export async function renderHtml(
       : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
+  const status = rendered.error?.statusCode ?? 200;
   const headEnd =
     (await documentStyleTags(devServer, rendered.modules, template)) +
     (devServer ? "" : localeCatalogPreloadTag(rendered.catalogLocale)) +
-    publicOptionsScript();
+    publicOptionsScript() +
+    backendRetryScript(status);
   const html = template
     .replace("<title>Antelope DMS</title>", () =>
       withFaviconPlaceholder(rendered.head.headTags),
@@ -283,7 +251,7 @@ export async function renderHtml(
       `<div id="dms-overlays" class="isolate">${rendered.overlays}</div>`,
     )
     .replace("__DMS_APP__", () => rendered.body);
-  return { html, status: rendered.error?.statusCode ?? 200 };
+  return { html, status };
 }
 
 /**
@@ -553,7 +521,7 @@ if (
   frontendHttpServer = createServer(SERVER_OPTIONS, handleRequestSafely);
   const server = frontendHttpServer;
   server.on("clientError", (error, socket) =>
-    handleClientError(error, socket, maxHeaderSize),
+    handleClientError(error, socket, SERVER_OPTIONS.maxHeaderSize),
   );
   const port = Number(process.env.PORT ?? 3001);
   const host = listenHost();
