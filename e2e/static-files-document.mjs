@@ -6,7 +6,7 @@ import { observe, withSatellite } from "./proxy-satellite.mjs";
 import { cookieHeader, setCookies } from "./proxy-signin.mjs";
 import { standalone } from "./standalone.mjs";
 
-const HEADER_LIMIT = 16384;
+const HEADER_LIMIT = 64 * 1024;
 
 export const journeys = [
   {
@@ -53,7 +53,7 @@ export const journeys = [
       await withSatellite(ctx, {}, async (server) => {
         /** @type {Record<number, number>} */
         const sizes = {};
-        for (const size of [8000, HEADER_LIMIT - 1000, HEADER_LIMIT + 2000, 60_000]) {
+        for (const size of [8000, HEADER_LIMIT - 1000, HEADER_LIMIT + 2000, 2 * HEADER_LIMIT]) {
           const answer = await rawExchange(server.url, `GET /dms-preview HTTP/1.1\r\nHost: x\r\nConnection: close\r\nX-Pad: ${"a".repeat(size)}\r\n\r\n`);
           sizes[size] = answer.status;
         }
@@ -65,7 +65,7 @@ export const journeys = [
         observe(ctx, "oversized and malformed requests", { sizes, malformed: malformed.text.slice(0, 80), garbage: garbage.text.slice(0, 80), hints }, [
           ctx.equal("headers well under the limit are served", sizes[8000], 200),
           ctx.equal("headers just under the limit are served", sizes[HEADER_LIMIT - 1000], 200),
-          ctx.equal("headers over the limit answer 431", [sizes[HEADER_LIMIT + 2000], sizes[60_000]], [431, 431]),
+          ctx.equal("headers over the limit answer 431", [sizes[HEADER_LIMIT + 2000], sizes[2 * HEADER_LIMIT]], [431, 431]),
           ctx.equal("a malformed header line answers 400", malformed.status, 400),
           ctx.equal("a request that is not HTTP answers 400", garbage.status, 400),
           ctx.equal("the server keeps serving", after.status, 200),
