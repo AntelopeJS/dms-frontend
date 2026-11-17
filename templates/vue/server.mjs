@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { createServer, maxHeaderSize } from "node:http";
+import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RequestBodyError, UpstreamError } from "./server/auth/backend.mjs";
@@ -553,7 +553,7 @@ if (
   frontendHttpServer = createServer(SERVER_OPTIONS, handleRequestSafely);
   const server = frontendHttpServer;
   server.on("clientError", (error, socket) =>
-    handleClientError(error, socket, maxHeaderSize),
+    handleClientError(error, socket, SERVER_OPTIONS.maxHeaderSize),
   );
   const port = Number(process.env.PORT ?? 3001);
   const host = listenHost();
