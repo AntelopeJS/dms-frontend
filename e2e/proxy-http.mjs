@@ -73,7 +73,8 @@ export function exchange(base, options) {
 
 /**
  * A request written byte by byte on a TCP socket, for targets and framing
- * `http.request` refuses (an absolute-form target, a backslash).
+ * `http.request` refuses (an absolute-form target, a backslash). A reset after a status line was
+ * received keeps the answer, as a browser sees it: the server closes with the oversized rest unread.
  *
  * @param {string} base The server's URL
  * @param {string} head The request head, lines joined with CRLF and ended by an empty line
@@ -88,9 +89,17 @@ export function rawExchange(base, head) {
     socket.setTimeout(DEFAULT_TIMEOUT_MS, () => socket.destroy(new Error("timeout")));
     socket.on("connect", () => socket.write(head));
     socket.on("data", (part) => parts.push(part));
-    socket.on("error", reject);
+    /** @type {Error | undefined} */
+    let failure;
+    socket.on("error", (error) => {
+      failure = error;
+    });
     socket.on("close", () => {
       const text = Buffer.concat(parts).toString("utf8");
+      if (failure && !("code" in failure && failure.code === "ECONNRESET" && /^HTTP\/1\.1 \d{3}/.test(text))) {
+        reject(failure);
+        return;
+      }
       resolve({ status: Number(/^HTTP\/1\.1 (\d{3})/.exec(text)?.[1] ?? 0), text });
     });
   });
