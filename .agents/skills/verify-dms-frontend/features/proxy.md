@@ -3,6 +3,7 @@ covers:
   - templates/vue/network-error.ts
   - templates/vue/public-options.ts
   - templates/vue/server/backend-proxies.mjs
+  - templates/vue/server/backend-retry.mjs
   - templates/vue/server/backend-request.mjs
   - templates/vue/server/backend-response.mjs
   - templates/vue/server/path-patterns.mjs
@@ -19,6 +20,7 @@ covers:
 docs:
   - docs/7.deployment/3.routing-and-proxy.md
   - docs/7.deployment/4.public-endpoints.md
+  - docs/9.troubleshooting.md
 ---
 
 # proxy
@@ -35,6 +37,7 @@ The frontend server sends the paths that a backend prefix covers to the backend:
 - `proxy-streams`: an event stream relayed as written, a client that leaves closes its backend request, a broken backend stream ends only that response.
 - `proxy-declarations`: the most specific pattern wins, ignored declarations and their exact warnings, the startup report, normalized paths (`..`, `%2e%2e`, `\`), and request targets that are not origin-form.
 - `proxy-offline`: the Connection lost toast of a navigation that never reaches the server.
+- `proxy-backend-restart`: a page loaded while the backend refuses connections answers 502, asks for itself again while the backend stays down, and loads by itself once the backend accepts them again.
 - `proxy-redirect-icons`: a backend redirect to its own `/api/_dms/icons` stays an absolute backend URL, since the renderer answers that path first.
 - `proxy-pattern-forms`: a finding, see Gotchas.
 
@@ -66,6 +69,7 @@ Most journeys start a second `ajs dms start` (`proxy-satellite.mjs`) on a free p
 | Response compression | `proxy-answers` |
 | Event streams | `proxy-streams` |
 | 4.public-endpoints | `proxy-access` (the playground's webhook and a second server) |
+| 9.troubleshooting, Cannot reach the backend (the 502 page that reloads) | `proxy-backend-restart` |
 
 ## Not driven
 

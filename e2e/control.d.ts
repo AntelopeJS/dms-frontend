@@ -40,6 +40,7 @@ export interface Request {
 
 export interface Response {
   url(): string;
+  request(): Request;
   status(): number;
   headers(): Record<string, string>;
   json(): Promise<Json>;
