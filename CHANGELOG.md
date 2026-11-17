@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.11.8
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.7...v0.11.8)
+
+### 🩹 Fixes
+
+- Answer an oversized-header request with a 431 page and raise the header limit ([#373](https://github.com/AntelopeJS/dms-frontend/pull/373))
+- Reload the 502 page once the backend answers again ([#374](https://github.com/AntelopeJS/dms-frontend/pull/374))
+- **e2e:** Keep the 431 a raw exchange received before the socket reset ([#376](https://github.com/AntelopeJS/dms-frontend/pull/376))
+
+### ✅ Tests
+
+- Probe the static-files client-errors journey against the 64 KiB header limit ([#375](https://github.com/AntelopeJS/dms-frontend/pull/375))
+
+### 🤖 CI
+
+- Pick the tier with the shared ci-tier action ([#372](https://github.com/AntelopeJS/dms-frontend/pull/372))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.11.7
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.6...v0.11.7)
