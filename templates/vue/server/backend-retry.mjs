@@ -7,30 +7,38 @@ const FIRST_DELAY_MS = 500;
 const LONGEST_DELAY_MS = 8000;
 
 /**
- * Runs in the browser: asks for the page again after `delay`, doubling it up
- * to `longestDelay`, and reloads once the answer is not a `retried` status.
+ * @typedef {{ detail?: { page?: { props?: { error?: { statusCode?: unknown } } } } }} NavigateEvent
+ */
+
+/**
+ * Runs in the browser: asks for the page again after `firstDelay`, doubling
+ * the wait up to `longestDelay`, and reloads once the answer is not a
+ * `retried` status. It stops once Inertia shows a page that is not a
+ * `retried` error, as when the visitor leaves the error page.
  *
  * @param {{ href: string, reload(): void }} page The browser's `location`
- * @param {number[]} retried
- * @param {number} delay
+ * @param {{ addEventListener(type: string, listener: (event: NavigateEvent) => void): void }} events The browser's `document`
+ * @param {unknown[]} retried
+ * @param {number} firstDelay
  * @param {number} longestDelay
  */
-function retryUntilAnswered(page, retried, delay, longestDelay) {
-  setTimeout(() => {
-    fetch(page.href, { headers: { accept: "text/html" }, cache: "no-store" })
-      .then((answer) => {
-        if (retried.includes(answer.status)) throw new Error("still down");
-        page.reload();
-      })
-      .catch(() =>
-        retryUntilAnswered(
-          page,
-          retried,
-          Math.min(delay * 2, longestDelay),
-          longestDelay,
-        ),
-      );
-  }, delay);
+function retryUntilAnswered(page, events, retried, firstDelay, longestDelay) {
+  let left = false;
+  events.addEventListener("inertia:navigate", (event) => {
+    left = !retried.includes(event.detail?.page?.props?.error?.statusCode);
+  });
+  /** @param {number} delay */
+  const attempt = (delay) =>
+    setTimeout(() => {
+      if (left) return;
+      fetch(page.href, { headers: { accept: "text/html" }, cache: "no-store" })
+        .then((answer) => {
+          if (retried.includes(answer.status)) throw new Error("still down");
+          if (!left) page.reload();
+        })
+        .catch(() => attempt(Math.min(delay * 2, longestDelay)));
+    }, delay);
+  attempt(firstDelay);
 }
 
 /**
@@ -42,6 +50,6 @@ function retryUntilAnswered(page, retried, delay, longestDelay) {
  */
 export function backendRetryScript(status) {
   if (!RETRIED_STATUSES.includes(status)) return "";
-  const call = `(${retryUntilAnswered.toString()})(location,${JSON.stringify(RETRIED_STATUSES)},${FIRST_DELAY_MS},${LONGEST_DELAY_MS})`;
+  const call = `(${retryUntilAnswered.toString()})(location,document,${JSON.stringify(RETRIED_STATUSES)},${FIRST_DELAY_MS},${LONGEST_DELAY_MS})`;
   return `<script>${call}</script>`;
 }

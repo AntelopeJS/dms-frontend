@@ -9,6 +9,8 @@ import { addressOf } from "./helpers/net";
 
 /** A request the server dropped would otherwise wait forever. */
 const REQUEST_TIMEOUT_MS = 10_000;
+/** A page that never reloads fails its test instead of hanging the run. */
+const TEST_TIMEOUT_MS = 15_000;
 /** How long a scheduled retry really waits: the page asks for longer. */
 const FAST_DELAY_MS = 5;
 /** The delays a page asks for while the backend stays down. */
@@ -33,9 +35,22 @@ function inlineScripts(html: string): string[] {
   );
 }
 
+interface NavigateEvent {
+  readonly detail: {
+    readonly page: {
+      readonly props: { readonly error?: { statusCode: number } };
+    };
+  };
+}
+
+type Listener = (event: NavigateEvent) => void;
+
 interface PageRun {
   readonly delays: number[];
+  readonly fetches: () => number;
   readonly reloaded: Promise<number>;
+  /** Plays Inertia showing a page whose error status is `statusCode`. */
+  readonly navigate: (statusCode?: number) => void;
 }
 
 /**
@@ -44,6 +59,8 @@ interface PageRun {
  */
 function runPage(html: string, href: string): PageRun {
   const delays: number[] = [];
+  const listeners: Listener[] = [];
+  let fetches = 0;
   const reloaded = new Promise<number>((resolve) => {
     const location = {
       href,
@@ -53,9 +70,18 @@ function runPage(html: string, href: string): PageRun {
         );
       },
     };
+    const document = {
+      addEventListener: (type: string, listener: Listener) => {
+        if (type === "inertia:navigate") listeners.push(listener);
+      },
+    };
     const context = {
       location,
-      fetch,
+      document,
+      fetch: (...request: Parameters<typeof fetch>) => {
+        fetches += 1;
+        return fetch(...request);
+      },
       setTimeout: (callback: () => void, delay: number) => {
         delays.push(delay);
         return setTimeout(callback, FAST_DELAY_MS);
@@ -63,7 +89,12 @@ function runPage(html: string, href: string): PageRun {
     };
     for (const code of inlineScripts(html)) runInNewContext(code, context);
   });
-  return { delays, reloaded };
+  const navigate = (statusCode?: number) => {
+    const error = statusCode === undefined ? undefined : { statusCode };
+    for (const listener of listeners)
+      listener({ detail: { page: { props: { error } } } });
+  };
+  return { delays, fetches: () => fetches, reloaded, navigate };
 }
 
 async function until(holds: () => boolean): Promise<void> {
@@ -74,10 +105,17 @@ async function until(holds: () => boolean): Promise<void> {
   }
 }
 
-const answerPage: RequestListener = (_request, response) => {
-  response.writeHead(200, { "content-type": "application/json" });
-  response.end("{}");
-};
+function answering(status: number, body = "{}"): RequestListener {
+  return (_request, response) => {
+    response.writeHead(status, { "content-type": "application/json" });
+    response.end(body);
+  };
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
 
 void describe("the error page served while the backend is unreachable", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-backend-retry-"));
@@ -107,8 +145,8 @@ void describe("the error page served while the backend is unreachable", () => {
 
   after(async () => {
     process.chdir(previousCwd);
-    process.env.DMS_DEV = previousDev;
-    process.env.DMS_API_BASE_URL = previousBackend;
+    restoreEnv("DMS_DEV", previousDev);
+    restoreEnv("DMS_API_BASE_URL", previousBackend);
     if (frontend) await close(frontend);
     rmSync(root, { recursive: true, force: true });
   });
@@ -120,41 +158,83 @@ void describe("the error page served while the backend is unreachable", () => {
     });
   }
 
-  void it("loads the page once the backend is up again, asking less often while it stays down", async (context) => {
-    context.mock.method(console, "error", () => undefined);
-    const down = await visit("/articles");
-    assert.equal(down.status, 502);
-    const page = runPage(await down.text(), `${base}/articles`);
-    await until(() => page.delays.length >= BACKOFF_MS.length);
-    assert.deepEqual(
-      page.delays.slice(0, BACKOFF_MS.length),
-      BACKOFF_MS,
-      "each retry waits twice as long, up to a bound",
-    );
-    const backend = createServer(answerPage);
+  async function withBackend<T>(
+    handler: RequestListener,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const backend = createServer(handler);
     await listen(backend, backendPort);
     try {
-      const status = await page.reloaded;
-      assert.notEqual(status, 502, "the reload shows the page, not the 502");
+      return await run();
     } finally {
       await close(backend);
     }
-  });
+  }
 
-  void it("does not retry an error the backend answered", async (context) => {
-    context.mock.method(console, "error", () => undefined);
-    const backend = createServer((_request, response) => {
-      response.writeHead(500, { "content-type": "application/json" });
-      response.end('{"message":"broken"}');
-    });
-    await listen(backend, backendPort);
-    try {
-      const failed = await visit("/articles");
-      assert.equal(failed.status, 500);
-      const page = runPage(await failed.text(), `${base}/articles`);
-      assert.deepEqual(page.delays, [], "a 500 page schedules no retry");
-    } finally {
-      await close(backend);
-    }
-  });
+  void it(
+    "reloads once the backend is up again, asking less often while it stays down",
+    { timeout: TEST_TIMEOUT_MS },
+    async (context) => {
+      context.mock.method(console, "error", () => undefined);
+      const down = await visit("/articles");
+      assert.equal(down.status, 502);
+      const page = runPage(await down.text(), `${base}/articles`);
+      await until(() => page.delays.length >= BACKOFF_MS.length);
+      assert.deepEqual(
+        page.delays.slice(0, BACKOFF_MS.length),
+        BACKOFF_MS,
+        "each retry waits twice as long, up to a bound",
+      );
+      const status = await withBackend(answering(200), () => page.reloaded);
+      assert.notEqual(status, 502, "the reload is no longer the 502 page");
+    },
+  );
+
+  void it(
+    "stops asking once the visitor left the error page",
+    { timeout: TEST_TIMEOUT_MS },
+    async (context) => {
+      context.mock.method(console, "error", () => undefined);
+      const down = await visit("/articles");
+      const page = runPage(await down.text(), `${base}/articles`);
+      page.navigate(502);
+      await until(() => page.fetches() >= 2);
+      page.navigate();
+      const asked = page.fetches();
+      await new Promise((resolve) => setTimeout(resolve, FAST_DELAY_MS * 20));
+      assert.ok(
+        page.fetches() <= asked + 1,
+        "at most the request already scheduled goes out",
+      );
+      assert.ok(
+        page.delays.length <= asked + 1,
+        "no retry is scheduled after the page left",
+      );
+    },
+  );
+
+  void it(
+    "retries a 503 the backend answered, and not a 500",
+    { timeout: TEST_TIMEOUT_MS },
+    async (context) => {
+      context.mock.method(console, "error", () => undefined);
+      for (const [status, retried] of [
+        [503, true],
+        [500, false],
+      ] as const) {
+        const failed = await withBackend(
+          answering(status, '{"message":"failed"}'),
+          () => visit("/articles"),
+        );
+        assert.equal(failed.status, status);
+        const page = runPage(await failed.text(), `${base}/articles`);
+        assert.equal(
+          page.delays.length > 0,
+          retried,
+          `a ${status} page schedules a retry: ${retried}`,
+        );
+        page.navigate();
+      }
+    },
+  );
 });

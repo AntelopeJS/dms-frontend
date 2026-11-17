@@ -2,8 +2,8 @@ import { connect, createServer } from "node:net";
 import { freePort, sleep, startSatellite } from "./proxy-satellite.mjs";
 import { signIn } from "./signin.mjs";
 
-/** How long the backend stays down once the page showed its error. */
-const DOWN_MS = 2500;
+/** How long the page may take to ask twice while the backend is down: 0.5 s, then 1 s, plus two error renders. */
+const DOWN_TIMEOUT_MS = 15_000;
 /** The longest a recovered page may take: one retry at the longest delay, and the reload. */
 const RECOVERY_TIMEOUT_MS = 20_000;
 const POLL_MS = 100;
@@ -81,8 +81,10 @@ export const journeys = [
         await ctx.verify("backend down: the page answers 502", [
           ctx.equal("the document's status", errorPage?.status, 502),
         ], { critical: true });
-        await sleep(DOWN_MS);
-        const retriesWhileDown = answers.filter((answer) => answer.kind === "fetch").length;
+        const retries = () => answers.filter((answer) => answer.kind === "fetch").length;
+        const downUntil = Date.now() + DOWN_TIMEOUT_MS;
+        while (retries() < 2 && Date.now() < downUntil) await sleep(POLL_MS);
+        const retriesWhileDown = retries();
         await gate.up();
         const deadline = Date.now() + RECOVERY_TIMEOUT_MS;
         const recovered = () => answers.some((answer) => answer.kind === "document" && answer.status === 200);

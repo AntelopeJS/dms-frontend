@@ -60,7 +60,7 @@ import {
   propsForQuery,
 } from "./server/page-props.mjs";
 import { htmlTag } from "./server/html-tag.mjs";
-import { isString } from "./server/type-guards.mjs";
+import { isNumber, isObjectLike, isString } from "./server/type-guards.mjs";
 import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
 import { ssrRenderer } from "./server/ssr-module.mjs";
@@ -231,7 +231,12 @@ async function serverRendered(page, serverFetch, requestCookies, devServer) {
       "DMS SSR render failed; falling back to client rendering",
       error,
     );
-    return { ...clientRenderedShell(page), error: { statusCode: 500 } };
+    const { error: pageError } = page.props;
+    const statusCode =
+      isObjectLike(pageError) && isNumber(pageError.statusCode)
+        ? pageError.statusCode
+        : 500;
+    return { ...clientRenderedShell(page), error: { statusCode } };
   }
 }
 
@@ -266,10 +271,12 @@ export async function renderHtml(
       : await serverRendered(page, serverFetch, requestCookies, devServer);
   if (rendered.redirect)
     return { html: "", status: 200, redirect: rendered.redirect };
+  const status = rendered.error?.statusCode ?? 200;
   const headEnd =
     (await documentStyleTags(devServer, rendered.modules, template)) +
     (devServer ? "" : localeCatalogPreloadTag(rendered.catalogLocale)) +
-    publicOptionsScript();
+    publicOptionsScript() +
+    backendRetryScript(status);
   const html = template
     .replace("<title>Antelope DMS</title>", () =>
       withFaviconPlaceholder(rendered.head.headTags),
@@ -284,7 +291,7 @@ export async function renderHtml(
       `<div id="dms-overlays" class="isolate">${rendered.overlays}</div>`,
     )
     .replace("__DMS_APP__", () => rendered.body);
-  return { html, status: rendered.error?.statusCode ?? 200 };
+  return { html, status };
 }
 
 /**
@@ -360,11 +367,7 @@ async function writeBackendError(error, request, response) {
       );
     }
     const { html } = await renderRequestHtml(page, request);
-    const retrying = html.replace(
-      "</head>",
-      () => `${backendRetryScript(status)}</head>`,
-    );
-    return writeContent(request, response, status, htmlHeaders(), retrying);
+    return writeContent(request, response, status, htmlHeaders(), html);
   }
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
