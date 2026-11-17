@@ -65,6 +65,7 @@ import { listenHost } from "./server/listen-host.mjs";
 import * as icons from "./server/icons.mjs";
 import { ssrRenderer } from "./server/ssr-module.mjs";
 import * as requestFailure from "./server/request-failure.mjs";
+import { backendRetryScript } from "./server/backend-retry.mjs";
 import { proxy } from "./server/proxy-request.mjs";
 import {
   hasOriginFormTarget,
@@ -359,7 +360,11 @@ async function writeBackendError(error, request, response) {
       );
     }
     const { html } = await renderRequestHtml(page, request);
-    return writeContent(request, response, status, htmlHeaders(), html);
+    const retrying = html.replace(
+      "</head>",
+      () => `${backendRetryScript(status)}</head>`,
+    );
+    return writeContent(request, response, status, htmlHeaders(), retrying);
   }
   const payload =
     error instanceof UpstreamError || error instanceof RequestBodyError
