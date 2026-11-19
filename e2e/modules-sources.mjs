@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { cliEnvironment, observe, scratch } from "./cli-run.mjs";
 import { RENDERER_RANGE } from "./renderer-range.mjs";
 import { startDev } from "./routing-dev.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -53,6 +54,7 @@ export const journeys = [
     id: "dev-serves-modules-from-the-core-cache-and-git",
     title: "ajs dms dev serves the pages and routes of a module core installed from npm into its versioned cache and of a module installed from git",
     entryPoint: "ajs project build in a fresh project listing @antelopejs/dms from npm and a git module, then ajs dms dev there against the run's backend",
+    ...noBrowser,
     async run(/** @type {Context} */ ctx) {
       const remote = scratch(ctx, "fx-git");
       const git = gitModule(ctx, remote);

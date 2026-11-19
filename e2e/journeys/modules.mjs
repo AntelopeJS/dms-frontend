@@ -2,6 +2,7 @@ import { keysOf, parseJson, rowAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { cookieOf, get } from "../web.mjs";
 import { journeys as sources } from "../modules-sources.mjs";
+import { byRunner } from "../standalone.mjs";
 
 /** @typedef {import("../control.d.ts").JourneyContext} Ctx */
 
@@ -46,4 +47,4 @@ const publicOptions = [
   },
 ];
 
-export const journeys = [...publicOptions, ...sources];
+export const { journeys, runJourneys } = byRunner([...publicOptions, ...sources]);

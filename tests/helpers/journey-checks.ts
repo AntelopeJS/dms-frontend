@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import type { Journey } from "@antelopejs/dms/e2e/run";
 import { isObjectLike, isText } from "./guards";
 
 /** One observation a journey records: what it checked, whether it held, and what it saw. */
@@ -186,26 +187,57 @@ function isCliJourney(value: unknown): value is CliJourney {
  *
  * @throws When a module's `cliJourneys` holds something that is not a journey
  */
-export async function cliFeatures(): Promise<CliFeature[]> {
-  const features: CliFeature[] = [];
+export function cliFeatures(): Promise<CliFeature[]> {
+  return exportedJourneys("cliJourneys", isCliJourney);
+}
+
+/** Whether `value` is a journey the kit runs: an id, a title, an entry point and a run function, whose parameters no run-time check can read. */
+function isRunJourney(value: unknown): value is Journey {
+  return (
+    isCliJourney(value) &&
+    "title" in value &&
+    isText(value.title) &&
+    "entryPoint" in value &&
+    isText(value.entryPoint)
+  );
+}
+
+/**
+ * The `runJourneys` of every feature module of `e2e/journeys`, in file order, leaving out the features that have
+ * none: the journeys the kit runs on a run without a browser.
+ *
+ * @throws When a module's `runJourneys` holds something that is not a journey
+ */
+export function runFeatures(): Promise<
+  {
+    feature: string;
+    journeys: Journey[];
+  }[]
+> {
+  return exportedJourneys("runJourneys", isRunJourney);
+}
+
+async function exportedJourneys<J>(
+  name: "cliJourneys" | "runJourneys",
+  isJourney: (value: unknown) => value is J,
+): Promise<{ feature: string; journeys: J[] }[]> {
+  const features: { feature: string; journeys: J[] }[] = [];
   for (const file of readdirSync(JOURNEYS)
-    .filter((name) => name.endsWith(".mjs"))
+    .filter((entry) => entry.endsWith(".mjs"))
     .sort()) {
     const exported: unknown = await import(
       pathToFileURL(join(JOURNEYS, file)).href
     );
-    const listed: unknown =
-      isObjectLike(exported) && "cliJourneys" in exported
-        ? exported.cliJourneys
-        : [];
+    const exports = new Map<string, unknown>(
+      isObjectLike(exported) ? Object.entries(exported) : [],
+    );
+    const listed = exports.get(name) ?? [];
     if (!Array.isArray(listed))
-      throw new Error(`${file}: cliJourneys is not a list`);
+      throw new Error(`${file}: ${name} is not a list`);
     const entries: unknown[] = listed;
-    const journeys = entries.filter(isCliJourney);
+    const journeys = entries.filter(isJourney);
     if (journeys.length !== entries.length)
-      throw new Error(
-        `${file}: cliJourneys holds an entry without an id or a run function`,
-      );
+      throw new Error(`${file}: ${name} holds an entry that is not a journey`);
     if (journeys.length > 0)
       features.push({ feature: file.replace(/\.mjs$/, ""), journeys });
   }

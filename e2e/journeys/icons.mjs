@@ -1,7 +1,7 @@
 import { keysOf, listAt, numberAt, parseJson, rowAt, textAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { cookieOf, get, header } from "../web.mjs";
-import { standalone } from "../standalone.mjs";
+import { byRunner, standalone } from "../standalone.mjs";
 
 /**
  * @typedef {import("../control.d.ts").JourneyContext} Ctx
@@ -34,7 +34,7 @@ function icons(ctx, path, options = {}) {
   return get(ctx, `${ICON_API}/${path}`, options);
 }
 
-export const journeys = [
+export const { journeys, runJourneys } = byRunner([
   {
     id: "the-icon-route-answers-iconify-json-from-the-installed-collections",
     title: "GET /api/_dms/icons/<prefix>.json answers Iconify JSON with the documented cache header, and refuses what it cannot serve",
@@ -188,4 +188,4 @@ export const journeys = [
       await ctx.verify("a signed-in page has asked for the bundle by the time it has loaded", [ctx.equal("bundle requests", signedIn.length, 1)]);
     },
   },
-];
+]);

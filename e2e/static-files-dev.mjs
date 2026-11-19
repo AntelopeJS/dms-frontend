@@ -6,6 +6,7 @@ import { textAt } from "./json.mjs";
 import { exchange } from "./proxy-http.mjs";
 import { observe } from "./proxy-satellite.mjs";
 import { startDev } from "./routing-dev.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 /**
  * @param {string} path A path
@@ -20,6 +21,7 @@ export const journeys = [
     id: "static-files-dev",
     title: "the development server hides the generated secrets and the modules' server code, listens on loopback, links the entry stylesheet first and answers a Vite error with 500",
     entryPoint: "requests to `ajs dms dev` against the run's backend, started under umask 022",
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const root = join(ctx.state.home, ".antelopejs", "dms-frontend");
       if (existsSync(root)) execFileSync("chmod", ["-R", "a+rwX", root]);

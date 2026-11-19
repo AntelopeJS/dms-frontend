@@ -4,7 +4,7 @@ import { parseJson, textAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { withSatellite } from "../proxy-satellite.mjs";
 import { get, header, serviceToken } from "../web.mjs";
-import { standalone } from "../standalone.mjs";
+import { byRunner, standalone } from "../standalone.mjs";
 
 /** @typedef {import("../control.d.ts").JourneyContext} Ctx */
 
@@ -37,7 +37,7 @@ function decoded(file) {
   return decodeURIComponent(joined.replace(/%/g, "%25").replace(/=([0-9A-F]{2})/g, "%$1"));
 }
 
-export const journeys = [
+export const { journeys, runJourneys } = byRunner([
   {
     id: "a-rendered-email-carries-no-hydration-markers-and-links-to-the-dashboard",
     title: "the password-reset and invitation emails are rendered by the frontend server: complete HTML, no Vue comments, links on the dashboard's origin",
@@ -134,4 +134,4 @@ export const journeys = [
     },
   },
   ...logo,
-];
+]);

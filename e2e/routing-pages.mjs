@@ -4,7 +4,7 @@ import { at, keysOf, numberAt, rowAt, textAt } from "./json.mjs";
 import { bodyJson, exchange } from "./proxy-http.mjs";
 import { freePort, observe, sleep, startSatellite, withSatellite } from "./proxy-satellite.mjs";
 import { cookieHeader, setCookies } from "./proxy-signin.mjs";
-import { standalone } from "./standalone.mjs";
+import { noBrowser, standalone } from "./standalone.mjs";
 
 const html = { accept: "text/html" };
 const inertia = { "x-inertia": "true" };
@@ -39,6 +39,7 @@ export const journeys = [
     id: "routing-pages",
     title: "pages: the homepage redirect, signed-out visits to private pages, 404 for other methods, malformed paths, backend routes outside every prefix, asset version conflicts",
     entryPoint: "document and Inertia requests to the run's frontend, signed out and as the administrator",
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const web = ctx.state.webUrl;
       const cookie = await adminCookie(web, ctx.adminCredentials());
@@ -111,6 +112,7 @@ export const journeys = [
     id: "routing-page-props",
     title: "page props: the site layout is a once prop, partial reloads send the props they name, and a build without server modules serves no module route",
     entryPoint: "Inertia visits to the run's frontend as the administrator, and a second `ajs dms start` whose server-modules bundle is missing",
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const web = ctx.state.webUrl;
       const cookie = await adminCookie(web, ctx.adminCredentials());

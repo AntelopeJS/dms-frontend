@@ -3,5 +3,6 @@ import { journeys as dev } from "../static-files-dev.mjs";
 import { journeys as build } from "../static-files-build.mjs";
 import { qualityJourneys, journeys as serve } from "../static-files-serve.mjs";
 import { journeys as start } from "../static-files-start.mjs";
+import { byRunner } from "../standalone.mjs";
 
-export const journeys = [...serve, ...qualityJourneys, ...start, ...build, ...dev, ...documents];
+export const { journeys, runJourneys } = byRunner([...serve, ...qualityJourneys, ...start, ...build, ...dev, ...documents]);
