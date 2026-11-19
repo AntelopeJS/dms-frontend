@@ -52,6 +52,10 @@ How the frontend server answers a page: a document request is rendered on the se
 - `key-hints-are-drawn-for-the-keyboard-the-server-was-told`: the `dms-keyboard-platform` cookie draws `⌘K` or `Ctrl K` in the server render.
 - `the-payload-is-escaped-so-data-cannot-close-its-script`: a user named `a</script><b>x/y` reaches the payload as `a\u003C\/script>\u003Cb>x\/y`, with no raw angle bracket and no unescaped slash.
 - `choosing-a-tab-changes-only-the-query-in-the-browser`: choosing a tab of the Filter tabs page changes the URL's query, keeps the document and sends the frontend server no request for the page.
+- `back-and-forward-move-between-visited-pages-without-a-document-load`: after a link visit, the browser's back and forward buttons show the overview and the feature index again in the same document.
+- `the-main-pages-hydrate-without-a-script-error`: the home page, the settings, the members list, the appearance settings and the example pages load and hydrate with no uncaught error and no console error.
+- `the-error-page-leads-back-and-home`: the 404 page's Go back returns to the page before it, and Go to home opens the dashboard still signed in.
+- `the-chosen-theme-is-drawn-again-after-a-reload`: Interface theme > Dark in the account menu darkens the page at once, and a reload draws it dark again.
 
 ## How to get to it (user POV)
 

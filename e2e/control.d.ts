@@ -188,7 +188,16 @@ export interface Locator {
   count(): Promise<number>;
 }
 
+export interface ConsoleMessage {
+  type(): string;
+  text(): string;
+}
+
 export interface Page {
+  goBack(): Promise<Json>;
+  goForward(): Promise<Json>;
+  on(event: "pageerror", handler: (error: Error) => void): void;
+  on(event: "console", handler: (message: ConsoleMessage) => void): void;
   locator(selector: string): Locator;
   getByText(text: string | RegExp, options?: { exact?: boolean }): Locator;
   context(): {
