@@ -8,7 +8,7 @@ import { startFakeBackend } from "./proxy-satellite.mjs";
 import { exchange } from "./proxy-http.mjs";
 import { fakeAuthBackend, signIn } from "./proxy-signin.mjs";
 import { BUILD_TIMEOUT_MS, untimed } from "./build-run-output.mjs";
-import { standalone } from "./standalone.mjs";
+import { cliOnly, standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -17,7 +17,7 @@ export const journeys = [
     id: "build-arguments",
     title: "build checks DMS_ENTRY_WEIGHT_WARNING before it does anything, and reads the project and environment it is given",
     entryPoint: "DMS_ENTRY_WEIGHT_WARNING=<value> ajs dms build, --project, -e",
-    ...standalone,
+    ...cliOnly,
     async run(/** @type {Context} */ ctx) {
       const cwd = scratch(ctx, "cwd");
       const values = ["abc", "-1", "NaN", "12KB"];

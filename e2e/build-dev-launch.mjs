@@ -6,7 +6,7 @@ import { startCliBackend } from "./cli-backend.mjs";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { freePort, holdPort, observe, runCli, scratch, startCli } from "./cli-run.mjs";
 import { lanAddresses, accepts } from "./build-network.mjs";
-import { standalone } from "./standalone.mjs";
+import { cliOnly, standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -60,7 +60,7 @@ export const journeys = [
     id: "dev-arguments",
     title: "dev needs a backend url and a session secret of 32 characters or none at all, and says so before it does anything",
     entryPoint: "ajs dms dev without a backend, with bad ports and secrets",
-    ...standalone,
+    ...cliOnly,
     async run(/** @type {Context} */ ctx) {
       const cwd = scratch(ctx, "cwd");
       const home = scratch(ctx, "home");

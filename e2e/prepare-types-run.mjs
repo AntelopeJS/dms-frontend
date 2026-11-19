@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, r
 import { join } from "node:path";
 import { observe, runCli, scratch } from "./cli-run.mjs";
 import { writeProject } from "./verify-source-fixtures.mjs";
-import { standalone } from "./standalone.mjs";
+import { cliOnly } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -107,7 +107,7 @@ export const journeys = [
     id: "prepare-types-on-a-real-layout",
     title: "prepare-types declares every component of a module with its own install and an @types-only dependency, writes nothing outside --out, and the project still type-checks once moved",
     entryPoint: "ajs dms prepare-types --out .dms-types from a project folder holding frontend-vue, then tsc -p .dms-types after a move",
-    ...standalone,
+    ...cliOnly,
     async run(/** @type {Context} */ ctx) {
       const fixture = realProject(ctx, "prepare-types");
       const before = tree(fixture.project, OUT);
@@ -134,7 +134,7 @@ export const journeys = [
     id: "prepare-types-through-a-symlink",
     title: "prepare-types declares every component when --out is a symlink whose real directory sits at another depth",
     entryPoint: "ajs dms prepare-types --out <symlink to a deeper directory>",
-    ...standalone,
+    ...cliOnly,
     async run(/** @type {Context} */ ctx) {
       const fixture = realProject(ctx, "prepare-types-link");
       const real = join(scratch(ctx, "prepare-types-link-out"), "one", "two", "out");
