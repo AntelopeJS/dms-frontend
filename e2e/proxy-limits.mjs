@@ -62,6 +62,7 @@ export const journeys = [
     title: "maxBodyBytes: a declared length over the limit is refused before a byte is sent on, a chunked body is cut off, and the 413 reaches the client",
     entryPoint: "uploads through an operator-declared proxy of a second `ajs dms start`, and through the DMS's own /file-storage/upload/**",
     ...noBrowser,
+    onboard: false,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       /** @type {{ backendEndedAt: number | null }} */
       const timeline = { backendEndedAt: null };

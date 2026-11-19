@@ -277,6 +277,7 @@ export const journeys = [
     title: "a state-changing proxied request needs the frontend's own Origin; auth none and public endpoints are the documented exceptions",
     entryPoint: "POST/PUT/DELETE/GET through the run's frontend and through a second `ajs dms start` with declared proxies and public endpoints",
     ...noBrowser,
+    onboard: false,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await checkRunFrontend(ctx);
 

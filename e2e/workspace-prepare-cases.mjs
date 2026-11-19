@@ -7,7 +7,7 @@ import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { freePort, observe, runCli, scratch } from "./cli-run.mjs";
 import { workspacesRoot, writeModule } from "./workspace-fixtures.mjs";
 import { SKIPPED_HINT, NOT_GENERATED, workspaceFor } from "./workspace-prepare-output.mjs";
-import { cliOnly, noBrowser } from "./standalone.mjs";
+import { cliOnly, standalone } from "./standalone.mjs";
 import { RENDERER_RANGE } from "./renderer-range.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
@@ -214,7 +214,7 @@ export const journeys = [
     id: "prepare-trailing-slash",
     title: "a backend url with a trailing slash reaches the same endpoints as the one without",
     entryPoint: "ajs dms prepare -b <url>/ and ajs dms start -b <url>/ against a backend of the journey's own",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       const home = scratch(ctx, "home");

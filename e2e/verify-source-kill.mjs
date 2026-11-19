@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cliEnvironment, cliScript, observe, scratch } from "./cli-run.mjs";
 import { projectFolder, writeProject } from "./verify-source-fixtures.mjs";
-import { noBrowser } from "./standalone.mjs";
+import { standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -158,7 +158,7 @@ export const journeys = [
     id: "verify-source-dies-with-a-killed-cli",
     title: "a verify-source run whose CLI, or whose node -e caller of runVerifySource, is killed with SIGKILL mid-build starts one runner and leaves no process and no workspace behind",
     entryPoint: "ajs dms verify-source, and node -e calling runVerifySource, each SIGKILLed once vite or vue-tsc runs",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       verifyKilled(ctx, "the CLI killed mid-build", await killMidBuild(ctx, "kill-cli", (script) => [script, "verify-source"]));
       const action = (/** @type {string} */ script) => join(script, "..", "commands", "verify-source-action.js");

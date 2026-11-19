@@ -1,7 +1,12 @@
 import * as assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { onboard, startRun, type StartedRun } from "@antelopejs/dms/e2e/run";
-import { journeyFeatures, judgeJourney } from "./helpers/journey-checks.ts";
+import {
+  runJourney,
+  startRun,
+  type FeatureResult,
+  type StartedRun,
+} from "@antelopejs/dms/e2e/run";
+import { runFeatures } from "./helpers/journey-checks.ts";
 
 const JOURNEY_TIMEOUT_MS = 900_000;
 const SHARD = /^(\d+)\/(\d+)$/;
@@ -23,8 +28,24 @@ function shardOf(spec: string | undefined): (position: number) => boolean {
   return (position) => position % n === i - 1;
 }
 
+/** What failed the kit's judgement of a journey: its error, the checks that failed unlisted, and the listed ones that passed. */
+function problemsOf(result: FeatureResult): string[] {
+  const checks = result.steps.flatMap((step) =>
+    step.checks.flatMap((check) => {
+      if (check.verdict === "fail")
+        return [`${step.name} › ${check.name}: ${check.detail}`];
+      if (check.verdict === "fixed")
+        return [
+          `${step.name} › ${check.name} passes: remove it from knownFailures`,
+        ];
+      return [];
+    }),
+  );
+  return result.error === null ? checks : [result.error, ...checks];
+}
+
 const inShard = shardOf(process.env.DMS_JOURNEY_SHARD);
-const selected = (await journeyFeatures("run"))
+const selected = (await runFeatures())
   .flatMap(({ feature, journeys }) =>
     journeys.map((journey) => ({ feature, journey })),
   )
@@ -35,9 +56,6 @@ void describe("journeys on a run of the kit", () => {
 
   before(async () => {
     started = await startRun();
-    const { register, login } = await onboard(started.run, {});
-    assert.equal(register.status, 200, "the administrator is onboarded");
-    assert.equal(login?.status, 200, "the administrator signs in");
   });
 
   after(() => started?.stop());
@@ -48,7 +66,13 @@ void describe("journeys on a run of the kit", () => {
       { timeout: JOURNEY_TIMEOUT_MS },
       async () => {
         assert.ok(started, "the run started");
-        assert.deepEqual(await judgeJourney(journey, started.run), []);
+        const result = await runJourney(started.run, feature, journey);
+        assert.deepEqual(
+          problemsOf(result),
+          [],
+          `evidence in ${started.run.evidence}/${result.folder}`,
+        );
+        assert.equal(result.status, "PASS");
       },
     );
   }

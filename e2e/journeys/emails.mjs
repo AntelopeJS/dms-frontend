@@ -4,7 +4,7 @@ import { parseJson, textAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { withSatellite } from "../proxy-satellite.mjs";
 import { get, header, serviceToken } from "../web.mjs";
-import { byRunner, noBrowser } from "../standalone.mjs";
+import { byRunner, standalone } from "../standalone.mjs";
 
 /** @typedef {import("../control.d.ts").JourneyContext} Ctx */
 
@@ -103,7 +103,7 @@ export const { journeys, runJourneys } = byRunner([
     id: "the-render-route-takes-one-signed-single-use-token-per-render",
     title: "a render with a valid service token answers the template's HTML; a replayed, forged, mis-addressed or expired token, an unknown template and a bad body are refused",
     entryPoint: "POST /api/html/render on a second frontend server",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Ctx} */ ctx) {
       await withSatellite(ctx, {}, async (server) => {
         const secret = ctx.state.secrets.DMS_HTML_RENDER_SECRET;

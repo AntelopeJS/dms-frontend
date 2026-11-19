@@ -6,7 +6,7 @@ import { startCliBackend } from "./cli-backend.mjs";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { freePort, holdPort, observe, runCli, scratch, startCli } from "./cli-run.mjs";
 import { lanAddresses, accepts } from "./build-network.mjs";
-import { cliOnly, noBrowser } from "./standalone.mjs";
+import { cliOnly, standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -89,7 +89,7 @@ export const journeys = [
     id: "dev-server",
     title: "dev serves the project's modules on 127.0.0.1, names who answers each path, keys its workspace on the backend url, and stops with 130",
     entryPoint: "ajs dms dev -b <backend> -p <port> against a backend of the journey's own",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       const home = scratch(ctx, "home");
@@ -132,7 +132,7 @@ export const journeys = [
     id: "dev-ports-and-host",
     title: "dev moves to the next free port and says so, -p 0 asks for any free port without calling it busy, HOST opens it to the network",
     entryPoint: "ajs dms dev -p <busy port>, -p 0, HOST=0.0.0.0",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       const home = scratch(ctx, "home");
@@ -166,7 +166,7 @@ export const journeys = [
     id: "dev-backend-down",
     title: "dev falls back to the last manifest it cached when the backend is down, with a warning; --offline uses it without asking; a refused credential never does",
     entryPoint: "ajs dms dev after a first run, with the backend closed, --offline, and answering 401",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const port = await freePort();

@@ -10,7 +10,7 @@ import { writeModule } from "./workspace-fixtures.mjs";
 import { observe, runCli, scratch } from "./cli-run.mjs";
 import { buildProjectFolder, writeBuildProject } from "./build-project.mjs";
 import { dev, writeRegistry, deadPid } from "./build-dev-launch.mjs";
-import { noBrowser } from "./standalone.mjs";
+import { standalone } from "./standalone.mjs";
 import { docsPage } from "./cli-docs.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
@@ -20,7 +20,7 @@ export const journeys = [
     id: "dev-discovery",
     title: "dev without -b finds the backend of the enclosing project in .antelope/dev.json, keys its workspace on that project, and stops at the first file it finds",
     entryPoint: "ajs dms dev from inside a folder holding .antelope/dev.json",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const first = await startCliBackend();
@@ -98,7 +98,7 @@ export const journeys = [
     id: "dev-public-files",
     title: "a file added to a module's public/ is served at once and not served any more once removed",
     entryPoint: "ajs dms dev with a project whose module has a public/ directory, a file added and removed while it runs",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const fixture = writeBuildProject(buildProjectFolder(ctx, "hot"));
       const backend = await startCliBackend();
@@ -142,7 +142,7 @@ export const journeys = [
     id: "dev-port-zero",
     title: "dev -p 0 asks for any free port and does not call it busy",
     entryPoint: "ajs dms dev -p 0",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const backend = await startCliBackend();
       try {
@@ -162,7 +162,7 @@ export const journeys = [
     id: "dev-secret-precedence",
     title: "the e-mail render secret the manifest publishes for a module of the project wins over DMS_HTML_RENDER_SECRET, as the configuration page says and the dev page does not contradict (AntelopeJS/dms-frontend#282)",
     entryPoint: "ajs dms dev -b <backend> with DMS_HTML_RENDER_SECRET set and a manifest that publishes htmlRender.serviceSecret for the playground's @antelopejs/dms-frontend-vue",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       const configuration = docsPage(ctx, "4.configuration.md");
@@ -199,7 +199,7 @@ export const journeys = [
     id: "dev-cookie-secure",
     title: "the dev server's session cookie is not Secure unless DMS_COOKIE_SECURE says so",
     entryPoint: "POST /auth/login on ajs dms dev, with DMS_COOKIE_SECURE unset, false and true",
-    ...noBrowser,
+    ...standalone,
     async run(/** @type {Context} */ ctx) {
       const { handler } = fakeAuthBackend((request, response) => {
         const path = (request.url ?? "").split("?")[0];
