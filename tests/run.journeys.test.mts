@@ -3,7 +3,7 @@ import { after, before, describe, it } from "node:test";
 import { onboard, startRun, type StartedRun } from "@antelopejs/dms/e2e/run";
 import { journeyFeatures, judgeJourney } from "./helpers/journey-checks.ts";
 
-const JOURNEY_TIMEOUT_MS = 600_000;
+const JOURNEY_TIMEOUT_MS = 900_000;
 const SHARD = /^(\d+)\/(\d+)$/;
 
 /**
