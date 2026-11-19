@@ -4,5 +4,6 @@ import { journeys as language } from "../sessions-language.mjs";
 import { journeys as security } from "../sessions-security.mjs";
 import { journeys as hooks } from "../sessions-hooks.mjs";
 import { journeys as browser } from "../sessions-browser.mjs";
+import { byRunner } from "../standalone.mjs";
 
-export const journeys = [...cookie, ...hooks, ...establish, ...language, ...security, ...browser];
+export const { journeys, runJourneys } = byRunner([...cookie, ...hooks, ...establish, ...language, ...security, ...browser]);

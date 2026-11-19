@@ -8,5 +8,6 @@ import { journeys as patterns } from "../proxy-patterns.mjs";
 import { journeys as recovery } from "../proxy-recovery.mjs";
 import { journeys as relay } from "../proxy-relay.mjs";
 import { journeys as streams } from "../proxy-streams.mjs";
+import { byRunner } from "../standalone.mjs";
 
-export const journeys = [...relay, ...access, ...limits, ...redirects, ...iconJourneys, ...answers, ...streams, ...declarations, ...offline, ...recovery, ...patterns];
+export const { journeys, runJourneys } = byRunner([...relay, ...access, ...limits, ...redirects, ...iconJourneys, ...answers, ...streams, ...declarations, ...offline, ...recovery, ...patterns]);

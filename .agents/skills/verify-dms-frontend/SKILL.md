@@ -48,13 +48,13 @@ $C formal "$RUN"                         # the formal checks that cover the diff
 ```
 
 - Each feature file in [features/](features/README.md) lists its source globs (`covers:`), its docs pages (`docs:`), its journeys and its "Not driven" rows; the journeys are in `e2e/journeys/<feature>.mjs`, with the helpers they share in `e2e/web.mjs` (HTTP against the frontend server, the Inertia page object and the payload) and `e2e/signin.mjs` (sign-in that survives a click before hydration), plus the helpers each feature names.
-- A journey starts on an empty database of the run with the administrator onboarded, unless it says otherwise. A journey that declares `...standalone` (`e2e/standalone.mjs`) keeps the database the run has and onboards nobody, so `dms-control` skips the backend restart: declare it only when the journey uses no account, token, tab, `ctx.api`, `ctx.mail` or state of the run's backend, such as one that spawns the `ajs dms` CLI against fixtures, scratch homes, fake backends or servers of its own. It reads each result through a second view: the response headers and body, the rendered HTML, a reload, the captured mail, the CLI's output or a file the CLI wrote.
+- A journey of the Playwright suite starts on an empty database of the run with the administrator onboarded, unless it says otherwise. It reads each result through a second view: the response headers and body, the rendered HTML, a reload, the captured mail, the CLI's output or a file the CLI wrote.
 - Journeys that need the frontend server in a state the run does not offer (another backend, no session secret, a closed port) start their own `ajs dms start` from this checkout on a kernel port and stop it by PID.
 - To look at the product yourself: `$C onboard "$RUN"`, `$C browser "$RUN" login`, `goto --path`, `snapshot`, `click --role --name`, `fill`, `press`, `screenshot`, `$C api "$RUN" <method> <path>`, `$C mail "$RUN"`, `$C reset "$RUN"`.
 
 ## The suite
 
-`pnpm e2e` runs every journey a feature module exports as `journeys` as a Playwright test through `@antelopejs/dms/e2e`. Its global setup runs `prepare` and `dms-control up` once, each test drives one journey on a fresh database of that run, and the teardown runs `down`. Set `DMS_PLAYGROUND` first.
+`pnpm e2e` runs every journey a feature module exports as `journeys` as a Playwright test through `@antelopejs/dms/e2e`. Its global setup runs `prepare` and starts one run of the kit, each test drives one journey on a fresh database of that run, and the teardown stops the run. Set `DMS_PLAYGROUND` first.
 
 ```bash
 pnpm e2e --grep @smoke                # the smoke set the full CI tier runs
@@ -62,9 +62,12 @@ pnpm e2e --grep '<journey-id>( @\S+)*$'   # one journey, tags or not
 DMS_E2E_RUN="$RUN" pnpm e2e           # drive a run of `up` and leave it running
 ```
 
-A journey can carry `tag` (`@smoke`), `knownFailures` (check name to the finding that makes it fail today) and `last: true` (it changes the run's playground for later journeys). CI runs the `@smoke` journeys on a pull request, and every journey in 2 shards in the merge queue, on a pull request labelled `ci:full`, on a manual run and each night, merged into one `playwright-report` artifact.
+A journey can carry `tag` (`@smoke`), `knownFailures` (check name to the finding that makes it fail today) and `last: true` (it changes the run's playground for later journeys). CI runs the `@smoke` journeys on a pull request, and every journey in the merge queue, on a pull request labelled `ci:full`, on a manual run and each night.
 
-A journey that needs no run at all, only the CLI of this checkout, a scratch run folder and a scratch HOME, declares `...cliOnly` (`e2e/standalone.mjs`) instead of `...standalone`. Its feature module exports it as `cliJourneys`, and `tests/cli-journeys.test.mts` runs it as an ordinary test of `pnpm test:cli`, which fails a journey that reads the run's playground, URLs, secrets or accounts. `dms-control journey` does not run it.
+Only a journey that opens a browser tab is a Playwright test. The others declare their runner (`e2e/standalone.mjs`), and `dms-control journey` runs none of them:
+
+- `...cliOnly`: it needs no run at all, only the CLI of this checkout, a scratch run folder and a scratch HOME. Its feature module exports it as `cliJourneys`, and `tests/cli-journeys.test.mts` runs it in `pnpm test:cli`, which fails a journey that reads the run's playground, URLs, secrets or accounts.
+- `...noBrowser`: it spawns the `ajs dms` CLI against the run's playground or calls the run's servers over HTTP. Its feature module exports it as `runJourneys`, and `tests/run.journeys.test.mts` runs it in `pnpm test:journeys`, on one run that `startRun()` of `@antelopejs/dms/e2e/run` starts for every such journey, with the administrator onboarded once. `DMS_JOURNEY_SHARD=<i>/<n>` runs every n-th of them, from the i-th. Set `DMS_PLAYGROUND` first.
 
 ## Evidence
 

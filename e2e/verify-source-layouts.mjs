@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { cliEnvironment, observe, runCli, scratch } from "./cli-run.mjs";
 import { projectFolder, writeProject } from "./verify-source-fixtures.mjs";
 import { leftovers } from "./verify-source-run.mjs";
-import { standalone } from "./standalone.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -71,7 +71,7 @@ export const journeys = [
     id: "verify-source-on-a-linked-workspace-layout",
     title: "verify-source passes on a module reached through a symlink, holding a symlink to its root and a ..b folder, whose workspace root pins a dependency to a tarball with pnpm overrides",
     entryPoint: "ajs dms verify-source from a symlink to a pnpm workspace root holding frontend-vue",
-    ...standalone,
+    ...noBrowser,
     async run(/** @type {Context} */ ctx) {
       const layout = linkedWorkspace(ctx);
       observe(ctx, "the workspace is installed", layout, [ctx.equal("npm pack and pnpm install exit 0", [layout.pack.code, layout.install.code], [0, 0])], { critical: true });

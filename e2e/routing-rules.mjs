@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { bodyJson, exchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 const SOURCE = readFileSync(new URL("./routing-fixture-rules.mjs", import.meta.url), "utf8");
 const PUBLIC_CACHE = "public, max-age=300, stale-while-revalidate=3600";
@@ -37,6 +38,7 @@ export const journeys = [
     id: "routing-rules",
     title: "route rules: public cache only under the narrow conditions, ssr: false, headers, merging by specificity, and every rejected rule warned about",
     entryPoint: "document and Inertia requests to a second `ajs dms start` whose server modules declare route rules",
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await withSatellite(ctx, { backend, modules: { source: SOURCE, keepOriginal: true } }, async (server) => {
         const lines = server.log().split("\n");

@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { connect } from "node:net";
 import { bodyJson, exchange } from "./proxy-http.mjs";
 import { observe, sleep, withSatellite } from "./proxy-satellite.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 const LIMIT = 1000;
 const TOO_LARGE = { message: "Payload Too Large" };
@@ -60,7 +61,7 @@ export const journeys = [
     id: "proxy-limits",
     title: "maxBodyBytes: a declared length over the limit is refused before a byte is sent on, a chunked body is cut off, and the 413 reaches the client",
     entryPoint: "uploads through an operator-declared proxy of a second `ajs dms start`, and through the DMS's own /file-storage/upload/**",
-    onboard: false,
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       /** @type {{ backendEndedAt: number | null }} */
       const timeline = { backendEndedAt: null };

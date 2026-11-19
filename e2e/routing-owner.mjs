@@ -1,6 +1,7 @@
 import { exchange } from "./proxy-http.mjs";
 import { observe } from "./proxy-satellite.mjs";
 import { startDev } from "./routing-dev.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 const OWNER = "x-dms-route-owner";
 
@@ -9,6 +10,7 @@ export const journeys = [
     id: "routing-owner",
     title: "in development every answer names its owner in x-dms-route-owner; production names none",
     entryPoint: "requests to `ajs dms dev` against the run's backend, and to the run's `ajs dms start`",
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const server = await startDev(ctx);
       try {

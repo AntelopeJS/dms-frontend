@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import type { RunState } from "@antelopejs/dms/e2e/run";
 import { isObjectLike, isText } from "./guards";
 
 /** One observation a journey records: what it checked, whether it held, and what it saw. */
@@ -18,7 +19,7 @@ interface Check {
   detail: string;
 }
 
-/** Anything a journey compares or reports, as `dms-control` serialises it. */
+/** Anything a journey compares or reports, as the kit serialises it. */
 type Observed =
   | string
   | number
@@ -28,18 +29,24 @@ type Observed =
   | Observed[]
   | { [key: string]: Observed };
 
-/** A journey of `e2e/` that needs only the `ajs dms` CLI, fixtures and servers of its own. */
-export interface CliJourney {
+/** A journey of `e2e/` that opens no browser tab, which `node:test` runs. */
+export interface NodeJourney {
   id: string;
   knownFailures?: Readonly<Record<string, string>>;
-  run(ctx: CliJourneyContext): Promise<void>;
+  run(ctx: JourneyContext): Promise<void>;
 }
 
-/** The CLI journeys of one feature module of `e2e/journeys`. */
-export interface CliFeature {
+/** The journeys of one feature module of `e2e/journeys` that one runner runs. */
+export interface JourneyFeature {
   feature: string;
-  journeys: CliJourney[];
+  journeys: NodeJourney[];
 }
+
+/**
+ * Who runs a journey outside Playwright, by the export of its feature module: `cliJourneys` need only the CLI of
+ * this checkout, `runJourneys` a run of the kit.
+ */
+const EXPORT_OF = { cli: "cliJourneys", run: "runJourneys" } as const;
 
 const UNIQUE_BYTES = 3;
 const JOURNEYS = resolve(import.meta.dirname, "..", "..", "e2e", "journeys");
@@ -48,12 +55,13 @@ class CriticalStep extends Error {}
 
 /**
  * The run of a CLI journey: a scratch run folder, a scratch HOME and this checkout as the renderer. Every field
- * only a `dms-control` run has throws when read, so a journey that needs the run fails instead of reading nothing.
+ * only a run of the kit has throws when read, so a journey that needs the run fails instead of reading nothing.
  */
 class CliRunState {
   readonly id = randomBytes(UNIQUE_BYTES).toString("hex");
   readonly dir = mkdtempSync(join(tmpdir(), "dms-frontend-journey-"));
   readonly home = join(this.dir, "home");
+  readonly evidence = join(this.dir, "evidence");
   readonly renderer = resolve(import.meta.dirname, "..", "..");
 
   constructor() {
@@ -82,18 +90,24 @@ class CliRunState {
 }
 
 function needsRun(field: string): never {
-  throw new Error(
-    `${field} needs a dms-control run: the journey is not CLI-only`,
-  );
+  throw new Error(`${field} needs a run: the journey is not CLI-only`);
 }
 
-/** The journey context of `dms-control`, reduced to what a journey reads without a playground, a backend or a browser. */
-export class CliJourneyContext {
-  readonly state = new CliRunState();
+/**
+ * The journey context of the kit, reduced to what a journey reads without a browser: the run, or a scratch one,
+ * checks recorded into numbered step folders under `<evidence>/<journey>/`, and the run's administrator.
+ */
+export class JourneyContext {
   readonly checks: Check[] = [];
+  readonly folder: string;
   private index = 0;
 
-  constructor(readonly journey: string) {}
+  constructor(
+    readonly journey: string,
+    readonly state: CliRunState | RunState,
+  ) {
+    this.folder = join(state.evidence, journey);
+  }
 
   step(label: string): string {
     this.index += 1;
@@ -102,8 +116,7 @@ export class CliJourneyContext {
       .replace(/[^a-z0-9]+/g, "-")
       .slice(0, 60);
     const folder = join(
-      this.state.dir,
-      "evidence",
+      this.folder,
       `${String(this.index).padStart(2, "0")}-${slug}`,
     );
     mkdirSync(folder, { recursive: true });
@@ -157,6 +170,18 @@ export class CliJourneyContext {
   unique(prefix: string): string {
     return `${prefix} ${randomBytes(UNIQUE_BYTES).toString("hex")}`;
   }
+
+  /**
+   * The e-mail and password of the run's administrator.
+   *
+   * @throws When the run onboarded no administrator
+   */
+  adminCredentials(): { email: string; password: string } {
+    const admin = this.state.accounts.admin;
+    if (admin === undefined)
+      throw new Error("the run has no administrator: onboard it first");
+    return admin;
+  }
 }
 
 /** Whether `value` is a record of non-empty findings, as `knownFailures` maps a check's name to the finding that makes it fail. */
@@ -168,7 +193,7 @@ function isFindings(value: unknown): value is Readonly<Record<string, string>> {
 }
 
 /** Whether `value` is a journey with an id, its findings and a run function, whose parameters no run-time check can read. */
-function isCliJourney(value: unknown): value is CliJourney {
+function isNodeJourney(value: unknown): value is NodeJourney {
   return (
     isObjectLike(value) &&
     "id" in value &&
@@ -182,29 +207,33 @@ function isCliJourney(value: unknown): value is CliJourney {
 }
 
 /**
- * The `cliJourneys` of every feature module of `e2e/journeys`, in file order, leaving out the features that have none.
+ * The journeys `runner` runs, from every feature module of `e2e/journeys`, in file order, leaving out the features
+ * that have none.
  *
- * @throws When a module's `cliJourneys` holds something that is not a journey
+ * @throws When a module's export of them holds something that is not a journey
  */
-export async function cliFeatures(): Promise<CliFeature[]> {
-  const features: CliFeature[] = [];
+export async function journeyFeatures(
+  runner: keyof typeof EXPORT_OF,
+): Promise<JourneyFeature[]> {
+  const name = EXPORT_OF[runner];
+  const features: JourneyFeature[] = [];
   for (const file of readdirSync(JOURNEYS)
-    .filter((name) => name.endsWith(".mjs"))
+    .filter((entry) => entry.endsWith(".mjs"))
     .sort()) {
     const exported: unknown = await import(
       pathToFileURL(join(JOURNEYS, file)).href
     );
-    const listed: unknown =
-      isObjectLike(exported) && "cliJourneys" in exported
-        ? exported.cliJourneys
-        : [];
+    const exports = new Map<string, unknown>(
+      isObjectLike(exported) ? Object.entries(exported) : [],
+    );
+    const listed = exports.get(name) ?? [];
     if (!Array.isArray(listed))
-      throw new Error(`${file}: cliJourneys is not a list`);
+      throw new Error(`${file}: ${name} is not a list`);
     const entries: unknown[] = listed;
-    const journeys = entries.filter(isCliJourney);
+    const journeys = entries.filter(isNodeJourney);
     if (journeys.length !== entries.length)
       throw new Error(
-        `${file}: cliJourneys holds an entry without an id or a run function`,
+        `${file}: ${name} holds an entry without an id or a run function`,
       );
     if (journeys.length > 0)
       features.push({ feature: file.replace(/\.mjs$/, ""), journeys });
@@ -213,14 +242,18 @@ export async function cliFeatures(): Promise<CliFeature[]> {
 }
 
 /**
- * Runs a journey and judges its checks the way `dms-control` does: a check that fails is an error unless the
- * journey lists it in `knownFailures`, and a listed check that passes is an error too, so a fixed finding is
- * removed from the list.
+ * Runs a journey on `run`, or on a scratch run of its own when there is none, and judges its checks the way the
+ * kit does: a check that fails is an error unless the journey lists it in `knownFailures`, and a listed check that
+ * passes is an error too, so a fixed finding is removed from the list.
  *
- * @returns The checks that failed unlisted and the listed ones that passed, then the evidence folder, kept only then; empty when the journey holds
+ * @returns The checks that failed unlisted and the listed ones that passed, then the evidence folder; empty when the journey holds, and then a scratch run is removed
  */
-export async function judgeJourney(journey: CliJourney): Promise<string[]> {
-  const ctx = new CliJourneyContext(journey.id);
+export async function judgeJourney(
+  journey: NodeJourney,
+  run?: RunState,
+): Promise<string[]> {
+  const state = run ?? new CliRunState();
+  const ctx = new JourneyContext(journey.id, state);
   const known = journey.knownFailures ?? {};
   try {
     await journey.run(ctx);
@@ -235,8 +268,8 @@ export async function judgeJourney(journey: CliJourney): Promise<string[]> {
     return [];
   });
   if (ctx.checks.length === 0) problems.push("the journey recorded no check");
-  if (problems.length === 0)
-    rmSync(ctx.state.dir, { recursive: true, force: true });
-  else problems.push(`evidence in ${ctx.state.dir}`);
+  if (problems.length > 0) problems.push(`evidence in ${ctx.folder}`);
+  else if (state instanceof CliRunState)
+    rmSync(state.dir, { recursive: true, force: true });
   return problems;
 }

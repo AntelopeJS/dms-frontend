@@ -2,6 +2,7 @@ import { isText } from "./json.mjs";
 import { bodyJson, exchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
 import { accessToken, FAKE_USER, setCookies } from "./proxy-signin.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 const FORBIDDEN = { error: "Forbidden" };
 const CROSS_ORIGIN = { error: "Forbidden", reason: "missing or untrusted Origin header" };
@@ -12,6 +13,7 @@ export const journeys = [
     id: "sessions-establish",
     title: "POST /auth/establish opens a session only from a declared backend endpoint, and the browser never carries a token",
     entryPoint: "POST /auth/establish on the run's frontend and on a second `ajs dms start` with declared and operator endpoints",
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const web = ctx.state.webUrl;
       const post = (/** @type {string} */ url, /** @type {unknown} */ body, /** @type {Record<string, string>} */ headers = { origin: url }) => exchange(url, { method: "POST", path: "/auth/establish", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });

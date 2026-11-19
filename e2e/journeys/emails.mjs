@@ -4,7 +4,7 @@ import { parseJson, textAt } from "../json.mjs";
 import { signIn } from "../signin.mjs";
 import { withSatellite } from "../proxy-satellite.mjs";
 import { get, header, serviceToken } from "../web.mjs";
-import { standalone } from "../standalone.mjs";
+import { byRunner, noBrowser } from "../standalone.mjs";
 
 /** @typedef {import("../control.d.ts").JourneyContext} Ctx */
 
@@ -37,7 +37,7 @@ function decoded(file) {
   return decodeURIComponent(joined.replace(/%/g, "%25").replace(/=([0-9A-F]{2})/g, "%$1"));
 }
 
-export const journeys = [
+export const { journeys, runJourneys } = byRunner([
   {
     id: "a-rendered-email-carries-no-hydration-markers-and-links-to-the-dashboard",
     title: "the password-reset and invitation emails are rendered by the frontend server: complete HTML, no Vue comments, links on the dashboard's origin",
@@ -103,7 +103,7 @@ export const journeys = [
     id: "the-render-route-takes-one-signed-single-use-token-per-render",
     title: "a render with a valid service token answers the template's HTML; a replayed, forged, mis-addressed or expired token, an unknown template and a bad body are refused",
     entryPoint: "POST /api/html/render on a second frontend server",
-    ...standalone,
+    ...noBrowser,
     async run(/** @type {Ctx} */ ctx) {
       await withSatellite(ctx, {}, async (server) => {
         const secret = ctx.state.secrets.DMS_HTML_RENDER_SECRET;
@@ -134,4 +134,4 @@ export const journeys = [
     },
   },
   ...logo,
-];
+]);

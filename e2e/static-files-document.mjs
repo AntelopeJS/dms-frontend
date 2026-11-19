@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { exchange, rawExchange } from "./proxy-http.mjs";
 import { observe, withSatellite } from "./proxy-satellite.mjs";
 import { cookieHeader, setCookies } from "./proxy-signin.mjs";
-import { standalone } from "./standalone.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 const HEADER_LIMIT = 64 * 1024;
 
@@ -13,6 +13,7 @@ export const journeys = [
     id: "static-files-document",
     title: "the production document links its stylesheet before the entry script, preloads the page's language catalog and carries the runtime options",
     entryPoint: "GET /auth of the run's `ajs dms start`, signed out",
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const answer = await exchange(ctx.state.webUrl, { path: "/auth", headers: { accept: "text/html" } });
       const client = join(ctx.state.runPlayground, ".dms-frontend", "dist", "client");
@@ -48,7 +49,7 @@ export const journeys = [
     id: "static-files-client-errors",
     title: "a request Node refuses before any route runs gets a status and, for oversized headers, a hint in the server output",
     entryPoint: "raw requests to a second `ajs dms start`",
-    ...standalone,
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       await withSatellite(ctx, {}, async (server) => {
         /** @type {Record<number, number>} */

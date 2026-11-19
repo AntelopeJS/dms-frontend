@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { bodyJson, exchange } from "./proxy-http.mjs";
 import { observe, startFakeBackend, withSatellite } from "./proxy-satellite.mjs";
 import { cookieHeader, fakeAuthBackend, setCookies, signIn } from "./proxy-signin.mjs";
+import { noBrowser } from "./standalone.mjs";
 
 /**
  * @param {string} directory A directory
@@ -20,6 +21,7 @@ export const journeys = [
     id: "sessions-security",
     title: "secrets stay on the server: no page, answer or built file holds them, the bootstrap credential reaches only the ready report, and a session needs the same secret",
     entryPoint: "documents and API answers of the run's frontend, its built files, and servers started against one fake backend with different DMS_SESSION_SECRET values",
+    ...noBrowser,
     async run(/** @type {import("./control.d.ts").JourneyContext} */ ctx) {
       const web = ctx.state.webUrl;
       const secrets = Object.entries(ctx.state.secrets);

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, plain, runCli, runCliOnTerminal, sameText, scratch } from "./cli-run.mjs";
-import { cliOnly, standalone } from "./standalone.mjs";
+import { cliOnly, noBrowser } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -31,7 +31,7 @@ export const journeys = [
     id: "global-options",
     title: "-q, --no-color, --verbose and their variables work before and after the command name",
     entryPoint: "ajs dms [-q|--no-color|--verbose[=channels]] <command> [...]",
-    ...standalone,
+    ...noBrowser,
     async run(/** @type {Context} */ ctx) {
       const home = scratch(ctx, "home");
       /**
