@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -6,7 +12,7 @@ import { pathToFileURL } from "node:url";
 import { isObjectLike, isText } from "./guards";
 
 /** One observation a journey records: what it checked, whether it held, and what it saw. */
-export interface Check {
+interface Check {
   name: string;
   pass: boolean;
   detail: string;
@@ -211,7 +217,7 @@ export async function cliFeatures(): Promise<CliFeature[]> {
  * journey lists it in `knownFailures`, and a listed check that passes is an error too, so a fixed finding is
  * removed from the list.
  *
- * @returns The checks that failed unlisted and the listed ones that passed, empty when the journey holds
+ * @returns The checks that failed unlisted and the listed ones that passed, then the evidence folder, kept only then; empty when the journey holds
  */
 export async function judgeJourney(journey: CliJourney): Promise<string[]> {
   const ctx = new CliJourneyContext(journey.id);
@@ -228,5 +234,9 @@ export async function judgeJourney(journey: CliJourney): Promise<string[]> {
       return [`${check.name} passes: remove it from knownFailures`];
     return [];
   });
-  return ctx.checks.length === 0 ? ["the journey recorded no check"] : problems;
+  if (ctx.checks.length === 0) problems.push("the journey recorded no check");
+  if (problems.length === 0)
+    rmSync(ctx.state.dir, { recursive: true, force: true });
+  else problems.push(`evidence in ${ctx.state.dir}`);
+  return problems;
 }
