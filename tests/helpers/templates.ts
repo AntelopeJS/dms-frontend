@@ -1,5 +1,5 @@
 import { cpSync, readFileSync } from "node:fs";
-import { parse } from "yaml";
+import { isScalar, isSeq, parseDocument } from "yaml";
 import { join } from "node:path";
 import { listNames } from "./files";
 
@@ -18,14 +18,20 @@ export function copyEmailRendererFiles(workspace: string): void {
 
 /** The pnpm settings of the generated workspace that a test reads. */
 export interface WorkspacePnpmConfig {
-  minimumReleaseAge?: number;
-  minimumReleaseAgeExclude?: string[];
+  minimumReleaseAge: unknown;
+  minimumReleaseAgeExclude: unknown;
 }
 
 /** The `pnpm-workspace.yaml` the generated dashboard workspace starts from, parsed. */
 export function readWorkspacePnpmConfig(): WorkspacePnpmConfig {
-  // SAFETY: the shipped file is a YAML mapping.
-  return parse(
+  const document = parseDocument(
     readFileSync(join(TEMPLATE, "pnpm-workspace.yaml"), "utf8"),
-  ) as WorkspacePnpmConfig;
+  );
+  const exclude = document.get("minimumReleaseAgeExclude", true);
+  return {
+    minimumReleaseAge: document.get("minimumReleaseAge"),
+    minimumReleaseAgeExclude: isSeq(exclude)
+      ? exclude.items.map((item) => (isScalar(item) ? item.value : item))
+      : exclude,
+  };
 }
