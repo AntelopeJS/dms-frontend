@@ -9,7 +9,7 @@
 | `skills`    | The agent skill shipped in the package (`antelopeJs.skills`)                                   |
 | `docs`      | The user docs. `pnpm docs:reference` writes the environment table in `docs/4.configuration.md` |
 | `tests`     | The `node:test` suite                                                                          |
-| `e2e`       | The verify skill's journeys, run as a Playwright suite by `pnpm e2e`                           |
+| `e2e`       | The journeys, run as a Playwright suite by `pnpm e2e` and as `node:test` suites                |
 
 oxlint skips `templates/**/*.{ts,tsx,vue}` and knip skips `templates/**`: they resolve against the consumer's dependencies. Their `.mjs` files stay linted.
 
@@ -43,8 +43,6 @@ CI runs `pnpm run checks` in full on every pull request and reports what failed.
 - `pnpm run typecheck` after you change types or signatures.
 - `pnpm exec oxlint <files>` and `pnpm exec oxfmt <files>` on the files you changed.
 - One test file, not the suite. In a module that tests with `ajs module test`: `pnpm run build`, then `pnpm exec ajs module test . -f dist/<path>.test.js`.
-
-Prove a change works with the verification skill in [`.agents/skills/verify-dms-frontend/SKILL.md`](.agents/skills/verify-dms-frontend/SKILL.md) before you call it done.
 
 ### Comments
 

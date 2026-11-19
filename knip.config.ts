@@ -6,7 +6,7 @@ const TEST_SUITE_ENTRIES = ["tests/**/*.test.ts"];
 /** Every file of the suite under tests/, helpers and fixtures included. */
 const TEST_SUITE_FILES = ["tests/**/*.ts"];
 
-/** The formal checks that `dms-control formal` runs, with the files they import. */
+/** The formal checks that the tests run, with the files they import. */
 const FORMAL_CHECK_ENTRIES = [".agents/skills/formal-*/check.mjs"];
 const FORMAL_CHECK_FILES = [".agents/skills/formal-*/*.mjs"];
 

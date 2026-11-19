@@ -28,7 +28,7 @@ node .agents/skills/formal-static-coding/check.mjs --seed 7  # another sample
 | CI (no flag) | 200 per rule and per finding | under 1 s |
 | Full (`--full`) | 2,000 per rule and per finding | about 2 s |
 
-The seed defaults to `20261116`, and the same seed with the same fast-check version replays the same cases. `pnpm test` runs the CI configuration (`tests/formal-static-coding.test.ts`), and `dms-control formal` runs `--full` when a diff touches a covered file (`verify.config.ts`).
+The seed defaults to `20261116`, and the same seed with the same fast-check version replays the same cases. `pnpm test` runs the CI configuration (`tests/formal-static-coding.test.ts`).
 
 - Exit 0 means every rule that held still holds, and each finding still breaks.
 - Exit 1 means a rule changed. `BROKEN <Rule>` names a rule that held and now breaks, with the shrunk case under it. `HOLDS  <Rule>` names a finding that no longer breaks.
@@ -38,7 +38,7 @@ The lines that name a changed rule match `^(?:BROKEN|CHANGED|HOLDS) +(\w+)`, and
 
 ## When to run it
 
-Run `--full` when a change touches a file in the coverage record below, this folder, or the `static-files` feature of the verify skill. A changed rule (exit 1) makes the Verdict FAIL. The recorded finding fails it only when the diff changes what the covered code does, which `dms-control formal` decides by comparing the covered files' JavaScript statements on the base and on HEAD (`verify-dms-frontend` verdict rule 5).
+Run `--full` when a change touches a file in the coverage record below or this folder. A changed rule (exit 1) blocks the change.
 
 ## The rules
 
