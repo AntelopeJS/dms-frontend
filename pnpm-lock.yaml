@@ -38,8 +38,8 @@ importers:
         specifier: ~1.24.0
         version: 1.24.0
       '@antelopejs/dms':
-        specifier: 0.21.4-next.941.gfbafd9a
-        version: 0.21.4-next.941.gfbafd9a(@antelopejs/core@1.24.0)(@playwright/test@1.65.1)(bare-buffer@3.7.1)(typescript@6.0.3)
+        specifier: 0.21.4-next.944.g3da5606
+        version: 0.21.4-next.944.g3da5606(@antelopejs/core@1.24.0)(@playwright/test@1.65.1)(bare-buffer@3.7.1)(typescript@6.0.3)
       '@antelopejs/interface-dms':
         specifier: '>=0.14.3 <0.15.0'
         version: 0.14.3(731721022beb8c4b1419853fd8700ce4)
@@ -179,8 +179,8 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
-  '@antelopejs/dms@0.21.4-next.941.gfbafd9a':
-    resolution: {integrity: sha512-5hvY9xLKBvo/VP8AdJrBNhU+ghvntJTckZvpaHBbfV3gg2QDR7tM1zd3JbBlQgCw2XV15/K8k7y70M/zeIP2bQ==}
+  '@antelopejs/dms@0.21.4-next.944.g3da5606':
+    resolution: {integrity: sha512-Os2WiWC8f5cm4JBtLea0ZQxnx09Iwp4t9vb1pWBcrcR8HJI3EshGE2jqjmspY4BovEgI0yYGzmH73QFPC9/IUg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -6029,7 +6029,7 @@ snapshots:
       semver: 7.8.6
       typescript: 5.9.3
 
-  '@antelopejs/dms@0.21.4-next.941.gfbafd9a(@antelopejs/core@1.24.0)(@playwright/test@1.65.1)(bare-buffer@3.7.1)(typescript@6.0.3)':
+  '@antelopejs/dms@0.21.4-next.944.g3da5606(@antelopejs/core@1.24.0)(@playwright/test@1.65.1)(bare-buffer@3.7.1)(typescript@6.0.3)':
     dependencies:
       2fa: 0.1.2
       '@antelopejs/interface-api': 0.3.3(@antelopejs/interface-core@0.5.1)
