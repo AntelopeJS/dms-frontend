@@ -19,7 +19,7 @@ interface Check {
   detail: string;
 }
 
-/** Anything a journey compares or reports, as `dms-control` serialises it. */
+/** Anything a journey compares or reports, as the e2e kit serialises it. */
 type Observed =
   | string
   | number
@@ -49,7 +49,7 @@ class CriticalStep extends Error {}
 
 /**
  * The run of a CLI journey: a scratch run folder, a scratch HOME and this checkout as the renderer. Every field
- * only a `dms-control` run has throws when read, so a journey that needs the run fails instead of reading nothing.
+ * only a run of the e2e kit has throws when read, so a journey that needs the run fails instead of reading nothing.
  */
 class CliRunState {
   readonly id = randomBytes(UNIQUE_BYTES).toString("hex");
@@ -84,11 +84,11 @@ class CliRunState {
 
 function needsRun(field: string): never {
   throw new Error(
-    `${field} needs a dms-control run: the journey is not CLI-only`,
+    `${field} needs a run of the e2e kit: the journey is not CLI-only`,
   );
 }
 
-/** The journey context of `dms-control`, reduced to what a journey reads without a playground, a backend or a browser. */
+/** The journey context of the e2e kit, reduced to what a journey reads without a playground, a backend or a browser. */
 export class CliJourneyContext {
   readonly state = new CliRunState();
   readonly checks: Check[] = [];
@@ -245,7 +245,7 @@ async function exportedJourneys<J>(
 }
 
 /**
- * Runs a journey and judges its checks the way `dms-control` does: a check that fails is an error unless the
+ * Runs a journey and judges its checks the way the e2e kit does: a check that fails is an error unless the
  * journey lists it in `knownFailures`, and a listed check that passes is an error too, so a fixed finding is
  * removed from the list.
  *

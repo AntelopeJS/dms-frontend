@@ -1,6 +1,6 @@
 import { antelopeFmtPreset } from "@antelopejs/tooling-configs/oxc/fmt";
 
-/** The journeys and their helpers keep the layout they had in the verify skill. */
+/** The journeys and their helpers keep the layout they were written in. */
 export default antelopeFmtPreset({
   ignorePatterns: [
     "**/*.md",
