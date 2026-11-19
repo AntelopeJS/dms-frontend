@@ -23,6 +23,8 @@ The session is a sealed, `HttpOnly`, `SameSite=Lax` cookie, scoped to the backen
 - `sessions-establish`: the declared endpoint, 11 ways around the allow-list, manifest and environment endpoints, 2FA and tenant outcomes, the payload, and a backend refusal.
 - `sessions-language`: `dms_locale` read from the request in four forms, one `lang` attribute, and the footer's language switcher setting the cookie for a year.
 - `sessions-security`: no secret in any answer or built file, the bootstrap credential only in the ready report, a session needs the same `DMS_SESSION_SECRET`, and survives a restart that keeps it.
+- `a-signed-out-visit-signs-in-and-returns-to-the-page-it-asked-for`: a signed-out browser that opens a private page is sent to the sign-in form, signs in there and lands on the page it asked for, query included.
+- `logging-out-from-the-account-menu-ends-the-session`: Logout in the account menu shows the sign-in form, drops the session cookie, and a private page then asks for sign-in again.
 - `sessions-language-order`: a signed-in user's saved language decides the page whatever the `dms_locale` cookie says, for French and for English.
 
 ## How to get to it (user POV)

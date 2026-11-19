@@ -54,7 +54,7 @@ $C formal "$RUN"                         # the formal checks that cover the diff
 
 ## The suite
 
-`pnpm e2e` runs every journey as a Playwright test through `@antelopejs/dms/e2e`. Its global setup runs `prepare` and `dms-control up` once, each test drives one journey on a fresh database of that run, and the teardown runs `down`. Set `DMS_PLAYGROUND` first.
+`pnpm e2e` runs every journey a feature module exports as `journeys` as a Playwright test through `@antelopejs/dms/e2e`. Its global setup runs `prepare` and `dms-control up` once, each test drives one journey on a fresh database of that run, and the teardown runs `down`. Set `DMS_PLAYGROUND` first.
 
 ```bash
 pnpm e2e --grep @smoke                # the smoke set the full CI tier runs
@@ -62,7 +62,9 @@ pnpm e2e --grep '<journey-id>( @\S+)*$'   # one journey, tags or not
 DMS_E2E_RUN="$RUN" pnpm e2e           # drive a run of `up` and leave it running
 ```
 
-A journey can carry `tag` (`@smoke`), `knownFailures` (check name to the finding that makes it fail today) and `last: true` (it changes the run's playground for later journeys). CI runs nothing on a draft or a pull request into `next`, the `@smoke` journeys on the full tier (a pull request into `main`, a push to `next`), and every journey in 2 shards each night, merged into one `playwright-report` artifact.
+A journey can carry `tag` (`@smoke`), `knownFailures` (check name to the finding that makes it fail today) and `last: true` (it changes the run's playground for later journeys). CI runs the `@smoke` journeys on a pull request, and every journey in 2 shards in the merge queue, on a pull request labelled `ci:full`, on a manual run and each night, merged into one `playwright-report` artifact.
+
+A journey that needs no run at all, only the CLI of this checkout, a scratch run folder and a scratch HOME, declares `...cliOnly` (`e2e/standalone.mjs`) instead of `...standalone`. Its feature module exports it as `cliJourneys`, and `tests/cli-journeys.test.mts` runs it as an ordinary test of `pnpm test:cli`, which fails a journey that reads the run's playground, URLs, secrets or accounts. `dms-control journey` does not run it.
 
 ## Evidence
 

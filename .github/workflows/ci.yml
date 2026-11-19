@@ -2,12 +2,14 @@ name: ci
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  merge_group:
   push:
-    branches: [next]
+    branches: [main]
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
+
 permissions:
   contents: read
 
@@ -27,20 +29,33 @@ jobs:
       docs-typescript-project: docs/tsconfig.json
       renovate-sync: false
       test-job: true
+      single-job: false
+      affected-tests: true
+    secrets:
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
 
   select:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       tier: ${{ steps.tier.outputs.tier }}
+      e2e: ${{ steps.e2e.outputs.suite }}
     steps:
       - name: Pick the tier from the event, the target branch and the draft flag
         id: tier
         uses: AntelopeJS/.github/.github/actions/ci-tier@v2
+      - name: Pick the e2e suite, the smoke set on a pull request without the ci:full label and every journey otherwise
+        id: e2e
+        env:
+          EVENT: ${{ github.event_name }}
+          FULL_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+        run: |
+          if [[ "$EVENT" == pull_request && "$FULL_LABEL" != true ]]; then suite=smoke; else suite=full; fi
+          echo "suite=${suite}" >> "$GITHUB_OUTPUT"
 
   cli:
     needs: select
-    if: needs.select.outputs.tier != 'none' && needs.select.outputs.tier != 'draft'
+    if: needs.select.outputs.tier != 'none'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -57,7 +72,7 @@ jobs:
 
   verify-source-dms:
     needs: select
-    if: needs.select.outputs.tier != 'none' && needs.select.outputs.tier != 'draft'
+    if: needs.select.outputs.tier != 'none'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -126,9 +141,9 @@ jobs:
         working-directory: dms
       - run: pnpm --dir packages/dms/frontend-vue typecheck
         working-directory: dms
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/next' && steps.pnpm-store-cache.outputs.cache-hit != 'true'
+      - if: github.event_name == 'schedule' && steps.pnpm-store-cache.outputs.cache-hit != 'true'
         run: pnpm store prune
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/next' && steps.pnpm-store-cache.outputs.cache-hit != 'true'
+      - if: github.event_name == 'schedule' && steps.pnpm-store-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
@@ -136,15 +151,15 @@ jobs:
 
   e2e:
     needs: select
-    if: needs.select.outputs.tier == 'full' || needs.select.outputs.tier == 'nightly'
+    if: needs.select.outputs.tier != 'none'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.select.outputs.tier == 'nightly' && '[1, 2]' || '[1]') }}
+        shard: ${{ fromJSON(needs.select.outputs.e2e == 'full' && '[1, 2]' || '[1]') }}
     env:
-      TIER: ${{ needs.select.outputs.tier }}
+      SUITE: ${{ needs.select.outputs.e2e }}
       LEFTHOOK: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -188,13 +203,13 @@ jobs:
           fi
           echo "::warning::Chromium's system packages did not install: installing the browser alone"
           pnpm exec playwright install --only-shell chromium
-      - if: env.TIER == 'full'
+      - if: env.SUITE == 'smoke'
         run: pnpm e2e --grep @smoke
-      - if: env.TIER == 'nightly'
+      - if: env.SUITE == 'full'
         run: pnpm e2e --shard=${{ matrix.shard }}/2 --reporter=blob
         env:
           PLAYWRIGHT_BLOB_OUTPUT_DIR: e2e/blob-report
-      - if: always() && env.TIER == 'nightly'
+      - if: always() && env.SUITE == 'full'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: blob-report-${{ matrix.shard }}
@@ -213,7 +228,7 @@ jobs:
 
   e2e-report:
     needs: [select, e2e]
-    if: always() && needs.select.outputs.tier == 'nightly'
+    if: always() && needs.select.outputs.e2e == 'full' && needs.e2e.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -249,12 +264,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - if: >-
-          needs.select.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || needs.ci.result == 'skipped' || (needs.select.outputs.tier != 'none' && needs.select.outputs.tier != 'draft' && (needs.cli.result == 'skipped' || needs.verify-source-dms.result == 'skipped')) || ((needs.select.outputs.tier == 'full' || needs.select.outputs.tier == 'nightly') && needs.e2e.result == 'skipped')
+          needs.select.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || needs.ci.result == 'skipped' || (needs.select.outputs.tier != 'none' && (needs.cli.result == 'skipped' || needs.verify-source-dms.result == 'skipped' || needs.e2e.result == 'skipped'))
         run: exit 1
-      - if: needs.select.outputs.tier == 'draft'
-        run: |
-          echo "::error::Draft pull request: only lint and typecheck ran. Mark it ready for review to run the tests."
-          exit 1
   renovate-sync:
     if: >-
       github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/') && github.event.pull_request.head.repo.full_name == github.repository

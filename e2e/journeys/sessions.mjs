@@ -3,5 +3,6 @@ import { journeys as establish } from "../sessions-establish.mjs";
 import { journeys as language } from "../sessions-language.mjs";
 import { journeys as security } from "../sessions-security.mjs";
 import { journeys as hooks } from "../sessions-hooks.mjs";
+import { journeys as browser } from "../sessions-browser.mjs";
 
-export const journeys = [...cookie, ...hooks, ...establish, ...language, ...security];
+export const journeys = [...cookie, ...hooks, ...establish, ...language, ...security, ...browser];

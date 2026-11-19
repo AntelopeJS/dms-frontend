@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docsPage, exampleOutput } from "./cli-docs.mjs";
 import { observe, plain, runCli, runCliOnTerminal, sameText, scratch } from "./cli-run.mjs";
-import { standalone } from "./standalone.mjs";
+import { cliOnly, standalone } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -116,7 +116,7 @@ export const journeys = [
     id: "exit-codes",
     title: "a usage error exits 2 with the fix on stderr, a failure exits 1, a success exits 0; ports and the session secret are checked at their limits",
     entryPoint: "ajs dms start / clean with bad input; the exit-code table of docs/3.cli/1.overview.md",
-    ...standalone,
+    ...cliOnly,
     async run(/** @type {Context} */ ctx) {
       const cwd = scratch(ctx, "cwd");
       const url = "http://127.0.0.1:9";

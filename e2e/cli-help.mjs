@@ -1,7 +1,7 @@
 import { rendererVersion } from "./cli-json.mjs";
 import { environmentRows, docsPage, exampleOutput, flatten, maskVersion } from "./cli-docs.mjs";
 import { observe, runCli, sameText } from "./cli-run.mjs";
-import { standalone } from "./standalone.mjs";
+import { cliOnly } from "./standalone.mjs";
 
 /** @typedef {import("./cli-run.mjs").Context} Context */
 
@@ -54,7 +54,7 @@ export const journeys = [
     id: "help-and-version",
     title: "--version prints the release, every spelling of help prints the same text the docs show, unknown help subjects are usage errors",
     entryPoint: "ajs dms --version, --help, -h, help [command], and no arguments",
-    ...standalone,
+    ...cliOnly,
     async run(/** @type {Context} */ ctx) {
       const release = rendererVersion(ctx);
       const long = await runCli(ctx, ["--version"]);
@@ -119,7 +119,7 @@ export const journeys = [
     id: "environment-topic",
     title: "help environment lists every variable the configuration page lists, in its order and words, then the .env rules",
     entryPoint: "ajs dms help environment, and docs/4.configuration.md",
-    ...standalone,
+    ...cliOnly,
     async run(/** @type {Context} */ ctx) {
       const topic = await runCli(ctx, ["help", "environment"]);
       const flat = flatten(topic.stdout);
