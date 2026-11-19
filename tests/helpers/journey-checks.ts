@@ -98,7 +98,7 @@ function needsRun(field: string): never {
  * checks recorded into numbered step folders under `<evidence>/<journey>/`, and the run's administrator.
  */
 export class JourneyContext {
-  readonly checks: Check[] = [];
+  readonly steps: { folder: string; checks: Check[] }[] = [];
   readonly folder: string;
   private index = 0;
 
@@ -132,7 +132,7 @@ export class JourneyContext {
       join(folder, "checks.json"),
       `${JSON.stringify(checks, null, 2)}\n`,
     );
-    this.checks.push(...checks);
+    this.steps.push({ folder, checks });
     const passed = checks.every((check) => check.pass);
     if (!passed && options.critical) throw new CriticalStep(folder);
     return passed;
@@ -260,14 +260,15 @@ export async function judgeJourney(
   } catch (error) {
     if (!(error instanceof CriticalStep)) throw error;
   }
-  const problems = ctx.checks.flatMap((check) => {
+  const checks = ctx.steps.flatMap((step) => step.checks);
+  const problems = checks.flatMap((check) => {
     const listed = Object.hasOwn(known, check.name);
     if (!check.pass && !listed) return [`${check.name}: ${check.detail}`];
     if (check.pass && listed)
       return [`${check.name} passes: remove it from knownFailures`];
     return [];
   });
-  if (ctx.checks.length === 0) problems.push("the journey recorded no check");
+  if (checks.length === 0) problems.push("the journey recorded no check");
   if (problems.length > 0) problems.push(`evidence in ${ctx.folder}`);
   else if (state instanceof CliRunState)
     rmSync(state.dir, { recursive: true, force: true });
