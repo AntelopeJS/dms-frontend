@@ -2,6 +2,11 @@ packages:
   - .
   - frontend-modules/*
 ignore-workspace-root-check: true
+# The install has no lockfile, so it resolves every dependency at build time: a
+# version published less than a day ago may not be served by the registry yet.
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@antelopejs/*"
 # Fixes carried until they are released upstream. Each patch names the upstream
 # issue and pull request it stands in for; drop it with the upgrade that ships
 # them, since pnpm refuses a patch whose version is no longer installed.
