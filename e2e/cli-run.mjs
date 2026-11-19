@@ -77,8 +77,8 @@ export function cliEnvironment(ctx, home, extra = {}) {
     AJS_NO_UPDATE_CHECK: "1",
     NO_UPDATE_NOTIFIER: "1",
     COREPACK_HOME: process.env.COREPACK_HOME ?? join(cacheHome, "node", "corepack"),
-    npm_config_cache: join(cacheHome, "dms-control", "npm"),
-    npm_config_store_dir: join(cacheHome, "dms-control", "pnpm-store"),
+    npm_config_cache: join(cacheHome, "dms-e2e", "npm"),
+    npm_config_store_dir: join(cacheHome, "dms-e2e", "pnpm-store"),
   });
   for (const [name, value] of Object.entries(extra)) {
     if (value === undefined) delete env[name];
