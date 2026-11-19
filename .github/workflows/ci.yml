@@ -191,14 +191,18 @@ jobs:
           pnpm --dir packages/dms/playground build
       - run: |
           echo "DMS_PLAYGROUND=${GITHUB_WORKSPACE}/dms/packages/dms/playground" >> "$GITHUB_ENV"
+          # The dms-control names go when this repo is on a dms release with AntelopeJS/dms#1184.
           echo "DMS_CONTROL_RUNS=${RUNNER_TEMP}/dms-runs" >> "$GITHUB_ENV"
+          echo "DMS_E2E_RUNS=${RUNNER_TEMP}/dms-runs" >> "$GITHUB_ENV"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/mongodb-binaries
             ~/.cache/ms-playwright
-          key: e2e-${{ matrix.part }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: e2e-${{ matrix.part }}-${{ runner.os }}-
+            ~/.cache/dms-control
+            ~/.cache/dms-e2e
+          key: e2e-v2-${{ matrix.part }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: e2e-v2-${{ matrix.part }}-${{ runner.os }}-
       - name: Install Chromium and its system packages
         if: matrix.part == 'browser'
         run: |

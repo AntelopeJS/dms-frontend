@@ -55,8 +55,8 @@ async function buildWithoutVariables(ctx, target) {
     NO_COLOR: "1",
     AJS_NO_UPDATE_CHECK: "1",
     NO_UPDATE_NOTIFIER: "1",
-    npm_config_cache: join(cache, "dms-control", "npm"),
-    npm_config_store_dir: join(cache, "dms-control", "pnpm-store"),
+    npm_config_cache: join(cache, "dms-e2e", "npm"),
+    npm_config_store_dir: join(cache, "dms-e2e", "pnpm-store"),
   });
   const logFile = join(state.dir, "satellites", "build.log");
   const out = openSync(logFile, "w");
