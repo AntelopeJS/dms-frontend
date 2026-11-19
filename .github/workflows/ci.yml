@@ -162,6 +162,7 @@ jobs:
     env:
       SUITE: ${{ needs.select.outputs.e2e }}
       LEFTHOOK: "0"
+      DMS_E2E_PREBUILT: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -172,6 +173,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Remove the verify skill and dms-control, which the suites run without
+        run: rm -rf .agents/skills/verify-* node_modules/.bin/dms-control
       - name: Pick the dms commit of the installed @antelopejs/dms
         id: dms
         run: echo "ref=$(node -p 'const p = require("./node_modules/@antelopejs/dms/package.json"); p.gitHead ?? `v${p.version}`')" >> "$GITHUB_OUTPUT"
