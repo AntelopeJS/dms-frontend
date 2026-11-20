@@ -5,6 +5,7 @@ import { defineComponent, h, nextTick } from "vue";
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
 import {
   clientApp,
+  deferred,
   mountRuntime,
   serverRender,
   settle,
@@ -34,6 +35,77 @@ void describe("Async data scope", () => {
     assert.equal(second.data.value, "plan of b");
     await app.runWithContext(() => runtimeModule.refreshDmsData("plan"));
     assert.deepEqual([...runtime.asyncData.keys()], ["account-b|plan"]);
+  });
+
+  void it("reads again, in the new scope, the data a mounted component shows", async () => {
+    let account = "a";
+    const { shown, root } = toggled("plan", async () => `plan of ${account}`);
+    const runtime = createDmsFrontendRuntime();
+    runtime.asyncDataScope = "account-a";
+    const app = mountRuntime(runtime, root);
+    await settle();
+    assert.equal(shown.at(-1), "success:plan of a");
+
+    account = "b";
+    shown.length = 0;
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    await settle();
+    assert.equal(shown.at(-1), "success:plan of b");
+    assert.ok(
+      shown.every((state) => !state.endsWith("plan of a")),
+      `the other account's data never shows: ${shown.join(", ")}`,
+    );
+    const { data } = app.runWithContext(() =>
+      runtimeModule.useDmsData<string>("plan"),
+    );
+    assert.equal(data.value, "plan of b");
+    app.unmount();
+  });
+
+  void it("never lets a late answer of the previous scope replace the new one", async () => {
+    const answers = { a: deferred<string>(), b: deferred<string>() };
+    let account: keyof typeof answers = "a";
+    const { shown, root } = toggled("plan", () => answers[account].promise);
+    const runtime = createDmsFrontendRuntime();
+    runtime.asyncDataScope = "account-a";
+    const app = mountRuntime(runtime, root);
+    await settle();
+
+    account = "b";
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    answers.b.resolve("plan of b");
+    await settle();
+    answers.a.resolve("plan of a");
+    await settle();
+    assert.equal(shown.at(-1), "success:plan of b");
+    app.unmount();
+  });
+
+  void it("leaves the data a component waits to execute() unread in the new scope", async () => {
+    let calls = 0;
+    let result: { status: { value: string } } | undefined;
+    const Waiting = defineComponent({
+      setup() {
+        result = useDmsAsyncData(
+          "report",
+          async () => {
+            calls++;
+            return "report";
+          },
+          { immediate: false },
+        );
+        return () => h("p");
+      },
+    });
+    const runtime = createDmsFrontendRuntime();
+    runtime.asyncDataScope = "account-a";
+    const app = mountRuntime(runtime, Waiting);
+    await settle();
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    await settle();
+    assert.equal(calls, 0);
+    assert.equal(result?.status.value, "idle");
+    app.unmount();
   });
 
   void it("finds the data the server transferred under the same scope", async () => {
