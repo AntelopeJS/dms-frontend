@@ -194,7 +194,10 @@ export interface DmsFrontendRuntime {
   serverPrefetches: Set<Promise<void>>;
   /** The runs in flight, which a server render aborts once it is over. */
   asyncDataRuns: Set<AbortController>;
-  /** The data some component or caller shows: `refreshDmsPageData`'s. */
+  /**
+   * The data some component or caller shows: what `refreshDmsPageData` and
+   * `setDmsAsyncDataScope` read again.
+   */
   boundAsyncData: Set<AsyncDataEntry<unknown>>;
   /** Orders the data no caller shows, the least recently shown first. */
   asyncDataClock: number;
