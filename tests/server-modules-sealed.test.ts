@@ -14,6 +14,13 @@ function isFlow(value: unknown): value is Flow {
   return isPlainObject(value) && value.kind === "flow" && isNumber(value.step);
 }
 
+function flipLastByte(cookie: string): string {
+  const separator = cookie.indexOf("=");
+  const bytes = Buffer.from(cookie.slice(separator + 1), "base64url");
+  bytes[bytes.length - 1] ^= 0xff;
+  return `${cookie.slice(0, separator + 1)}${bytes.toString("base64url")}`;
+}
+
 void describe("Sealed cookies read through a guard", () => {
   void it("hand the module only a value its guard accepts", async () => {
     process.env.DMS_SESSION_SECRET ??=
@@ -70,7 +77,7 @@ void describe("Sealed cookies read through a guard", () => {
 
       assert.deepEqual((await call("/api/_shop/read")).body, { value: null });
       await call("/api/_shop/inspect");
-      await call("/api/_shop/inspect", `${flow.cookie.slice(0, -2)}xx`);
+      await call("/api/_shop/inspect", flipLastByte(flow.cookie));
       assert.deepEqual(seen, []);
     } finally {
       await served.close();
