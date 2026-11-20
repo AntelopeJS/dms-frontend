@@ -7,7 +7,8 @@ import {
 } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { resolveSessionSecret, UsageError } from "../src/config";
+import { UsageError } from "../src/config";
+import { resolveSessionSecret } from "../src/session-secret";
 import { formatReadyBlock } from "../src/output";
 import { isGuestBridge, readyLines } from "../src/server-process";
 import { memoryUi } from "./fixtures/memory-ui";
@@ -47,7 +48,7 @@ const SECRET_NOT_SET = [
 
 function secretNotSet(): UsageError {
   try {
-    resolveSessionSecret("start", undefined);
+    resolveSessionSecret({ mode: "start" }, undefined);
   } catch (err) {
     if (err instanceof UsageError) return err;
   }

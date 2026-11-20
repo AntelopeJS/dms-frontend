@@ -16,7 +16,7 @@ export const ENVIRONMENT_VARIABLES: ReadonlyArray<readonly [string, string]> = [
   ["DMS_BOOTSTRAP_SECRET", "Same as --bootstrap-secret"],
   [
     "DMS_SESSION_SECRET",
-    "Session key, 32 characters or more; start needs one, dev makes one when unset",
+    "Session key, 32 characters or more; start needs one, dev makes one per workspace when unset",
   ],
   ["DMS_OFFLINE", "Same as --offline, unless 0, false, no or off"],
   ["DMS_WORKSPACE_DIR", "Same as build and start --workspace"],

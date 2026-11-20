@@ -1,5 +1,6 @@
 export * from "./cancellation";
 export * from "./config";
+export * from "./session-secret";
 export * from "./layers";
 export * from "./layer-aliases";
 export * from "./manifest";

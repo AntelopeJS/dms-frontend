@@ -73,7 +73,7 @@ export const journeys = [
       };
       const port = await runCli(ctx, ["dev", "-b", "http://127.0.0.1:9", "-p", "65536"], { cwd, home });
       const badUrl = await runCli(ctx, ["dev", "-b", "localhost:5010"], { cwd, home });
-      const reason = "  dev generates an ephemeral secret only when the variable is not set at all.\n  → Create one: openssl rand -hex 32, then set it in the environment or ./.env\n";
+      const reason = "  dev generates a secret only when the variable is not set at all.\n  → Create one: openssl rand -hex 32, then set it in the environment or ./.env\n";
       observe(ctx, "refusals", { nowhere, secrets, port, badUrl }, [
         ctx.equal("no backend and no running project: the page's text", [nowhere.stdout, nowhere.stderr.trimEnd()], ["", page ?? "<no block>"]),
         ctx.equal("it is a failure of the command", nowhere.code === 1 || nowhere.code === 2, true),

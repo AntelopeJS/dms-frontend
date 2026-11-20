@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import { chmodSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -429,43 +429,6 @@ export function normalizeBootstrapSecret(
     });
   }
   return trimmed;
-}
-
-export type SessionSecretMode = "dev" | "start";
-
-const SESSION_SECRET_MIN_LENGTH = 32;
-
-/**
- * Resolve the secret used by the generated server. Development gets a fresh
- * in-memory secret when none is configured; persistent commands must be
- * explicit so a deployment cannot silently invalidate sessions on restart.
- */
-export function resolveSessionSecret(
-  mode: SessionSecretMode,
-  value: string | undefined = process.env.DMS_SESSION_SECRET,
-): string {
-  if (value === undefined && mode === "dev") {
-    return randomBytes(32).toString("hex");
-  }
-  if (value !== undefined && value.length >= SESSION_SECRET_MIN_LENGTH) {
-    return value;
-  }
-  throw new UsageError({
-    title: `DMS_SESSION_SECRET ${describeSessionSecret(value)}`,
-    reason:
-      mode === "dev"
-        ? "dev generates an ephemeral secret only when the variable is not set at all."
-        : "start signs sessions with it, so it must stay the same across restarts.",
-    fixes: [
-      "Create one: openssl rand -hex 32, then set it in the environment or ./.env",
-    ],
-  });
-}
-
-function describeSessionSecret(value: string | undefined): string {
-  if (value === undefined) return "is not set";
-  if (value === "") return "is empty";
-  return `is too short: ${value.length} characters, at least ${SESSION_SECRET_MIN_LENGTH} needed`;
 }
 
 /**

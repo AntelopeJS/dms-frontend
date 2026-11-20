@@ -6,7 +6,9 @@ import {
   pluralize,
 } from "@antelopejs/core/cli";
 import {
+  canonicalizeBackendUrl,
   describeSecretSources,
+  getWorkspaceDirForKey,
   parseBackendUrl,
   parsePort,
   projectWorkspaceKey,
@@ -82,14 +84,15 @@ function clientHost(): string {
  */
 interface ResolvedBackend {
   backendUrl: string;
-  workspaceKey?: string;
+  workspaceKey: string;
   /** The project the backend was discovered from, when it was. */
   projectDir?: string;
 }
 
 function resolveBackend(options: DevOptions): ResolvedBackend {
   if (options.backendUrl) {
-    return { backendUrl: parseBackendUrl(options.backendUrl) };
+    const backendUrl = parseBackendUrl(options.backendUrl);
+    return { backendUrl, workspaceKey: canonicalizeBackendUrl(backendUrl) };
   }
 
   const result = discoverBackend(process.cwd());
@@ -121,8 +124,11 @@ export async function runDev(options: DevOptions): Promise<void> {
   const startedAt = Date.now();
   const requestedPort = parsePort(options.port);
   const offline = flagOrEnv(options.offline, "DMS_OFFLINE");
-  const sessionSecret = resolveSessionSecret("dev");
   const { backendUrl, workspaceKey, projectDir } = resolveBackend(options);
+  const sessionSecret = resolveSessionSecret({
+    mode: "dev",
+    workspaceDir: getWorkspaceDirForKey(workspaceKey),
+  });
   const project = {
     projectDir: options.project ?? projectDir ?? process.cwd(),
     environment: options.env ?? BASE_ENVIRONMENT,
