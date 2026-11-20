@@ -201,6 +201,19 @@ void describe("the proxy forwards who is asking", () => {
     assert.equal(received.cookie, undefined);
   });
 
+  void it("relays the Content-Length of a POST, so the backend sees the declared size", async () => {
+    const body = JSON.stringify({ text: "hello" });
+    const response = await fetch(`${frontendUrl}/api/tracker/beacon`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    assert.equal(response.status, 200);
+    await response.arrayBuffer();
+    assert.equal(received["content-length"], String(Buffer.byteLength(body)));
+    assert.equal(received["transfer-encoding"], undefined);
+  });
+
   void it("appends the client to the chain a trusted reverse proxy sent", async () => {
     process.env.DMS_TRUSTED_PROXY_HOPS = "1";
     const response = await fetch(`${frontendUrl}/api/items`, {
