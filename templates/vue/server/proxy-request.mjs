@@ -7,6 +7,21 @@ import { backendUrl } from "./request-target.mjs";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
+ * A backend that budgets by declared size counts a body without its
+ * Content-Length as the largest it accepts, so a body's declared length goes
+ * on with it.
+ *
+ * @param {import("./request-target.mjs").ServerRequest} request
+ * @returns {{ "content-length"?: string }}
+ */
+function declaredLength(request) {
+  const length = request.headers["content-length"];
+  return SAFE_METHODS.has(request.method) || length === undefined
+    ? {}
+    : { "content-length": length };
+}
+
+/**
  * Sends a request to the backend through the proxy it reached.
  * `isProxiedPath` says which backend paths a relayed `Location` may name on
  * the frontend's origin.
@@ -40,7 +55,11 @@ export async function proxy(request, response, backendProxy, isProxiedPath) {
   const init = {
     signal: abandoned.signal,
     method: request.method,
-    headers: { ...backendHeaders(request, access), ...PLAIN_ANSWER_HEADERS },
+    headers: {
+      ...backendHeaders(request, access),
+      ...declaredLength(request),
+      ...PLAIN_ANSWER_HEADERS,
+    },
     duplex: "half",
     redirect: "manual",
   };
