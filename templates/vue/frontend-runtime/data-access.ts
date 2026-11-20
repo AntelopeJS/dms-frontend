@@ -89,11 +89,12 @@ export async function refreshDmsPageData(): Promise<void> {
  * Puts the keys of the async data in a scope, such as a digest of the
  * account and the workspace: the same key in another scope is another
  * entry, never the data of the previous one. Moving to another scope drops
- * the data of every key, aborting its runs; the components on screen then
- * show their default until they load again. Call it on both sides before
- * the page renders, with the same value, so the browser finds the data the
- * server transferred; the scope is written in the page with each key, so a
- * digest rather than an identifier. Call it from a plugin registered with
+ * the data of every key, aborting its runs; the components on screen show
+ * their default while the data they showed is read again in the new scope,
+ * and the data they wait to `execute()` stays unread. Call it on both sides
+ * before the page renders, with the same value, so the browser finds the data
+ * the server transferred; the scope is written in the page with each key, so
+ * a digest rather than an identifier. Call it from a plugin registered with
  * `{ enforce: "pre" }`: a plugin of another module that reads data at setup
  * would otherwise run first, and the new scope abort its read.
  *
@@ -103,8 +104,19 @@ export function setDmsAsyncDataScope(scope: string | undefined): void {
   const runtime = useDmsRuntime();
   if (runtime.asyncDataScope === scope) return;
   runtime.asyncDataScope = scope;
+  const shown = [...runtime.asyncData.values()].flatMap((result) => {
+    const entry = asyncDataEntries.get(result);
+    const key = result.key.value;
+    if (!entry || entry.unused() || key === undefined) return [];
+    const loaded = result.status.value !== "idle" || entry.running();
+    return [{ entry, key, loaded }];
+  });
   for (const result of runtime.asyncData.values()) result.clear();
   runtime.asyncData.clear();
+  for (const { entry, key, loaded } of shown) {
+    runtime.asyncData.set(scopedKey(runtime, key), entry.result);
+    if (loaded) void entry.load();
+  }
 }
 
 /**

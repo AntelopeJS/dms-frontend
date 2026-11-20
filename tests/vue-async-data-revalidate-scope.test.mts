@@ -19,20 +19,21 @@ const { createDmsFrontendRuntime, hydrateDmsPageProps, useDmsAsyncData } =
 void describe("Async data scope", () => {
   void it("keeps the same key of two scopes apart, and drops the data on a change", async () => {
     const { app, runtime } = clientApp();
+    let account = "a";
+    const plan = async () => `plan of ${account}`;
     app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-a"));
-    const first = await app.runWithContext(() =>
-      useDmsAsyncData("plan", async () => "plan of a"),
-    );
+    const first = await app.runWithContext(() => useDmsAsyncData("plan", plan));
     assert.equal(first.data.value, "plan of a");
     assert.deepEqual([...runtime.asyncData.keys()], ["account-a|plan"]);
 
+    account = "b";
     app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
-    assert.equal(runtime.asyncData.size, 0);
     assert.equal(first.data.value, null, "the other account's data is gone");
     const second = await app.runWithContext(() =>
-      useDmsAsyncData("plan", async () => "plan of b"),
+      useDmsAsyncData("plan", plan),
     );
     assert.equal(second.data.value, "plan of b");
+    assert.equal(first.data.value, "plan of b");
     await app.runWithContext(() => runtimeModule.refreshDmsData("plan"));
     assert.deepEqual([...runtime.asyncData.keys()], ["account-b|plan"]);
   });
