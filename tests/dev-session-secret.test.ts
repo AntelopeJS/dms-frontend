@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { resolveSessionSecret } from "../src/config";
+import { resolveSessionSecret } from "../src/session-secret";
 import {
   readSession,
   writeSession,

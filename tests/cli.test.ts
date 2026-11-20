@@ -24,10 +24,12 @@ import {
   parseBackendUrl,
   parsePort,
   requireBackendUrl,
-  resolveSessionSecret,
-  type SessionSecretCommand,
   UsageError,
 } from "../src/config";
+import {
+  resolveSessionSecret,
+  type SessionSecretCommand,
+} from "../src/session-secret";
 import { applyDmsHelp, formatEnvironmentHelp } from "../src/help";
 import { memoryUi, problemText } from "./fixtures/memory-ui";
 
