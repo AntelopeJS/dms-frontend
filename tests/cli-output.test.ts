@@ -47,7 +47,7 @@ const SECRET_NOT_SET = [
 
 function secretNotSet(): UsageError {
   try {
-    resolveSessionSecret("start", undefined);
+    resolveSessionSecret({ mode: "start" }, undefined);
   } catch (err) {
     if (err instanceof UsageError) return err;
   }

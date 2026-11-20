@@ -25,6 +25,7 @@ import {
   parsePort,
   requireBackendUrl,
   resolveSessionSecret,
+  type SessionSecretCommand,
   UsageError,
 } from "../src/config";
 import { applyDmsHelp, formatEnvironmentHelp } from "../src/help";
@@ -45,25 +46,28 @@ function usageError(title: RegExp, ...details: RegExp[]) {
 
 void describe("DMS CLI plugin", () => {
   void it("resolves session secrets by command mode", () => {
-    const generated = resolveSessionSecret("dev", undefined);
-    assert.match(generated, /^[0-9a-f]{64}$/);
+    const dev: SessionSecretCommand = {
+      mode: "dev",
+      workspaceDir: resolve("no-workspace"),
+    };
     assert.equal(
-      resolveSessionSecret("dev", "explicit-session-secret-32-characters!!"),
+      resolveSessionSecret(dev, "explicit-session-secret-32-characters!!"),
       "explicit-session-secret-32-characters!!",
     );
 
-    for (const mode of ["dev", "start"] as const) {
+    const commands: SessionSecretCommand[] = [dev, { mode: "start" }];
+    for (const command of commands) {
       assert.throws(
-        () => resolveSessionSecret(mode, ""),
+        () => resolveSessionSecret(command, ""),
         usageError(/DMS_SESSION_SECRET is empty/),
       );
       assert.throws(
-        () => resolveSessionSecret(mode, "too-short"),
+        () => resolveSessionSecret(command, "too-short"),
         usageError(/is too short: 9 characters, at least 32 needed/),
       );
     }
     assert.throws(
-      () => resolveSessionSecret("start", undefined),
+      () => resolveSessionSecret({ mode: "start" }, undefined),
       usageError(/DMS_SESSION_SECRET is not set/, /openssl rand -hex 32/),
     );
   });

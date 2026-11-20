@@ -1,6 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { chmodSync, renameSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -431,21 +438,31 @@ export function normalizeBootstrapSecret(
   return trimmed;
 }
 
-export type SessionSecretMode = "dev" | "start";
+/**
+ * The command a session secret is resolved for. `dev` keeps the secret it
+ * generates in its workspace; `start` keeps none.
+ */
+export type SessionSecretCommand =
+  | { mode: "dev"; workspaceDir: string }
+  | { mode: "start" };
 
 const SESSION_SECRET_MIN_LENGTH = 32;
 
+/** The file in a dev workspace that holds the session secret `dev` generated. */
+const DEV_SESSION_SECRET_FILE = ".session-secret";
+
 /**
- * Resolve the secret used by the generated server. Development gets a fresh
- * in-memory secret when none is configured; persistent commands must be
- * explicit so a deployment cannot silently invalidate sessions on restart.
+ * Resolve the secret used by the generated server. An explicit value is used
+ * as it is. Without one, `dev` reads the secret it generated for the
+ * workspace on an earlier run, so a restart keeps sessions open, and `start`
+ * refuses to run so a deployment cannot silently invalidate them.
  */
 export function resolveSessionSecret(
-  mode: SessionSecretMode,
+  command: SessionSecretCommand,
   value: string | undefined = process.env.DMS_SESSION_SECRET,
 ): string {
-  if (value === undefined && mode === "dev") {
-    return randomBytes(32).toString("hex");
+  if (value === undefined && command.mode === "dev") {
+    return devSessionSecret(command.workspaceDir);
   }
   if (value !== undefined && value.length >= SESSION_SECRET_MIN_LENGTH) {
     return value;
@@ -453,13 +470,22 @@ export function resolveSessionSecret(
   throw new UsageError({
     title: `DMS_SESSION_SECRET ${describeSessionSecret(value)}`,
     reason:
-      mode === "dev"
-        ? "dev generates an ephemeral secret only when the variable is not set at all."
+      command.mode === "dev"
+        ? "dev generates a secret only when the variable is not set at all."
         : "start signs sessions with it, so it must stay the same across restarts.",
     fixes: [
       "Create one: openssl rand -hex 32, then set it in the environment or ./.env",
     ],
   });
+}
+
+function devSessionSecret(workspaceDir: string): string {
+  const file = join(workspaceDir, DEV_SESSION_SECRET_FILE);
+  if (existsSync(file)) return readFileSync(file, "utf8");
+  const secret = randomBytes(32).toString("hex");
+  mkdirSync(workspaceDir, { recursive: true, mode: WORKSPACE_DIR_MODE });
+  writeSecretBearingFile(file, secret);
+  return secret;
 }
 
 function describeSessionSecret(value: string | undefined): string {

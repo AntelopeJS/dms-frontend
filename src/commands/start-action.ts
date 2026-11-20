@@ -209,7 +209,7 @@ export async function runStart(options: StartOptions): Promise<void> {
   const workspaceDir = resolve(productionWorkspace(options));
   const backendUrl = requireBackendUrl(options.backendUrl);
   const requestedPort = parsePort(options.port);
-  const sessionSecret = resolveSessionSecret("start");
+  const sessionSecret = resolveSessionSecret({ mode: "start" });
   const serverPath = join(workspaceDir, "server.mjs");
   const clientPath = join(workspaceDir, "dist", "client", "index.html");
 
