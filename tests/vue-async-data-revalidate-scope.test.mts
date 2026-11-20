@@ -37,7 +37,9 @@ void describe("Async data scope", () => {
     await app.runWithContext(() => runtimeModule.refreshDmsData("plan"));
     assert.deepEqual([...runtime.asyncData.keys()], ["account-b|plan"]);
   });
+});
 
+void describe("Async data on a scope move", () => {
   void it("reads again, in the new scope, the data a mounted component shows", async () => {
     let account = "a";
     const { shown, root } = toggled("plan", async () => `plan of ${account}`);
@@ -61,6 +63,22 @@ void describe("Async data scope", () => {
     );
     assert.equal(data.value, "plan of b");
     app.unmount();
+  });
+
+  void it("reads again, in the new scope, the data a call without a key shows", async () => {
+    const { app } = clientApp();
+    let account = "a";
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-a"));
+    const plan = await app.runWithContext(() =>
+      useDmsAsyncData(async () => `plan of ${account}`),
+    );
+    assert.equal(plan.data.value, "plan of a");
+
+    account = "b";
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    assert.equal(plan.data.value, null, "the other account's data is gone");
+    await settle();
+    assert.equal(plan.data.value, "plan of b");
   });
 
   void it("never lets a late answer of the previous scope replace the new one", async () => {
@@ -108,7 +126,9 @@ void describe("Async data scope", () => {
     assert.equal(result?.status.value, "idle");
     app.unmount();
   });
+});
 
+void describe("Async data scope from the server", () => {
   void it("finds the data the server transferred under the same scope", async () => {
     const Plan = defineComponent({
       setup() {

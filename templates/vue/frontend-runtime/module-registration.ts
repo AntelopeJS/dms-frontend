@@ -7,6 +7,7 @@ import {
   type Ref,
 } from "vue";
 import type { DmsPublicOptionsById } from "../public-options";
+import type { AsyncDataEntry } from "./async-data-entry";
 import {
   type DmsAppContext,
   type DmsAsyncData,
@@ -194,7 +195,7 @@ export interface DmsFrontendRuntime {
   /** The runs in flight, which a server render aborts once it is over. */
   asyncDataRuns: Set<AbortController>;
   /** The data some component or caller shows: `refreshDmsPageData`'s. */
-  boundAsyncData: Set<{ pageRefresh(): Promise<void> | undefined }>;
+  boundAsyncData: Set<AsyncDataEntry<unknown>>;
   /** Orders the data no caller shows, the least recently shown first. */
   asyncDataClock: number;
   /**

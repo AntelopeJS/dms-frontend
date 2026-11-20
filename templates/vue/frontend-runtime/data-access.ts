@@ -104,17 +104,17 @@ export function setDmsAsyncDataScope(scope: string | undefined): void {
   const runtime = useDmsRuntime();
   if (runtime.asyncDataScope === scope) return;
   runtime.asyncDataScope = scope;
-  const shown = [...runtime.asyncData.values()].flatMap((result) => {
-    const entry = asyncDataEntries.get(result);
-    const key = result.key.value;
-    if (!entry || entry.unused() || key === undefined) return [];
-    const loaded = result.status.value !== "idle" || entry.running();
-    return [{ entry, key, loaded }];
-  });
+  const shown = [...runtime.boundAsyncData].map((entry) => ({
+    entry,
+    loaded: entry.result.status.value !== "idle" || entry.running(),
+  }));
   for (const result of runtime.asyncData.values()) result.clear();
   runtime.asyncData.clear();
-  for (const { entry, key, loaded } of shown) {
-    runtime.asyncData.set(scopedKey(runtime, key), entry.result);
+  for (const { entry, loaded } of shown) {
+    entry.result.clear();
+    const key = entry.result.key.value;
+    if (key !== undefined)
+      runtime.asyncData.set(scopedKey(runtime, key), entry.result);
     if (loaded) void entry.load();
   }
 }
