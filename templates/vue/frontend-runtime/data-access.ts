@@ -89,13 +89,15 @@ export async function refreshDmsPageData(): Promise<void> {
  * Puts the keys of the async data in a scope, such as a digest of the
  * account and the workspace: the same key in another scope is another
  * entry, never the data of the previous one. Moving to another scope drops
- * the data of every key, aborting its runs; the components on screen then
- * show their default until they load again. Call it on both sides before
- * the page renders, with the same value, so the browser finds the data the
- * server transferred; the scope is written in the page with each key, so a
- * digest rather than an identifier. Call it from a plugin registered with
+ * the data of every key, aborting its runs; the components on screen show
+ * their default while the data they showed is read again in the new scope,
+ * and the data they wait to `execute()` stays unread. Call it on both sides
+ * before the page renders, with the same value, so the browser finds the data
+ * the server transferred; the scope is written in the page with each key, so
+ * a digest rather than an identifier. Call it from a plugin registered with
  * `{ enforce: "pre" }`: a plugin of another module that reads data at setup
- * would otherwise run first, and the new scope abort its read.
+ * would otherwise run first, and the new scope abort its read and start it
+ * over.
  *
  * @param scope The scope, or `undefined` for none
  */
@@ -103,8 +105,19 @@ export function setDmsAsyncDataScope(scope: string | undefined): void {
   const runtime = useDmsRuntime();
   if (runtime.asyncDataScope === scope) return;
   runtime.asyncDataScope = scope;
+  const shown = [...runtime.boundAsyncData].map((entry) => ({
+    entry,
+    loaded: entry.result.status.value !== "idle",
+  }));
   for (const result of runtime.asyncData.values()) result.clear();
   runtime.asyncData.clear();
+  for (const { entry, loaded } of shown) {
+    entry.result.clear();
+    const key = entry.result.key.value;
+    if (key !== undefined)
+      runtime.asyncData.set(scopedKey(runtime, key), entry.result);
+    if (loaded) void entry.load();
+  }
 }
 
 /**

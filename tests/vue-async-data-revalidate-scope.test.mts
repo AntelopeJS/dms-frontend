@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createI18n } from "vue-i18n";
-import { defineComponent, h, nextTick } from "vue";
+import { defineComponent, h, nextTick, ref } from "vue";
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
 import {
   clientApp,
+  deferred,
   mountRuntime,
   serverRender,
   settle,
@@ -18,24 +19,141 @@ const { createDmsFrontendRuntime, hydrateDmsPageProps, useDmsAsyncData } =
 void describe("Async data scope", () => {
   void it("keeps the same key of two scopes apart, and drops the data on a change", async () => {
     const { app, runtime } = clientApp();
+    let account = "a";
+    const plan = async () => `plan of ${account}`;
     app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-a"));
-    const first = await app.runWithContext(() =>
-      useDmsAsyncData("plan", async () => "plan of a"),
-    );
+    const first = await app.runWithContext(() => useDmsAsyncData("plan", plan));
     assert.equal(first.data.value, "plan of a");
     assert.deepEqual([...runtime.asyncData.keys()], ["account-a|plan"]);
 
+    account = "b";
     app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
-    assert.equal(runtime.asyncData.size, 0);
     assert.equal(first.data.value, null, "the other account's data is gone");
     const second = await app.runWithContext(() =>
-      useDmsAsyncData("plan", async () => "plan of b"),
+      useDmsAsyncData("plan", plan),
     );
     assert.equal(second.data.value, "plan of b");
+    assert.equal(first.data.value, "plan of b");
     await app.runWithContext(() => runtimeModule.refreshDmsData("plan"));
     assert.deepEqual([...runtime.asyncData.keys()], ["account-b|plan"]);
   });
+});
 
+void describe("Async data on a scope move", () => {
+  void it("reads again, in the new scope, the data a mounted component shows", async () => {
+    let account = "a";
+    const { shown, root } = toggled("plan", async () => `plan of ${account}`);
+    const runtime = createDmsFrontendRuntime();
+    runtime.asyncDataScope = "account-a";
+    const app = mountRuntime(runtime, root);
+    await settle();
+    assert.equal(shown.at(-1), "success:plan of a");
+
+    account = "b";
+    shown.length = 0;
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    await settle();
+    assert.equal(shown.at(-1), "success:plan of b");
+    assert.ok(
+      shown.every((state) => !state.endsWith("plan of a")),
+      `the other account's data never shows: ${shown.join(", ")}`,
+    );
+    const { data } = app.runWithContext(() =>
+      runtimeModule.useDmsData<string>("plan"),
+    );
+    assert.equal(data.value, "plan of b");
+    app.unmount();
+  });
+
+  void it("reads again, in the new scope, the data a call without a key shows", async () => {
+    const { app } = clientApp();
+    let account = "a";
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-a"));
+    const plan = await app.runWithContext(() =>
+      useDmsAsyncData(async () => `plan of ${account}`),
+    );
+    assert.equal(plan.data.value, "plan of a");
+
+    account = "b";
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    assert.equal(plan.data.value, null, "the other account's data is gone");
+    await settle();
+    assert.equal(plan.data.value, "plan of b");
+  });
+
+  void it("never lets a late answer of the previous scope replace the new one", async () => {
+    const answers = { a: deferred<string>(), b: deferred<string>() };
+    let account: keyof typeof answers = "a";
+    const { shown, root } = toggled("plan", () => answers[account].promise);
+    const runtime = createDmsFrontendRuntime();
+    runtime.asyncDataScope = "account-a";
+    const app = mountRuntime(runtime, root);
+    await settle();
+
+    account = "b";
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    answers.b.resolve("plan of b");
+    await settle();
+    answers.a.resolve("plan of a");
+    await settle();
+    assert.equal(shown.at(-1), "success:plan of b");
+    app.unmount();
+  });
+
+  void it("drops the previous key's data a reactive key carries into the new scope", async () => {
+    const { app } = clientApp();
+    let account = "a";
+    const key = ref("first");
+    const second = deferred<string>();
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-a"));
+    const plan = await app.runWithContext(() =>
+      useDmsAsyncData(
+        () => key.value,
+        async () =>
+          key.value === "first" ? `first of ${account}` : second.promise,
+      ),
+    );
+    key.value = "second";
+    assert.equal(plan.data.value, "first of a");
+
+    account = "b";
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    assert.equal(plan.data.value, null, "the other account's data is gone");
+    assert.equal(plan.placeholder.value, false);
+    second.resolve("second of b");
+    await settle();
+    assert.equal(plan.data.value, "second of b");
+  });
+
+  void it("leaves the data a component waits to execute() unread in the new scope", async () => {
+    let calls = 0;
+    let result: { status: { value: string } } | undefined;
+    const Waiting = defineComponent({
+      setup() {
+        result = useDmsAsyncData(
+          "report",
+          async () => {
+            calls++;
+            return "report";
+          },
+          { immediate: false },
+        );
+        return () => h("p");
+      },
+    });
+    const runtime = createDmsFrontendRuntime();
+    runtime.asyncDataScope = "account-a";
+    const app = mountRuntime(runtime, Waiting);
+    await settle();
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    await settle();
+    assert.equal(calls, 0);
+    assert.equal(result?.status.value, "idle");
+    app.unmount();
+  });
+});
+
+void describe("Async data scope from the server", () => {
   void it("finds the data the server transferred under the same scope", async () => {
     const Plan = defineComponent({
       setup() {
