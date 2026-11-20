@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createI18n } from "vue-i18n";
-import { defineComponent, h, nextTick } from "vue";
+import { defineComponent, h, nextTick, ref } from "vue";
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
 import {
   clientApp,
@@ -98,6 +98,31 @@ void describe("Async data on a scope move", () => {
     await settle();
     assert.equal(shown.at(-1), "success:plan of b");
     app.unmount();
+  });
+
+  void it("drops the previous key's data a reactive key carries into the new scope", async () => {
+    const { app } = clientApp();
+    let account = "a";
+    const key = ref("first");
+    const second = deferred<string>();
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-a"));
+    const plan = await app.runWithContext(() =>
+      useDmsAsyncData(
+        () => key.value,
+        async () =>
+          key.value === "first" ? `first of ${account}` : second.promise,
+      ),
+    );
+    key.value = "second";
+    assert.equal(plan.data.value, "first of a");
+
+    account = "b";
+    app.runWithContext(() => runtimeModule.setDmsAsyncDataScope("account-b"));
+    assert.equal(plan.data.value, null, "the other account's data is gone");
+    assert.equal(plan.placeholder.value, false);
+    second.resolve("second of b");
+    await settle();
+    assert.equal(plan.data.value, "second of b");
   });
 
   void it("leaves the data a component waits to execute() unread in the new scope", async () => {

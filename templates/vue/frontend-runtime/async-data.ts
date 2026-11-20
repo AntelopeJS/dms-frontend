@@ -316,7 +316,8 @@ function followAsyncDataKey<T>(
     if (!inComponent) runtime.serverPrefetches.add(entry.settled());
   };
   const current = () => consumer.value.entry.result;
-  // The previous key's data, shown until the current key settles.
+  // The previous key's data, shown until the current key settles or is
+  // cleared.
   const carried = shallowRef<{ value: T | null } | undefined>();
   const settled = (result: DmsAsyncData<T>) =>
     result.status.value === "success" || result.status.value === "error";
@@ -327,7 +328,7 @@ function followAsyncDataKey<T>(
       : result.data.value;
   };
   watch(
-    () => settled(current()),
+    () => current().status.value !== "pending",
     (done) => {
       if (done) carried.value = undefined;
     },

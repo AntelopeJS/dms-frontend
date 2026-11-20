@@ -96,7 +96,8 @@ export async function refreshDmsPageData(): Promise<void> {
  * the server transferred; the scope is written in the page with each key, so
  * a digest rather than an identifier. Call it from a plugin registered with
  * `{ enforce: "pre" }`: a plugin of another module that reads data at setup
- * would otherwise run first, and the new scope abort its read.
+ * would otherwise run first, and the new scope abort its read and start it
+ * over.
  *
  * @param scope The scope, or `undefined` for none
  */
@@ -106,7 +107,7 @@ export function setDmsAsyncDataScope(scope: string | undefined): void {
   runtime.asyncDataScope = scope;
   const shown = [...runtime.boundAsyncData].map((entry) => ({
     entry,
-    loaded: entry.result.status.value !== "idle" || entry.running(),
+    loaded: entry.result.status.value !== "idle",
   }));
   for (const result of runtime.asyncData.values()) result.clear();
   runtime.asyncData.clear();
