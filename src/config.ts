@@ -481,7 +481,8 @@ export function resolveSessionSecret(
 
 function devSessionSecret(workspaceDir: string): string {
   const file = join(workspaceDir, DEV_SESSION_SECRET_FILE);
-  if (existsSync(file)) return readFileSync(file, "utf8");
+  const stored = existsSync(file) ? readFileSync(file, "utf8") : "";
+  if (stored.length >= SESSION_SECRET_MIN_LENGTH) return stored;
   const secret = randomBytes(32).toString("hex");
   mkdirSync(workspaceDir, { recursive: true, mode: WORKSPACE_DIR_MODE });
   writeSecretBearingFile(file, secret);

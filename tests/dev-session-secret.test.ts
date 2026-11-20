@@ -1,5 +1,11 @@
 import * as assert from "node:assert/strict";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -39,6 +45,15 @@ void describe("dev session secret without DMS_SESSION_SECRET", () => {
       openSession(bootDev(workspaceDir), cookie)?.accessToken,
       "token",
     );
+  });
+
+  void it("replaces a stored secret too short to seal a session", () => {
+    const workspaceDir = join(root, "truncated");
+    mkdirSync(workspaceDir);
+    writeFileSync(join(workspaceDir, ".session-secret"), "abc");
+    const secret = bootDev(workspaceDir);
+    assert.match(secret, /^[0-9a-f]{64}$/);
+    assert.equal(bootDev(workspaceDir), secret);
   });
 
   void it("keeps the secret owner-readable in its own workspace", () => {
