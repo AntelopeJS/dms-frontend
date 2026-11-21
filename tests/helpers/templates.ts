@@ -35,3 +35,9 @@ export function readWorkspacePnpmConfig(): WorkspacePnpmConfig {
       : exclude,
   };
 }
+
+/** The `packageManager` the generated dashboard workspace pins. */
+export function readWorkspacePackageManager(): string | undefined {
+  const manifest = readFileSync(join(TEMPLATE, "package.json"), "utf8");
+  return /"packageManager":\s*"([^"]+)"/.exec(manifest)?.[1];
+}
