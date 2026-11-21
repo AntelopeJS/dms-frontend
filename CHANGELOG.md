@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.11.9
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.8...v0.11.9)
+
+### 🩹 Fixes
+
+- Give the generated dashboard workspace a minimum release age ([#382](https://github.com/AntelopeJS/dms-frontend/pull/382))
+- **dev:** Keep the generated session secret across restarts ([#385](https://github.com/AntelopeJS/dms-frontend/pull/385))
+- **proxy:** Relay the Content-Length of a proxied POST ([#386](https://github.com/AntelopeJS/dms-frontend/pull/386))
+- **vue:** Read the async data on screen again when its scope moves ([#388](https://github.com/AntelopeJS/dms-frontend/pull/388))
+- **vue:** Pin pnpm 10.33.0 so the generated workspace honours minimumReleaseAge ([#389](https://github.com/AntelopeJS/dms-frontend/pull/389))
+- **deps:** Depend on the stable @antelopejs/dms
+
+### 🏡 Chore
+
+- Delete the verify-dms-frontend skill and its references ([#381](https://github.com/AntelopeJS/dms-frontend/pull/381))
+- Remove the verify-dms-frontend skill link ([#383](https://github.com/AntelopeJS/dms-frontend/pull/383))
+
+### ✅ Tests
+
+- **e2e:** Run CLI journeys as integration tests and every journey in the merge queue ([#378](https://github.com/AntelopeJS/dms-frontend/pull/378))
+- **e2e:** Run the journeys that open no browser as integration tests on a kit run ([#379](https://github.com/AntelopeJS/dms-frontend/pull/379))
+- **e2e:** Read the journeys suite from e2e/journeys.config.ts, not the verify skill ([#380](https://github.com/AntelopeJS/dms-frontend/pull/380))
+- Flip a byte of the decoded sealed cookie in the tamper test ([#387](https://github.com/AntelopeJS/dms-frontend/pull/387))
+
+### 🤖 CI
+
+- Export and cache both the dms-control and dms-e2e names ([#384](https://github.com/AntelopeJS/dms-frontend/pull/384))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.11.8
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.7...v0.11.8)

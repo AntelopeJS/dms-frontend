@@ -1,6 +1,6 @@
 {
   "name": "@antelopejs/dms-frontend",
-  "version": "0.11.8",
+  "version": "0.11.9",
   "description": "Frontend-agnostic loader for AntelopeJS DMS, shipping the Vue 3 renderer (Vite, Inertia, SSR)",
   "keywords": [
     "antelope",
@@ -99,7 +99,7 @@
   },
   "devDependencies": {
     "@antelopejs/core": "~1.24.0",
-    "@antelopejs/dms": "0.21.4-next.944.g3da5606",
+    "@antelopejs/dms": ">=0.22.0 <0.23.0",
     "@antelopejs/interface-dms": ">=0.14.3 <0.15.0",
     "@antelopejs/tooling-configs": ">=0.8.9 <0.9.0",
     "@iconify/utils": "^3.1.0",
