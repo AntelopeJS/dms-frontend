@@ -146,9 +146,13 @@ function documentChecks(ctx, client, log) {
       : brotliCompressSync(readFileSync(join(client, file)), { params: { [constants.BROTLI_PARAM_QUALITY]: constants.BROTLI_MAX_QUALITY } }).length;
   const entryBr = recordedFiles.reduce((total, file) => total + brotliOf(file), 0);
   const entryRaw = numberAt(recorded, "bytes") ?? 0;
-  const summary = /Client entry (\d+) KB Brotli \((\d+) KB\)/.exec(log);
+  const summary = /Client entry ([\d.]+) (B|KB|MB|GB) Brotli \(([\d.]+) (B|KB|MB|GB)\)/.exec(log);
+  const kibibytes = (/** @type {string} */ amount, /** @type {string} */ unit) => Number(amount) * 1024 ** (["B", "KB", "MB", "GB"].indexOf(unit) - 1);
   const preloads = (html.match(/rel="modulepreload"/g) ?? []).length;
-  const weighs = summary !== null && Math.abs(Number(summary[1]) - entryBr / 1024) <= 1 && Math.abs(Number(summary[2]) - entryRaw / 1024) <= 1;
+  const weighs =
+    summary !== null &&
+    Math.abs(kibibytes(summary[1], summary[2]) - entryBr / 1024) <= Math.max(1, entryBr / 1024 / 20) &&
+    Math.abs(kibibytes(summary[3], summary[4]) - entryRaw / 1024) <= Math.max(1, entryRaw / 1024 / 20);
   const entryNamed = entry !== undefined && recordedFiles.includes(entry);
   observe(ctx, "the built document and the entry", { script, styleAt, scriptAt, entry, entryBr, entryRaw, summary: summary?.[0], preloads }, [
     ctx.holds("the stylesheet comes before the entry script", styleAt >= 0 && scriptAt >= 0 && styleAt < scriptAt, `${styleAt} < ${scriptAt}`),
