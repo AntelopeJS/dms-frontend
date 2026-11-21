@@ -38,9 +38,6 @@ export function readWorkspacePnpmConfig(): WorkspacePnpmConfig {
 
 /** The `packageManager` the generated dashboard workspace pins. */
 export function readWorkspacePackageManager(): string | undefined {
-  // SAFETY: the template's package.json is a JSON object, which this reads one field of.
-  const manifest = JSON.parse(
-    readFileSync(join(TEMPLATE, "package.json"), "utf8"),
-  ) as { packageManager?: string };
-  return manifest.packageManager;
+  const manifest = readFileSync(join(TEMPLATE, "package.json"), "utf8");
+  return /"packageManager":\s*"([^"]+)"/.exec(manifest)?.[1];
 }
