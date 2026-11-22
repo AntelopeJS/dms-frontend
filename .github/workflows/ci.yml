@@ -31,8 +31,6 @@ jobs:
       test-job: true
       single-job: false
       affected-tests: true
-    secrets:
-      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
 
   select:
     runs-on: ubuntu-latest
