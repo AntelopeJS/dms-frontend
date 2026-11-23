@@ -6,6 +6,7 @@ import { appConfigs } from "./app-configs.generated";
 import moduleRegistry from "./generated-frontend-modules.json";
 import { loadEmailLocaleMessages } from "./email-locales";
 import { stripSsrMarkers } from "./email-markup";
+import type { DmsAppConfig } from "./frontend-runtime/types";
 import { parsePublicOptions } from "./public-options";
 
 interface EmailModule {
@@ -14,7 +15,16 @@ interface EmailModule {
 
 interface EmailRegistry {
   serverEmailTemplates: Record<string, () => Promise<EmailModule>>;
-  appConfig?: Record<string, unknown>;
+  appConfig?: DmsAppConfig;
+}
+
+/** The props of an email template, as Vue takes the props of a root component. */
+type EmailProps = NonNullable<Parameters<typeof createSSRApp>[1]>;
+
+type HeadingTag = "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+
+function isHeadingTag(value: unknown): value is HeadingTag {
+  return typeof value === "string" && /^h[1-6]$/.test(value);
 }
 
 interface EmailRenderOptions {
@@ -53,7 +63,7 @@ function templateEntries(): Array<[string, () => Promise<EmailModule>]> {
   );
 }
 
-const EMAIL_ELEMENTS: Record<string, string> = {
+const EMAIL_ELEMENTS = {
   EBody: "body",
   EButton: "a",
   EHr: "hr",
@@ -62,7 +72,7 @@ const EMAIL_ELEMENTS: Record<string, string> = {
   EText: "p",
   ELink: "a",
   EColumn: "td",
-};
+} as const;
 
 function registerEmailElements(app: ReturnType<typeof createSSRApp>): void {
   Object.entries(EMAIL_ELEMENTS).forEach(([name, tag]) => {
@@ -96,7 +106,7 @@ function registerEmailElements(app: ReturnType<typeof createSSRApp>): void {
   );
   app.component("EHeading", (_props, { attrs, slots }) => {
     const { as, ...attributes } = attrs;
-    const tag = typeof as === "string" && /^h[1-6]$/.test(as) ? as : "h1";
+    const tag = isHeadingTag(as) ? as : "h1";
     return h(tag, attributes, slots.default?.());
   });
   app.component("ERow", (_props, { attrs, slots }) =>
@@ -138,7 +148,7 @@ function registerEmailElements(app: ReturnType<typeof createSSRApp>): void {
 
 export async function renderEmail(
   templateName: string,
-  props: Record<string, unknown>,
+  props: EmailProps,
   options: EmailRenderOptions = {},
 ): Promise<string> {
   const suffix = `/${templateName}.vue`;
