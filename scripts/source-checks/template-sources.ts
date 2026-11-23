@@ -191,11 +191,11 @@ function optimizerCrawlsEveryModule(): Problem[] {
   const template = templateText("vite.config.ts");
   const expression = template.match(
     /const optimizerEntries = ([\s\S]*?\n\][^;]*);/,
-  );
-  if (!expression)
+  )?.[1];
+  if (expression === undefined)
     return ["vite.config.ts does not compute the optimizer's entry points"];
   const entries: unknown = runInNewContext(
-    `(${expression[1]!.replaceAll("import.meta.dirname", "dirname")})`,
+    `(${expression.replaceAll("import.meta.dirname", "dirname")})`,
     {
       dirname: "/workspace",
       normalizePath,
