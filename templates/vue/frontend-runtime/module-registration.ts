@@ -9,6 +9,7 @@ import {
 import type { DmsPublicOptionsById } from "../public-options";
 import type { AsyncDataEntry } from "./async-data-entry";
 import {
+  type DmsAppConfig,
   type DmsAppContext,
   type DmsAsyncData,
   type DmsComponentPreloader,
@@ -111,10 +112,13 @@ export function withPublicOptions(
 export interface DmsLayerAppConfig {
   /** The id of the frontend module the layer belongs to. */
   module: string;
-  config: Record<string, unknown>;
+  config: DmsAppConfig;
 }
-// Async middleware without a redirect naturally infers Promise<void>.
-// biome-ignore lint/suspicious/noConfusingVoidType: preserve that valid handler signature.
+/**
+ * What a middleware answers: nothing to go on, `false` to abort, or a location
+ * to redirect to. `void` stays in the union because an async middleware
+ * without a redirect infers `Promise<void>`.
+ */
 export type DmsMiddlewareResult = void | false | RouteLocationRaw;
 export type DmsMiddleware = (
   to: DmsRoute,
@@ -184,7 +188,8 @@ export interface DmsFrontendRuntime {
   transferredState: Set<string>;
   /**
    * Whether the browser is still hydrating the page the server rendered,
-   * whose first render must match the server's HTML.
+   * whose first render must match the server's HTML. A browser handed the
+   * server's data, even none, hydrates.
    */
   hydrating: boolean;
   /**
@@ -217,7 +222,7 @@ export interface DmsFrontendRuntime {
   devWarnings?: boolean;
   runtimeHooks: Map<string, DmsRuntimeHook[]>;
   serverFetch?: DmsServerFetch;
-  currentError: Ref<Error | null>;
+  currentError: Ref<(Error & DmsErrorData) | null>;
   route: DmsRoute;
   currentRoutePattern?: string;
   appContext?: DmsAppContext;

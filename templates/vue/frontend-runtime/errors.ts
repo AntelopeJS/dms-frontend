@@ -3,7 +3,11 @@ import { ofetch } from "ofetch";
 import { computed, nextTick, type Ref, readonly } from "vue";
 import {
   type DmsErrorData,
-  type DmsPageProps,
+  type DmsLayoutDefinition,
+  type DmsPageEntryProps,
+  type DmsPageLayout,
+  type DmsPagePayload,
+  type DmsPageRoute,
   type DmsSession,
   type DmsUser,
   type DmsUserSession,
@@ -22,7 +26,7 @@ export function showDmsError(
   return error;
 }
 export function useDmsError(): Ref<(Error & DmsErrorData) | null> {
-  return useDmsRuntime().currentError as Ref<(Error & DmsErrorData) | null>;
+  return useDmsRuntime().currentError;
 }
 export async function clearDmsError(options?: {
   redirect?: string;
@@ -31,9 +35,80 @@ export async function clearDmsError(options?: {
   if (options?.redirect) await navigateDms(options.redirect);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isPageRoute(value: unknown): value is DmsPageRoute {
+  return (
+    isRecord(value) &&
+    [
+      value.displayName,
+      value.description,
+      value.fullSlug,
+      value.icon,
+      value.layoutUrl,
+    ].every(isOptionalString)
+  );
+}
+
+function isLayoutDefinition(value: unknown): value is DmsLayoutDefinition {
+  return (
+    isRecord(value) &&
+    isOptionalString(value.componentName) &&
+    (value.options === undefined || isRecord(value.options))
+  );
+}
+
+function isPageLayout(value: unknown): value is DmsPageLayout {
+  return (
+    isRecord(value) &&
+    isOptionalString(value.componentName) &&
+    (value.layout === undefined || isLayoutDefinition(value.layout))
+  );
+}
+
+function isPagePayload(value: unknown): value is DmsPagePayload {
+  return (
+    isRecord(value) &&
+    isOptionalString(value.componentName) &&
+    isOptionalString(value.layoutUrl) &&
+    (value.route === undefined || isPageRoute(value.route)) &&
+    (value.layout === undefined || isPageLayout(value.layout))
+  );
+}
+
+function isErrorData(value: unknown): value is DmsErrorData {
+  return (
+    isRecord(value) &&
+    isOptionalString(value.statusMessage) &&
+    isOptionalString(value.message) &&
+    (value.statusCode === undefined || typeof value.statusCode === "number") &&
+    (value.fatal === undefined || typeof value.fatal === "boolean")
+  );
+}
+
+function isPageEntryProps(value: unknown): value is DmsPageEntryProps {
+  return (
+    isRecord(value) &&
+    isString(value.path) &&
+    isPagePayload(value.page) &&
+    (value.error === undefined || isErrorData(value.error))
+  );
+}
+
 function sessionIdentity(session: unknown): string {
-  const { accountId, activeTenantId } = (session ?? {}) as Partial<DmsSession>;
-  return `${accountId ?? ""}\n${activeTenantId ?? ""}`;
+  return isRecord(session)
+    ? `${String(session.accountId ?? "")}\n${String(session.activeTenantId ?? "")}`
+    : "\n";
 }
 
 /**
@@ -53,16 +128,15 @@ function forgetPrefetchedPages(): void {
  */
 export function preloadPrefetchedDmsPages(): () => void {
   return inertiaRouter.on("prefetched", (event) => {
-    const data = event.detail.response.data as unknown;
-    let page: { props?: DmsPageProps } | undefined;
+    const data: unknown = event.detail.response.data;
+    let body: unknown;
     try {
-      page = (typeof data === "string" ? JSON.parse(data) : data) as
-        | { props?: DmsPageProps }
-        | undefined;
+      body = isString(data) ? JSON.parse(data) : data;
     } catch {
       return;
     }
-    if (page?.props?.page) void preloadDmsPage(page.props).catch(() => {});
+    if (isRecord(body) && isPageEntryProps(body.props))
+      void preloadDmsPage(body.props).catch(() => {});
   });
 }
 
@@ -116,6 +190,12 @@ export function isDmsHydrating(): boolean {
   return useDmsRuntime().hydrating;
 }
 
+export interface DmsPageSuspenseProps {
+  onPending(): void;
+  onResolve(): void;
+  onVnodeBeforeUnmount(): void;
+}
+
 /**
  * The props of the `<Suspense>` around the page that keep `useDmsPageLoading`
  * in step with it. Cleared before the boundary unmounts, so a page left while
@@ -126,7 +206,7 @@ export function isDmsHydrating(): boolean {
  * browser has then hydrated what the server rendered. A hydrating suspense
  * never reports itself pending: the server rendered the page resolved.
  */
-export function dmsPageSuspenseProps(): Record<string, () => void> {
+export function dmsPageSuspenseProps(): DmsPageSuspenseProps {
   const runtime = useDmsRuntime();
   const loading = runtime.pageLoading;
   const settle = () => {
