@@ -101,6 +101,7 @@ function createAsyncDataCall<T>(
   handler: DmsAsyncDataHandler<T> | undefined,
   callerOptions: UseAsyncDataOptions<T>,
 ): DmsAsyncDataResult<T> {
+  // SAFETY: A handler is present only when the first argument is the key, so `keyOrHandler` is the key source in this branch.
   const keySource = handler
     ? (keyOrHandler as MaybeRefOrGetter<DmsAsyncDataKey>)
     : undefined;

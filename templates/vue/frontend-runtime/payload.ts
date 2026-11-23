@@ -142,12 +142,14 @@ export function useDmsState<T>(
   if (options.transfer) runtime.transferredState.add(key);
   if (!runtime.sharedState.has(key))
     runtime.sharedState.set(key, ref(init?.()));
+  // SAFETY: The shared state holds a ref under this key that useDmsState created with the T its caller passed for that key.
   return runtime.sharedState.get(key) as Ref<T>;
 }
 export function useDmsRuntimeConfig(): DmsRuntimeConfig {
   return runtimeConfig.value;
 }
 export function useDmsAppConfig(): DmsAppConfig {
+  // SAFETY: The app config is the merge of the layers' configs, and each layer fills DmsAppConfig, which modules augment with their keys.
   return appConfig.value as DmsAppConfig;
 }
 export function defineDmsAppConfig<T extends Record<string, unknown>>(

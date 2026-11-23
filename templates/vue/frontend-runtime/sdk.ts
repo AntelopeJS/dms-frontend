@@ -162,6 +162,7 @@ export async function setupFrontendModules(
 ): Promise<void> {
   const next = createDmsFrontendRegistry();
   const configs = layerAppConfigs.map(({ config }) => config);
+  // SAFETY: Public runtime config starts empty and the layers and modules fill their own keys of the augmentable PublicRuntimeConfig later in the setup.
   runtimeConfig.value.public = {} as PublicRuntimeConfig;
   appConfig.value = mergeLayerAppConfigs(configs);
   for (const registration of registrations) {

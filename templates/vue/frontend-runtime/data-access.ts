@@ -48,6 +48,7 @@ export function useDmsData<T>(
   return {
     data: computed({
       get() {
+        // SAFETY: The entry's data ref holds the T the key's handler returned, or null before it has run, which the nullish fallback turns into undefined.
         return (entry()?.result.data.value ?? undefined) as T | undefined;
       },
       set(value) {
