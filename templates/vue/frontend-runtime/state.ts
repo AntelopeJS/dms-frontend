@@ -1,6 +1,5 @@
 import {
   type App,
-  type AppContext,
   effectScope,
   getCurrentInstance,
   hasInjectionContext,
@@ -17,10 +16,8 @@ import {
   type DmsRuntimeHooks,
 } from "./module-registration";
 import {
-  type DmsAppConfig,
   type DmsAppContext,
   type DmsErrorData,
-  type DmsPayloadData,
   type DmsRoute,
   type DmsServerFetch,
   type DmsRuntimeConfig,
@@ -51,9 +48,8 @@ export let registry = createDmsFrontendRegistry();
 export const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
-export const appConfig = ref<DmsAppConfig>({});
+export const appConfig = ref<Record<string, unknown>>({});
 const DMS_RUNTIME_KEY: InjectionKey<DmsFrontendRuntime> = Symbol("dms-runtime");
-const appRuntimes = new WeakMap<AppContext, DmsFrontendRuntime>();
 type DmsRuntimeContext = DmsAppContext["runWithContext"];
 export const runtimeContexts = new WeakMap<
   DmsFrontendRuntime,
@@ -78,7 +74,7 @@ export function forgetBrowserRuntime(runtime: DmsFrontendRuntime): void {
  */
 export function createDmsFrontendRuntime(
   serverFetch?: DmsServerFetch,
-  hydratedAsyncData?: DmsPayloadData,
+  hydratedAsyncData?: Record<string, unknown>,
   isServer = false,
   requestCookies?: string,
 ): DmsFrontendRuntime {
@@ -124,7 +120,6 @@ export function provideDmsFrontendRuntime(
   runtime: DmsFrontendRuntime,
 ): void {
   app.provide(DMS_RUNTIME_KEY, runtime);
-  appRuntimes.set(app._context, runtime);
   runtimeContexts.set(runtime, (callback) => app.runWithContext(callback));
   if (typeof window !== "undefined") browserRuntime = runtime;
 }
@@ -138,7 +133,9 @@ export function setDmsServerRuntimeResolver(
 
 export function useDmsRuntime(): DmsFrontendRuntime {
   const instance = getCurrentInstance();
-  const provided = instance && appRuntimes.get(instance.appContext);
+  const provided = instance?.appContext.provides[DMS_RUNTIME_KEY as symbol] as
+    | DmsFrontendRuntime
+    | undefined;
   if (provided) return provided;
   const contextual = hasInjectionContext()
     ? inject(DMS_RUNTIME_KEY, undefined)

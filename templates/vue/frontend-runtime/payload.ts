@@ -148,7 +148,7 @@ export function useDmsRuntimeConfig(): DmsRuntimeConfig {
   return runtimeConfig.value;
 }
 export function useDmsAppConfig(): DmsAppConfig {
-  return appConfig.value;
+  return appConfig.value as DmsAppConfig;
 }
 export function defineDmsAppConfig<T extends Record<string, unknown>>(
   config: T,

@@ -1,17 +1,13 @@
 import { inject } from "vue";
-import type {
-  DmsAppConfig,
-  PublicRuntimeConfig,
-} from "./frontend-runtime/types";
 
 export interface EmailRuntimeConfig {
-  public: PublicRuntimeConfig & {
+  public: Record<string, unknown> & {
     dms: { clientBaseUrl: string };
   };
 }
 
-export function useDmsAppConfig(): DmsAppConfig {
-  return inject<DmsAppConfig>("dmsEmailAppConfig", {});
+export function useDmsAppConfig(): Record<string, unknown> {
+  return inject<Record<string, unknown>>("dmsEmailAppConfig", {});
 }
 
 export function useDmsRuntimeConfig(): EmailRuntimeConfig {
@@ -20,6 +16,8 @@ export function useDmsRuntimeConfig(): EmailRuntimeConfig {
   });
 }
 
-export function defineDmsAppConfig<T extends DmsAppConfig>(config: T): T {
+export function defineDmsAppConfig<T extends Record<string, unknown>>(
+  config: T,
+): T {
   return config;
 }

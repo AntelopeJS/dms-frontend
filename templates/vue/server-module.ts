@@ -1,5 +1,4 @@
 /// <reference types="node" />
-import type { createSSRApp } from "vue";
 
 /**
  * What a frontend module's `dms.server.ts` declares: the routes it serves from
@@ -24,23 +23,9 @@ export type DmsServerMethod =
   | "DELETE"
   | "OPTIONS";
 
-/** A JSON value: what a cookie, a request body and a backend answer hold. */
-export type DmsJsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | DmsJsonValue[]
-  | DmsJsonObject;
-
-/** A JSON object. */
-export interface DmsJsonObject {
-  [key: string]: DmsJsonValue | undefined;
-}
-
 /** The session the frontend server keeps in its sealed session cookie. */
 export interface DmsSession {
-  user?: DmsJsonObject & { language?: string };
+  user?: Record<string, unknown> & { language?: string };
   accessToken?: string;
   refreshToken?: string;
   accountId?: string;
@@ -49,7 +34,7 @@ export interface DmsSession {
   persistent: boolean;
   /** Stamped by the frontend server on every write. */
   updatedAt?: number;
-  [key: string]: DmsJsonValue | undefined;
+  [key: string]: unknown;
 }
 
 export interface DmsSealedCookieOptions {
@@ -76,11 +61,8 @@ export interface DmsBackendRequest {
 /** What a session shows the browser: the `user` and `session` page props. */
 export interface DmsPublicSession {
   user?: unknown;
-  session?: DmsJsonObject;
+  session?: Record<string, unknown>;
 }
-
-/** The props of an email template, as Vue gives them to a root component. */
-type DmsEmailProps = NonNullable<Parameters<typeof createSSRApp>[1]>;
 
 /** What a route handler receives. */
 export interface DmsServerEvent {
@@ -137,7 +119,7 @@ export interface DmsServerEvent {
     ): T | undefined;
     writeSealed(
       name: string,
-      value: DmsJsonValue,
+      value: unknown,
       options?: DmsSealedCookieOptions,
     ): void;
     clear(name: string, options?: { path?: string }): void;
@@ -165,13 +147,13 @@ export interface DmsServerEvent {
   /** This module, and only this one. */
   module: {
     id: string;
-    options: Readonly<DmsJsonObject>;
-    privateOptions: Readonly<DmsJsonObject>;
+    options: Readonly<Record<string, unknown>>;
+    privateOptions: Readonly<Record<string, unknown>>;
   };
   /** Renders an email template of the application (`dms.email.ts`). */
   renderEmail(
     template: string,
-    props: DmsEmailProps,
+    props: Record<string, unknown>,
     options?: { locale?: string },
   ): Promise<string>;
   /** Deployment data from the manifest, read-only. */
@@ -186,7 +168,9 @@ export interface DmsServerEvent {
  * JSON with a 200, `null` or nothing as an empty 204. Cookies written through
  * the event are added to the response either way.
  */
-export type DmsServerHandler = (event: DmsServerEvent) => unknown;
+export type DmsServerHandler = (
+  event: DmsServerEvent,
+) => Response | unknown | Promise<Response | unknown>;
 
 export interface DmsServerRouteOptions {
   /**

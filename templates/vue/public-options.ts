@@ -1,10 +1,7 @@
-/** The public options of one module, whatever its `dms.frontend.ts` reads from them. */
-interface ModulePublicOptions extends Record<string, unknown> {}
-
 /** Public options by module id, as `ajs dms start` computes them. */
-export type DmsPublicOptionsById = Record<string, ModulePublicOptions>;
+export type DmsPublicOptionsById = Record<string, Record<string, unknown>>;
 
-function isModuleOptions(value: unknown): value is ModulePublicOptions {
+function isModuleOptions(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

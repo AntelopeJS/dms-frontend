@@ -15,11 +15,12 @@ export interface DmsPageRoute {
   icon?: string;
   layoutUrl?: string;
 }
-export interface DmsPagePayload extends Record<string, unknown> {
+export interface DmsPagePayload {
   route?: DmsPageRoute;
   componentName?: string;
   layoutUrl?: string;
   layout?: DmsPageLayout;
+  [key: string]: unknown;
 }
 export interface DmsSharedPagePayload {
   siteLayout?: unknown;
@@ -28,14 +29,14 @@ export interface DmsSharedPagePayload {
   modules?: unknown;
   isOwner?: boolean;
 }
-export interface DmsLayoutOptions extends Record<string, unknown> {}
 export interface DmsLayoutDefinition {
   componentName?: string;
-  options?: DmsLayoutOptions;
+  options?: Record<string, unknown>;
 }
-export interface DmsPageLayout extends Record<string, unknown> {
+export interface DmsPageLayout {
   componentName?: string;
   layout?: DmsLayoutDefinition;
+  [key: string]: unknown;
 }
 export interface DmsPageProps {
   path: string;
@@ -69,12 +70,12 @@ export interface DmsSession {
 export interface DmsRuntimeConfig extends RuntimeConfig {
   public: PublicRuntimeConfig;
 }
-export interface DmsPublicModuleOptions extends Record<string, unknown> {}
 export interface DmsModuleOptions {
-  public: DmsPublicModuleOptions;
+  public: Record<string, unknown>;
 }
-export interface DmsLocaleMessages extends Record<string, unknown> {}
-export type DmsLocaleLoader = (locale: string) => Promise<DmsLocaleMessages>;
+export type DmsLocaleLoader = (
+  locale: string,
+) => Promise<Record<string, unknown>>;
 export type DmsNavigationOptions = Pick<
   InertiaLinkProps,
   | "async"
@@ -99,10 +100,9 @@ export type DmsNavigationOptions = Pick<
   | "replace"
   | "viewTransition"
 >;
-export interface RouteLocationQuery extends Record<string, unknown> {}
 export interface RouteLocationObject {
   path?: string;
-  query?: RouteLocationQuery;
+  query?: Record<string, unknown>;
   hash?: string;
 }
 export type LocationQueryValue = string | null;
@@ -118,14 +118,13 @@ export type LocationQueryRaw = Record<
   | (LocationQueryValue | number | undefined)[]
 >;
 export type RouteLocationRaw = string | RouteLocationObject;
-export interface DmsRouteMeta extends Record<string, unknown> {}
 export interface DmsRoute {
   name?: string;
   fullPath: string;
   path: string;
   query: Record<string, string>;
   params: Record<string, string>;
-  meta: DmsRouteMeta;
+  meta: Record<string, unknown>;
   matched: unknown[];
 }
 export interface DmsRouter {
@@ -288,12 +287,10 @@ export interface DmsErrorData {
   fatal?: boolean;
 }
 /** What a server render hands the browser along with its HTML. */
-export interface DmsPayloadData extends Record<string, unknown> {}
-export interface DmsPayloadState extends Record<string, unknown> {}
 export interface DmsPayload {
-  data: DmsPayloadData;
+  data: Record<string, unknown>;
   errors: Record<string, DmsErrorData>;
-  state: DmsPayloadState;
+  state: Record<string, unknown>;
 }
 export interface DmsStateOptions {
   /**

@@ -1,7 +1,7 @@
 import { defu } from "defu";
 
 /** A config object, whose values are the config's own to give. */
-export interface PlainRecord extends Record<string, unknown> {}
+export type PlainRecord = Record<string, unknown>;
 
 /** The value under a key of a config object. */
 export type PlainValue = PlainRecord[string];
