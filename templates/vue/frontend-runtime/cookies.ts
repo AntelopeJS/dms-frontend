@@ -24,10 +24,14 @@ function parseCookieValue<T>(
   stored: string | undefined,
   options: DmsCookieOptions<T>,
 ): T {
-  if (stored === undefined) return (options.default?.() ?? null) as T;
+  if (stored === undefined)
+    // SAFETY: The default factory returns the cookie's T, and the null it falls back to stands for a cookie with no default, which the caller's T admits.
+    return (options.default?.() ?? null) as T;
   try {
+    // SAFETY: The stored text was written as JSON by this cookie's setter from a T, so parsing it gives that T.
     return JSON.parse(stored) as T;
   } catch {
+    // SAFETY: A stored value that is not JSON was written as a plain string, which is the T of a string cookie.
     return stored as T;
   }
 }
@@ -56,6 +60,7 @@ function createCookieRef<T>(
   options: DmsCookieOptions<T>,
   isServer: boolean,
 ): Ref<T> {
+  // SAFETY: The ref is built from `parseCookieValue`, which returns the cookie's T, so its unwrapped type is that T.
   const value = ref(
     parseCookieValue(readCookie(source, name), options),
   ) as Ref<T>;
@@ -110,6 +115,7 @@ export function useDmsCookie<T = string | null>(
         name,
         createCookieRef(name, document.cookie, options, false),
       );
+    // SAFETY: A browser cookie ref is cached under the cookie's name by createCookieRef with the T the caller passed for that name.
     return browserCookieRefs.get(name) as Ref<T>;
   }
   const runtime = useDmsRuntime();
@@ -119,5 +125,6 @@ export function useDmsCookie<T = string | null>(
       key,
       createCookieRef(name, runtime.requestCookies, options, true),
     );
+  // SAFETY: The ref was stored under this key by createCookieRef a few lines above, with the T the caller passed for that cookie.
   return runtime.sharedState.get(key) as Ref<T>;
 }

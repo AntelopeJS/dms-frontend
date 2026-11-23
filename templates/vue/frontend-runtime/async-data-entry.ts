@@ -10,6 +10,7 @@ import {
 import { type DmsFrontendRuntime } from "./module-registration";
 import { createDmsError } from "./dms-error";
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The guard narrows an arbitrary value to a string-keyed object whose members it has not read yet.
 function isKeyedObject<V>(value: V): value is V & Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -21,6 +22,7 @@ function pickValue<T>(value: Awaited<T>, keys?: string[]): T {
           keys.filter((key) => key in value).map((key) => [key, value[key]]),
         )
       : value;
+  // SAFETY: `picked` is either the whole value or the subset of its own keys that the caller listed in `pick`, and `pick` is only offered for object results, so it keeps the shape the caller declared as T.
   return picked as T;
 }
 
@@ -218,6 +220,7 @@ function createAsyncDataEntry<T>(
   initial: AsyncDataInitialState<T>,
   deep: boolean,
 ): AsyncDataEntry<T> {
+  // SAFETY: The ref wraps `initial.data`, which holds a T or null, so the unwrapped ref type is the Ref<T | null> that `deep` or shallowRef produces.
   const data = (
     deep ? ref(initial.data) : shallowRef(initial.data)
   ) as Ref<T | null>;
@@ -342,6 +345,7 @@ function serverAsyncDataState<T>(
 ): AsyncDataInitialState<T> | undefined {
   if (runtime.hydratedAsyncData.has(key))
     return {
+      // SAFETY: A hydrated entry is written by the server's payload for this key with the T the page's useDmsAsyncData call produced, so reading it back gives that T.
       data: runtime.hydratedAsyncData.get(key) as T,
       error: null,
       status: "success",
@@ -379,7 +383,9 @@ export function asyncDataEntry<T>(
   const stored = key === undefined ? undefined : scopedKey(runtime, key);
   const shared =
     stored === undefined ? undefined : runtime.asyncData.get(stored);
-  if (shared) return asyncDataEntries.get(shared) as AsyncDataEntry<T>;
+  if (shared)
+    // SAFETY: An entry is stored under a scoped key by the useDmsAsyncData call that owns it and is looked up by the same key, so the shared entry holds the T of that call.
+    return asyncDataEntries.get(shared) as AsyncDataEntry<T>;
   const fallback: AsyncDataInitialState<T> = {
     data: options.default?.() ?? null,
     error: null,

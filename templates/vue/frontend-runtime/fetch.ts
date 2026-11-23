@@ -67,6 +67,7 @@ function createDmsFetch(defaults: FetchOptions = {}): typeof ofetch {
       runtimeFetchOptions(runtime, { ...defaults, ...options }),
     );
   };
+  // SAFETY: `execute` takes the request and the options as ofetch does and forwards them to a fetch function, and the `create`, `native` and `raw` members are ofetch's own, so the assembled function has the shape of typeof ofetch.
   return Object.assign(execute, {
     create: (options: FetchOptions) =>
       createDmsFetch({ ...defaults, ...options }),
@@ -92,6 +93,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** JSON with sorted keys, or nothing for a value JSON cannot stand for. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- stableJson serialises whatever a caller puts in a request key or a body, which the API hands over unread.
 function stableJson(value: unknown): string | undefined {
   if (value === undefined || value === null) return "null";
   if (value instanceof Date || isScalar(value)) return JSON.stringify(value);
@@ -260,6 +262,7 @@ export function useDmsFetch<T>(
       body: toValue(body),
     });
   const handler: DmsAsyncDataHandler<T> = async ({ signal }) => {
+    // SAFETY: `url` is called only after the handler's caller has checked that a URL resolves, so the result is the string it was checked to be.
     const target = url() as string;
     const sent = requestOptions();
     const runKey =
@@ -272,7 +275,9 @@ export function useDmsFetch<T>(
           target,
           runtimeFetchOptions(runtime, { ...sent, signal }),
         ));
-    if (!transform) return value as T;
+    if (!transform)
+      // SAFETY: Without a `transform`, the fetch result is returned as it came, and the caller of useDmsFetch declared T as that result.
+      return value as T;
     return transform(value, { key: runKey, url: target });
   };
   const asyncOptions: UseAsyncDataOptions<T> = {

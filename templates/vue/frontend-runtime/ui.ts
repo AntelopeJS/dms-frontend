@@ -59,6 +59,7 @@ export function withinFailedSetup(
   return false;
 }
 /** Shows the error page in place of the page, keeping the first failure. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure reaches the error page from any thrown value, which failPage turns into an Error.
 export function failPage(runtime: DmsFrontendRuntime, reason: unknown): void {
   runtime.currentError.value ??=
     reason instanceof Error ? reason : new Error(String(reason));
@@ -69,6 +70,7 @@ export function abortDmsNavigation(): false {
 export const useHead = useUnhead;
 export const useSeoMeta = useUnheadSeoMeta;
 export function useI18n(): DmsI18n {
+  // SAFETY: vue-i18n's composer exposes the translation functions DmsI18n names, and the layer's i18n setup installs it.
   return useVueI18n() as DmsI18n;
 }
 
@@ -88,8 +90,10 @@ function shouldNavigateDmsLink(event: MouseEvent): boolean {
 }
 
 function dmsLinkNavigationOptions(
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The attributes of a link are whatever the template passes it, read by name below.
   attributes: Record<string, unknown>,
 ): DmsNavigationOptions {
+  // SAFETY: The link's attributes are the navigation options DmsNavigationOptions names, which the Link component passes along with its own.
   const options = attributes as DmsNavigationOptions;
   return {
     async: options.async,
@@ -266,7 +270,9 @@ export function defineDmsPlugin(setup: DmsPluginSetup): DmsPluginSetup {
 }
 export function useDmsApp(): DmsAppContext {
   const instance = getCurrentInstance();
+  // SAFETY: The DMS plugin installs the app context under `$dms` on the app's global properties, so it is there whenever a plugin has run, and the nullish fallback covers the case it is not.
   const contextual = instance?.appContext.config.globalProperties
     .$dms as DmsAppContext;
+  // SAFETY: The runtime's app context is the one setup installs for DmsAppContext, so the fallback has that shape.
   return contextual ?? (useDmsRuntime().appContext as DmsAppContext);
 }

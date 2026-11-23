@@ -243,6 +243,8 @@ function visitInBrowser(
       onSuccess: options.onSuccess,
       onError: options.onError,
       onFinish: (visit) => {
+        // SAFETY: `onFinish` is declared by Inertia for its own visit type, which the router does not expose, so the callback is called with the visit it is handed.
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The visit is Inertia's own object, which this callback passes on unread.
         (options.onFinish as ((visit: unknown) => void) | undefined)?.(visit);
         resolve();
       },

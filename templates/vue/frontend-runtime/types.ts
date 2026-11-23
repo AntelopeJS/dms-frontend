@@ -20,6 +20,7 @@ export interface DmsPagePayload {
   componentName?: string;
   layoutUrl?: string;
   layout?: DmsPageLayout;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- A page payload carries the keys that modules add to it, which this type leaves open.
   [key: string]: unknown;
 }
 export interface DmsSharedPagePayload {
@@ -31,11 +32,13 @@ export interface DmsSharedPagePayload {
 }
 export interface DmsLayoutDefinition {
   componentName?: string;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- A layout's options are the ones its component defines, which a module declares and the runtime passes on.
   options?: Record<string, unknown>;
 }
 export interface DmsPageLayout {
   componentName?: string;
   layout?: DmsLayoutDefinition;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- A page layout carries the keys that modules add to it, which this type leaves open.
   [key: string]: unknown;
 }
 export interface DmsPageProps {
@@ -71,10 +74,12 @@ export interface DmsRuntimeConfig extends RuntimeConfig {
   public: PublicRuntimeConfig;
 }
 export interface DmsModuleOptions {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- A module's public options are the keys that module defines, which this type leaves open for it to fill.
   public: Record<string, unknown>;
 }
 export type DmsLocaleLoader = (
   locale: string,
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- A locale's messages are the translations of an app, which the loader hands over unread.
 ) => Promise<Record<string, unknown>>;
 export type DmsNavigationOptions = Pick<
   InertiaLinkProps,
@@ -102,6 +107,7 @@ export type DmsNavigationOptions = Pick<
 >;
 export interface RouteLocationObject {
   path?: string;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- A route location's query holds whatever values the caller puts there, as vue-router's does.
   query?: Record<string, unknown>;
   hash?: string;
 }
@@ -124,6 +130,7 @@ export interface DmsRoute {
   path: string;
   query: Record<string, string>;
   params: Record<string, string>;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- A route's meta holds the keys that pages and modules set on it, which this type leaves open.
   meta: Record<string, unknown>;
   matched: unknown[];
 }
@@ -221,6 +228,7 @@ export interface UseAsyncDataOptions<T> {
   server?: boolean;
   watch?: false | unknown[];
   transform?: (
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A transform receives the value the fetch or the handler returned, which the API hands over unread, and the caller types it.
     value: unknown,
     context: DmsAsyncDataTransformContext,
   ) => T | Promise<T>;
@@ -250,6 +258,7 @@ export interface UseAsyncDataOptions<T> {
 export type DmsServerFetch = (
   request: string,
   options?: FetchOptions,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- A server fetch returns what the response body held, which the API hands over unread.
 ) => Promise<unknown>;
 
 /**
@@ -273,6 +282,7 @@ export interface UseFetchOptions<T>
   params?: MaybeRefOrGetter<FetchOptions["params"]>;
   body?: MaybeRefOrGetter<FetchOptions["body"]>;
   transform?: (
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A transform receives the value the fetch returned, which the API hands over unread, and the caller types it.
     value: unknown,
     context: DmsFetchTransformContext,
   ) => T | Promise<T>;
@@ -288,8 +298,10 @@ export interface DmsErrorData {
 }
 /** What a server render hands the browser along with its HTML. */
 export interface DmsPayload {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The payload's data is what the server render's handlers returned, unread until the browser claims it.
   data: Record<string, unknown>;
   errors: Record<string, DmsErrorData>;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The payload's state is what useDmsState stored under each key, unread until the browser claims it.
   state: Record<string, unknown>;
 }
 export interface DmsStateOptions {
@@ -320,6 +332,7 @@ export type DmsLinkPrefetch =
   | DmsLinkPrefetchMode
   | DmsLinkPrefetchMode[];
 export interface DmsAppContext {
+  // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- The type parameter ties the provided value to what the app's later injection reads under the key, as Vue's provide does.
   provide<T>(key: string, value: T): void;
   vueApp: App;
   runWithContext<T>(callback: () => T): T;
@@ -356,6 +369,7 @@ export interface DmsPluginRegistrationOptions {
    */
   enforce?: "pre" | "default" | "post";
 }
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- A component preloader resolves with the module a dynamic import returns, which the API hands over unread.
 export type DmsComponentPreloader = () => Promise<unknown>;
 export interface DmsComponentRegistrationOptions {
   /**

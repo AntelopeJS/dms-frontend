@@ -45,9 +45,11 @@ export function createDmsFrontendRegistry(): DmsFrontendRegistry {
  * `setupFrontendModules`.
  */
 export let registry = createDmsFrontendRegistry();
+// SAFETY: The public runtime config starts empty and the layers and modules fill its keys during setup, so the empty object stands for DmsRuntimeConfig until then.
 export const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The app config is the merge of the layers' configs, which each module defines in its own shape.
 export const appConfig = ref<Record<string, unknown>>({});
 const DMS_RUNTIME_KEY: InjectionKey<DmsFrontendRuntime> = Symbol("dms-runtime");
 type DmsRuntimeContext = DmsAppContext["runWithContext"];
@@ -74,6 +76,7 @@ export function forgetBrowserRuntime(runtime: DmsFrontendRuntime): void {
  */
 export function createDmsFrontendRuntime(
   serverFetch?: DmsServerFetch,
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The hydrated async data is the payload a server render hands over, unread until a useDmsAsyncData call claims its key.
   hydratedAsyncData?: Record<string, unknown>,
   isServer = false,
   requestCookies?: string,
@@ -133,6 +136,7 @@ export function setDmsServerRuntimeResolver(
 
 export function useDmsRuntime(): DmsFrontendRuntime {
   const instance = getCurrentInstance();
+  // SAFETY: The provides map is keyed by the symbol `DMS_RUNTIME_KEY`, and the runtime plugin stores only a DmsFrontendRuntime under it, so the lookup returns that runtime or undefined.
   const provided = instance?.appContext.provides[DMS_RUNTIME_KEY as symbol] as
     | DmsFrontendRuntime
     | undefined;
