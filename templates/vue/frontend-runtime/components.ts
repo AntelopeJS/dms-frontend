@@ -14,6 +14,7 @@ import {
 } from "./module-registration";
 import { registry, useDmsRuntime } from "./state";
 import {
+  type DmsPageEntryProps,
   type DmsPageLayout,
   type DmsPageProps,
   type DmsSession,
@@ -217,7 +218,9 @@ export function normalizeDmsPageKey(name: string): string {
 }
 const CATCH_ALL_PAGE_KEY = "[...slug]";
 
-function findDmsPageEntry(props: DmsPageProps): DmsFrontendEntry | undefined {
+function findDmsPageEntry(
+  props: DmsPageEntryProps,
+): DmsFrontendEntry | undefined {
   const name = [
     props.page.componentName,
     props.page.route?.fullSlug,
@@ -393,7 +396,7 @@ export function getDmsErrorPage(): Component | undefined {
  * (Inertia's initial swap) then makes Vue drop the server-rendered markup and
  * render the subtree from scratch.
  */
-export async function preloadDmsPage(props: DmsPageProps): Promise<void> {
+export async function preloadDmsPage(props: DmsPageEntryProps): Promise<void> {
   const layoutName =
     props.page.layout?.layout?.componentName ??
     props.page.layout?.componentName;

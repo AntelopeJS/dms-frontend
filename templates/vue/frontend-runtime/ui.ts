@@ -14,7 +14,6 @@ import {
   type InjectionKey,
   inject,
   onMounted,
-  type PropType,
   type Ref,
   ref,
 } from "vue";
@@ -26,7 +25,6 @@ import {
   type DmsLinkPrefetch,
   type DmsNavigationOptions,
   type DmsPluginSetup,
-  type RouteLocationRaw,
 } from "./types";
 import { useDmsRuntime } from "./state";
 import { locationToUrl, visit } from "./route";
@@ -118,20 +116,40 @@ function dmsLinkNavigationOptions(
   };
 }
 
+function isLinkPrefetchMode(
+  value: unknown,
+): value is "mount" | "hover" | "click" {
+  return value === "mount" || value === "hover" || value === "click";
+}
+
+function isLinkPrefetch(value: unknown): value is DmsLinkPrefetch {
+  return (
+    typeof value === "boolean" ||
+    isLinkPrefetchMode(value) ||
+    (Array.isArray(value) && value.every(isLinkPrefetchMode))
+  );
+}
+
+function isClickHandler(value: unknown): value is (event: MouseEvent) => void {
+  return typeof value === "function";
+}
+
 export const DmsLink: Component = defineComponent({
   name: "DmsLink",
   inheritAttrs: false,
   props: {
     to: {
-      type: [String, Object] as PropType<RouteLocationRaw>,
+      type: [String, Object],
       required: true,
     },
   },
   setup(props, { attrs, slots }) {
     const runtime = useDmsRuntime();
-    const prefetch = attrs.prefetch as DmsLinkPrefetch | undefined;
+    const prefetch = isLinkPrefetch(attrs.prefetch)
+      ? attrs.prefetch
+      : undefined;
     const onClick = (event: MouseEvent) => {
-      if (typeof attrs.onClick === "function") attrs.onClick(event);
+      if (isClickHandler(attrs.onClick)) attrs.onClick(event);
       if (!shouldNavigateDmsLink(event)) return;
       event.preventDefault();
       void visit(runtime, props.to, dmsLinkNavigationOptions(attrs));
@@ -185,6 +203,13 @@ export function provideDmsKbdPlatform(
   app.provide(KBD_PLATFORM_KEY, source);
 }
 
+/** Whether a component's vnode is bound to its server node before setup: it hydrates. */
+function isBoundToServerNode(
+  instance: ComponentInternalInstance | null,
+): boolean {
+  return !!instance?.vnode.el;
+}
+
 interface NuxtUiKbd {
   macOS: ComputedRef<unknown>;
   getKbdKey: (value?: string) => string | undefined;
@@ -209,14 +234,14 @@ export function useDmsKbd(
   const instance = getCurrentInstance();
   const source = instance ? inject(KBD_PLATFORM_KEY, null) : null;
   const platform = source ? source() : null;
-  // A hydrating component's vnode is bound to its server node before setup.
-  const hydrating = ref(!!instance?.vnode.el);
+  const hydrating = ref(isBoundToServerNode(instance));
   if (hydrating.value) onMounted(() => (hydrating.value = false));
   return {
     macOS,
     getKbdKey(value) {
       if (!value) return undefined;
-      if (!isModifierKbdKey(value)) return keys[value] || value;
+      if (!isModifierKbdKey(value))
+        return (Object.hasOwn(keys, value) && keys[value]) || value;
       if (platform) return MODIFIER_KBD_KEYS[platform.value][value];
       if (typeof window === "undefined" || hydrating.value) return " ";
       return MODIFIER_KBD_KEYS[macOS.value ? "mac" : "other"][value];

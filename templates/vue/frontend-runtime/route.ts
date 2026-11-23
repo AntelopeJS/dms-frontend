@@ -56,16 +56,19 @@ function hasSameEntries(
   const keys = Object.keys(left);
   return (
     keys.length === Object.keys(right).length &&
-    keys.every((key) => right[key] === left[key])
+    keys.every((key) => Object.hasOwn(right, key) && right[key] === left[key])
   );
 }
 
-// Every parse builds a new query, params and matched: assigning them as they
-// come would re-run each watcher of the route on every call of useDmsRoute,
-// though the URL did not change. They are only replaced when their content did.
+/**
+ * Follows the route to a URL. Every parse builds a new query, params and
+ * matched: assigning them as they come would re-run each watcher of the route
+ * on every call of useDmsRoute, though the URL did not change. They are only
+ * replaced when their content did. The meta is the page's, not the URL's: a
+ * page declares it, then reads its route, and the middleware the meta
+ * selected must still find it.
+ */
 export function updateRoute(runtime: DmsFrontendRuntime, url: string): void {
-  // The meta is the page's, not the URL's: a page declares it, then reads its
-  // route, and the middleware the meta selected must still find it.
   const {
     meta: _pageMeta,
     query,
@@ -82,28 +85,36 @@ export function updateRoute(runtime: DmsFrontendRuntime, url: string): void {
 
 const URL_BASE = "http://frontend.local";
 
-// The URL the browser shows: it may be ahead of the route, which follows
-// Inertia's page, when a component wrote it in place (history.replaceState).
+/**
+ * The URL the browser shows: it may be ahead of the route, which follows
+ * Inertia's page, when a component wrote it in place (history.replaceState).
+ */
 function currentUrl(runtime: DmsFrontendRuntime): string {
   if (runtime.isServer || typeof window === "undefined")
     return new URL(runtime.route.fullPath, URL_BASE).href;
   return window.location.href;
 }
 
-// One spelling per URL: `a b`, `a+b` and `a%20b` are the same query, as are
-// `:` and `%3A`. The origin is kept, so a URL of another site never matches
-// the current one, whatever its path.
+/**
+ * One spelling per URL: `a b`, `a+b` and `a%20b` are the same query, as are
+ * `:` and `%3A`. The origin is kept, so a URL of another site never matches
+ * the current one, whatever its path.
+ */
 function normalizeUrl(url: string, base: string): string {
   const parsed = new URL(url, base);
   const search = parsed.searchParams.toString();
   return `${parsed.origin}${parsed.pathname}${search ? `?${search}` : ""}${parsed.hash}`;
 }
 
+function isLocationUrl(to: RouteLocationRaw): to is string {
+  return typeof to === "string";
+}
+
 export function locationToUrl(
   runtime: DmsFrontendRuntime,
   to: RouteLocationRaw,
 ): string {
-  if (typeof to === "string") return to;
+  if (isLocationUrl(to)) return to;
   const origin =
     typeof window === "undefined"
       ? "http://frontend.local"
@@ -126,27 +137,34 @@ export function locationToUrl(
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
+/**
+ * Runs the middlewares a route selects and answers the first result that is
+ * not `undefined`. A group of parallel middlewares starts together; its
+ * results apply in order, as a sequence's would.
+ */
 export async function runMiddleware(
   runtime: DmsFrontendRuntime,
   to: DmsRoute,
 ): Promise<DmsMiddlewareResult> {
-  const declared = Array.isArray(to.meta.middleware) ? to.meta.middleware : [];
+  const declared: unknown[] = Array.isArray(to.meta.middleware)
+    ? to.meta.middleware
+    : [];
   const metadataNames = Object.keys(to.meta).filter((name) => to.meta[name]);
   const declaredHandlers = [...declared, ...metadataNames]
     .map((name) => registry.namedMiddleware.get(String(name)))
     .filter((handler): handler is DmsMiddleware => !!handler);
   const run = (handler: DmsMiddleware) => {
     const runWithContext = runtimeContexts.get(runtime);
-    return runWithContext
-      ? runWithContext(() => handler(to, runtime.route))
-      : handler(to, runtime.route);
+    return Promise.resolve(
+      runWithContext
+        ? runWithContext(() => handler(to, runtime.route))
+        : handler(to, runtime.route),
+    );
   };
   for (const group of middlewareGroups([
     ...registry.middleware,
     ...declaredHandlers,
   ])) {
-    // A group of parallel middlewares starts together; its results apply in
-    // order, as a sequence's would.
     const results = await Promise.all(group.map(run));
     const result = results.find((value) => value !== undefined);
     if (result !== undefined) return result;
@@ -166,8 +184,10 @@ function middlewareGroups(handlers: DmsMiddleware[]): DmsMiddleware[][] {
   return groups;
 }
 
-// What only a request to the server can honour: a client-side visit sends
-// none and has none of these events.
+/**
+ * What only a request to the server can honour: a client-side visit sends
+ * none and has none of these events.
+ */
 const SERVER_VISIT_OPTIONS = [
   "async",
   "component",
@@ -214,11 +234,8 @@ function visitInBrowser(
   url: string,
   options: DmsNavigationOptions,
 ): Promise<void> {
-  const clientVisit = options.replace
-    ? inertiaRouter.replace
-    : inertiaRouter.push;
   return new Promise<void>((resolve) => {
-    clientVisit.call(inertiaRouter, {
+    const clientVisit: Parameters<typeof inertiaRouter.push>[0] = {
       url,
       preserveScroll: options.preserveScroll ?? true,
       preserveState: options.preserveState ?? true,
@@ -229,10 +246,17 @@ function visitInBrowser(
         (options.onFinish as ((visit: unknown) => void) | undefined)?.(visit);
         resolve();
       },
-    } as Parameters<typeof inertiaRouter.push>[0]);
+    };
+    if (options.replace) inertiaRouter.replace(clientVisit);
+    else inertiaRouter.push(clientVisit);
   });
 }
 
+/**
+ * Like Vue Router, a navigation that only changes the query or hash keeps the
+ * page mounted: without preserveState, Inertia remounts the page component on
+ * every visit and its local state (open tabs, selection, inputs) is lost.
+ */
 export async function visit(
   runtime: DmsFrontendRuntime,
   to: RouteLocationRaw,
@@ -247,10 +271,6 @@ export async function visit(
     runtime.serverRedirect = url;
     return;
   }
-  // Like Vue Router, a navigation that only changes the query or hash keeps
-  // the page mounted: without preserveState, Inertia remounts the page
-  // component on every visit and its local state (open tabs, selection,
-  // inputs) is lost.
   const samePath = target.path === runtime.route.path;
   if (samePath && staysOnPage(runtime, url, options)) {
     await visitInBrowser(url, options);
@@ -269,20 +289,22 @@ export async function visit(
   );
 }
 
+/**
+ * The route of the page on screen. A server render answers one request, whose
+ * URL the runtime was given with its page, and never changes it. Inertia's
+ * page is one ref for the whole process, written by each render as it starts:
+ * after an await it may hold another request's URL, and while the plugins set
+ * up, the previous one's. The browser's plugins set up before Inertia has a
+ * page: until then the runtime's route is the initial page's.
+ */
 export function useDmsRoute(pattern?: string): DmsRoute {
   const runtime = useDmsRuntime();
   runtime.currentRoutePattern = pattern;
-  // A server render answers one request, whose URL the runtime was given with
-  // its page, and never changes it. Inertia's page is one ref for the whole
-  // process, written by each render as it starts: after an await it may hold
-  // another request's URL, and while the plugins set up, the previous one's.
   if (runtime.isServer) {
     updateRoute(runtime, runtime.route.fullPath);
     return runtime.route;
   }
   const page = usePage();
-  // The browser's plugins set up before Inertia has a page: until then the
-  // runtime's route is the initial page's.
   if (page.url !== undefined) updateRoute(runtime, page.url);
   watch(
     () => page.url,
