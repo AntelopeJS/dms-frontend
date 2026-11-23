@@ -6,7 +6,7 @@ import {
   toRaw,
   toValue,
 } from "vue";
-import { type DmsAsyncDataKey, type DmsData } from "./types";
+import { type DmsAsyncDataKey, type DmsData, type DmsPayload } from "./types";
 import { useDmsRuntime } from "./state";
 import {
   asyncDataEntries,
@@ -23,6 +23,13 @@ import { type DmsFrontendRuntime } from "./module-registration";
  * a caller loads the key, its data once there, `undefined` again once the
  * browser lets the key go (past the most recent keys it keeps) or the scope
  * changes. It does not load the key, nor keep it.
+ *
+ * A component after the caller, in the page or in its subtree, renders the
+ * data the browser hydrates it with: the server waits for the caller's run
+ * too. One before it has none on either side. Whether the key is there as
+ * the setup runs is the same on both sides, and so are the async boundaries
+ * `useId()` counts. An entry only ever holds its own key's data: a caller
+ * showing the previous key's data meanwhile keeps it in its own refs.
  */
 export function useDmsData<T>(
   key: MaybeRefOrGetter<DmsAsyncDataKey>,
@@ -36,18 +43,11 @@ export function useDmsData<T>(
         : runtime.asyncData.get(scopedKey(runtime, String(name)));
     return result && asyncDataEntries.get(result);
   };
-  // A component after the caller, in the page or in its subtree, renders the
-  // data the browser hydrates it with: the server waits for the caller's run
-  // too. One before it has none on either side. Whether the key is there as
-  // the setup runs is the same on both sides, and so are the async
-  // boundaries `useId()` counts.
   const loaded = entry();
   if (loaded && getCurrentInstance()) onServerPrefetch(() => loaded.settled());
   return {
     data: computed({
       get() {
-        // An entry only ever holds its own key's data: a caller showing the
-        // previous key's data meanwhile keeps it in its own refs.
         return (entry()?.result.data.value ?? undefined) as T | undefined;
       },
       set(value) {
@@ -68,7 +68,9 @@ export async function refreshDmsData(keys?: string | string[]): Promise<void> {
       )
     : [...runtime.asyncData.keys()];
   await Promise.all(
-    selected.map((key) => runtime.asyncData.get(key)?.refresh()),
+    selected.map(
+      (key) => runtime.asyncData.get(key)?.refresh() ?? Promise.resolve(),
+    ),
   );
 }
 
@@ -81,7 +83,9 @@ export async function refreshDmsData(keys?: string | string[]): Promise<void> {
 export async function refreshDmsPageData(): Promise<void> {
   const runtime = useDmsRuntime();
   await Promise.all(
-    [...runtime.boundAsyncData].map((entry) => entry.pageRefresh()),
+    [...runtime.boundAsyncData].map(
+      (entry) => entry.pageRefresh() ?? Promise.resolve(),
+    ),
   );
 }
 
@@ -127,16 +131,18 @@ export function setDmsAsyncDataScope(scope: string | undefined): void {
  */
 export function dropUnusedAsyncData(runtime: DmsFrontendRuntime): void {
   const unused = [...runtime.asyncData]
-    .map(([key, result]) => ({ key, entry: asyncDataEntries.get(result) }))
-    .filter(({ entry }) => entry?.unused())
-    .sort((left, right) => right.entry!.lastShown() - left.entry!.lastShown());
+    .flatMap(([key, result]) => {
+      const entry = asyncDataEntries.get(result);
+      return entry?.unused() ? [{ key, lastShown: entry.lastShown() }] : [];
+    })
+    .sort((left, right) => right.lastShown - left.lastShown);
   for (const { key } of unused.slice(MAX_UNUSED_ASYNC_DATA))
     runtime.asyncData.delete(key);
 }
 
 export function serializeDmsAsyncData(
   runtime: DmsFrontendRuntime,
-): Record<string, unknown> {
+): DmsPayload["data"] {
   return Object.fromEntries(
     [...runtime.asyncData.entries()]
       .filter(([, entry]) => entry.status.value === "success")
