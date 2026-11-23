@@ -168,9 +168,7 @@ export interface DmsServerEvent {
  * JSON with a 200, `null` or nothing as an empty 204. Cookies written through
  * the event are added to the response either way.
  */
-export type DmsServerHandler = (
-  event: DmsServerEvent,
-) => Response | unknown | Promise<Response | unknown>;
+export type DmsServerHandler = (event: DmsServerEvent) => unknown;
 
 export interface DmsServerRouteOptions {
   /**
