@@ -194,6 +194,7 @@ async function renderWithPayload(
 
 /** Holds, on the request's runtime, the page Inertia's app sets as it starts. */
 function holdInertiaPage(runtime: DmsFrontendRuntime, page: DmsSsrPage): void {
+  // SAFETY: readonly only wraps the merged object in a read-only proxy, and the merge of the empty flash with the server's page gives the DmsInertiaPage shape.
   runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
 }
 

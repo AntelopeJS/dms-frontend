@@ -166,12 +166,17 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 
 function attributedHook(
   label: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a hook is whatever a module's Vite plugin property holds, and the function checks it before use
   hook: unknown,
   returnsHook: boolean,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the wrapped hook returns whatever the module's Vite hook returns, which this wrapper must not reshape
 ): unknown {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- the plugin property is arbitrary module data, so the function checks its kind before wrapping it
   if (typeof hook === "function") {
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters,anti-slop/no-unknown-returns -- the result is whatever the wrapped Vite hook returned, passed through untouched
     const attributedResult = (result: unknown): unknown =>
       returnsHook ? attributedHook(label, result, false) : result;
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- the wrapped hook keeps the open type of the Vite hook it stands for
     return function (this: unknown, ...args: unknown[]) {
       try {
         const result: unknown = hook.apply(this, args);
@@ -189,7 +194,9 @@ function attributedHook(
       }
     };
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- the plugin property is arbitrary module data, so the function checks its kind before wrapping it
   if (typeof hook === "object" && hook !== null && "handler" in hook) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- the wrapped hook keeps the open type of the Vite hook it stands for
     return {
       ...hook,
       handler: attributedHook(label, hook.handler, returnsHook),
@@ -229,13 +236,16 @@ function propertyNames(plugin: Plugin): Set<string> {
  * module in the errors they throw. The module's own object is left as it is.
  */
 function attributedPlugin(label: string, plugin: Plugin): Plugin {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- the copy holds plugin properties of any kind, each a Vite hook or option the module chose
   const copy: Record<string, unknown> = {};
   for (const key of propertyNames(plugin)) {
+    // oxlint-disable-next-line anti-slop/no-reflect-get -- the property names include inherited ones of a class instance, read on the plugin itself to keep receiver semantics
     const value: unknown = Reflect.get(plugin, key);
     copy[key] = PLUGIN_PROPERTIES.has(key)
       ? value
       : attributedHook(label, value, SERVER_HOOKS.has(key));
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- the value is an arbitrary module-provided plugin property that isPlugin checks
   if (!isPlugin(copy)) throw invalidPlugins(label);
   return copy;
 }

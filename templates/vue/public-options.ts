@@ -1,4 +1,5 @@
 /** Public options by module id, as `ajs dms start` computes them. */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- a module's public options are its own, which the frontend passes on unread
 export type DmsPublicOptionsById = Record<string, Record<string, unknown>>;
 
 function isModuleOptions(value: unknown): value is Record<string, unknown> {

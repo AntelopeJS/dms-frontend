@@ -280,6 +280,8 @@ function createBrowserRuntime(
 type PageAttrs = SetupContext["attrs"];
 
 function pagePropsOf(attrs: PageAttrs): DmsPageProps {
+  // SAFETY: Inertia hands the page component its page props as attrs, and DmsPageProps is the shape the server renders every page with, so the attrs hold it.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- attrs is typed as open attrs and DmsPageProps is unrelated to it, so the cast goes through unknown
   return attrs as unknown as DmsPageProps;
 }
 

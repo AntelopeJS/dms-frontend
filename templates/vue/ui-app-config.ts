@@ -1,9 +1,11 @@
 import { defu } from "defu";
 
 /** A config object, whose values are the config's own to give. */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- a config object's values are the config's own to give, merged unread
 export type PlainRecord = Record<string, unknown>;
 
 /** The value under a key of a config object. */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- the value under a key of a config object is the config's own to give
 export type PlainValue = PlainRecord[string];
 
 interface MergeState {

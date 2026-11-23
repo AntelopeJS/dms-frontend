@@ -131,6 +131,7 @@ export function recordMessageReads<T extends object>(
   const wrap = <V extends object>(source: V, slot: Slot): V =>
     new Proxy(source, {
       get(target, key, receiver) {
+        // oxlint-disable-next-line anti-slop/no-reflect-get -- the Proxy trap must forward the read with its receiver to keep the catalog's getter semantics
         const value: unknown = Reflect.get(target, key, receiver);
         if (!isText(key) || key === "__proto__") return value;
         if (isText(value)) {
