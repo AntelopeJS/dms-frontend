@@ -158,9 +158,3 @@ export function getLayerWorkspacePath(
 ): string {
   return join(workspaceDir, LAYERS_SUBDIR, getLayerSafeName(layer));
 }
-
-/**
- * Get the package root directory (where the package.json and
- * templates/ directory live). Works for both `dist/common.js` (published)
- * and `src/common.ts` (via tsx during development).
- */

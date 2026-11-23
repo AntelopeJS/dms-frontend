@@ -46,6 +46,11 @@ import {
 import { isObjectLike, isText } from "./internal/guards";
 import { isPlainObject } from "./internal/plain-object";
 
+/**
+ * Get the package root directory (where the package.json and
+ * templates/ directory live). Works for both `dist/` (published)
+ * and `src/` (via tsx during development).
+ */
 export function getPackageRoot(): string {
   return resolve(__dirname, "..");
 }

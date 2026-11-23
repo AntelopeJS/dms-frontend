@@ -103,15 +103,21 @@ export function buildBackendUrl(endpoint: DevRegistryEndpoint): string {
   return `${endpoint.protocol}://${host}:${endpoint.port}`;
 }
 
+/** A dev.json exists but its writer is dead (orphan from a crash). */
+type StaleDiscovery = { status: "stale"; projectDir: string; pid: number };
+
+/** A live dev.json exists but declares no api endpoint. */
+type NoApiEndpointDiscovery = { status: "no-api-endpoint"; projectDir: string };
+
+/** A dev.json exists but cannot be parsed against the contract. */
+type MalformedDiscovery = { status: "malformed"; projectDir: string };
+
 export type DiscoveryResult =
   | { status: "found"; backend: DiscoveredBackend }
   | { status: "not-found" }
-  /** A dev.json exists but its writer is dead (orphan from a crash) */
-  | { status: "stale"; projectDir: string; pid: number }
-  /** A live dev.json exists but declares no api endpoint */
-  | { status: "no-api-endpoint"; projectDir: string }
-  /** A dev.json exists but cannot be parsed against the contract */
-  | { status: "malformed"; projectDir: string };
+  | StaleDiscovery
+  | NoApiEndpointDiscovery
+  | MalformedDiscovery;
 
 /**
  * Walk up from `cwd` to the filesystem root looking for an antelope

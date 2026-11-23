@@ -393,12 +393,3 @@ export function bootstrapHeaders(secret?: string): Record<string, string> {
 export function isUnauthorized(status: number): boolean {
   return UNAUTHORIZED_STATUSES.includes(status);
 }
-
-/**
- * The backend rejected our credential for its layer endpoints.
- *
- * Distinct from a transport failure because it must never fall back to the
- * cached manifest: that cache can still hold the private layer options a
- * previously-authorized run received, and replaying them would defeat the
- * very gate the backend is applying.
- */
