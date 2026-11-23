@@ -194,7 +194,7 @@ async function renderWithPayload(
 
 /** Holds, on the request's runtime, the page Inertia's app sets as it starts. */
 function holdInertiaPage(runtime: DmsFrontendRuntime, page: DmsSsrPage): void {
-  // SAFETY: readonly only wraps the merged object in a read-only proxy, and the merge of the empty flash with the server's page gives the DmsInertiaPage shape.
+  // SAFETY: the server's page lacks only Inertia's client-history fields (`rescuedProps`, `rememberedState`), which a server render never has; Nuxt UI's Link and route stub, its readers through `useDmsInertiaPage`, read only `url`.
   runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
 }
 
