@@ -38,6 +38,27 @@ function normalizeDmsComponentName(name: string): string {
     .toLowerCase();
 }
 
+function hasAsyncLoader(
+  component: Component,
+): component is Component & Required<DmsAsyncComponent> {
+  return (
+    "__asyncLoader" in component &&
+    typeof component.__asyncLoader === "function"
+  );
+}
+
+async function loadAsyncComponent(
+  component: Component | undefined,
+): Promise<void> {
+  if (component && hasAsyncLoader(component)) await component.__asyncLoader();
+}
+
+async function preloadEntry(
+  entry: DmsFrontendEntry | undefined,
+): Promise<void> {
+  await entry?.preload?.();
+}
+
 function moduleLabel(module: string | undefined): string {
   return module ? `module "${module}"` : "an unnamed module";
 }
@@ -87,13 +108,12 @@ export function resolveDmsComponent(name: string): Component | undefined {
 export function trackDmsAsyncComponents(app: App): Set<string> {
   const names = new Map<Component, string>();
   registry.components.forEach(({ component, name }) => {
-    if ((component as DmsAsyncComponent).__asyncLoader)
-      names.set(component, name);
+    if (hasAsyncLoader(component)) names.set(component, name);
   });
   const rendered = new Set<string>();
   app.mixin({
     beforeCreate(this: ComponentPublicInstance) {
-      const name = names.get(this.$.type as Component);
+      const name = names.get(this.$.type);
       if (name) rendered.add(name);
     },
   });
@@ -132,20 +152,12 @@ export async function resolveDmsAsyncComponents(
   names: readonly string[],
 ): Promise<void> {
   await Promise.all(
-    names.map((name) =>
-      (
-        resolveDmsComponent(name) as DmsAsyncComponent | undefined
-      )?.__asyncLoader?.(),
-    ),
+    names.map((name) => loadAsyncComponent(resolveDmsComponent(name))),
   );
 }
 export async function preloadDmsComponents(names: string[]): Promise<void> {
   const registry = useDmsRuntime().appContext?.vueApp._context.components ?? {};
-  await Promise.all(
-    names.map((name) =>
-      (registry[name] as DmsAsyncComponent | undefined)?.__asyncLoader?.(),
-    ),
-  );
+  await Promise.all(names.map((name) => loadAsyncComponent(registry[name])));
 }
 export function normalizeDmsName(name: string): string {
   return name
@@ -155,25 +167,36 @@ export function normalizeDmsName(name: string): string {
     .toLowerCase();
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+/**
+ * Adds to `names` every component a layout tree places: a `component` or
+ * `componentName` string anywhere in it, and, where a child places a component
+ * definition (`{ id, component: { … } }`), the names inside that definition.
+ */
 function collectRenderedComponentNames(
   value: unknown,
   names: Set<string>,
 ): void {
-  if (!value || typeof value !== "object") return;
   if (Array.isArray(value)) {
     value.forEach((entry) => {
       collectRenderedComponentNames(entry, names);
     });
     return;
   }
-  const definition = value as Record<string, unknown>;
-  for (const key of ["component", "componentName"]) {
-    if (typeof definition[key] === "string") names.add(definition[key]);
+  if (isRecord(value)) {
+    for (const name of [value.component, value.componentName]) {
+      if (isString(name)) names.add(name);
+    }
+    collectRenderedComponentNames(value.component, names);
+    collectRenderedComponentNames(value.children, names);
   }
-  // A child places a component definition: `{ id, component: { … } }`.
-  if (typeof definition.component === "object")
-    collectRenderedComponentNames(definition.component, names);
-  collectRenderedComponentNames(definition.children, names);
 }
 
 async function preloadDmsLayoutComponents(
@@ -185,12 +208,7 @@ async function preloadDmsLayoutComponents(
     collectRenderedComponentNames(component, names);
   });
   await Promise.all(
-    [...names].map((name) => {
-      const component = resolveDmsComponent(name) as
-        | DmsAsyncComponent
-        | undefined;
-      return component?.__asyncLoader?.();
-    }),
+    [...names].map((name) => loadAsyncComponent(resolveDmsComponent(name))),
   );
 }
 
@@ -234,12 +252,10 @@ export function getDmsLayout(props: DmsPageProps): Component | undefined {
     ? registry.layouts.get(normalizeDmsName(name))?.component
     : undefined;
 }
-export function getDmsLayoutProps(
-  props: DmsPageProps,
-): Record<string, unknown> {
+export function getDmsLayoutProps(props: DmsPageProps) {
   const definition = props.page.layout?.layout;
   return {
-    ...(definition?.options ?? {}),
+    ...definition?.options,
     icon: props.page.route?.icon,
     title: props.page.route?.displayName,
     description: props.page.route?.description,
@@ -269,14 +285,15 @@ function isStaleSession(
  * the layout it was sent over from page to page (a once prop): the same copy
  * is applied once, so the state keeps what a later refresh wrote into it, and
  * `dms-lastRefreshTime` tells when the layout was last received.
+ *
+ * A page from the history carries the layout it was shown with, which the
+ * state has replaced since, so it is not copied: see `keepSharedOverHistory`.
  */
 export function hydrateDmsSharedProps(
   shared: DmsSharedPagePayload | undefined,
 ): void {
   const runtime = useDmsRuntime();
   if (!shared || shared === runtime.appliedShared) return;
-  // A page from the history carries the layout it was shown with, which the
-  // state has replaced since: see `keepSharedOverHistory`.
   if (runtime.restoringHistory) return;
   runtime.appliedShared = shared;
   useDmsState<unknown>("dms-siteLayout", () => undefined).value =
@@ -290,26 +307,29 @@ export function hydrateDmsSharedProps(
   useDmsState("dms-lastRefreshTime", () => 0).value = Date.now();
 }
 
+function isInertiaHistoryState(state: unknown): boolean {
+  return isRecord(state) && Boolean(state.page);
+}
+
 /**
  * Keeps the newest site layout when Back or Forward puts a page back. The
  * page carries the layout it was shown with, which a later reload replaced
  * (a menu change the backend announced); it is not copied into the state, and
  * the page is given the current one, so the next visit carries that over
- * rather than the older one.
+ * rather than the older one. Inertia restores only the entries it wrote, which
+ * hold a page.
  */
 export function keepSharedOverHistory(): () => void {
   const runtime = useDmsRuntime();
   const onPopstate = (event: PopStateEvent) => {
-    // Inertia restores only the entries it wrote, which hold a page.
-    if ((event.state as { page?: unknown } | null)?.page)
-      runtime.restoringHistory = true;
+    if (isInertiaHistoryState(event.state)) runtime.restoringHistory = true;
   };
   window.addEventListener("popstate", onPopstate);
   const stopListening = inertiaRouter.on("navigate", (event) => {
     if (!runtime.restoringHistory) return;
     runtime.restoringHistory = false;
     const current = runtime.appliedShared;
-    const restored = (event.detail.page.props as Partial<DmsPageProps>).shared;
+    const restored = event.detail.page.props.shared;
     if (current && restored !== current)
       inertiaRouter.replaceProp("shared", current);
   });
@@ -319,12 +339,17 @@ export function keepSharedOverHistory(): () => void {
   };
 }
 
+/**
+ * Copies the page props into the state. Pages are keyed by path: another path
+ * mounts another page, which declares its own meta, and so does an error page
+ * shown in place of the page. A visit that only changes the query keeps the
+ * page, and so its meta. Each navigation is a new authorization snapshot, so
+ * the layouts of an earlier account, tenant or permission context are never
+ * retained.
+ */
 export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
   const runtime = useDmsRuntime();
   if (url) updateRoute(runtime, url);
-  // Pages are keyed by path: another path mounts another page, which declares
-  // its own meta, and so does an error page shown in place of the page. A
-  // visit that only changes the query keeps the page, and so its meta.
   const pageKey = props.error ? `error:${props.path}` : props.path;
   if (pageKey !== runtime.pageKey) {
     runtime.pageKey = pageKey;
@@ -344,8 +369,6 @@ export function hydrateDmsPageProps(props: DmsPageProps, url?: string): void {
     "dms-pageLayouts",
     () => ({}),
   );
-  // Each navigation is a new authorization snapshot. Never retain layouts
-  // from an earlier account, tenant, or permission context.
   pageLayouts.value =
     layoutUrl && props.page.layout ? { [layoutUrl]: props.page.layout } : {};
 }
@@ -363,6 +386,13 @@ export function getDmsErrorPage(): Component | undefined {
   return registry.errorPage?.component;
 }
 
+/**
+ * Resolves the components a page needs before it renders. `preload` only warms
+ * the module; the async wrapper stays unresolved until its own loader runs.
+ * Hydrating an unresolved wrapper defers it, and the first parent render
+ * (Inertia's initial swap) then makes Vue drop the server-rendered markup and
+ * render the subtree from scratch.
+ */
 export async function preloadDmsPage(props: DmsPageProps): Promise<void> {
   const layoutName =
     props.page.layout?.layout?.componentName ??
@@ -372,14 +402,10 @@ export async function preloadDmsPage(props: DmsPageProps): Promise<void> {
     ? registry.layouts.get(normalizeDmsName(layoutName))
     : undefined;
   const entries = props.error ? [registry.errorPage] : [page, layout];
-  // `preload` only warms the module; the async wrapper stays unresolved until
-  // its own loader runs. Hydrating an unresolved wrapper defers it, and the
-  // first parent render (Inertia's initial swap) then makes Vue drop the
-  // server-rendered markup and render the subtree from scratch.
   await Promise.all(
     entries.flatMap((entry) => [
-      entry?.preload?.(),
-      (entry?.component as DmsAsyncComponent | undefined)?.__asyncLoader?.(),
+      preloadEntry(entry),
+      loadAsyncComponent(entry?.component),
     ]),
   );
   if (!props.error) await preloadDmsLayoutComponents(props.page.layout);
