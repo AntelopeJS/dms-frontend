@@ -80,6 +80,13 @@ function writeFileAtomically(file: string, content: string, mode: number) {
 }
 
 /**
+ * The workspace's `tsconfig.json`, shipped under another name so that no
+ * tsconfig sits beside the template sources: this repository's lint finds
+ * theirs, which resolves the modules the workspace generates.
+ */
+export const WORKSPACE_TSCONFIG_TEMPLATE = "tsconfig.workspace.json";
+
+/**
  * Static files copied verbatim from `templates/` into the workspace.
  * Each entry is `[sourceName, destName]`: npm strips any `.npmrc` from
  * published tarballs (hardcoded, to prevent token leaks), so we ship the
@@ -125,7 +132,7 @@ export const TEMPLATE_FILES: ReadonlyArray<readonly [string, string]> = [
   ["email-locales.ts", "email-locales.ts"],
   ["email-markup.ts", "email-markup.ts"],
   ["public-options.ts", "public-options.ts"],
-  ["tsconfig.json", "tsconfig.json"],
+  [WORKSPACE_TSCONFIG_TEMPLATE, "tsconfig.json"],
   ["typecheck-loader.mjs", "typecheck-loader.mjs"],
   ["workspace-writes.mjs", "workspace-writes.mjs"],
   ["vue-components.mjs", "vue-components.mjs"],

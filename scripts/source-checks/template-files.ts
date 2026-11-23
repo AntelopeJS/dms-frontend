@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, posix, relative, resolve } from "node:path";
-import { TEMPLATE_FILES } from "../../src/config";
+import { TEMPLATE_FILES, WORKSPACE_TSCONFIG_TEMPLATE } from "../../src/config";
 import {
   filesUnder,
   isFile,
@@ -33,7 +33,7 @@ const REFERENCES = {
 const CONVENTIONAL = [
   "vite.config.ts",
   "index.html",
-  "tsconfig.json",
+  WORKSPACE_TSCONFIG_TEMPLATE,
   "pnpm-workspace.yaml",
   "npmrc",
   "gitignore",
@@ -64,16 +64,16 @@ function copiedFiles(): Set<string> {
 }
 
 /**
- * The files `file` names. A tsconfig.json names its `files`, a package.json
+ * The files `file` names. The workspace tsconfig names its `files`, a package.json
  * the files its scripts run; one whose field has another shape adds a problem
  * to `malformed` instead.
  */
 function references(file: string, malformed: Problem[]): string[] {
   const source = readFileSync(file, "utf8");
   const found = Object.values(REFERENCES).flatMap((pattern) =>
-    [...source.matchAll(pattern)].map((match) => match[1]!),
+    [...source.matchAll(pattern)].flatMap((match) => match[1] ?? []),
   );
-  if (file.endsWith("tsconfig.json")) {
+  if (file.endsWith(WORKSPACE_TSCONFIG_TEMPLATE)) {
     const manifest: unknown = JSON.parse(source);
     const files =
       isJsonObject(manifest) && "files" in manifest ? manifest.files : [];
@@ -87,9 +87,11 @@ function references(file: string, malformed: Problem[]): string[] {
       isJsonObject(manifest) && "scripts" in manifest ? manifest.scripts : {};
     const commands = isJsonObject(scripts) ? Object.values(scripts) : undefined;
     if (isStringList(commands)) {
-      for (const command of commands)
-        for (const match of command.matchAll(SCRIPT_FILE))
-          found.push(match[1]!);
+      found.push(
+        ...commands.flatMap((command) =>
+          [...command.matchAll(SCRIPT_FILE)].flatMap((match) => match[1] ?? []),
+        ),
+      );
     } else
       malformed.push(
         `${relativeName(file)}: "scripts" is not an object of commands`,
@@ -109,8 +111,7 @@ function reachedFiles(
 ): Map<string, string> {
   const reached = new Map<string, string>();
   const pending = [...roots];
-  while (pending.length) {
-    const file = pending.pop()!;
+  for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
     for (const reference of references(file, malformed)) {
       const target = templateFile(file, reference);
       if (!target || reached.has(target)) continue;

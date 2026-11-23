@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -224,6 +224,16 @@ void describe("Vite frontend generation", () => {
       "locales.generated/",
       "sfc-global-types.generated.d.ts",
     ]);
+  });
+
+  void it("gives the workspace the tsconfig.json vue-tsc reads, under that name", () => {
+    const workspace = temporaryDirectory("dms-tsconfig-workspace-");
+    copyStaticTemplates(workspace);
+    assert.ok(
+      jsonAt(readJson(join(workspace, "tsconfig.json")), "files"),
+      "the workspace tsconfig lists its root files",
+    );
+    assert.equal(existsSync(join(workspace, "tsconfig.workspace.json")), false);
   });
 });
 

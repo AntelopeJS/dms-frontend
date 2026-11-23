@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
@@ -235,6 +236,18 @@ void describe("the workspace verify-source installs", () => {
         "@antelopejs/dms": `link:${local}`,
       },
     );
+  });
+});
+
+void describe("the files of the workspace verify-source installs", () => {
+  void it("gives the workspace the tsconfig.json vue-tsc reads, under that name", () => {
+    const workspace = directory("dms-verify-workspace-");
+    materializeWorkspace(workspace, [layer("demo-frontend-vue")], {});
+    assert.ok(
+      jsonAt(readJson(join(workspace, "tsconfig.json")), "files"),
+      "the workspace tsconfig lists its root files",
+    );
+    assert.equal(existsSync(join(workspace, "tsconfig.workspace.json")), false);
   });
 });
 

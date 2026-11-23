@@ -1,0 +1,12 @@
+{
+  "modules": [
+    {
+      "id": "example",
+      "name": "example",
+      "root": "frontend-modules/example",
+      "priority": 0,
+      "entry": "dms.frontend.ts",
+      "options": { "dms": { "apiBaseUrl": "/api" } }
+    }
+  ]
+}
