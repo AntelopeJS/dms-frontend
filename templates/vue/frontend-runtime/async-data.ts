@@ -42,6 +42,9 @@ import {
  *
  * A call without a key cannot be transferred: the server leaves it to the
  * browser, as `server: false` does, so the page hydrates with what it shows.
+ *
+ * A call outside any scope (a plugin past its first await, a callback)
+ * belongs to the application: its watchers and its polling live as long.
  */
 export function useDmsAsyncData<T>(
   keyOrHandler: MaybeRefOrGetter<DmsAsyncDataKey> | DmsAsyncDataHandler<T>,
@@ -49,28 +52,60 @@ export function useDmsAsyncData<T>(
   callerOptions: UseAsyncDataOptions<T> = {},
 ): DmsAsyncDataResult<T> {
   const runtime = useDmsRuntime();
-  // A call outside any scope (a plugin past its first await, a callback)
-  // belongs to the application: its watchers and its polling live as long.
-  if (getCurrentScope() || !runtime.scope.active)
-    return createAsyncDataCall(runtime, keyOrHandler, handler, callerOptions);
-  return runtime.scope.run(() =>
-    createAsyncDataCall(runtime, keyOrHandler, handler, callerOptions),
-  )!;
+  const create = () =>
+    createAsyncDataCall(runtime, keyOrHandler, handler, callerOptions);
+  if (getCurrentScope() || !runtime.scope.active) return create();
+  return runtime.scope.run(create) ?? create();
 }
 
+function isAsyncDataHandler<T>(
+  source: MaybeRefOrGetter<DmsAsyncDataKey> | DmsAsyncDataHandler<T>,
+): source is DmsAsyncDataHandler<T> {
+  return typeof source === "function";
+}
+
+function isStaticKey(
+  source: MaybeRefOrGetter<DmsAsyncDataKey> | undefined,
+): source is DmsAsyncDataKey {
+  return typeof source === "string" || source == null;
+}
+
+/**
+ * Registered in the browser too, though only a server calls it: Vue makes a
+ * component that prefetches an async boundary, which shifts the ids `useId()`
+ * gives the components after it, and both sides must agree. It waits for the
+ * key the caller is on by then, which its setup may have set. Returns whether
+ * the server's render still waits for the caller.
+ */
+function prefetchAsyncData<T>(
+  consumer: ShallowRef<AsyncDataConsumer<T>>,
+  options: UseAsyncDataOptions<T>,
+  inComponent: boolean,
+): () => boolean {
+  let prefetched = false;
+  if (inComponent && options.immediate !== false && options.server !== false)
+    onServerPrefetch(() => {
+      prefetched = true;
+      return consumer.value.entry.settled();
+    });
+  return () => !prefetched;
+}
+
+/**
+ * With a handler second, the first argument is the key: a string, or a ref or
+ * getter whose changes move the caller to the data of another key.
+ */
 function createAsyncDataCall<T>(
   runtime: DmsFrontendRuntime,
   keyOrHandler: MaybeRefOrGetter<DmsAsyncDataKey> | DmsAsyncDataHandler<T>,
   handler: DmsAsyncDataHandler<T> | undefined,
   callerOptions: UseAsyncDataOptions<T>,
 ): DmsAsyncDataResult<T> {
-  // With a handler second, the first argument is the key: a string, or a ref
-  // or getter whose changes move the caller to the data of another key.
   const keySource = handler
     ? (keyOrHandler as MaybeRefOrGetter<DmsAsyncDataKey>)
     : undefined;
   const execute = handler ?? keyOrHandler;
-  if (typeof execute !== "function")
+  if (!isAsyncDataHandler(execute))
     throw new Error("useDmsAsyncData requires a handler");
   const keyless = keySource === undefined;
   if (keyless && runtime.isServer && runtime.devWarnings)
@@ -86,7 +121,7 @@ function createAsyncDataCall<T>(
     attachAsyncData(
       runtime,
       keyless ? undefined : (toValue(keySource) ?? null),
-      execute as DmsAsyncDataHandler<T>,
+      execute,
       options,
       inComponent,
     ),
@@ -94,31 +129,18 @@ function createAsyncDataCall<T>(
   if (getCurrentScope()) onScopeDispose(() => consumer.value.unbind());
   if (options.watch && options.watch.length)
     refreshOnWatchedChange(consumer, options.watch);
-  // Registered in the browser too, though only a server calls it: Vue makes
-  // a component that prefetches an async boundary, which shifts the ids
-  // `useId()` gives the components after it, and both sides must agree. It
-  // waits for the key the caller is on by then, which its setup may have set.
-  let prefetched = false;
-  if (inComponent && options.immediate !== false && options.server !== false)
-    onServerPrefetch(() => {
-      prefetched = true;
-      return consumer.value.entry.settled();
-    });
+  const serverWaits = prefetchAsyncData(consumer, options, inComponent);
   pollAsyncData(runtime, consumer, options);
   const { entry } = consumer.value;
   const waited = startAsyncData(runtime, entry, options, inComponent);
-  const result =
-    keySource == null || typeof keySource === "string"
-      ? entry.result
-      : followAsyncDataKey(
-          runtime,
-          consumer,
-          keySource,
-          execute as DmsAsyncDataHandler<T>,
-          options,
-          inComponent,
-          () => !prefetched,
-        );
+  const result = isStaticKey(keySource)
+    ? entry.result
+    : followAsyncDataKey(
+        { runtime, handler: execute, options, inComponent },
+        consumer,
+        keySource,
+        serverWaits,
+      );
   return Object.assign(
     Promise.resolve(waited).then(() => result),
     result,
@@ -144,7 +166,7 @@ function refreshOnWatchedChange<T>(
     },
     { flush: "sync" },
   );
-  watch(sources as never[], () => {
+  watch(sources, () => {
     if (!moved) void consumer.value.entry.result.refresh();
   });
 }
@@ -184,8 +206,9 @@ function pollOnce<T>(
   if (typeof document !== "undefined" && document.visibilityState === "hidden")
     return;
   const result = consumer.value.entry.result;
-  // Data a caller waits to `execute()` is not read before it is.
-  if (result.status.value === "idle" && options.immediate === false) return;
+  const awaitsExecute =
+    result.status.value === "idle" && options.immediate === false;
+  if (awaitsExecute) return;
   void result.refresh({ dedupe: "defer" });
 }
 
@@ -199,44 +222,65 @@ function startAsyncData<T>(
   options: UseAsyncDataOptions<T>,
   inComponent: boolean,
 ): Promise<void> | undefined {
-  const immediate = options.immediate !== false;
-  const onServer = options.server !== false;
+  return runtime.isServer
+    ? startAsyncDataOnServer(runtime, entry, options, inComponent)
+    : startAsyncDataInBrowser(runtime, entry, options, inComponent);
+}
+
+/**
+ * A render that already answers a redirect throws its HTML away: what it
+ * still has to read would reach nobody.
+ */
+function startAsyncDataOnServer<T>(
+  runtime: DmsFrontendRuntime,
+  entry: AsyncDataEntry<T>,
+  options: UseAsyncDataOptions<T>,
+  inComponent: boolean,
+): Promise<void> | undefined {
   const idle = entry.result.status.value === "idle";
-  if (runtime.isServer) {
-    if (!immediate || !onServer) return undefined;
-    // A render that already answers a redirect throws its HTML away: what it
-    // still has to read would reach nobody.
-    if (runtime.serverRedirect) return undefined;
-    if (idle && options.lazy) entry.schedule();
-    else if (idle) void entry.load();
-    const settled = entry.settled();
-    if (!inComponent) runtime.serverPrefetches.add(settled);
-    return settled;
-  }
-  // The server's render had the data once the setup awaited it, and before
-  // the component rendered: handed over at the same points, it gives what
-  // the setup derives from it, and so the HTML, the same values.
+  if (options.immediate === false || options.server === false) return undefined;
+  if (runtime.serverRedirect) return undefined;
+  if (idle && options.lazy) entry.schedule();
+  else if (idle) void entry.load();
+  const settled = entry.settled();
+  if (!inComponent) runtime.serverPrefetches.add(settled);
+  return settled;
+}
+
+/**
+ * Data loaded before is shown at once and read again in the background,
+ * except while the page the server rendered hydrates with the server's data,
+ * or when another caller of the page has just read it. Where the server
+ * rendered the default in place of the data, the browser's first render must
+ * show it too, before the request leaves.
+ *
+ * The server's render had the data once the setup awaited it, and before the
+ * component rendered: handed over at the same points, it gives what the
+ * setup derives from it, and so the HTML, the same values.
+ */
+function startAsyncDataInBrowser<T>(
+  runtime: DmsFrontendRuntime,
+  entry: AsyncDataEntry<T>,
+  options: UseAsyncDataOptions<T>,
+  inComponent: boolean,
+): Promise<void> | undefined {
+  const idle = entry.result.status.value === "idle";
   const adoption = entry.adoption();
   if (adoption) {
-    if (inComponent) onBeforeMount(entry.adoptNow);
+    if (inComponent) onBeforeMount(() => entry.adoptNow());
     return adoption;
   }
-  if (!immediate) return undefined;
+  if (options.immediate === false) return undefined;
   const waitForData = () =>
     !options.lazy && entry.result.data.value === null
       ? entry.settled()
       : undefined;
   if (entry.running()) return waitForData();
   if (!idle) {
-    // Loaded before: shown at once and read again in the background, except
-    // while the page the server rendered hydrates with the server's data, or
-    // when another caller of the page has just read it.
     if (!runtime.hydrating && !entry.justReadForAnother()) void entry.load();
     return waitForData();
   }
-  // The server rendered the default in place of this data: the browser's
-  // first render must show it too, before the request leaves.
-  if (runtime.hydrating && (options.lazy || !onServer)) {
+  if (runtime.hydrating && (options.lazy || options.server === false)) {
     if (inComponent) onMounted(() => void entry.load());
     else entry.schedule();
   } else if (options.lazy) entry.schedule();
@@ -244,6 +288,13 @@ function startAsyncData<T>(
   return !options.lazy && entry.result.pending.value
     ? entry.settled()
     : undefined;
+}
+
+interface AsyncDataCallContext<T> {
+  runtime: DmsFrontendRuntime;
+  handler: DmsAsyncDataHandler<T>;
+  options: UseAsyncDataOptions<T>;
+  inComponent: boolean;
 }
 
 interface AsyncDataConsumer<T> extends AsyncDataBindingHandle {
@@ -285,17 +336,22 @@ function attachAsyncData<T>(
  * that point the server renders the default and the browser reads the key. A
  * browser hydrating the server's HTML reads a key the server did not render
  * once the component is mounted, so that its first render matches the HTML.
+ *
+ * Data written to the current key from elsewhere (`useDmsData`, another
+ * caller of the key) is its own: it replaces what is carried. On a key
+ * change the previous key is unbound first: its run, aborted, settles it,
+ * which must not drop what is carried to the next key. `watch: false` keeps
+ * the caller on the key it names, without a run. Past the setup, the server's
+ * data for the new key, if it rendered any, is taken over at once. A read of
+ * the new key is held back until the hydrating component is mounted.
  */
 function followAsyncDataKey<T>(
-  runtime: DmsFrontendRuntime,
+  call: AsyncDataCallContext<T>,
   consumer: ShallowRef<AsyncDataConsumer<T>>,
   keySource: MaybeRefOrGetter<DmsAsyncDataKey>,
-  handler: DmsAsyncDataHandler<T>,
-  options: UseAsyncDataOptions<T>,
-  inComponent: boolean,
   serverWaits: () => boolean,
 ): DmsAsyncData<T> {
-  // A read held back until the hydrating component is mounted.
+  const { runtime, handler, options, inComponent } = call;
   let held = false;
   let mounted = !(inComponent && runtime.hydrating);
   if (!mounted)
@@ -316,8 +372,6 @@ function followAsyncDataKey<T>(
     if (!inComponent) runtime.serverPrefetches.add(entry.settled());
   };
   const current = () => consumer.value.entry.result;
-  // The previous key's data, shown until the current key settles or is
-  // cleared.
   const carried = shallowRef<{ value: T | null } | undefined>();
   const settled = (result: DmsAsyncData<T>) =>
     result.status.value === "success" || result.status.value === "error";
@@ -334,8 +388,6 @@ function followAsyncDataKey<T>(
     },
     { flush: "sync" },
   );
-  // Data written to the current key from elsewhere (`useDmsData`, another
-  // caller of the key) is its own: it replaces what is carried.
   watch(
     () => [current(), current().data.value] as const,
     ([result], [previous]) => {
@@ -349,20 +401,16 @@ function followAsyncDataKey<T>(
       const previous = current();
       const shown = shownData();
       const wasRunning = previous.pending.value;
-      // Past the setup, the server's data for the new key, if it rendered
-      // any, is taken over at once.
       const next = attachAsyncData(runtime, key, handler, options, false);
       const { entry } = next;
       const carry =
         next.alone && entry.result.status.value === "idle" && shown !== null;
-      // Unbound first: the previous key's run, aborted, settles it, which
-      // must not drop what is carried to the next key.
       consumer.value.unbind();
       consumer.value = next;
       carried.value = carry ? { value: shown } : undefined;
       held = false;
-      // `watch: false` keeps the caller on the key it names, without a run.
-      if (key === null || options.watch === false) return;
+      const keepsKey = key === null || options.watch === false;
+      if (keepsKey) return;
       if (runtime.isServer) return startOnServer(entry);
       const wanted =
         options.immediate !== false || shown !== null || wasRunning;
