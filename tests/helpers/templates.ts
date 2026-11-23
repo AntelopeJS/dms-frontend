@@ -11,6 +11,7 @@ export function copyEmailRendererFiles(workspace: string): void {
     (name) =>
       name.startsWith("email-") ||
       name === "public-options.ts" ||
+      name === "message-subset.ts" ||
       name === "vite.email.config.ts",
   ))
     cpSync(join(TEMPLATE, file), join(workspace, file));
