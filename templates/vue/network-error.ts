@@ -13,33 +13,40 @@ export interface DmsNetworkErrorTranslator {
   te: (key: string) => boolean;
 }
 
+/** One toast however many visits fail while the server is away. */
 const NETWORK_ERROR_TOAST_ID = "dms-network-error";
 const NETWORK_ERROR_KEY = "error.network";
 /** The messages a module overrides the built-in texts with. */
 export const NETWORK_ERROR_KEYS = ["title", "description"].map(
   (name) => `${NETWORK_ERROR_KEY}.${name}`,
 );
-const DEFAULT_LOCALE = "en";
-// Shipped with the renderer, since no module is guaranteed to translate the
-// case; a module overrides them with `error.network.title` and
-// `error.network.description` in its own locale files. `te()` reads the
-// visitor's locale alone, and the generated catalogs leave these keys out of
-// their English fill, so only that locale's own message replaces them.
-const NETWORK_ERROR_MESSAGES: Record<
-  string,
-  Record<"title" | "description", string>
-> = {
-  en: {
-    title: "Connection lost",
-    description:
-      "The server could not be reached. Check your connection and try again.",
-  },
-  fr: {
-    title: "Connexion perdue",
-    description:
-      "Le serveur est injoignable. Vérifiez votre connexion et réessayez.",
-  },
+
+type NetworkErrorMessages = Record<"title" | "description", string>;
+
+const ENGLISH_MESSAGES: NetworkErrorMessages = {
+  title: "Connection lost",
+  description:
+    "The server could not be reached. Check your connection and try again.",
 };
+
+/**
+ * Shipped with the renderer, since no module is guaranteed to translate the
+ * case; a module overrides them with `error.network.title` and
+ * `error.network.description` in its own locale files. `te()` reads the
+ * visitor's locale alone, and the generated catalogs leave these keys out of
+ * their English fill, so only that locale's own message replaces them.
+ */
+const NETWORK_ERROR_MESSAGES = new Map<string, NetworkErrorMessages>([
+  ["en", ENGLISH_MESSAGES],
+  [
+    "fr",
+    {
+      title: "Connexion perdue",
+      description:
+        "Le serveur est injoignable. Vérifiez votre connexion et réessayez.",
+    },
+  ],
+]);
 
 function networkErrorMessage(
   i18n: DmsNetworkErrorTranslator,
@@ -48,8 +55,7 @@ function networkErrorMessage(
   const key = `${NETWORK_ERROR_KEY}.${name}`;
   if (i18n.te(key)) return i18n.t(key);
   const locale = i18n.locale.value.slice(0, 2);
-  return (NETWORK_ERROR_MESSAGES[locale] ??
-    NETWORK_ERROR_MESSAGES[DEFAULT_LOCALE])[name];
+  return (NETWORK_ERROR_MESSAGES.get(locale) ?? ENGLISH_MESSAGES)[name];
 }
 
 /**
@@ -66,7 +72,6 @@ export function showNetworkErrors(
   return router.on("networkError", (event) => {
     event.preventDefault();
     notify({
-      // One toast however many visits fail while the server is away.
       id: NETWORK_ERROR_TOAST_ID,
       title: networkErrorMessage(i18n, "title"),
       description: networkErrorMessage(i18n, "description"),

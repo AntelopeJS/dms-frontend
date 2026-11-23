@@ -55,10 +55,17 @@ function markDmsReady(): void {
   document.documentElement.dataset.dmsReady = "true";
 }
 
+/**
+ * Registers the icon provider before any module or component can render an
+ * icon the client bundle lacks: the generated server answers those queries
+ * from the installed collections.
+ */
+function registerIconProvider(): void {
+  addAPIProvider("", sameOriginIconProvider(location.origin));
+}
+
 if (import.meta.env.DEV) adoptViteDevStyles();
-// Before any module or component can render an icon the client bundle lacks:
-// the generated server answers those queries from the installed collections.
-addAPIProvider("", sameOriginIconProvider(location.origin));
+registerIconProvider();
 
 /**
  * Shows the URL of the page the server sent, when it rendered a query the page
@@ -83,6 +90,9 @@ function showServedUrl(url: string): void {
 /**
  * Sets the modules up, then starts the app.
  *
+ * A layer's app config edited during development reaches the page without a
+ * reload. A server render imports the new configs instead.
+ *
  * A function rather than top-level statements: Rollup keeps apart every module
  * the entry shares with a dynamic import when the entry awaits at its top level
  * (merging them could deadlock that await). Every page and component is such
@@ -97,11 +107,9 @@ async function startDmsApp(): Promise<void> {
     withPublicOptions(frontendModules, runtimeOptions),
     appConfigs,
   );
-  // A layer's app config edited during development reaches the page without a
-  // reload. A server render imports the new configs instead.
   syncAppConfigs(applyLayerAppConfigs);
 
-  createInertiaApp({
+  void createInertiaApp({
     resolve: resolveDmsInertiaPage,
     async setup({ App, el, props, plugin }) {
       showServedUrl(props.initialPage.url);
