@@ -1,23 +1,23 @@
-// The DMS app config the layers' `app/app.config.ts` make, and how an edited
-// one reaches it while the page is open in development.
-//
-// Lives apart from frontend-module.ts so the merge can be exercised on its own,
-// the way ui-app-config.ts is.
-
 import { defu } from "defu";
-import { clonePlain, isPlainRecord, type PlainRecord } from "./ui-app-config";
+import {
+  clonePlain,
+  clonePlainRecord,
+  isPlainRecord,
+  type PlainRecord,
+  type PlainValue,
+} from "./ui-app-config";
 
 /**
- * The layer configs, highest precedence first, merged into a new object that
+ * The DMS app config the layers' `app/app.config.ts` make: the layer configs, highest precedence first, merged into a new object that
  * shares nothing with them: the modules extend what this returns, and must not
  * write into a config module's exports, which a development server keeps from
  * one setup of the modules to the next.
  */
 export function mergeLayerAppConfigs(configs: readonly unknown[]): PlainRecord {
-  return defu({}, ...configs.filter(isPlainRecord).map(clonePlain));
+  return defu({}, ...configs.filter(isPlainRecord).map(clonePlainRecord));
 }
 
-function isSameValue(left: unknown, right: unknown): boolean {
+function isSameValue(left: PlainValue, right: PlainValue): boolean {
   if (Array.isArray(left) && Array.isArray(right))
     return (
       left.length === right.length &&

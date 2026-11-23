@@ -265,7 +265,7 @@ void it("renders setup errors as HTTP errors without corrupting simultaneous suc
   const unreadCountPath = "/settings/user/notifications/unread-count";
   const backendReads: string[] = [];
   const backend = createServer((request, response) => {
-    const url = new URL(request.url!, "http://fixture");
+    const url = new URL(request.url ?? "/", "http://fixture");
     backendReads.push(`${url.pathname}${url.search}`);
     response.setHeader("content-type", "application/json");
     if (url.pathname === "/fixture/counted") {
@@ -299,11 +299,10 @@ void it("renders setup errors as HTTP errors without corrupting simultaneous suc
     );
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    frontend = createServer(await requestHandlerOf(workspace));
-    await new Promise<void>((resolve) =>
-      frontend!.listen(0, "127.0.0.1", resolve),
-    );
-    const address = addressOf(frontend);
+    const site = createServer(await requestHandlerOf(workspace));
+    frontend = site;
+    await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+    const address = addressOf(site);
     const base = `http://127.0.0.1:${address.port}`;
     const [failed, healthy] = await Promise.all([
       fetch(`${base}/throws`, { headers: { accept: "text/html" } }),

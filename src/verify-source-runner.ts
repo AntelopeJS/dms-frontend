@@ -1,3 +1,11 @@
+/**
+ * Builds and type-checks unpublished frontend packages in a temporary
+ * workspace, one task per check. Started by `ajs dms verify-source`, it
+ * sends its result over IPC for the CLI to report; run on its own (`pnpm
+ * test:real-source`), it reports the result itself.
+ *
+ * @packageDocumentation
+ */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -271,10 +279,4 @@ async function verifySources(): Promise<VerificationResult> {
   return { ok: true, modules: layers.length };
 }
 
-/**
- * Builds and type-checks unpublished frontend packages in a temporary
- * workspace, one task per check. Started by `ajs dms verify-source`, it
- * sends its result over IPC for the CLI to report; run on its own (`pnpm
- * test:real-source`), it reports the result itself.
- */
 startSourceRunner(verifySources, reportVerification);

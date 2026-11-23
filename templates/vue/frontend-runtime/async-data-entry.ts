@@ -10,13 +10,20 @@ import {
 import { type DmsFrontendRuntime } from "./module-registration";
 import { createDmsError } from "./dms-error";
 
-function pickValue<T>(value: unknown, keys?: string[]): T {
-  if (!keys || typeof value !== "object" || value === null) return value as T;
-  return Object.fromEntries(
-    keys
-      .filter((key) => key in value)
-      .map((key) => [key, Reflect.get(value, key)]),
-  ) as T;
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The guard narrows an arbitrary value to a string-keyed object whose members it has not read yet.
+function isKeyedObject<V>(value: V): value is V & Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function pickValue<T>(value: Awaited<T>, keys?: string[]): T {
+  const picked =
+    keys && isKeyedObject(value)
+      ? Object.fromEntries(
+          keys.filter((key) => key in value).map((key) => [key, value[key]]),
+        )
+      : value;
+  // SAFETY: `picked` is either the whole value or the subset of its own keys that the caller listed in `pick`, and `pick` is only offered for object results, so it keeps the shape the caller declared as T.
+  return picked as T;
 }
 
 interface AsyncDataBinding<T> {
@@ -46,7 +53,10 @@ export interface AsyncDataEntry<T> {
   bind(binding: AsyncDataBinding<T>): AsyncDataBindingHandle;
   /** A run: the one in flight, or a new one. */
   load(): Promise<void>;
-  /** The first run, once the current turn is over. */
+  /**
+   * The first run, once the current turn is over: an explicit refresh in that
+   * turn replaces it instead of cancelling it mid-request.
+   */
   schedule(): void;
   /** Resolves once no run is in flight, including the runs that replace it. */
   settled(): Promise<void>;
@@ -59,7 +69,10 @@ export interface AsyncDataEntry<T> {
    */
   justReadForAnother(): boolean;
   running(): boolean;
-  /** `refreshDmsPageData`'s run, for data a caller shows and opted into. */
+  /**
+   * `refreshDmsPageData`'s run, for data a caller shows and opted into: data
+   * a caller waits to `execute()` stays unread.
+   */
   pageRefresh(): Promise<void> | undefined;
   /**
    * Holds the server's state back, as pending, until the next turn or
@@ -89,12 +102,125 @@ export const asyncDataEntries = new WeakMap<
   AsyncDataEntry<unknown>
 >();
 
+/** What a run writes its answer to, and how it learns it is still wanted. */
+interface AsyncDataRunTarget<T> {
+  data: Ref<T | null>;
+  error: Ref<unknown>;
+  status: Ref<DmsAsyncDataStatus>;
+  current(): boolean;
+  answered(): void;
+  finish(): void;
+}
+
+function runAsyncDataHandler<T>(
+  runtime: DmsFrontendRuntime,
+  binding: AsyncDataBinding<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  const call = () => binding.handler({ signal });
+  return runtime.runAsyncDataHandler
+    ? runtime.runAsyncDataHandler(call)
+    : call();
+}
+
+/**
+ * Reads what one run needs and writes its answer. A run another one replaced,
+ * or that nobody waits for any more, settles nothing, even when its handler
+ * ignores the signal; a failure leaves the data of the last success on screen
+ * next to it.
+ */
+async function answerAsyncDataRun<T>(
+  runtime: DmsFrontendRuntime,
+  key: string | undefined,
+  binding: AsyncDataBinding<T>,
+  controller: AbortController,
+  target: AsyncDataRunTarget<T>,
+): Promise<void> {
+  try {
+    const value = await runAsyncDataHandler(
+      runtime,
+      binding,
+      controller.signal,
+    );
+    const transformed = binding.options.transform
+      ? await binding.options.transform(value, { key })
+      : value;
+    if (!target.current()) return;
+    target.data.value = pickValue<T>(transformed, binding.options.pick);
+    target.error.value = null;
+    target.status.value = "success";
+    target.answered();
+  } catch (reason) {
+    if (!target.current()) return;
+    target.error.value = reason;
+    target.status.value = "error";
+  } finally {
+    runtime.asyncDataRuns.delete(controller);
+    target.finish();
+  }
+}
+
+function removeFrom<V>(items: V[], item: V): boolean {
+  const index = items.indexOf(item);
+  if (index === -1) return false;
+  items.splice(index, 1);
+  return true;
+}
+
+/** What a key shows once its last run is gone, as that run's answer left it. */
+function statusAfterLastAnswer(
+  failed: boolean,
+  empty: boolean,
+): DmsAsyncDataStatus {
+  if (failed) return "error";
+  return empty ? "idle" : "success";
+}
+
+/** The server's state a component's setup saw in flight, held back as pending. */
+interface AsyncDataAdoption<T> {
+  hold: (state: AsyncDataInitialState<T>) => void;
+  adopt: () => void;
+  release: () => void;
+  waiting: () => Promise<void> | undefined;
+  pending: () => Promise<void> | undefined;
+}
+
+function createAsyncDataAdoption<T>(
+  data: Ref<T | null>,
+  error: Ref<unknown>,
+  status: Ref<DmsAsyncDataStatus>,
+): AsyncDataAdoption<T> {
+  let heldBack: AsyncDataInitialState<T> | undefined;
+  let adoption: Promise<void> | undefined;
+  const adopt = () => {
+    if (!heldBack) return;
+    data.value = heldBack.data;
+    error.value = heldBack.error;
+    status.value = heldBack.status;
+    heldBack = undefined;
+  };
+  return {
+    hold(state) {
+      heldBack = state;
+      status.value = "pending";
+      adoption = Promise.resolve().then(adopt);
+    },
+    adopt,
+    release() {
+      heldBack = undefined;
+    },
+    waiting: () => (heldBack ? adoption : undefined),
+    pending: () => adoption,
+  };
+}
+
 function createAsyncDataEntry<T>(
   runtime: DmsFrontendRuntime,
   key: string | undefined,
   initial: AsyncDataInitialState<T>,
   deep: boolean,
 ): AsyncDataEntry<T> {
+  // SAFETY: The ref wraps `initial.data`, which holds a T or null, so the unwrapped ref type is the Ref<T | null> that `deep` or shallowRef produces.
   const data = (
     deep ? ref(initial.data) : shallowRef(initial.data)
   ) as Ref<T | null>;
@@ -104,56 +230,29 @@ function createAsyncDataEntry<T>(
   const bindings: AsyncDataBinding<T>[] = [];
   let run: AsyncDataRun | undefined;
   let scheduled: Promise<void> | undefined;
-  let heldBack: AsyncDataInitialState<T> | undefined;
-  let adoption: Promise<void> | undefined;
+  const adoption = createAsyncDataAdoption(data, error, status);
   let lastShown = 0;
-  // When the last run answered, to spare a caller joining at once a second read.
   let answeredAt = 0;
-  const adoptNow = () => {
-    if (!heldBack) return;
-    data.value = heldBack.data;
-    error.value = heldBack.error;
-    status.value = heldBack.status;
-    heldBack = undefined;
-  };
-  const handle = (binding: AsyncDataBinding<T>, signal: AbortSignal) => {
-    const call = () => binding.handler({ signal });
-    return runtime.runAsyncDataHandler
-      ? runtime.runAsyncDataHandler(call)
-      : call();
-  };
   const start = (binding: AsyncDataBinding<T>): Promise<void> => {
-    heldBack = undefined;
+    adoption.release();
     run?.controller.abort();
     const controller = new AbortController();
     const current: AsyncDataRun = { controller, promise: Promise.resolve() };
     run = current;
     runtime.asyncDataRuns.add(controller);
-    // The last failure stays until this run answers, as in Nuxt.
     status.value = "pending";
-    // A run another one replaced, or that nobody waits for any more, settles
-    // nothing, even when its handler ignores the signal.
-    current.promise = (async () => {
-      try {
-        const value = await handle(binding, controller.signal);
-        const transformed = binding.options.transform
-          ? await binding.options.transform(value, { key })
-          : value;
-        if (run !== current) return;
-        data.value = pickValue<T>(transformed, binding.options.pick);
-        error.value = null;
-        status.value = "success";
+    current.promise = answerAsyncDataRun(runtime, key, binding, controller, {
+      data,
+      error,
+      status,
+      current: () => run === current,
+      answered: () => {
         answeredAt = Date.now();
-      } catch (reason) {
-        if (run !== current) return;
-        // The data of the last success stays on screen next to the failure.
-        error.value = reason;
-        status.value = "error";
-      } finally {
-        runtime.asyncDataRuns.delete(controller);
+      },
+      finish: () => {
         if (run === current) run = undefined;
-      }
-    })();
+      },
+    });
     return current.promise;
   };
   const refresh = (options: DmsAsyncDataRefreshOptions = {}) => {
@@ -177,7 +276,7 @@ function createAsyncDataEntry<T>(
     execute: refresh,
     refresh,
     clear() {
-      heldBack = undefined;
+      adoption.release();
       run?.controller.abort();
       run = undefined;
       data.value = bindings.at(-1)?.options.default?.() ?? null;
@@ -191,29 +290,21 @@ function createAsyncDataEntry<T>(
       bindings.push(binding);
       runtime.boundAsyncData.add(entry);
       const unbind = () => {
-        const index = bindings.indexOf(binding);
-        if (index === -1) return;
-        bindings.splice(index, 1);
-        if (bindings.length > 0) return;
+        if (!removeFrom(bindings, binding) || bindings.length > 0) return;
         lastShown = ++runtime.asyncDataClock;
         runtime.boundAsyncData.delete(entry);
         if (!run) return;
         run.controller.abort();
         run = undefined;
-        // Back to what the last answer left.
-        status.value =
-          error.value != null
-            ? "error"
-            : data.value === null
-              ? "idle"
-              : "success";
+        status.value = statusAfterLastAnswer(
+          error.value != null,
+          data.value === null,
+        );
       };
       return { unbind };
     },
     load,
     schedule() {
-      // Started after the caller's turn, an explicit refresh in that turn
-      // replaces this first run instead of cancelling it mid-request.
       scheduled ??= Promise.resolve().then(() => {
         scheduled = undefined;
         return load();
@@ -221,7 +312,7 @@ function createAsyncDataEntry<T>(
     },
     async settled() {
       await scheduled;
-      await adoption;
+      await adoption.pending();
       while (run) await run.promise;
     },
     unused: () => bindings.length === 0,
@@ -233,17 +324,12 @@ function createAsyncDataEntry<T>(
       const wanted = bindings.some(
         (binding) => binding.options.refreshOnPageRefresh !== false,
       );
-      // Data a caller waits to `execute()` stays unread.
       if (!wanted || (status.value === "idle" && !run)) return undefined;
       return refresh();
     },
-    adoptLater(state) {
-      heldBack = state;
-      status.value = "pending";
-      adoption = Promise.resolve().then(adoptNow);
-    },
-    adoptNow,
-    adoption: () => (heldBack ? adoption : undefined),
+    adoptLater: adoption.hold,
+    adoptNow: adoption.adopt,
+    adoption: adoption.waiting,
   };
   return entry;
 }
@@ -259,6 +345,7 @@ function serverAsyncDataState<T>(
 ): AsyncDataInitialState<T> | undefined {
   if (runtime.hydratedAsyncData.has(key))
     return {
+      // SAFETY: A hydrated entry is written by the server's payload for this key with the T the page's useDmsAsyncData call produced, so reading it back gives that T.
       data: runtime.hydratedAsyncData.get(key) as T,
       error: null,
       status: "success",
@@ -282,6 +369,11 @@ export function scopedKey(runtime: DmsFrontendRuntime, key: string): string {
     : `${runtime.asyncDataScope}|${key}`;
 }
 
+/**
+ * The entry of a key, shared by every caller of it. A component's setup saw
+ * the server's run in flight, not its result: the browser holds the result
+ * back as long (`adoptLater`), see `startAsyncData`.
+ */
 export function asyncDataEntry<T>(
   runtime: DmsFrontendRuntime,
   key: string | undefined,
@@ -291,7 +383,9 @@ export function asyncDataEntry<T>(
   const stored = key === undefined ? undefined : scopedKey(runtime, key);
   const shared =
     stored === undefined ? undefined : runtime.asyncData.get(stored);
-  if (shared) return asyncDataEntries.get(shared) as AsyncDataEntry<T>;
+  if (shared)
+    // SAFETY: An entry is stored under a scoped key by the useDmsAsyncData call that owns it and is looked up by the same key, so the shared entry holds the T of that call.
+    return asyncDataEntries.get(shared) as AsyncDataEntry<T>;
   const fallback: AsyncDataInitialState<T> = {
     data: options.default?.() ?? null,
     error: null,
@@ -307,14 +401,12 @@ export function asyncDataEntry<T>(
     server && !inComponent ? server : fallback,
     options.deep === true,
   );
-  // A component's setup saw the server's run in flight, not its result: the
-  // browser holds the result back as long, see `startAsyncData`.
   if (server && inComponent) entry.adoptLater(server);
   if (stored === undefined) return entry;
   runtime.hydratedAsyncData.delete(stored);
   runtime.hydratedAsyncErrors.delete(stored);
-  const result = entry.result as DmsAsyncData<unknown>;
+  const { result } = entry;
   runtime.asyncData.set(stored, result);
-  asyncDataEntries.set(result, entry as AsyncDataEntry<unknown>);
+  asyncDataEntries.set(result, entry);
   return entry;
 }

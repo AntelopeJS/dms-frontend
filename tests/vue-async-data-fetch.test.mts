@@ -19,6 +19,7 @@ import {
   mountRuntime,
 } from "./fixtures/vue-async-data.mts";
 import { addressOf } from "./helpers/net";
+import { present } from "./helpers/present";
 
 type FetchOptions = NonNullable<Parameters<typeof ofetch>[1]>;
 
@@ -47,7 +48,9 @@ function switchingFetcher() {
       answers.set(url, { resolve, reject });
     });
   };
-  return { fetcher, requests, answers };
+  const pending = (url: string) =>
+    present(answers.get(url), `the read of ${url}`);
+  return { fetcher, requests, pending };
 }
 
 function followOrders(
@@ -70,7 +73,7 @@ function followOrders(
         }),
       ),
   });
-  return { runtime, app, entry: () => entry! };
+  return { runtime, app, entry: () => present(entry, "the order entry") };
 }
 
 function registerTransferTests(): void {
@@ -149,6 +152,8 @@ function registerReactiveRequestTests(): void {
       answers.set(url, answer);
       return answer.promise;
     };
+    const pending = (url: string) =>
+      present(answers.get(url), `the read of ${url}`);
     let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
     const Consumer = defineComponent({
       setup() {
@@ -160,17 +165,18 @@ function registerReactiveRequestTests(): void {
       },
     });
     const app = mountRuntime(runtime, { render: () => h(Consumer) });
-    answers.get("/api/orders/1")!.resolve("order 1");
+    const read = present(entry, "the entry");
+    pending("/api/orders/1").resolve("order 1");
     await settle();
-    assert.equal(entry!.data.value, "order 1");
+    assert.equal(read.data.value, "order 1");
 
     id.value = 2;
     await nextTick();
-    assert.equal(entry!.status.value, "pending");
-    assert.equal(entry!.data.value, "order 1", "no flash while it loads");
-    answers.get("/api/orders/2")!.resolve("order 2");
+    assert.equal(read.status.value, "pending");
+    assert.equal(read.data.value, "order 1", "no flash while it loads");
+    pending("/api/orders/2").resolve("order 2");
     await settle();
-    assert.equal(entry!.data.value, "order 2");
+    assert.equal(read.data.value, "order 2");
     assert.equal(signals.length, 2, "the custom fetcher gets the signal");
     assert.ok(signals.every((signal) => signal instanceof AbortSignal));
 
@@ -184,12 +190,12 @@ function registerReactiveRequestTests(): void {
     );
     id.value = 1;
     await nextTick();
-    assert.equal(entry!.data.value, "order 1");
-    assert.equal(entry!.status.value, "pending");
+    assert.equal(read.data.value, "order 1");
+    assert.equal(read.status.value, "pending");
     assert.equal(signals.length, 3);
-    answers.get("/api/orders/1")!.resolve("order 1, again");
+    pending("/api/orders/1").resolve("order 1, again");
     await settle();
-    assert.equal(entry!.data.value, "order 1, again");
+    assert.equal(read.data.value, "order 1, again");
     app.unmount();
   });
 
@@ -279,10 +285,11 @@ function registerNullUrlTests(): void {
           }),
         ),
     });
+    const read = present(entry, "the entry");
     await settle();
-    await entry!.refresh();
+    await read.refresh();
     assert.deepEqual(browser.requests, [], "not even when refreshed");
-    assert.equal(entry!.status.value, "idle");
+    assert.equal(read.status.value, "idle");
 
     id.value = 7;
     await settle();
@@ -290,11 +297,11 @@ function registerNullUrlTests(): void {
       browser.requests.map(({ url }) => url),
       ["/api/orders/7"],
     );
-    assert.equal(entry!.data.value, "data:/api/orders/7");
+    assert.equal(read.data.value, "data:/api/orders/7");
 
     id.value = null;
     await settle();
-    assert.equal(entry!.data.value, "data:/api/orders/7", "kept on screen");
+    assert.equal(read.data.value, "data:/api/orders/7", "kept on screen");
     assert.equal(browser.requests.length, 1);
     app.unmount();
   });
@@ -302,10 +309,10 @@ function registerNullUrlTests(): void {
 
 function registerKeySwitchTests(): void {
   void it("refetches a key whose run a switch away aborted, never showing another key's data as its own", async () => {
-    const { fetcher, requests, answers } = switchingFetcher();
+    const { fetcher, requests, pending } = switchingFetcher();
     const id = ref(1);
     const { runtime, app, entry } = followOrders(fetcher, id);
-    answers.get("/api/orders/1")!.resolve("order 1");
+    pending("/api/orders/1").resolve("order 1");
     await settle();
 
     id.value = 2;
@@ -331,7 +338,7 @@ function registerKeySwitchTests(): void {
       "/api/orders/1",
       "/api/orders/2",
     ]);
-    answers.get("/api/orders/2")!.resolve("order 2");
+    pending("/api/orders/2").resolve("order 2");
     await settle();
     assert.equal(entry().status.value, "success");
     assert.equal(entry().data.value, "order 2");
@@ -339,17 +346,17 @@ function registerKeySwitchTests(): void {
   });
 
   void it("shows a failed key's own data and error, not the previous key's data", async () => {
-    const { fetcher, answers } = switchingFetcher();
+    const { fetcher, pending } = switchingFetcher();
     const id = ref(1);
     const { runtime, app, entry } = followOrders(fetcher, id);
-    answers.get("/api/orders/1")!.resolve("order 1");
+    pending("/api/orders/1").resolve("order 1");
     await settle();
 
     id.value = 2;
     await nextTick();
     assert.equal(entry().data.value, "order 1", "no flash while it loads");
     const failure = new Error("not found");
-    answers.get("/api/orders/2")!.reject(failure);
+    pending("/api/orders/2").reject(failure);
     await settle();
 
     assert.equal(entry().status.value, "error");

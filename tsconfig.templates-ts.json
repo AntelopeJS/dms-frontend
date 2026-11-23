@@ -1,0 +1,41 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "rootDir": ".",
+    "outDir": "node_modules/.cache/templates-ts-config",
+    "tsBuildInfoFile": "node_modules/.cache/templates-ts-config/.tsbuildinfo",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"],
+    "allowImportingTsExtensions": true,
+    "jsx": "preserve",
+    "rootDirs": ["./templates/vue", "./template-workspace"],
+    "paths": {
+      "#dms/frontend-module": ["./templates/vue/frontend-module.ts"],
+      "#dms/frontend-build": ["./templates/vue/frontend-build.ts"],
+      "#dms/server": ["./templates/vue/server-module.ts"],
+      "@nuxt/ui/vite": ["./node_modules/nuxt-ui-auto-imports/dist/vite.d.mts"],
+      "@nuxt/ui/vue-plugin": [
+        "./node_modules/nuxt-ui-auto-imports/vue-plugin.d.ts"
+      ],
+      "@nuxt/ui/locale": [
+        "./node_modules/nuxt-ui-auto-imports/dist/runtime/locale/index.d.ts"
+      ],
+      "@nuxt/ui/composables/*": [
+        "./node_modules/nuxt-ui-auto-imports/dist/runtime/composables/*.d.ts"
+      ],
+      "@nuxt/ui/runtime/vue/composables/*": [
+        "./node_modules/nuxt-ui-auto-imports/dist/runtime/vue/composables/*.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "./templates/vue/**/*.ts",
+    "./template-workspace/*.d.ts",
+    "./template-workspace/*.json"
+  ]
+}

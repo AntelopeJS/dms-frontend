@@ -14,7 +14,6 @@ import {
   type InjectionKey,
   inject,
   onMounted,
-  type PropType,
   type Ref,
   ref,
 } from "vue";
@@ -26,7 +25,6 @@ import {
   type DmsLinkPrefetch,
   type DmsNavigationOptions,
   type DmsPluginSetup,
-  type RouteLocationRaw,
 } from "./types";
 import { useDmsRuntime } from "./state";
 import { locationToUrl, visit } from "./route";
@@ -61,6 +59,7 @@ export function withinFailedSetup(
   return false;
 }
 /** Shows the error page in place of the page, keeping the first failure. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure reaches the error page from any thrown value, which failPage turns into an Error.
 export function failPage(runtime: DmsFrontendRuntime, reason: unknown): void {
   runtime.currentError.value ??=
     reason instanceof Error ? reason : new Error(String(reason));
@@ -71,6 +70,7 @@ export function abortDmsNavigation(): false {
 export const useHead = useUnhead;
 export const useSeoMeta = useUnheadSeoMeta;
 export function useI18n(): DmsI18n {
+  // SAFETY: vue-i18n's composer exposes the translation functions DmsI18n names, and the layer's i18n setup installs it.
   return useVueI18n() as DmsI18n;
 }
 
@@ -90,8 +90,10 @@ function shouldNavigateDmsLink(event: MouseEvent): boolean {
 }
 
 function dmsLinkNavigationOptions(
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The attributes of a link are whatever the template passes it, read by name below.
   attributes: Record<string, unknown>,
 ): DmsNavigationOptions {
+  // SAFETY: The link's attributes are the navigation options DmsNavigationOptions names, which the Link component passes along with its own.
   const options = attributes as DmsNavigationOptions;
   return {
     async: options.async,
@@ -118,20 +120,40 @@ function dmsLinkNavigationOptions(
   };
 }
 
+function isLinkPrefetchMode(
+  value: unknown,
+): value is "mount" | "hover" | "click" {
+  return value === "mount" || value === "hover" || value === "click";
+}
+
+function isLinkPrefetch(value: unknown): value is DmsLinkPrefetch {
+  return (
+    typeof value === "boolean" ||
+    isLinkPrefetchMode(value) ||
+    (Array.isArray(value) && value.every(isLinkPrefetchMode))
+  );
+}
+
+function isClickHandler(value: unknown): value is (event: MouseEvent) => void {
+  return typeof value === "function";
+}
+
 export const DmsLink: Component = defineComponent({
   name: "DmsLink",
   inheritAttrs: false,
   props: {
     to: {
-      type: [String, Object] as PropType<RouteLocationRaw>,
+      type: [String, Object],
       required: true,
     },
   },
   setup(props, { attrs, slots }) {
     const runtime = useDmsRuntime();
-    const prefetch = attrs.prefetch as DmsLinkPrefetch | undefined;
+    const prefetch = isLinkPrefetch(attrs.prefetch)
+      ? attrs.prefetch
+      : undefined;
     const onClick = (event: MouseEvent) => {
-      if (typeof attrs.onClick === "function") attrs.onClick(event);
+      if (isClickHandler(attrs.onClick)) attrs.onClick(event);
       if (!shouldNavigateDmsLink(event)) return;
       event.preventDefault();
       void visit(runtime, props.to, dmsLinkNavigationOptions(attrs));
@@ -185,6 +207,13 @@ export function provideDmsKbdPlatform(
   app.provide(KBD_PLATFORM_KEY, source);
 }
 
+/** Whether a component's vnode is bound to its server node before setup: it hydrates. */
+function isBoundToServerNode(
+  instance: ComponentInternalInstance | null,
+): boolean {
+  return !!instance?.vnode.el;
+}
+
 interface NuxtUiKbd {
   macOS: ComputedRef<unknown>;
   getKbdKey: (value?: string) => string | undefined;
@@ -209,14 +238,14 @@ export function useDmsKbd(
   const instance = getCurrentInstance();
   const source = instance ? inject(KBD_PLATFORM_KEY, null) : null;
   const platform = source ? source() : null;
-  // A hydrating component's vnode is bound to its server node before setup.
-  const hydrating = ref(!!instance?.vnode.el);
+  const hydrating = ref(isBoundToServerNode(instance));
   if (hydrating.value) onMounted(() => (hydrating.value = false));
   return {
     macOS,
     getKbdKey(value) {
       if (!value) return undefined;
-      if (!isModifierKbdKey(value)) return keys[value] || value;
+      if (!isModifierKbdKey(value))
+        return (Object.hasOwn(keys, value) && keys[value]) || value;
       if (platform) return MODIFIER_KBD_KEYS[platform.value][value];
       if (typeof window === "undefined" || hydrating.value) return " ";
       return MODIFIER_KBD_KEYS[macOS.value ? "mac" : "other"][value];
@@ -241,7 +270,9 @@ export function defineDmsPlugin(setup: DmsPluginSetup): DmsPluginSetup {
 }
 export function useDmsApp(): DmsAppContext {
   const instance = getCurrentInstance();
+  // SAFETY: setup stores the DmsAppContext under `$dms` on the app's global properties, which Vue types loosely; before setup it is undefined, which `??` hands on to the runtime's copy.
   const contextual = instance?.appContext.config.globalProperties
     .$dms as DmsAppContext;
+  // SAFETY: setup gives the runtime its DmsAppContext before any component or plugin calls this; a call before setup gets undefined, which the declared return type has always hidden.
   return contextual ?? (useDmsRuntime().appContext as DmsAppContext);
 }

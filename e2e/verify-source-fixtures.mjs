@@ -1,6 +1,8 @@
 /**
  * Small frontend modules and a project folder to verify them from. The project folder lies inside
  * the run's checkout, so Node finds the `@antelopejs/dms` the run installed from it.
+ *
+ * @packageDocumentation
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

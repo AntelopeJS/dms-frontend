@@ -17,6 +17,7 @@ import { after, before, describe, it } from "node:test";
 import { readText } from "./helpers/files";
 import { OWN_PACKAGE } from "./helpers/own-package";
 import { addressOf } from "./helpers/net";
+import { present } from "./helpers/present";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(REPOSITORY, "dist/index.js");
@@ -96,7 +97,12 @@ function startCli({
     },
     () => output,
   );
-  return { pid: cli.pid!, exited, output: () => output, tree };
+  return {
+    pid: present(cli.pid, "the cli pid"),
+    exited,
+    output: () => output,
+    tree,
+  };
 }
 
 /** Calls `probe` until it returns a value; a probe that throws is not ready yet. */

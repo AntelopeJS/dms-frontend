@@ -44,12 +44,12 @@ function helpListsEveryVariableRead(): Problem[] {
       .flatMap(sourceFiles)
       .flatMap((file) =>
         [...readFileSync(file, "utf8").matchAll(ENV_READ)].map(
-          (match) => match[1] ?? match[2] ?? match[3],
+          (match) => match[1] ?? match[2] ?? match[3] ?? [],
         ),
       ),
   );
   const missing = [...read].filter(
-    (name) => !documented.has(name!) && !INTERNAL_VARIABLES.has(name!),
+    (name) => !documented.has(name) && !INTERNAL_VARIABLES.has(name),
   );
   return [
     ...(read.has("DMS_PREPARE_STRICT")

@@ -13,11 +13,17 @@ import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { writeAppConfigs } from "../src/common";
+import { WORKSPACE_TSCONFIG_TEMPLATE } from "../src/config";
 import { isObjectLike, isText } from "../src/internal/guards";
 import { projectTypeErrors } from "./helpers/type-check";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const templateTsconfig = join(repoRoot, "templates", "vue", "tsconfig.json");
+const templateTsconfig = join(
+  repoRoot,
+  "templates",
+  "vue",
+  WORKSPACE_TSCONFIG_TEMPLATE,
+);
 const tsc = join(repoRoot, "node_modules", "typescript", "bin", "tsc");
 
 const workspaces: string[] = [];

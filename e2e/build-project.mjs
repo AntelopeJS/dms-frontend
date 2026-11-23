@@ -1,6 +1,8 @@
 /**
  * A small AntelopeJS project for `ajs dms build --project`: the DMS core module and one frontend
  * module of the journey's own, inside the run's checkout so the core module resolves.
+ *
+ * @packageDocumentation
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

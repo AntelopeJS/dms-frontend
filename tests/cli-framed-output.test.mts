@@ -268,7 +268,6 @@ void describePosix("framing verify-source", () => {
   });
   after(() => cli.dispose());
 
-  /** The DMS core layer, the only one the checks run against. */
   function sourceLayer(sandbox: string): void {
     writeLayer(join(sandbox, "frontend-vue"));
     writeFileSync(
@@ -320,7 +319,6 @@ void describePosix("framing verify-source", () => {
     ]);
   });
 
-  /** A project whose frontend-vue module runs on the @antelopejs/dms it installs. */
   function project(sandbox: string): void {
     const dms = join(sandbox, "node_modules/@antelopejs/dms");
     sourceLayer(dms);

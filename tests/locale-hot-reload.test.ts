@@ -1,3 +1,11 @@
+/**
+ * The generated locale module in a real Vite dev server, as `ajs-dms dev`
+ * runs it: the browser side is played by a module runner with HMR, which
+ * applies updates with the same client the browser uses, and the server side
+ * by `ssrLoadModule`, which is how the generated server renders pages.
+ *
+ * @packageDocumentation
+ */
 import assert from "node:assert/strict";
 import {
   mkdirSync,
@@ -83,12 +91,6 @@ async function startFixtureServer(
   });
 }
 
-/**
- * The generated locale module in a real Vite dev server, as `ajs-dms dev`
- * runs it: the browser side is played by a module runner with HMR, which
- * applies updates with the same client the browser uses, and the server side
- * by `ssrLoadModule`, which is how the generated server renders pages.
- */
 void describe("regenerated locale catalogs in the dev server", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-locale-hmr-")));
   const workspace = join(root, "workspace");

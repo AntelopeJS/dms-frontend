@@ -87,6 +87,13 @@ function createSyncFailures(src: string, reporter: WatchReporter) {
   };
 }
 
+/** Removes the staged entries `select` picks, and returns them. */
+function take(staged: Set<string>, select: (rel: string) => boolean): string[] {
+  const taken = [...staged].filter(select);
+  for (const rel of taken) staged.delete(rel);
+  return taken;
+}
+
 /**
  * Per-layer event stager. Watcher events are coalesced, with those of every
  * other layer, over `WATCH_DEBOUNCE_MS` (see `createPassScheduler`) and
@@ -124,16 +131,6 @@ function createLayerSync(
   const toRel = (p: string): string | null => {
     const r = relative(src, p);
     return r ? r : null;
-  };
-
-  /** Removes the staged entries `select` picks, and returns them. */
-  const take = (
-    staged: Set<string>,
-    select: (rel: string) => boolean,
-  ): string[] => {
-    const taken = [...staged].filter(select);
-    for (const rel of taken) staged.delete(rel);
-    return taken;
   };
 
   const upsert = (rel: string): void => {

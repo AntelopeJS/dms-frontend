@@ -1,13 +1,19 @@
 {
   "rules": {
-    "anti-slop/no-unknown-parameters": 4,
-    "anti-slop/no-unknown-returns": 1,
+    "anti-slop/no-unknown-parameters": 12,
+    "anti-slop/no-unknown-returns": 8,
     "typescript/no-unsafe-assignment": 0,
-    "typescript/no-unsafe-return": 0
+    "typescript/no-unsafe-return": 0,
+    "anti-slop/no-chained-type-assertions": 1,
+    "anti-slop/no-unsafe-dictionary-type": 27,
+    "anti-slop/no-runtime-typeof": 2,
+    "anti-slop/no-known-value-widening": 3,
+    "anti-slop/no-reflect-get": 2,
+    "typescript/no-unnecessary-type-parameters": 1
   },
   "tsExpectError": 0,
   "tsIgnore": 0,
-  "safety": 7,
+  "safety": 34,
   "config": {
     "eslint/max-lines for tests/**/*.test.mts": 0,
     "eslint/max-lines for tests/**/*.test.ts": 0,

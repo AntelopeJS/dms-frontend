@@ -7,6 +7,8 @@
  * `--seed <n>` explores another sample. Exits 0 when every rule matches the
  * record in SKILL.md, 1 when a rule changed, and 2 when the harness could not
  * run or the arguments were wrong.
+ *
+ * @packageDocumentation
  */
 import fc from "fast-check";
 import { startServers } from "./drive.mjs";

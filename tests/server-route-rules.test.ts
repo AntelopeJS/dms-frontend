@@ -238,7 +238,7 @@ void describe("Route rules in the production server", () => {
   };
 
   before(async () => {
-    backend = createServer((request, response) => {
+    const upstream = createServer((request, response) => {
       const path = new URL(
         request.url ?? "/",
         "http://backend",
@@ -254,10 +254,11 @@ void describe("Route rules in the production server", () => {
         }),
       );
     });
+    backend = upstream;
     await new Promise<void>((settle) =>
-      backend!.listen(0, "127.0.0.1", settle),
+      upstream.listen(0, "127.0.0.1", settle),
     );
-    const backendAddress = addressOf(backend);
+    const backendAddress = addressOf(upstream);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     process.env.DMS_SESSION_SECRET =
       "a-test-only-session-secret-of-32-characters";
@@ -276,11 +277,10 @@ void describe("Route rules in the production server", () => {
       root: workspace,
       logLevel: "silent",
     });
-    frontend = createServer(await requestHandlerOf(workspace));
-    await new Promise<void>((settle) =>
-      frontend!.listen(0, "127.0.0.1", settle),
-    );
-    const address = addressOf(frontend);
+    const site = createServer(await requestHandlerOf(workspace));
+    frontend = site;
+    await new Promise<void>((settle) => site.listen(0, "127.0.0.1", settle));
+    const address = addressOf(site);
     frontendUrl = `http://127.0.0.1:${address.port}`;
   });
 

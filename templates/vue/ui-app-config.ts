@@ -1,10 +1,16 @@
 import { defu } from "defu";
 
+/** A config object, whose values are the config's own to give. */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- a config object's values are the config's own to give, merged unread
 export type PlainRecord = Record<string, unknown>;
+
+/** The value under a key of a config object. */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- the value under a key of a config object is the config's own to give
+export type PlainValue = PlainRecord[string];
 
 interface MergeState {
   pristine: PlainRecord;
-  mergedFrom: object | null;
+  mergedFrom: PlainRecord | null;
 }
 
 interface MergeOptions {
@@ -15,7 +21,7 @@ interface MergeOptions {
   isChanged?: boolean;
 }
 
-export function isPlainRecord(value: unknown): value is PlainRecord {
+export function isPlainRecord(value: PlainValue): value is PlainRecord {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -23,18 +29,23 @@ export function isPlainRecord(value: unknown): value is PlainRecord {
   );
 }
 
-/** A deep copy of the records and arrays in `value`, sharing anything else. */
-export function clonePlain<T>(value: T): T {
-  if (Array.isArray(value)) return value.map(clonePlain) as T;
-  if (!isPlainRecord(value)) return value;
+/** A deep copy of the records and arrays in `record`, sharing anything else. */
+export function clonePlainRecord(record: PlainRecord): PlainRecord {
   return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [key, clonePlain(entry)]),
-  ) as T;
+    Object.entries(record).map(([key, entry]) => [key, clonePlain(entry)]),
+  );
+}
+
+/** A deep copy of the records and arrays in `value`, sharing anything else. */
+export function clonePlain(value: PlainValue): PlainValue {
+  if (Array.isArray(value)) return value.map(clonePlain);
+  if (!isPlainRecord(value)) return value;
+  return clonePlainRecord(value);
 }
 
 function replaceInPlace(target: PlainRecord, source: PlainRecord): void {
   for (const key of Object.keys(target)) {
-    if (!(key in source)) delete target[key];
+    if (!Object.hasOwn(source, key)) delete target[key];
   }
   Object.assign(target, source);
 }
@@ -50,20 +61,23 @@ function replaceInPlace(target: PlainRecord, source: PlainRecord): void {
  */
 export function createUiAppConfigMerger(): (
   uiAppConfig: PlainRecord,
-  dmsAppConfig: object,
+  dmsAppConfig: PlainRecord,
   options?: MergeOptions,
 ) => void {
   const states = new WeakMap<object, MergeState>();
   return (uiAppConfig, dmsAppConfig, { isChanged = false } = {}) => {
     let state = states.get(uiAppConfig);
     if (state === undefined) {
-      state = { pristine: clonePlain({ ...uiAppConfig }), mergedFrom: null };
+      state = {
+        pristine: clonePlainRecord({ ...uiAppConfig }),
+        mergedFrom: null,
+      };
       states.set(uiAppConfig, state);
     }
     if (state.mergedFrom === dmsAppConfig && !isChanged) return;
     replaceInPlace(
       uiAppConfig,
-      defu(clonePlain(dmsAppConfig), clonePlain(state.pristine)),
+      defu(clonePlainRecord(dmsAppConfig), clonePlainRecord(state.pristine)),
     );
     state.mergedFrom = dmsAppConfig;
   };

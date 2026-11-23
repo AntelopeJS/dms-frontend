@@ -1,4 +1,5 @@
 /// <reference types="node" />
+
 /**
  * What a frontend module's `dms.server.ts` declares: the routes it serves from
  * the frontend server, its auth hooks, its route rules and the backend paths
@@ -24,6 +25,7 @@ export type DmsServerMethod =
 
 /** The session the frontend server keeps in its sealed session cookie. */
 export interface DmsSession {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- the session user is the backend's own object, which the handler checks before reading
   user?: Record<string, unknown> & { language?: string };
   accessToken?: string;
   refreshToken?: string;
@@ -33,6 +35,7 @@ export interface DmsSession {
   persistent: boolean;
   /** Stamped by the frontend server on every write. */
   updatedAt?: number;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- a handler stores its own keys in the session, which the server seals unread
   [key: string]: unknown;
 }
 
@@ -60,6 +63,7 @@ export interface DmsBackendRequest {
 /** What a session shows the browser: the `user` and `session` page props. */
 export interface DmsPublicSession {
   user?: unknown;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- the public session is a module's own data that the server passes to the browser unread
   session?: Record<string, unknown>;
 }
 
@@ -77,6 +81,7 @@ export interface DmsServerEvent {
    * The body as JSON, `{}` when empty; a 400 when it is not JSON. The client
    * sent it, so the handler checks its shape before reading it.
    */
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the request body is the client's JSON, which the handler checks before reading
   readJson(): Promise<unknown>;
   session: {
     read(): DmsSession | undefined;
@@ -118,6 +123,7 @@ export interface DmsServerEvent {
     ): T | undefined;
     writeSealed(
       name: string,
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a handler seals any value it chooses, which the server serializes unread
       value: unknown,
       options?: DmsSealedCookieOptions,
     ): void;
@@ -130,6 +136,7 @@ export interface DmsServerEvent {
    * followed: it throws a 502. The answer is the backend's JSON, which the
    * handler checks before reading it.
    */
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the answer is the backend's JSON, which the handler checks before reading
   backend(path: string, init?: DmsBackendRequest): Promise<unknown>;
   /**
    * The backend URL of an absolute path, for a call `backend` cannot make (a
@@ -146,12 +153,15 @@ export interface DmsServerEvent {
   /** This module, and only this one. */
   module: {
     id: string;
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- a module's options are its own, which the module authors define and fill
     options: Readonly<Record<string, unknown>>;
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- a module's options are its own, which the module authors define and fill
     privateOptions: Readonly<Record<string, unknown>>;
   };
   /** Renders an email template of the application (`dms.email.ts`). */
   renderEmail(
     template: string,
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- the email template props are the application's own, which the template reads
     props: Record<string, unknown>,
     options?: { locale?: string },
   ): Promise<string>;
@@ -167,9 +177,8 @@ export interface DmsServerEvent {
  * JSON with a 200, `null` or nothing as an empty 204. Cookies written through
  * the event are added to the response either way.
  */
-export type DmsServerHandler = (
-  event: DmsServerEvent,
-) => Response | unknown | Promise<Response | unknown>;
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- a handler returns any value the module sends as JSON, which the server serializes unread
+export type DmsServerHandler = (event: DmsServerEvent) => unknown;
 
 export interface DmsServerRouteOptions {
   /**

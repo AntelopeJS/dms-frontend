@@ -1,5 +1,14 @@
 /** Public options by module id, as `ajs dms start` computes them. */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- a module's public options are its own, which the frontend passes on unread
 export type DmsPublicOptionsById = Record<string, Record<string, unknown>>;
+
+function isModuleOptions(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPublicOptionsById(value: unknown): value is DmsPublicOptionsById {
+  return isModuleOptions(value) && Object.values(value).every(isModuleOptions);
+}
 
 /** `DMS_PUBLIC_OPTIONS` as options by module id, undefined when unset. */
 export function parsePublicOptions(
@@ -8,11 +17,7 @@ export function parsePublicOptions(
   if (!raw) return undefined;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed)
-      ? (parsed as DmsPublicOptionsById)
-      : undefined;
+    return isPublicOptionsById(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }

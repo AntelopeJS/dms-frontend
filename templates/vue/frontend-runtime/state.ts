@@ -17,6 +17,7 @@ import {
 } from "./module-registration";
 import {
   type DmsAppContext,
+  type DmsErrorData,
   type DmsRoute,
   type DmsServerFetch,
   type DmsRuntimeConfig,
@@ -39,12 +40,16 @@ export function createDmsFrontendRegistry(): DmsFrontendRegistry {
   };
 }
 
-// Replaced, never refilled, by each setup of the modules: see
-// `setupFrontendModules`.
+/**
+ * Replaced, never refilled, by each setup of the modules: see
+ * `setupFrontendModules`.
+ */
 export let registry = createDmsFrontendRegistry();
+// SAFETY: The public runtime config starts empty and the layers and modules fill its keys during setup, so the empty object stands for DmsRuntimeConfig until then.
 export const runtimeConfig = ref<DmsRuntimeConfig>({
   public: {},
 } as DmsRuntimeConfig);
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The app config is the merge of the layers' configs, which each module defines in its own shape.
 export const appConfig = ref<Record<string, unknown>>({});
 const DMS_RUNTIME_KEY: InjectionKey<DmsFrontendRuntime> = Symbol("dms-runtime");
 type DmsRuntimeContext = DmsAppContext["runWithContext"];
@@ -63,9 +68,15 @@ export function forgetBrowserRuntime(runtime: DmsFrontendRuntime): void {
   if (browserRuntime === runtime) browserRuntime = undefined;
 }
 
-/** Creates mutable runtime state owned by one Vue application. */
+/**
+ * Creates mutable runtime state owned by one Vue application. A browser handed
+ * the server's data, even none, hydrates its HTML. A server render stops the
+ * runtime's scope once it has answered: whatever it still fetches then would
+ * reach nobody.
+ */
 export function createDmsFrontendRuntime(
   serverFetch?: DmsServerFetch,
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The hydrated async data is the payload a server render hands over, unread until a useDmsAsyncData call claims its key.
   hydratedAsyncData?: Record<string, unknown>,
   isServer = false,
   requestCookies?: string,
@@ -77,7 +88,6 @@ export function createDmsFrontendRuntime(
     hydratedAsyncData: new Map(Object.entries(hydratedAsyncData ?? {})),
     hydratedAsyncErrors: new Map(),
     transferredState: new Set(),
-    // A browser handed the server's data, even none, hydrates its HTML.
     hydrating: !isServer && hydratedAsyncData !== undefined,
     serverPrefetches: new Set(),
     asyncDataRuns: new Set(),
@@ -86,7 +96,7 @@ export function createDmsFrontendRuntime(
     runtimeHooks: new Map(),
     serverFetch,
     isServer,
-    currentError: ref<Error | null>(null),
+    currentError: ref<(Error & DmsErrorData) | null>(null),
     route: reactive<DmsRoute>({
       fullPath: "/",
       path: "/",
@@ -99,8 +109,6 @@ export function createDmsFrontendRuntime(
     pageLoading: ref(false),
     scope: effectScope(true),
   };
-  // A server render stops its scope once it has answered: whatever it still
-  // fetches then would reach nobody.
   runtime.scope.run(() =>
     onScopeDispose(() => {
       for (const run of runtime.asyncDataRuns) run.abort();
@@ -128,6 +136,7 @@ export function setDmsServerRuntimeResolver(
 
 export function useDmsRuntime(): DmsFrontendRuntime {
   const instance = getCurrentInstance();
+  // SAFETY: The provides map is keyed by the symbol `DMS_RUNTIME_KEY`, and the runtime plugin stores only a DmsFrontendRuntime under it, so the lookup returns that runtime or undefined.
   const provided = instance?.appContext.provides[DMS_RUNTIME_KEY as symbol] as
     | DmsFrontendRuntime
     | undefined;

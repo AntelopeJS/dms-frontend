@@ -4,8 +4,10 @@ import { type DmsFrontendRuntime } from "./module-registration";
 import { useDmsRuntime } from "./state";
 
 const COOKIE_STATE_PREFIX = "dms-cookie:";
-// A browser tab runs one application, so its cookie refs are shared by every
-// caller; a server shares them within the request it renders instead.
+/**
+ * A browser tab runs one application, so its cookie refs are shared by every
+ * caller; a server shares them within the request it renders instead.
+ */
 const browserCookieRefs = new Map<string, Ref<unknown>>();
 
 function readCookie(
@@ -22,14 +24,22 @@ function parseCookieValue<T>(
   stored: string | undefined,
   options: DmsCookieOptions<T>,
 ): T {
-  if (stored === undefined) return (options.default?.() ?? null) as T;
+  if (stored === undefined)
+    // SAFETY: the default factory returns the caller's T; with no default the cookie reads as null, as useDmsCookie documents, whatever T the caller named.
+    return (options.default?.() ?? null) as T;
   try {
+    // SAFETY: T is the caller's claim about the cookie under this name, which the API has never validated; writeCookie serializes a T as JSON, and a cookie set elsewhere parses as whatever it holds.
     return JSON.parse(stored) as T;
   } catch {
+    // SAFETY: a value that is not JSON is handed back as the raw string, as it always has been, under the caller's claimed T.
     return stored as T;
   }
 }
 
+/**
+ * Writes the cookie as `document.cookie`, synchronously: reactive cookie refs
+ * require it.
+ */
 export function writeCookie<T>(
   name: string,
   next: T,
@@ -41,7 +51,6 @@ export function writeCookie<T>(
     options.sameSite ? `samesite=${options.sameSite}` : "",
     options.secure ? "secure" : "",
   ].filter(Boolean);
-  // biome-ignore lint/suspicious/noDocumentCookie: reactive cookie refs require synchronous writes.
   document.cookie = `${name}=${encodeURIComponent(JSON.stringify(next ?? null))}; ${attributes.join("; ")}`;
 }
 
@@ -51,6 +60,7 @@ function createCookieRef<T>(
   options: DmsCookieOptions<T>,
   isServer: boolean,
 ): Ref<T> {
+  // SAFETY: The ref is built from `parseCookieValue`, which returns the cookie's T, so its unwrapped type is that T.
   const value = ref(
     parseCookieValue(readCookie(source, name), options),
   ) as Ref<T>;
@@ -63,14 +73,18 @@ function createCookieRef<T>(
   });
 }
 
-// The language a visitor picks, kept by the browser so that a reload renders
-// in it. A signed-in user's own language still comes first.
+/**
+ * The language a visitor picks, kept by the browser so that a reload renders
+ * in it. A signed-in user's own language still comes first.
+ */
 export const LOCALE_COOKIE = "dms_locale";
 export const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 /**
  * The language this browser picked: read from `document.cookie`, or in a
- * server render from the request. Only one of `supportedLocales` counts.
+ * server render from the request. Only one of `supportedLocales` counts. A
+ * value that is not URI-encoded counts as none: as if the browser had picked
+ * none.
  */
 export function readDmsLocaleCookie(
   runtime: DmsFrontendRuntime,
@@ -79,15 +93,9 @@ export function readDmsLocaleCookie(
   const source =
     typeof document === "undefined" ? runtime.requestCookies : document.cookie;
   try {
-    const locale = parseCookieValue<unknown>(
-      readCookie(source, LOCALE_COOKIE),
-      {},
-    );
-    return typeof locale === "string" && supportedLocales.includes(locale)
-      ? locale
-      : undefined;
+    const locale = parseCookieValue(readCookie(source, LOCALE_COOKIE), {});
+    return supportedLocales.find((supported) => supported === locale);
   } catch {
-    // A value that is not URI-encoded: as if the browser had picked none.
     return undefined;
   }
 }
@@ -105,8 +113,9 @@ export function useDmsCookie<T = string | null>(
     if (!browserCookieRefs.has(name))
       browserCookieRefs.set(
         name,
-        createCookieRef(name, document.cookie, options, false) as Ref<unknown>,
+        createCookieRef(name, document.cookie, options, false),
       );
+    // SAFETY: A browser cookie ref is cached under the cookie's name by createCookieRef with the T the caller passed for that name.
     return browserCookieRefs.get(name) as Ref<T>;
   }
   const runtime = useDmsRuntime();
@@ -114,12 +123,8 @@ export function useDmsCookie<T = string | null>(
   if (!runtime.sharedState.has(key))
     runtime.sharedState.set(
       key,
-      createCookieRef(
-        name,
-        runtime.requestCookies,
-        options,
-        true,
-      ) as Ref<unknown>,
+      createCookieRef(name, runtime.requestCookies, options, true),
     );
+  // SAFETY: The ref was stored under this key by createCookieRef a few lines above, with the T the caller passed for that cookie.
   return runtime.sharedState.get(key) as Ref<T>;
 }

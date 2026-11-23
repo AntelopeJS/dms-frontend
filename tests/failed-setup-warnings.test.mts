@@ -21,6 +21,7 @@ import {
   setupFrontendModules,
 } from "../templates/vue/frontend-module.ts";
 import { isCallable, isNumber, isObjectLike } from "./helpers/guards";
+import { present } from "./helpers/present";
 
 /** Inside the repository, so the compiled modules resolve its `vue`. */
 const directory = mkdtempSync(resolve(".failed-setup-"));
@@ -36,7 +37,7 @@ async function devComponent(name: string, source: string): Promise<Component> {
     genDefaultAs: "_sfc_main",
   });
   const template = compileTemplate({
-    source: descriptor.template!.content,
+    source: present(descriptor.template, "the template block").content,
     filename,
     id: name,
     ssr: true,
@@ -185,7 +186,7 @@ void describe("a page whose setup fails", () => {
     assert.equal(statusCode, 400);
     assert.equal(warnings.length, 1);
     assert.match(
-      warnings[0]!,
+      present(warnings[0], "the warning"),
       /^\[Vue warn\]: Component Blank is missing template or render function\.\nat <Blank>\nat <Untidy>/,
     );
   });
@@ -195,7 +196,7 @@ void describe("a page whose setup fails", () => {
     assert.equal(error, null);
     assert.equal(warnings.length, 1);
     assert.match(
-      warnings[0]!,
+      present(warnings[0], "the warning"),
       /Component Blank is missing template or render function/,
     );
   });

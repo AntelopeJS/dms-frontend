@@ -19,6 +19,14 @@ import { isPlainObject } from "./internal/plain-object";
 import { hasManifestVersion, isManifest } from "./internal/manifest-decoder";
 import { ownRelease } from "./internal/own-release";
 
+/**
+ * The backend rejected our credential for its layer endpoints.
+ *
+ * Distinct from a transport failure because it must never fall back to the
+ * cached manifest: that cache can still hold the private layer options a
+ * previously-authorized run received, and replaying them would defeat the
+ * very gate the backend is applying.
+ */
 export class ManifestUnauthorizedError extends CliError {
   constructor(
     readonly url: string,

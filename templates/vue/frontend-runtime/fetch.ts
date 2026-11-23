@@ -1,5 +1,5 @@
 import { type FetchOptions, ofetch } from "ofetch";
-import { isRef, type MaybeRefOrGetter, toValue } from "vue";
+import { isRef, type MaybeRefOrGetter, type Ref, toValue } from "vue";
 import { type DmsFrontendRuntime } from "./module-registration";
 import { useDmsRuntime } from "./state";
 import {
@@ -67,36 +67,46 @@ function createDmsFetch(defaults: FetchOptions = {}): typeof ofetch {
       runtimeFetchOptions(runtime, { ...defaults, ...options }),
     );
   };
+  // SAFETY: `execute` takes the request and the options as ofetch does and forwards them to a fetch function, and the `create`, `native` and `raw` members are ofetch's own, so the assembled function has the shape of typeof ofetch.
   return Object.assign(execute, {
     create: (options: FetchOptions) =>
       createDmsFetch({ ...defaults, ...options }),
     native: configuredFetch.native,
-    raw: configuredFetch.raw,
+    raw: configuredFetch.raw.bind(configuredFetch),
   }) as typeof ofetch;
 }
 
 export const $fetch = createDmsFetch();
 
+function isScalar(value: unknown): value is string | number | boolean {
+  return (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 /** JSON with sorted keys, or nothing for a value JSON cannot stand for. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- stableJson serialises whatever a caller puts in a request key or a body, which the API hands over unread.
 function stableJson(value: unknown): string | undefined {
   if (value === undefined || value === null) return "null";
-  if (value instanceof Date) return JSON.stringify(value);
-  if (typeof value !== "object")
-    return ["string", "number", "boolean"].includes(typeof value)
-      ? JSON.stringify(value)
-      : undefined;
+  if (value instanceof Date || isScalar(value)) return JSON.stringify(value);
   if (Array.isArray(value)) {
     const items = value.map(stableJson);
     return items.includes(undefined) ? undefined : `[${items.join(",")}]`;
   }
-  const prototype = Object.getPrototypeOf(value) as unknown;
-  if (prototype !== Object.prototype && prototype !== null) return undefined;
-  const record = value as Record<string, unknown>;
-  const members = Object.keys(record)
-    .filter((name) => record[name] !== undefined)
+  if (!isPlainRecord(value)) return undefined;
+  const members = Object.keys(value)
+    .filter((name) => value[name] !== undefined)
     .sort()
     .map((name) => {
-      const member = stableJson(record[name]);
+      const member = stableJson(value[name]);
       return member === undefined
         ? undefined
         : `${JSON.stringify(name)}:${member}`;
@@ -107,8 +117,10 @@ function stableJson(value: unknown): string | undefined {
 const FETCH_KEY_PREFIX = "$dmsfetch:";
 const DEFAULT_FETCH_METHOD = "GET";
 
-// cyrb53's mixing constants, with its two 32-bit lanes both kept: a 64-bit
-// digest, as short as Nuxt's keys and as unlikely to collide within a page.
+/**
+ * cyrb53's mixing constants, with its two 32-bit lanes both kept: a 64-bit
+ * digest, as short as Nuxt's keys and as unlikely to collide within a page.
+ */
 const HASH_SEEDS = [0xdeadbeef, 0x41c6ce57];
 const HASH_MULTIPLIERS = [2654435761, 1597334677];
 const HASH_FINALIZERS = [2246822507, 3266489909];
@@ -143,10 +155,10 @@ function hashText(text: string): string {
  * its method, base URL, URL, query and params, and body, the headers aside. A
  * server render writes the key into its HTML, which must not show the URL, a
  * token in its query or a body. A body only a request can read, such as a
- * FormData, gives none.
+ * FormData, gives none. ofetch sends the params and the query together, the
+ * query winning.
  */
 function requestKey(url: string, options: FetchOptions): string | undefined {
-  // ofetch sends the params and the query together, the query winning.
   const query =
     options.query || options.params
       ? { ...options.params, ...options.query }
@@ -188,7 +200,9 @@ export function dmsRequestKey(
 /** A URL to request, or nothing to request while it is null or undefined. */
 type DmsFetchRequest = string | null | undefined;
 
-function isReactiveSource(value: unknown): boolean {
+function isReactiveSource<S>(
+  value: MaybeRefOrGetter<S>,
+): value is Ref<S> | (() => S) {
   return isRef(value) || typeof value === "function";
 }
 
@@ -196,7 +210,7 @@ function isReactiveSource(value: unknown): boolean {
 function definedOptions(options: FetchOptions): FetchOptions {
   return Object.fromEntries(
     Object.entries(options).filter(([, value]) => value !== undefined),
-  ) as FetchOptions;
+  );
 }
 
 /**
@@ -205,6 +219,13 @@ function definedOptions(options: FetchOptions): FetchOptions {
  * transfers it. A ref or a getter for the URL, the method, the query, the
  * params or the body moves the caller to the key of each request; a URL that
  * is null or undefined requests nothing.
+ *
+ * A `$fetch` of the caller's own applies its own retries. The transform runs
+ * where the request a response answers is known: a reactive URL may have
+ * changed since it was sent. The request gives its key, which follows the
+ * request as it changes; the key the caller names, or none for a body without
+ * one, stays put while the request changes, and the request is watched
+ * instead.
  */
 export function useDmsFetch<T>(
   request: MaybeRefOrGetter<DmsFetchRequest>,
@@ -240,10 +261,8 @@ export function useDmsFetch<T>(
       params: toValue(params),
       body: toValue(body),
     });
-  // A `$fetch` of the caller's own applies its own retries. The transform
-  // runs here, where the request a response answers is known: a reactive URL
-  // may have changed since it was sent.
   const handler: DmsAsyncDataHandler<T> = async ({ signal }) => {
+    // SAFETY: a keyed run starts only once its key resolves, and `derived` and `named` below make the key null whenever `url` is, so it sees a string; a request with no stable key runs keyless, and there a null URL reaches the fetch unchanged, as it always has.
     const target = url() as string;
     const sent = requestOptions();
     const runKey =
@@ -256,7 +275,9 @@ export function useDmsFetch<T>(
           target,
           runtimeFetchOptions(runtime, { ...sent, signal }),
         ));
-    if (!transform) return value as T;
+    if (!transform)
+      // SAFETY: Without a `transform`, the fetch result is returned as it came, and the caller of useDmsFetch declared T as that result.
+      return value as T;
     return transform(value, { key: runKey, url: target });
   };
   const asyncOptions: UseAsyncDataOptions<T> = {
@@ -275,7 +296,6 @@ export function useDmsFetch<T>(
     isReactiveSource,
   );
   const isReactive = reactiveSources.length > 0;
-  // The request gives its key, which follows the request as it changes.
   const derived = (): string | null | undefined => {
     const target = url();
     return target == null ? null : requestKey(target, requestOptions());
@@ -286,8 +306,6 @@ export function useDmsFetch<T>(
       handler,
       asyncOptions,
     );
-  // The key the caller names, or none for a body without one, stays put while
-  // the request changes: the request is watched instead.
   const watched =
     isReactive && sources !== false
       ? [...reactiveSources, ...(sources ?? [])]

@@ -40,13 +40,48 @@ interface FrontendModuleRegistry {
   modules: FrontendModuleRegistryEntry[];
 }
 
+function isOptionalText(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isRegistryEntry(value: unknown): value is FrontendModuleRegistryEntry {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "root" in value &&
+    typeof value.root === "string" &&
+    "priority" in value &&
+    typeof value.priority === "number" &&
+    isOptionalText("name" in value ? value.name : undefined) &&
+    isOptionalText("packageName" in value ? value.packageName : undefined) &&
+    isOptionalText("backendPackage" in value ? value.backendPackage : undefined)
+  );
+}
+
+function isRegistry(value: unknown): value is FrontendModuleRegistry {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "modules" in value &&
+    Array.isArray(value.modules) &&
+    value.modules.every(isRegistryEntry)
+  );
+}
+
+function readRegistry(path: string): FrontendModuleRegistry {
+  const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+  if (!isRegistry(parsed))
+    throw new TypeError(`${path} is not a frontend module registry.`);
+  return parsed;
+}
+
 const registryPath = resolve(
   import.meta.dirname,
   "generated-frontend-modules.json",
 );
-const registry = JSON.parse(
-  readFileSync(registryPath, "utf8"),
-) as FrontendModuleRegistry;
+const registry = readRegistry(registryPath);
 const moduleRoots = registry.modules.map((module) => module.root);
 const backendPackages = registry.modules.flatMap((module) =>
   module.backendPackage === undefined ? [] : [module.backendPackage],
@@ -69,11 +104,23 @@ const stableModuleAliases = Object.fromEntries(
     return [[`#${moduleName}`, module.root]];
   }),
 );
+/** The levels Vite logs at. */
+const LOG_LEVELS = [
+  "info",
+  "warn",
+  "error",
+  "silent",
+] as const satisfies readonly LogLevel[];
+
+function logLevelOf(value: string | undefined): LogLevel {
+  return LOG_LEVELS.find((level) => level === value) ?? "info";
+}
+
 /**
  * `ajs dms build` runs Vite at "warn" and reports the steps itself; a verbose
  * run, `dev` and a hand-run build keep Vite's own output.
  */
-const logLevel = (process.env.DMS_VITE_LOG_LEVEL ?? "info") as LogLevel;
+const logLevel = logLevelOf(process.env.DMS_VITE_LOG_LEVEL);
 const logger = createLogger(logLevel);
 /**
  * Only what each module declares in its `dms.frontend.build.ts`: a module
@@ -149,6 +196,24 @@ const optimizerEntries = [
   ]),
 ].map(normalizePath);
 
+/**
+ * `@iconify/vue` keeps its API providers in module state: `main.ts` and Nuxt
+ * UI's `Icon` must share one copy for the same-origin provider to apply.
+ */
+const DEDUPED_PACKAGES = [
+  "vue",
+  "reka-ui",
+  "@nuxt/ui",
+  "@vueuse/core",
+  "@iconify/vue",
+];
+
+/**
+ * For the server's development loader only: no browser module imports a
+ * `dms.server.ts`.
+ */
+const SERVER_MODULE_ALIAS = resolve(import.meta.dirname, "server-module.ts");
+
 function paintBeforeHydrate(): Plugin {
   return {
     name: "dms-paint-before-hydrate",
@@ -178,13 +243,8 @@ const isNuxtUiFile = (id: string) =>
 export default defineConfig({
   logLevel,
   plugins: [
-    // Fails a client build that imports a dms.server.ts or a file under a
-    // module's server/ directory, however it is imported.
     rejectServerSourcesInClient(moduleRoots),
-    // Fails a build, a worker build or a dev request that resolves a file
-    // under the src of the package that ships a module.
     rejectBackendSources(backendPackages),
-    // What each module adds to the client entry, which `ajs dms build` reports.
     recordEntryWeight(registry.modules),
     {
       name: "dms-ui-inertia-link",
@@ -231,17 +291,13 @@ export default defineConfig({
   ],
   worker: { plugins: () => vitePlugins(registry.modules, frontendBuilds) },
   resolve: {
-    // `@iconify/vue` keeps its API providers in module state: `main.ts` and
-    // Nuxt UI's `Icon` must share one copy for the same-origin provider to apply.
-    dedupe: ["vue", "reka-ui", "@nuxt/ui", "@vueuse/core", "@iconify/vue"],
+    dedupe: DEDUPED_PACKAGES,
     alias: {
       "#dms/frontend-module": resolve(
         import.meta.dirname,
         "frontend-module.ts",
       ),
-      // For the server's development loader only: no browser module imports
-      // a `dms.server.ts`.
-      "#dms/server": resolve(import.meta.dirname, "server-module.ts"),
+      "#dms/server": SERVER_MODULE_ALIAS,
       "#build/nuxt-icon-client-bundle": "virtual:nuxt-ui-icons",
       "#shortcuts-aggregated": resolve(
         import.meta.dirname,
@@ -267,8 +323,6 @@ export default defineConfig({
     outDir: "dist/client",
     rolldownOptions: { onLog: onBuildLog },
   },
-  // The browser bundle only: the server bundles are single Node programs, for
-  // which a file count means nothing.
   environments: {
     client: {
       build: {

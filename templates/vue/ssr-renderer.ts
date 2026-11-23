@@ -3,7 +3,7 @@ import { createInertiaApp } from "@inertiajs/vue3";
 import { createHead, renderSSRHead } from "@unhead/vue/server";
 import { renderToString } from "@vue/server-renderer";
 import { stringify } from "devalue";
-import { createSSRApp, h, readonly } from "vue";
+import { type App, createSSRApp, h, readonly, type VNode } from "vue";
 import { appConfigs } from "./app-configs.generated";
 import {
   DMS_PAYLOAD_ID,
@@ -77,22 +77,43 @@ export interface DmsSsrHead {
   htmlAttrs: string;
 }
 
+interface ExpectedFailure extends Error {
+  statusCode: number;
+}
+
 interface DmsSsrContext {
   /** Filled by `@vitejs/plugin-vue`: each component adds its id as it sets up. */
   modules?: Set<string>;
   teleports?: Record<string, string>;
 }
 
-// Holds the runtime rather than being it: every socket, timer and promise a
-// render starts keeps this store for its whole life, and a pooled backend
-// connection then serving an SSE stream lives for hours. Emptied once the
-// render is over, the store no longer ties the render to them.
-const runtimeStorage = new AsyncLocalStorage<{
+/**
+ * Holds the runtime rather than being it: every socket, timer and promise a
+ * render starts keeps this store for its whole life, and a pooled backend
+ * connection then serving an SSE stream lives for hours. Emptied once the
+ * render is over, the store no longer ties the render to them.
+ */
+interface RuntimeStore {
   runtime?: DmsFrontendRuntime;
-}>();
+}
+
+const runtimeStorage = new AsyncLocalStorage<RuntimeStore>();
 setDmsServerRuntimeResolver(() => runtimeStorage.getStore()?.runtime);
 /** Set while an async data handler runs: its requests are transferred. */
 const asyncDataHandlerStorage = new AsyncLocalStorage<boolean>();
+
+function keepSerializable<V>(
+  source: Record<string, V>,
+  kept: Record<string, V>,
+): void {
+  for (const [key, value] of Object.entries(source))
+    try {
+      stringify(value);
+      kept[key] = value;
+    } catch (error) {
+      console.error(`DMS payload: "${key}" cannot be serialized`, error);
+    }
+}
 
 /**
  * The payload in devalue's format, which keeps what JSON cannot (a Set, a
@@ -105,20 +126,15 @@ function stringifyPayload(payload: DmsPayload): string {
     return stringify(payload);
   } catch {
     const kept: DmsPayload = { data: {}, errors: {}, state: {} };
-    for (const part of ["data", "errors", "state"] as const)
-      for (const [key, value] of Object.entries(payload[part]))
-        try {
-          stringify(value);
-          kept[part][key] = value as never;
-        } catch (error) {
-          console.error(`DMS payload: "${key}" cannot be serialized`, error);
-        }
+    keepSerializable(payload.data, kept.data);
+    keepSerializable(payload.errors, kept.errors);
+    keepSerializable(payload.state, kept.state);
     return stringify(kept);
   }
 }
 
+/** The payload script, escaped like Inertia's page object so that no value can end it. */
 function payloadScript(payload: DmsPayload): string {
-  // Escaped like Inertia's page object, so that no value can end the script.
   const value = stringifyPayload(payload)
     .replaceAll("/", "\\/")
     .replaceAll("<", "\\u003c");
@@ -160,6 +176,49 @@ export function accessRedirect(code: string): string | undefined {
   return resolveDmsAccessRedirect(code);
 }
 
+/**
+ * Renders the app to HTML, then hands over the payload. It is read as the HTML
+ * is complete: data a run settles afterwards was never rendered, and the
+ * browser must not hydrate the page with it.
+ */
+async function renderWithPayload(
+  app: App | VNode,
+  ssrContext: DmsSsrContext,
+  runtime: DmsFrontendRuntime,
+  onPayload: (payload: DmsPayload) => void,
+): Promise<string> {
+  const html = await renderToString(app, ssrContext);
+  onPayload(serializeDmsPayload(runtime));
+  return html;
+}
+
+/** Holds, on the request's runtime, the page Inertia's app sets as it starts. */
+function holdInertiaPage(runtime: DmsFrontendRuntime, page: DmsSsrPage): void {
+  // SAFETY: the server's page lacks only Inertia's client-history fields (`rescuedProps`, `rememberedState`), which a server render never has; Nuxt UI's Link and route stub, its readers through `useDmsInertiaPage`, read only `url`.
+  runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
+}
+
+function isExpectedFailure(failure: Error): failure is ExpectedFailure {
+  return (
+    "statusCode" in failure &&
+    Number.isInteger(failure.statusCode) &&
+    typeof failure.statusCode === "number" &&
+    failure.statusCode >= 400 &&
+    failure.statusCode <= 599
+  );
+}
+
+/**
+ * The error a failed render is retried with. An unexpected failure reaches the
+ * page as its status code alone, which the DMS error page describes in the
+ * visitor's language; the technical cause only reaches the server log.
+ */
+function errorForPage(failure: Error): DmsErrorData {
+  if (isExpectedFailure(failure)) return pageErrorData(failure);
+  console.error("DMS page render failed", failure);
+  return { statusCode: 500 };
+}
+
 export async function renderDmsPage(
   page: DmsSsrPage,
   serverFetch?: DmsServerFetch,
@@ -175,9 +234,8 @@ export async function renderDmsPage(
   runtime.inAsyncDataHandler = () =>
     asyncDataHandlerStorage.getStore() === true;
   runtime.devWarnings = import.meta.env.DEV;
-  // The page Inertia's app sets as it starts, held by the request's runtime.
-  runtime.inertiaPage = readonly({ flash: {}, ...page }) as DmsInertiaPage;
-  const store = { runtime };
+  holdInertiaPage(runtime, page);
+  const store: RuntimeStore = { runtime };
   try {
     return await runtimeStorage.run(store, () =>
       renderDmsPageWithRuntime(page, runtime, serverFetch),
@@ -187,6 +245,11 @@ export async function renderDmsPage(
   }
 }
 
+/**
+ * Renders the page with the runtime of its request. The runtime's scope stops
+ * only once the head and the async data are serialized: both still read state
+ * the rendered components own.
+ */
 async function renderDmsPageWithRuntime(
   page: DmsSsrPage,
   runtime: DmsFrontendRuntime,
@@ -205,13 +268,10 @@ async function renderDmsPageWithRuntime(
     let messageSubset: (() => DmsMessageSubset | undefined) | undefined;
     const inertiaResult = await createInertiaApp({
       page,
-      // Read as the HTML is complete: data a run settles afterwards was never
-      // rendered, and the browser must not hydrate the page with it.
-      render: async (app) => {
-        const html = await renderToString(app, ssrContext);
-        payload = serializeDmsPayload(runtime);
-        return html;
-      },
+      render: (app: App | VNode) =>
+        renderWithPayload(app, ssrContext, runtime, (rendered) => {
+          payload = rendered;
+        }),
       resolve: resolveDmsInertiaPage,
       async setup({ App, props, plugin }) {
         const app = createSSRApp({ render: () => h(App, props) });
@@ -244,17 +304,9 @@ async function renderDmsPageWithRuntime(
         redirect: runtime.serverRedirect,
       };
     }
-    if (runtime.currentError.value && !page.props.error) {
-      const failure = runtime.currentError.value as Error & DmsErrorData;
-      const expected =
-        Number.isInteger(failure.statusCode) &&
-        failure.statusCode! >= 400 &&
-        failure.statusCode! <= 599;
-      // An unexpected failure reaches the page as its status code alone, which
-      // the DMS error page describes in the visitor's language; the technical
-      // cause only reaches the server log.
-      if (!expected) console.error("DMS page render failed", failure);
-      const error = expected ? pageErrorData(failure) : { statusCode: 500 };
+    const failure = runtime.currentError.value;
+    if (failure && !page.props.error) {
+      const error = errorForPage(failure);
       return renderDmsPage(
         { ...page, props: { ...page.props, error } },
         serverFetch,
@@ -275,8 +327,6 @@ async function renderDmsPageWithRuntime(
       catalogLocale: catalogLocale?.(),
     };
   } finally {
-    // Only once the head and the async data are serialized: both still read
-    // state the rendered components own.
     stopScopes();
     runtime.scope.stop();
   }

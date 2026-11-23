@@ -123,7 +123,6 @@ void describe("backend messages", () => {
 });
 
 void describe("cookies of instances sharing a host", () => {
-  /** Run `action` as the frontend of `backendUrl`, with its own secret. */
   function asInstance<T>(backendUrl: string, secret: string, action: () => T) {
     const previous = process.env.DMS_API_BASE_URL;
     process.env.DMS_API_BASE_URL = backendUrl;

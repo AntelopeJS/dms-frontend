@@ -15,6 +15,7 @@ import {
   writeFrontendModuleRegistry,
   writeWorkspacePackageJson,
 } from "./common";
+import { WORKSPACE_TSCONFIG_TEMPLATE } from "./config";
 import { toPosixPath } from "./fs-sync";
 import { ensure } from "./internal/ensure";
 import { isText } from "./internal/guards";
@@ -148,9 +149,14 @@ export function materializeWorkspace(
     (file) => !file.startsWith("npmrc"),
   );
   for (const file of templateFiles)
-    cpSync(join(templateRoot, file), join(workspace, file), {
-      recursive: true,
-    });
+    cpSync(
+      join(templateRoot, file),
+      join(
+        workspace,
+        file === WORKSPACE_TSCONFIG_TEMPLATE ? "tsconfig.json" : file,
+      ),
+      { recursive: true },
+    );
   materializeLayers(workspace, layers);
   const registry = createFrontendModuleRegistry(workspace, layers);
   registry.modules.forEach((module) => {

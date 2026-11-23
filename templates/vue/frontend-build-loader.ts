@@ -1,5 +1,5 @@
 import { isAbsolute, posix, resolve } from "node:path";
-import { normalizePath, type Plugin } from "vite";
+import { normalizePath, type Plugin, type Rollup } from "vite";
 import type {
   DmsFrontendBuild,
   DmsFrontendBuildSetup,
@@ -127,26 +127,30 @@ const ERROR_FIELDS = [
   "code",
 ] as const;
 
+type ErrorField = (typeof ERROR_FIELDS)[number];
+
+type DiagnosticError = Error & Partial<Pick<Rollup.RollupError, ErrorField>>;
+
 /**
  * A new error naming the module, with the original as its cause: the original
  * may be frozen. It carries the original's diagnostic fields and its stack
  * frames, so the error still points at the file and the line.
  */
-function attribute(label: string, error: unknown): Error {
-  if (error instanceof Error && attributedErrors.has(error)) return error;
-  const message = error instanceof Error ? error.message : String(error);
+function attribute(label: string, cause: unknown): Error {
+  if (cause instanceof Error && attributedErrors.has(cause)) return cause;
+  const message = cause instanceof Error ? cause.message : String(cause);
   const attributed = new Error(`Frontend module ${label}: ${message}`, {
-    cause: error,
+    cause,
   });
   attributedErrors.add(attributed);
-  if (!(error instanceof Error)) return attributed;
+  if (!(cause instanceof Error)) return attributed;
+  const original: DiagnosticError = cause;
   for (const field of ERROR_FIELDS) {
-    if (field in error)
-      Reflect.set(attributed, field, Reflect.get(error, field));
+    if (field in original) Reflect.set(attributed, field, original[field]);
   }
-  const frames = error.stack?.split(error.message).slice(1).join(error.message);
-  if (frames !== undefined && error.stack?.includes(error.message)) {
-    attributed.stack = `${error.name}: ${attributed.message}${frames}`;
+  const frames = cause.stack?.split(cause.message).slice(1).join(cause.message);
+  if (frames !== undefined && cause.stack?.includes(cause.message)) {
+    attributed.stack = `${cause.name}: ${attributed.message}${frames}`;
   }
   return attributed;
 }
@@ -162,12 +166,17 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 
 function attributedHook(
   label: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a hook is whatever a module's Vite plugin property holds, and the function checks it before use
   hook: unknown,
   returnsHook: boolean,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the wrapped hook returns whatever the module's Vite hook returns, which this wrapper must not reshape
 ): unknown {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- the plugin property is arbitrary module data, so the function checks its kind before wrapping it
   if (typeof hook === "function") {
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters,anti-slop/no-unknown-returns -- the result is whatever the wrapped Vite hook returned, passed through untouched
     const attributedResult = (result: unknown): unknown =>
       returnsHook ? attributedHook(label, result, false) : result;
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- the wrapped hook keeps the open type of the Vite hook it stands for
     return function (this: unknown, ...args: unknown[]) {
       try {
         const result: unknown = hook.apply(this, args);
@@ -185,7 +194,9 @@ function attributedHook(
       }
     };
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- the plugin property is arbitrary module data, so the function checks its kind before wrapping it
   if (typeof hook === "object" && hook !== null && "handler" in hook) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- the wrapped hook keeps the open type of the Vite hook it stands for
     return {
       ...hook,
       handler: attributedHook(label, hook.handler, returnsHook),
@@ -206,12 +217,12 @@ function isPlugin(value: unknown): value is Plugin {
 }
 
 /** Every property name of an object, inherited ones included. */
-function propertyNames(plugin: object): Set<string> {
+function propertyNames(plugin: Plugin): Set<string> {
   const names = new Set<string>();
   for (
     let object: object | null = plugin;
     object !== null && object !== Object.prototype;
-    object = Object.getPrototypeOf(object)
+    object = Reflect.getPrototypeOf(object)
   ) {
     for (const name of Object.getOwnPropertyNames(object)) {
       if (name !== "constructor") names.add(name);
@@ -225,13 +236,16 @@ function propertyNames(plugin: object): Set<string> {
  * module in the errors they throw. The module's own object is left as it is.
  */
 function attributedPlugin(label: string, plugin: Plugin): Plugin {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- the copy holds plugin properties of any kind, each a Vite hook or option the module chose
   const copy: Record<string, unknown> = {};
   for (const key of propertyNames(plugin)) {
+    // oxlint-disable-next-line anti-slop/no-reflect-get -- the property names include inherited ones of a class instance, read on the plugin itself to keep receiver semantics
     const value: unknown = Reflect.get(plugin, key);
     copy[key] = PLUGIN_PROPERTIES.has(key)
       ? value
       : attributedHook(label, value, SERVER_HOOKS.has(key));
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- the value is an arbitrary module-provided plugin property that isPlugin checks
   if (!isPlugin(copy)) throw invalidPlugins(label);
   return copy;
 }

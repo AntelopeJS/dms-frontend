@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { addressOf } from "./helpers/net";
+import { present } from "./helpers/present";
 
 const FONT = Buffer.from("wOF2 font bytes");
 const SCRIPT = "export const probe = 1;\n".repeat(64);
@@ -34,7 +35,7 @@ function registerEncodingTests(base: () => string): void {
     const crossed = await fetch(`${base()}/assets/app-abc123.js`, {
       headers: {
         "accept-encoding": "identity",
-        "if-none-match": brotli.headers.get("etag")!,
+        "if-none-match": present(brotli.headers.get("etag"), "the brotli etag"),
       },
     });
     assert.equal(crossed.status, 200);
@@ -86,7 +87,7 @@ void describe("the files of the build", () => {
     await writeFile(join(root, "assets", "style-def456.css.gz"), SCRIPT_GZIP);
     await mkdir(join(root, ".vite"));
     await writeFile(join(root, ".vite", "manifest.json"), "{}");
-    server = createServer((request, response) => {
+    const site = createServer((request, response) => {
       const pathname = new URL(request.url ?? "/", "http://frontend").pathname;
       const file = publicBuildFile(root, pathname);
       if (file) {
@@ -98,10 +99,9 @@ void describe("the files of the build", () => {
       response.writeHead(404);
       response.end();
     });
-    await new Promise<void>((resolve) =>
-      server!.listen(0, "127.0.0.1", resolve),
-    );
-    const address = addressOf(server);
+    server = site;
+    await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+    const address = addressOf(site);
     base = `http://127.0.0.1:${address.port}`;
   });
 
@@ -119,17 +119,18 @@ void describe("the files of the build", () => {
     const tag = first.headers.get("etag");
     const modified = first.headers.get("last-modified");
     assert.match(tag ?? "", /^W\/"[0-9a-f]+-[0-9a-f]+"$/);
+    assert.ok(tag);
     assert.ok(modified);
 
     const byTag = await fetch(`${base}/fonts/Face.woff2`, {
-      headers: { "if-none-match": tag! },
+      headers: { "if-none-match": tag },
     });
     assert.equal(byTag.status, 304);
     assert.equal(byTag.headers.get("etag"), tag);
     assert.equal(await byTag.text(), "");
 
     const byDate = await fetch(`${base}/fonts/Face.woff2`, {
-      headers: { "if-modified-since": modified! },
+      headers: { "if-modified-since": modified },
     });
     assert.equal(byDate.status, 304);
     await byDate.body?.cancel();
@@ -137,7 +138,7 @@ void describe("the files of the build", () => {
 
   void it("sends the file again once it changed", async () => {
     const before = await fetch(`${base}/fonts/Face.woff2`);
-    const tag = before.headers.get("etag")!;
+    const tag = present(before.headers.get("etag"), "the etag");
     await before.body?.cancel();
     const later = new Date(Date.now() + ONE_DAY_MS);
     await utimes(join(root, "fonts", "Face.woff2"), later, later);

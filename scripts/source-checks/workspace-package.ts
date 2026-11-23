@@ -54,14 +54,16 @@ const PINNED_PATCH = /^\s+"(@?[^@"]+)@([^"]+)":\s*patches\/\S+$/gm;
 /** Every patch file the workspace declares. */
 function declaredPatches(): string[] {
   return [...templateText("pnpm-workspace.yaml").matchAll(DECLARED_PATCH)].map(
-    ([, patch]) => patch!,
+    ([, patch]) => patch ?? [],
   );
 }
 
 /** The `[name, version]` of every dependency the workspace patches. */
 function patchedDependencies(): [string, string][] {
-  return [...templateText("pnpm-workspace.yaml").matchAll(PINNED_PATCH)].map(
-    ([, name, version]) => [name!, version!],
+  return [
+    ...templateText("pnpm-workspace.yaml").matchAll(PINNED_PATCH),
+  ].flatMap(([, name, version]) =>
+    name === undefined || version === undefined ? [] : [[name, version]],
   );
 }
 

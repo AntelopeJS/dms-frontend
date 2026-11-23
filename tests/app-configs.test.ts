@@ -22,7 +22,6 @@ void describe("the generated app configs module", () => {
     for (const root of roots) rmSync(root, { recursive: true, force: true });
   });
 
-  /** What materialization generates for `modules`, each a module's files. */
   function generate(modules: Record<string, Record<string, string>>): string {
     const root = mkdtempSync(join(tmpdir(), "dms-app-configs-"));
     roots.push(root);

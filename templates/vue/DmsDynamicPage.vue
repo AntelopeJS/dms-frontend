@@ -2,6 +2,15 @@
 import { type Component, computed } from "vue";
 import { resolveDmsComponent, useDmsRoute } from "./frontend-module";
 
+/** A value of the JSON the backend sends as a component's options. */
+type ComponentOptionValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ComponentOptionValue[]
+  | { [key: string]: ComponentOptionValue };
+
 interface ComponentChild {
   id: string;
   component: ComponentDefinition;
@@ -11,7 +20,7 @@ interface ComponentChild {
 
 interface ComponentDefinition {
   componentName?: string;
-  options?: Record<string, unknown>;
+  options?: Record<string, ComponentOptionValue>;
   children?: ComponentChild[];
 }
 
@@ -19,7 +28,7 @@ interface ResolvedComponentDefinition {
   id: string;
   component: Component | string;
   componentName?: string;
-  options?: Record<string, unknown>;
+  options?: Record<string, ComponentOptionValue>;
   children: ResolvedComponentDefinition[];
   slot?: string;
   colSpan?: number;
@@ -44,7 +53,6 @@ interface DynamicPageProps {
 }
 
 const props = defineProps<DynamicPageProps>();
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Vue template.
 const route = useDmsRoute(props.page.route?.fullSlug);
 
 function resolveDefinition(
@@ -67,7 +75,6 @@ function resolveDefinition(
   };
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: Referenced by the Vue template.
 const components = computed(() =>
   Object.entries(props.page.layout?.components ?? {}).map(([id, definition]) =>
     resolveDefinition(id, definition),

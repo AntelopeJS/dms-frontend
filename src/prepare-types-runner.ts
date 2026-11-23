@@ -1,3 +1,11 @@
+/**
+ * Writes the type-check configuration and auto-import declarations of
+ * unpublished frontend packages to a directory that outlives the run.
+ * Started by `ajs dms prepare-types`, it sends its result over IPC for the
+ * CLI to report.
+ *
+ * @packageDocumentation
+ */
 import { resolve } from "node:path";
 import { getProcessTasks, isVerboseRun, pluralize } from "@antelopejs/core/cli";
 import { createPathMapper } from "./child-output";
@@ -71,10 +79,4 @@ async function prepareTypes(): Promise<PreparationResult> {
   };
 }
 
-/**
- * Writes the type-check configuration and auto-import declarations of
- * unpublished frontend packages to a directory that outlives the run.
- * Started by `ajs dms prepare-types`, it sends its result over IPC for the
- * CLI to report.
- */
 startSourceRunner(prepareTypes, reportPreparation);

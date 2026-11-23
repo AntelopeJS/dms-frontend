@@ -236,7 +236,6 @@ void describe("validating options before any work", () => {
 
   registerReadyReportTest();
 
-  /** A built workspace whose server prints the NODE_ENV it was given. */
   function nodeEnvWorkspace() {
     return {
       ...builtWorkspace(),

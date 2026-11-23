@@ -291,7 +291,6 @@ void describe("the proxy compresses what the backend did not", () => {
   let frontend: Server | undefined;
   let frontendPort = 0;
 
-  /** The answer as the client receives it, its body still encoded. */
   function get(
     path: string,
     headers: OutgoingHttpHeaders = {},

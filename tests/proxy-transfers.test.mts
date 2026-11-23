@@ -6,6 +6,7 @@ import { isServerRequest } from "../templates/vue/server/request-target.mjs";
 import { DMS_BACKEND_PROXIES } from "./fixtures/dms-backend-proxies.mts";
 import { parseJson } from "./helpers/json";
 import { addressOf, streamedBody } from "./helpers/net";
+import { present } from "./helpers/present";
 
 interface BackendRequest {
   method?: string;
@@ -113,7 +114,7 @@ function registerBodyTests(transfers: Transfers): void {
       response.headers.get("content-length"),
       String(TRANSFER_BYTES),
     );
-    const reader = response.body!.getReader();
+    const reader = present(response.body, "the response body").getReader();
     let received = 0;
     for (;;) {
       const { done, value } = await reader.read();
@@ -157,11 +158,6 @@ function registerBodyTests(transfers: Transfers): void {
 }
 
 function registerRefusalAndRedirectTests(transfers: Transfers): void {
-  /**
-   * Sends an upload of `TOO_LARGE_BYTES` over a raw socket, the rest of the
-   * body only once the answer arrived, as a client does that keeps sending
-   * while the server answers: the connection must stay up for it.
-   */
   async function uploadPastTheAnswer(headers: string) {
     const url = new URL(transfers.frontendUrl);
     const socket = connect(Number(url.port), url.hostname);

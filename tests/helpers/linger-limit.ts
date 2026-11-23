@@ -1,3 +1,16 @@
+/**
+ * Preloaded with `--import` into each test file's process, it fails the file, naming it and what still
+ * runs, when the process stays alive {@link LINGER_LIMIT_MS} after a `<root>` span of `node.test` ends
+ * with no test started inside it. Node opens that span after each batch of tests to run the root `after`
+ * hooks; a test that starts inside it makes Node run another batch and another `<root>` span. A test that
+ * starts clears the limit. The limit also runs from load until the first test or suite starts, so a file
+ * that registers no test fails, and so does a file whose top-level `await`, or root `before` or
+ * `beforeEach` with no `describe` around its tests, holds its first test back past the limit. It drops
+ * itself from `process.execArgv`, so the processes a test forks, from any directory,
+ * neither load it nor fail to resolve its relative path.
+ *
+ * @packageDocumentation
+ */
 import { tracingChannel } from "node:diagnostics_channel";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,17 +60,6 @@ function namesSelf(argument: string | undefined): boolean {
   );
 }
 
-/**
- * Preloaded with `--import` into each test file's process, it fails the file, naming it and what still
- * runs, when the process stays alive {@link LINGER_LIMIT_MS} after a `<root>` span of `node.test` ends
- * with no test started inside it. Node opens that span after each batch of tests to run the root `after`
- * hooks; a test that starts inside it makes Node run another batch and another `<root>` span. A test that
- * starts clears the limit. The limit also runs from load until the first test or suite starts, so a file
- * that registers no test fails, and so does a file whose top-level `await`, or root `before` or
- * `beforeEach` with no `describe` around its tests, holds its first test back past the limit. It drops
- * itself from `process.execArgv`, so the processes a test forks, from any directory,
- * neither load it nor fail to resolve its relative path.
- */
 process.execArgv = process.execArgv.filter(
   (argument, index, all) =>
     !namesSelf(argument) &&
