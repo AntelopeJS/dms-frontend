@@ -262,7 +262,7 @@ export function useDmsFetch<T>(
       body: toValue(body),
     });
   const handler: DmsAsyncDataHandler<T> = async ({ signal }) => {
-    // SAFETY: `url` is called only after the handler's caller has checked that a URL resolves, so the result is the string it was checked to be.
+    // SAFETY: a keyed run starts only once its key resolves, and `derived` and `named` below make the key null whenever `url` is, so it sees a string; a request with no stable key runs keyless, and there a null URL reaches the fetch unchanged, as it always has.
     const target = url() as string;
     const sent = requestOptions();
     const runKey =

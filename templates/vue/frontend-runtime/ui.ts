@@ -270,9 +270,9 @@ export function defineDmsPlugin(setup: DmsPluginSetup): DmsPluginSetup {
 }
 export function useDmsApp(): DmsAppContext {
   const instance = getCurrentInstance();
-  // SAFETY: The DMS plugin installs the app context under `$dms` on the app's global properties, so it is there whenever a plugin has run, and the nullish fallback covers the case it is not.
+  // SAFETY: setup stores the DmsAppContext under `$dms` on the app's global properties, which Vue types loosely; before setup it is undefined, which `??` hands on to the runtime's copy.
   const contextual = instance?.appContext.config.globalProperties
     .$dms as DmsAppContext;
-  // SAFETY: The runtime's app context is the one setup installs for DmsAppContext, so the fallback has that shape.
+  // SAFETY: setup gives the runtime its DmsAppContext before any component or plugin calls this; a call before setup gets undefined, which the declared return type has always hidden.
   return contextual ?? (useDmsRuntime().appContext as DmsAppContext);
 }

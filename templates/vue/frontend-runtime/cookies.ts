@@ -25,13 +25,13 @@ function parseCookieValue<T>(
   options: DmsCookieOptions<T>,
 ): T {
   if (stored === undefined)
-    // SAFETY: The default factory returns the cookie's T, and the null it falls back to stands for a cookie with no default, which the caller's T admits.
+    // SAFETY: the default factory returns the caller's T; with no default the cookie reads as null, as useDmsCookie documents, whatever T the caller named.
     return (options.default?.() ?? null) as T;
   try {
-    // SAFETY: The stored text was written as JSON by this cookie's setter from a T, so parsing it gives that T.
+    // SAFETY: T is the caller's claim about the cookie under this name, which the API has never validated; writeCookie serializes a T as JSON, and a cookie set elsewhere parses as whatever it holds.
     return JSON.parse(stored) as T;
   } catch {
-    // SAFETY: A stored value that is not JSON was written as a plain string, which is the T of a string cookie.
+    // SAFETY: a value that is not JSON is handed back as the raw string, as it always has been, under the caller's claimed T.
     return stored as T;
   }
 }
