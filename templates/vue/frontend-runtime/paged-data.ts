@@ -37,7 +37,7 @@ export interface UseDmsPagedDataOptions<TPage, TCursor> extends Omit<
   "default" | "transform" | "pick"
 > {
   /** The cursor of the page after `page`, or `null` (or `undefined`) for none. */
-  nextCursor(page: TPage, pages: TPage[]): TCursor | null | undefined;
+  nextCursor: (page: TPage, pages: TPage[]) => TCursor | null | undefined;
   /** The first page's cursor; none by default. */
   initialCursor?: TCursor;
 }
@@ -130,7 +130,7 @@ export function useDmsPagedData<TPage, TCursor = unknown>(
   shown = call;
   const result: DmsPagedData<TPage, TCursor> = Object.assign(
     {},
-    call as DmsAsyncData<PagedValue<TPage, TCursor>>,
+    call,
     pagedControls(call, handler, options),
   );
   return Object.assign(
