@@ -1,6 +1,8 @@
 /**
  * Reads the examples of the renderer checkout's own docs, so a journey can hold the product to
  * what a page prints.
+ *
+ * @packageDocumentation
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

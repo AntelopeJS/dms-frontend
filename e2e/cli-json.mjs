@@ -1,5 +1,7 @@
 /**
  * Reads the JSON the CLI and its files hold, without assuming a shape.
+ *
+ * @packageDocumentation
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

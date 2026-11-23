@@ -1,6 +1,8 @@
 /**
  * A backend of the journey's own, for the commands that call one: it serves the frontend manifest,
  * takes the ready report, and records every request.
+ *
+ * @packageDocumentation
  */
 import { createServer } from "node:http";
 import { listeningPort } from "./cli-run.mjs";

@@ -2,6 +2,8 @@
  * Runs the renderer checkout's CLI (`node <renderer>/dist/index.js`) the way a user's shell does:
  * a home and a working directory of the journey's own, the run's package caches, and nothing of the
  * process manager's environment.
+ *
+ * @packageDocumentation
  */
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";

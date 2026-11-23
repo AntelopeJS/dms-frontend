@@ -1,6 +1,8 @@
 /**
  * Workspaces written by hand under a journey's home, in the shape the CLI stamps them: a directory
  * named after the SHA-256 of its key, with a `.ajs-dms-meta.json`.
+ *
+ * @packageDocumentation
  */
 import { createHash } from "node:crypto";
 import { linkSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";

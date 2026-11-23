@@ -1,5 +1,7 @@
 /**
  * `ajs dms start` against the run's built workspace and a backend of the journey's own.
+ *
+ * @packageDocumentation
  */
 import { lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
