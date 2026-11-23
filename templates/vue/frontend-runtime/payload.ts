@@ -7,8 +7,10 @@ import {
 } from "vue";
 import {
   type DmsAppConfig,
+  type DmsAsyncData,
   type DmsErrorData,
   type DmsPayload,
+  type DmsRoute,
   type DmsRuntimeConfig,
   type DmsStateOptions,
 } from "./types";
@@ -25,11 +27,21 @@ const HTTP_ERROR_STATUS = { min: 400, max: 599 };
 const SERVER_FAILURE_STATUS = 500;
 const FETCH_ERROR_NAME = "FetchError";
 
-/** The fields of a failure, under the names `createDmsError` and ofetch use. */
-interface DmsFailure extends DmsErrorData {
-  name?: string;
-  status?: number;
-  statusText?: string;
+function isFailureRecord(reason: unknown): reason is Record<string, unknown> {
+  return typeof reason === "object" && reason !== null;
+}
+
+function isHttpErrorStatus(status: unknown): status is number {
+  return (
+    Number.isInteger(status) &&
+    typeof status === "number" &&
+    status >= HTTP_ERROR_STATUS.min &&
+    status <= HTTP_ERROR_STATUS.max
+  );
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === "string";
 }
 
 /**
@@ -38,30 +50,31 @@ interface DmsFailure extends DmsErrorData {
  * is a 4xx, anything else
  * is a server failure whose cause only reaches the server log. A fetch error
  * names the URL it requested, which on a server is the backend's own address:
- * its status text stands for it.
+ * its status text stands for it. A 5xx body is the backend's own account of
+ * its failure, a stack or a query at times: only a 4xx body, written for the
+ * client, is transferred.
  */
-function transferredError(key: string, reason: unknown): DmsErrorData {
-  const failure = (reason ?? {}) as DmsFailure;
-  const statusCode = failure.statusCode ?? failure.status;
-  if (
-    statusCode === undefined ||
-    !Number.isInteger(statusCode) ||
-    statusCode < HTTP_ERROR_STATUS.min ||
-    statusCode > HTTP_ERROR_STATUS.max
-  ) {
+function transferredError(
+  key: string,
+  entry: DmsAsyncData<unknown>,
+): DmsErrorData {
+  const reason = entry.error.value;
+  const failure = isFailureRecord(reason) ? reason : undefined;
+  const statusCode = failure?.statusCode ?? failure?.status;
+  if (!isHttpErrorStatus(statusCode)) {
     console.error(`DMS async data "${key}" failed`, reason);
     return { statusCode: SERVER_FAILURE_STATUS };
   }
-  const statusMessage = failure.statusMessage ?? failure.statusText;
+  const statusText = failure?.statusMessage ?? failure?.statusText;
+  const statusMessage = isText(statusText) ? statusText : undefined;
+  const failureMessage = failure?.message;
+  const message = isText(failureMessage) ? failureMessage : undefined;
   const transferred: DmsErrorData = {
     statusCode,
     statusMessage,
-    message:
-      failure.name === FETCH_ERROR_NAME ? statusMessage : failure.message,
+    message: failure?.name === FETCH_ERROR_NAME ? statusMessage : message,
   };
-  // A 5xx body is the backend's own account of its failure, a stack or a
-  // query at times: only a 4xx body, written for the client, is transferred.
-  if (statusCode < SERVER_FAILURE_STATUS) transferred.data = failure.data;
+  if (statusCode < SERVER_FAILURE_STATUS) transferred.data = failure?.data;
   return transferred;
 }
 
@@ -91,7 +104,7 @@ export function serializeDmsPayload(runtime: DmsFrontendRuntime): DmsPayload {
     .filter(([, entry]) => entry.status.value === "error")
     .map(([key, entry]): [string, DmsErrorData] => [
       key,
-      transferredError(key, entry.error.value),
+      transferredError(key, entry),
     ]);
   const state = [...runtime.transferredState]
     .map((key): [string, unknown] => [
@@ -135,7 +148,7 @@ export function useDmsRuntimeConfig(): DmsRuntimeConfig {
   return runtimeConfig.value;
 }
 export function useDmsAppConfig(): DmsAppConfig {
-  return appConfig.value as DmsAppConfig;
+  return appConfig.value;
 }
 export function defineDmsAppConfig<T extends Record<string, unknown>>(
   config: T,
@@ -145,27 +158,29 @@ export function defineDmsAppConfig<T extends Record<string, unknown>>(
 export function defineDmsMiddleware(handler: DmsMiddleware): DmsMiddleware {
   return handler;
 }
-export function defineDmsPageMeta(meta: Record<string, unknown>): void {
+/**
+ * Merges `meta` into the route's. A middleware that throws fails the page, as
+ * in Nuxt: the error page shows in its place with the error's status code,
+ * which a server render answers with. A redirect another navigation decided
+ * still wins. A server renders the page's subtree once its middleware is
+ * done, so the state a middleware sets is the one the HTML shows and the
+ * payload carries; a failure shows the error page in its place (`failPage`).
+ * The hook is registered in the browser too, where only a server calls it:
+ * both sides must agree on the async boundaries `useId()` counts.
+ */
+export function defineDmsPageMeta(meta: DmsRoute["meta"]): void {
   const runtime = useDmsRuntime();
   Object.assign(runtime.route.meta, meta);
-  // A middleware that throws fails the page, as in Nuxt: the error page
-  // shows in its place with the error's status code, which a server render
-  // answers with. A redirect another navigation decided still wins.
   const navigation = runMiddleware(runtime, runtime.route)
     .then(async (result) => {
       if (result !== undefined && result !== false)
         await visit(runtime, result);
     })
-    .catch((reason) => failPage(runtime, reason));
+    .catch((reason: unknown) => failPage(runtime, reason));
   runtime.pendingNavigation = runtime.pendingNavigation
     ? Promise.all([runtime.pendingNavigation, navigation]).then(() => undefined)
     : navigation;
   void runtime.pendingNavigation;
-  // A server renders the page's subtree once its middleware is done, so the
-  // state a middleware sets is the one the HTML shows and the payload carries.
-  // A failure shows the error page in its place (`failPage`). Registered
-  // in the browser too, where only a server calls it: both sides must agree
-  // on the async boundaries `useId()` counts.
   if (getCurrentInstance())
     onServerPrefetch(() => navigation.then(ignoreSettlement, ignoreSettlement));
 }
