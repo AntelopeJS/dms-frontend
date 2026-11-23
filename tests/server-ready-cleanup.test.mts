@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "node:test";
+import { present } from "./helpers/present";
 
 const CLEANUP_FAILURE = "tests/fixtures/failing-server-cleanup.mjs";
 const LIMIT_MS = 30_000;
@@ -38,7 +39,10 @@ void it(
     let output = "";
     run.stdout.on("data", (chunk: Buffer) => (output += chunk));
     run.stderr.on("data", (chunk: Buffer) => (output += chunk));
-    const hung = setTimeout(() => process.kill(-run.pid!, "SIGKILL"), LIMIT_MS);
+    const hung = setTimeout(
+      () => process.kill(-present(run.pid, "the server pid"), "SIGKILL"),
+      LIMIT_MS,
+    );
     const code = await new Promise<number | null>((settle) =>
       run.on("exit", (exitCode) => settle(exitCode)),
     );

@@ -284,8 +284,6 @@ void describe("verify-source CLI", () => {
   });
 });
 
-/** Starts every ANSI color sequence. */
-
 void describe("workspace listing", () => {
   const home = "/home/user/.antelopejs/dms-frontend";
   const projectId = `76672b08${"0".repeat(56)}`;

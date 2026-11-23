@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { defineComponent, h, nextTick, ref, watch } from "vue";
 import * as runtimeModule from "../templates/vue/frontend-module.ts";
+import { present } from "./helpers/present";
 
 const { createDmsFrontendRuntime, hydrateDmsPageProps, useDmsAsyncData } =
   runtimeModule;
@@ -93,7 +94,7 @@ function registerReactiveKeyTests(): void {
     const id = ref(1);
     const answers = new Map<string, ReturnType<typeof deferred<Rows>>>();
     let owner: ReturnType<typeof useDmsAsyncData<Rows>> | undefined;
-    let accessor: ReturnType<typeof runtimeModule.useDmsData<Rows>>;
+    let accessor: ReturnType<typeof runtimeModule.useDmsData<Rows>> | undefined;
     const app = mountRuntime(runtime, {
       setup() {
         owner = useDmsAsyncData<Rows>(
@@ -108,26 +109,38 @@ function registerReactiveKeyTests(): void {
         return () => h("p");
       },
     });
-    answers.get("order-1")!.resolve({ rows: ["first"] });
+    const ownerEntry = present(owner, "the owner");
+    const reader = present(accessor, "the accessor");
+    present(answers.get("order-1"), "the read of order 1").resolve({
+      rows: ["first"],
+    });
     await settle();
-    assert.deepEqual(accessor!.data.value, { rows: ["first"] });
+    assert.deepEqual(reader.data.value, { rows: ["first"] });
 
     id.value = 2;
     await nextTick();
-    assert.deepEqual(owner!.data.value, { rows: ["first"] }, "shown in place");
-    assert.equal(accessor!.data.value, undefined, "not order 2's");
+    assert.deepEqual(
+      ownerEntry.data.value,
+      { rows: ["first"] },
+      "shown in place",
+    );
+    assert.equal(reader.data.value, undefined, "not order 2's");
 
-    accessor!.data.value = { rows: ["second, from a write"] };
-    assert.equal(owner!.placeholder.value, false, "now order 2's own");
-    assert.deepEqual(owner!.data.value, { rows: ["second, from a write"] });
+    reader.data.value = { rows: ["second, from a write"] };
+    assert.equal(ownerEntry.placeholder.value, false, "now order 2's own");
+    assert.deepEqual(ownerEntry.data.value, {
+      rows: ["second, from a write"],
+    });
     assert.deepEqual(
       runtime.asyncData.get("order-1")?.data.value,
       { rows: ["first"] },
       "order 1 untouched",
     );
-    answers.get("order-2")!.resolve({ rows: ["second"] });
+    present(answers.get("order-2"), "the read of order 2").resolve({
+      rows: ["second"],
+    });
     await settle();
-    assert.deepEqual(accessor!.data.value, { rows: ["second"] });
+    assert.deepEqual(reader.data.value, { rows: ["second"] });
     app.unmount();
   });
 }
@@ -154,13 +167,14 @@ void describe("Another caller's data (useDmsData)", () => {
         };
       },
     });
-    let accessor: ReturnType<typeof runtimeModule.useDmsData<Rows>>;
+    let accessor: ReturnType<typeof runtimeModule.useDmsData<Rows>> | undefined;
     const seen: string[] = [];
     const app = mountRuntime(runtime, {
       setup() {
         accessor = runtimeModule.useDmsData<Rows>("rows");
+        const own = accessor;
         watch(
-          () => accessor.data.value?.rows.join() ?? "undefined",
+          () => own.data.value?.rows.join() ?? "undefined",
           (value) => seen.push(value),
           { immediate: true },
         );
@@ -170,9 +184,10 @@ void describe("Another caller's data (useDmsData)", () => {
     await settle();
     assert.deepEqual(seen, ["undefined", "a"], "the key's data once it is in");
 
-    accessor!.data.value = { rows: ["a", "b"] };
+    const reader = present(accessor, "the accessor");
+    reader.data.value = { rows: ["a", "b"] };
     await nextTick();
-    accessor!.data.value!.rows.push("c");
+    present(reader.data.value, "the rows").rows.push("c");
     await nextTick();
     assert.equal(rendered.at(-1), "a,b,c", "the caller shows both updates");
     assert.equal(calls, 1, "without reading the key again");

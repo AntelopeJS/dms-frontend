@@ -1,3 +1,10 @@
+/**
+ * The catalogs the application loads: every module's messages, which weigh
+ * hundreds of kilobytes once all the modules of an application are merged,
+ * against the few dozen messages a page shows.
+ *
+ * @packageDocumentation
+ */
 import assert from "node:assert/strict";
 import {
   mkdirSync,
@@ -21,6 +28,7 @@ import { clientOutput } from "../templates/vue/client-chunking.mjs";
 import { readText } from "./helpers/files";
 import { isFlag, isObjectLike, isText } from "./helpers/guards";
 import { isJsonObject, isJsonValue, jsonAt, readJson } from "./helpers/json";
+import { present } from "./helpers/present";
 
 interface ManifestChunk {
   file: string;
@@ -91,11 +99,6 @@ function writeCatalogFixture(workspace: string, layer: ResolvedLayer): void {
   );
 }
 
-/**
- * The catalogs the application loads: every module's messages, which weigh
- * hundreds of kilobytes once all the modules of an application are merged,
- * against the few dozen messages a page shows.
- */
 void describe("generated locale catalogs", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-locale-files-")));
   const workspace = join(root, "workspace");
@@ -196,7 +199,7 @@ void describe("generated locale catalogs", () => {
     assert.ok(entry, "the build has an entry");
     const loadedFirst = [
       entry,
-      ...(entry.imports ?? []).map((key) => manifest.get(key)!),
+      ...(entry.imports ?? []).map((key) => present(manifest.get(key), key)),
     ]
       .map((chunk) => readText(join(outDir, chunk.file)))
       .join("\n");

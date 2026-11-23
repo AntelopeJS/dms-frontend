@@ -1,5 +1,6 @@
 import { after, afterEach, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { present } from "./helpers/present";
 
 class FakeClassList {
   private readonly names = new Set<string>();
@@ -112,8 +113,9 @@ function createDom() {
       return { opacity: "1" };
     },
     addEventListener: (type: string, listener: Listener) => {
-      if (!listeners.has(type)) listeners.set(type, new Set());
-      listeners.get(type)!.add(listener);
+      const existing = listeners.get(type);
+      if (existing) existing.add(listener);
+      else listeners.set(type, new Set([listener]));
     },
     removeEventListener: (type: string, listener: Listener) => {
       listeners.get(type)?.delete(listener);
@@ -187,7 +189,10 @@ function reset({
 function colorMode(options: Parameters<typeof vueuse.useColorMode>[0] = {}) {
   const scope = vue.effectScope();
   scopes.push(scope);
-  return scope.run(() => vueuse.useColorMode(options))!;
+  return present(
+    scope.run(() => vueuse.useColorMode(options)),
+    "the color mode",
+  );
 }
 
 afterEach(() => {

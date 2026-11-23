@@ -248,21 +248,21 @@ void describe("telling a skipped prepare from a failed one", () => {
   });
 });
 
+const ENV_ONLY = {
+  DMS_API_BASE_URL: undefined,
+  DMS_SESSION_SECRET: "configured-session-secret-at-least-32-characters",
+  PORT: "0",
+};
+
 /**
- * `start` is the cheapest command that proves a variable reached Commander:
- * from a built project it touches no network, and names the URL it resolved
- * in its header.
+ * The header `start` prints for the URL it resolved. `start` is the cheapest
+ * command that proves a variable reached Commander: from a built project it
+ * touches no network.
  */
+const startedFor = (port: number) =>
+  new RegExp(`^ajs dms start {2}http://127\\.0\\.0\\.1:${port} · `);
 
 void describe("loading the project .env", () => {
-  const ENV_ONLY = {
-    DMS_API_BASE_URL: undefined,
-    DMS_SESSION_SECRET: "configured-session-secret-at-least-32-characters",
-    PORT: "0",
-  };
-  const startedFor = (port: number) =>
-    new RegExp(`^ajs dms start {2}http://127\\.0\\.0\\.1:${port} · `);
-
   void it("fills a variable the environment does not define", async () => {
     const result = await runCli(["start"], {
       files: {
@@ -323,5 +323,3 @@ void describe("loading the project .env", () => {
     );
   });
 });
-
-/** A workspace stamped as the loader stamps one, holding `bytes` of files. */

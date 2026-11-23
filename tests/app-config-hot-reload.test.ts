@@ -1,3 +1,12 @@
+/**
+ * The generated app configs module in a real Vite dev server, as `ajs-dms dev`
+ * runs it: the browser side is played by a module runner with HMR, which
+ * applies updates with the same client the browser uses, and the server side
+ * by `ssrLoadModule`, which is how the generated server renders pages. Both
+ * set the modules up from the configs as `main.ts` and `ssr-renderer.ts` do.
+ *
+ * @packageDocumentation
+ */
 import assert from "node:assert/strict";
 import {
   cpSync,
@@ -176,13 +185,6 @@ async function startAppConfigServer(
   });
 }
 
-/**
- * The generated app configs module in a real Vite dev server, as `ajs-dms dev`
- * runs it: the browser side is played by a module runner with HMR, which
- * applies updates with the same client the browser uses, and the server side
- * by `ssrLoadModule`, which is how the generated server renders pages. Both
- * set the modules up from the configs as `main.ts` and `ssr-renderer.ts` do.
- */
 void describe("edited layer app configs in the dev server", () => {
   const root = realpathSync(mkdtempSync(resolve(".app-config-hmr-")));
   const workspace = join(root, "workspace");

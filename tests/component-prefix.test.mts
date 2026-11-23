@@ -20,6 +20,7 @@ import {
   trackDmsAsyncComponents,
 } from "../templates/vue/frontend-module.ts";
 import { isText } from "./helpers/guards";
+import { present } from "./helpers/present";
 
 function isTextList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isText);
@@ -249,7 +250,13 @@ void describe("Component prefix", () => {
 
   void it("resolves before hydration the components the server render reached", async () => {
     const server = createSSRApp({
-      render: () => h(resolveDmsComponent("BillingLazyTotals")!),
+      render: () =>
+        h(
+          present(
+            resolveDmsComponent("BillingLazyTotals"),
+            "BillingLazyTotals",
+          ),
+        ),
     });
     const reached = trackDmsAsyncComponents(server);
     assert.equal(await renderToString(server), "<p>billing lazy totals</p>");

@@ -123,7 +123,7 @@ void it("links the stylesheet of every component the server rendered, and only t
   const workspace = mkdtempSync(resolve(".ssr-component-styles-"));
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backend = createServer((request, response) => {
-    const path = new URL(request.url!, "http://fixture").searchParams.get(
+    const path = new URL(request.url ?? "/", "http://fixture").searchParams.get(
       "path",
     );
     response.setHeader("content-type", "application/json");

@@ -67,7 +67,7 @@ void it("releases every server render once it is sent", async () => {
   const previousEnvironment = process.env.NODE_ENV;
   process.env.NODE_ENV = "production";
   const backend = createServer((request, response) => {
-    const path = new URL(request.url!, "http://fixture").searchParams.get(
+    const path = new URL(request.url ?? "/", "http://fixture").searchParams.get(
       "path",
     );
     response.setHeader("content-type", "application/json");
@@ -137,11 +137,10 @@ export default {plugins:[{name:'fixture-ui',resolveId(id){if(id.startsWith('@nux
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
     Reflect.set(globalThis, "__dmsLeakProbe", probe);
-    frontend = createServer(await requestHandlerOf(workspace));
-    await new Promise<void>((settle) =>
-      frontend!.listen(0, "127.0.0.1", settle),
-    );
-    const address = addressOf(frontend);
+    const site = createServer(await requestHandlerOf(workspace));
+    frontend = site;
+    await new Promise<void>((settle) => site.listen(0, "127.0.0.1", settle));
+    const address = addressOf(site);
     for (let render = 0; render < RENDERS; render += 1) {
       const response = await fetch(
         `http://127.0.0.1:${address.port}/page?render=${render}`,

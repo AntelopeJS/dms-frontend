@@ -508,17 +508,16 @@ void describe("A reactive key a render sets", () => {
 
   void it("runs no immediate: false read on a server when its key changes, even with a default", async () => {
     const server = backend(true);
-    let entry: ReturnType<typeof runtimeModule.useDmsFetch<string>> | undefined;
     const ssr = createSSRApp(
       defineComponent({
         setup() {
           const id = ref<number | null>(null);
-          entry = runtimeModule.useDmsFetch<string>(
+          const fetched = runtimeModule.useDmsFetch<string>(
             () => (id.value === null ? null : `/api/orders/${id.value}`),
             { immediate: false, default: () => "none" },
           );
           id.value = 7;
-          return () => h("p", `${entry!.status.value}:${entry!.data.value}`);
+          return () => h("p", `${fetched.status.value}:${fetched.data.value}`);
         },
       }),
     );

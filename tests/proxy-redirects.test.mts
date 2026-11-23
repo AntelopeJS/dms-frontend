@@ -305,7 +305,6 @@ void describe("backend redirects", () => {
     thirdParty.close();
   });
 
-  /** What the browser gets for `path`, without following a redirect. */
   function visit(path: string, init: RequestInit = {}) {
     return fetch(`${state.frontendUrl}${path}`, {
       redirect: "manual",

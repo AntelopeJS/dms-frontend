@@ -147,7 +147,7 @@ void it("hydrates a server render with exactly the data its HTML shows", async (
   const previousBackend = process.env.DMS_API_BASE_URL;
   const backendCalls: string[] = [];
   const backend = createServer((request, response) => {
-    const url = new URL(request.url!, "http://fixture");
+    const url = new URL(request.url ?? "/", "http://fixture");
     backendCalls.push(url.pathname);
     response.setHeader("content-type", "application/json");
     const path = url.searchParams.get("path");
@@ -163,9 +163,10 @@ void it("hydrates a server render with exactly the data its HTML shows", async (
     await new Promise<void>((done) => backend.listen(0, "127.0.0.1", done));
     const backendAddress = addressOf(backend);
     process.env.DMS_API_BASE_URL = `http://127.0.0.1:${backendAddress.port}`;
-    frontend = createServer(await requestHandlerOf(workspace));
-    await new Promise<void>((done) => frontend!.listen(0, "127.0.0.1", done));
-    const address = addressOf(frontend);
+    const site = createServer(await requestHandlerOf(workspace));
+    frontend = site;
+    await new Promise<void>((done) => site.listen(0, "127.0.0.1", done));
+    const address = addressOf(site);
     const base = `http://127.0.0.1:${address.port}`;
     const render = async (path: string) => {
       const response = await fetch(`${base}${path}`, {

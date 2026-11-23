@@ -9,6 +9,7 @@ import { describe, it, type TestContext } from "node:test";
 import { listenHost } from "../templates/vue/server/listen-host.mjs";
 import { addressOf } from "./helpers/net";
 import { isNumber } from "./helpers/guards";
+import { present } from "./helpers/present";
 import { isJsonObject, isJsonValue, type JsonObject } from "./helpers/json";
 
 const SERVER = resolve(
@@ -85,8 +86,14 @@ function startServer(
     stdio: ["ignore", "pipe", "pipe", ...(ipc ? ["ipc" as const] : [])],
   });
   let output = "";
-  server.stdout!.on("data", (chunk: Buffer) => (output += chunk));
-  server.stderr!.on("data", (chunk: Buffer) => (output += chunk));
+  present(server.stdout, "the server's stdout").on(
+    "data",
+    (chunk: Buffer) => (output += chunk),
+  );
+  present(server.stderr, "the server's stderr").on(
+    "data",
+    (chunk: Buffer) => (output += chunk),
+  );
   const exited = new Promise<number | null>((settle) =>
     server.on("exit", (code) => settle(code)),
   );
@@ -254,7 +261,7 @@ void describe("Frontend server startup", () => {
     async (context) => {
       const started = startServer(context, 0, false);
       const port = await new Promise<number>((settle, fail) => {
-        started.server.stdout!.on("data", () => {
+        present(started.server.stdout, "the server's stdout").on("data", () => {
           const match = started.output().match(READY);
           if (match) settle(Number(match[1]));
         });

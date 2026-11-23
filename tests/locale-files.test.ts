@@ -1,3 +1,9 @@
+/**
+ * A message vue-i18n cannot compile stops the generation of the catalogs,
+ * which the build and the dev server's start both run first: it never reaches a page.
+ *
+ * @packageDocumentation
+ */
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,10 +21,6 @@ import {
 
 type LocaleMessages = { [key: string]: string | LocaleMessages };
 
-/**
- * A message vue-i18n cannot compile stops the generation of the catalogs,
- * which the build and the dev server's start both run first: it never reaches a page.
- */
 void describe("locale messages vue-i18n cannot compile", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-locale-files-"));
   after(() => rmSync(root, { recursive: true, force: true }));
@@ -96,10 +98,6 @@ void describe("locale messages vue-i18n cannot compile", () => {
   });
 });
 
-/**
- * A catalog is a JSON object of messages: a file holding any other JSON value
- * would have its characters or elements spread into the catalog as messages.
- */
 void describe("a locale file that is not a JSON object", () => {
   const root = mkdtempSync(join(tmpdir(), "dms-locale-file-kind-"));
   after(() => rmSync(root, { recursive: true, force: true }));

@@ -251,11 +251,6 @@ void describe("A generated workspace", () => {
     );
   });
 
-  /**
-   * The template's Vite config, on a workspace whose one module is the
-   * fixture's layer, loading `file` from that module through the server
-   * renderer's module graph.
-   */
   async function loadThroughGeneratedConfig(fixture: Layout, file: string) {
     const workspace = realpathSync(mkdtempSync(resolve(".backend-boundary-")));
     let server: ViteDevServer | undefined;
