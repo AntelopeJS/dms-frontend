@@ -214,16 +214,6 @@ const DEDUPED_PACKAGES = [
  */
 const SERVER_MODULE_ALIAS = resolve(import.meta.dirname, "server-module.ts");
 
-/**
- * The browser bundle only: the server bundles are single Node programs, for
- * which a file count means nothing.
- */
-const CLIENT_ENVIRONMENT = {
-  build: {
-    rolldownOptions: { output: clientOutput },
-  },
-};
-
 function paintBeforeHydrate(): Plugin {
   return {
     name: "dms-paint-before-hydrate",
@@ -333,5 +323,11 @@ export default defineConfig({
     outDir: "dist/client",
     rolldownOptions: { onLog: onBuildLog },
   },
-  environments: { client: CLIENT_ENVIRONMENT },
+  environments: {
+    client: {
+      build: {
+        rolldownOptions: { output: clientOutput },
+      },
+    },
+  },
 });

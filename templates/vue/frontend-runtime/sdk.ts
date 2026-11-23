@@ -29,7 +29,6 @@ import {
   PLUGIN_ORDER,
 } from "./module-registration";
 import {
-  type DmsAppConfig,
   type DmsAppContext,
   type DmsComponentPreloader,
   type DmsI18n,
@@ -62,7 +61,8 @@ import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE, writeCookie } from "./cookies";
  * What the last setup of the modules changed in the layers' app configs, which
  * a development update of those configs keeps: see `updateDmsAppConfig`.
  */
-let appConfigSetupChanges: DmsAppConfig = {};
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- the changes are any subset of the app config modules augment, so no key is required, which DmsAppConfig cannot express.
+let appConfigSetupChanges: Record<string, unknown> = {};
 
 export function useDmsInjection<T>(
   key: string | InjectionKey<T>,
