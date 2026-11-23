@@ -14,6 +14,7 @@ import {
   cloneVNode,
   inject,
   type InjectionKey,
+  type SetupContext,
   type VNode,
 } from "vue";
 
@@ -32,7 +33,61 @@ type IconSymbols = Map<string, string>;
 const SERVER_SYMBOLS: InjectionKey<IconSymbols> = Symbol("dms-icon-symbols");
 
 interface IconProps {
-  icon?: unknown;
+  icon?: string | IconifyIcon;
+}
+
+function isIconName(icon: IconProps["icon"]): icon is string {
+  return typeof icon === "string";
+}
+
+interface SsrPropOption {
+  type: BooleanConstructor;
+  default?: (props: IconProps) => boolean;
+}
+
+/** The options `defineComponent` gives `Icon`, which its type does not show. */
+interface IconOptions {
+  props: { ssr: SsrPropOption };
+  setup: (props: IconProps, context: SetupContext) => () => VNode;
+}
+
+function isIconOptions(
+  component: Component,
+): component is Component & IconOptions {
+  return (
+    "props" in component &&
+    typeof component.props === "object" &&
+    component.props !== null &&
+    "ssr" in component.props &&
+    typeof component.props.ssr === "object" &&
+    component.props.ssr !== null &&
+    "type" in component.props.ssr &&
+    component.props.ssr.type === Boolean &&
+    "setup" in component &&
+    typeof component.setup === "function"
+  );
+}
+
+function iconOptions(): IconOptions {
+  if (!isIconOptions(Icon))
+    throw new TypeError("@iconify/vue's Icon is not a setup component.");
+  return Icon;
+}
+
+function isIconSvgProps(
+  props: VNode["props"],
+): props is NonNullable<VNode["props"]> & IconSvgProps {
+  return (
+    props !== null &&
+    typeof props.innerHTML === "string" &&
+    props.innerHTML !== "" &&
+    typeof props.viewBox === "string"
+  );
+}
+
+interface IconSvgProps {
+  innerHTML: string;
+  viewBox: string;
 }
 
 /**
@@ -47,10 +102,9 @@ interface IconProps {
  * so a server render never queries an Iconify API.
  */
 export function drawLoadedIconsAtOnce(): void {
-  (Icon as unknown as { props: Record<string, unknown> }).props.ssr = {
+  iconOptions().props.ssr = {
     type: Boolean,
-    default: ({ icon }: IconProps) =>
-      typeof icon !== "string" || iconLoaded(icon),
+    default: ({ icon }) => !isIconName(icon) || iconLoaded(icon),
   };
   drawIconsFromSprite();
 }
@@ -92,16 +146,9 @@ function addSymbolToDocument(id: string, viewBox: string, body: string): void {
  * symbols, and for an empty icon.
  */
 function spriteIcon(vnode: VNode, symbols: IconSymbols | null): VNode {
-  const props = vnode.props as Record<string, unknown> | null;
-  const body = props?.innerHTML;
-  const viewBox = props?.viewBox;
-  if (
-    vnode.type !== "svg" ||
-    typeof body !== "string" ||
-    body === "" ||
-    typeof viewBox !== "string"
-  )
-    return vnode;
+  const { props } = vnode;
+  if (vnode.type !== "svg" || !isIconSvgProps(props)) return vnode;
+  const { innerHTML: body, viewBox } = props;
   const id = `${SYMBOL_PREFIX}${digest(`${viewBox}\n${body}`)}`;
   if (symbols) symbols.set(id, symbolMarkup(id, viewBox, body));
   else if (typeof document !== "undefined")
@@ -116,9 +163,7 @@ let drawingFromSprite = false;
 function drawIconsFromSprite(): void {
   if (drawingFromSprite) return;
   drawingFromSprite = true;
-  const component = Icon as unknown as {
-    setup: (props: unknown, context: unknown) => () => VNode;
-  };
+  const component = iconOptions();
   const setup = component.setup;
   component.setup = (props, context) => {
     const symbols = inject(SERVER_SYMBOLS, null);
@@ -152,11 +197,12 @@ export function registerDmsIconCollections(collections: IconifyJSON[]): void {
 /** Records the name of every Iconify icon a server render reaches. */
 export function trackDmsIcons(app: App): Set<string> {
   const names = new Set<string>();
+  const iconComponent = iconOptions();
   app.mixin({
-    beforeCreate(this: ComponentPublicInstance) {
-      if (this.$.type !== (Icon as Component)) return;
-      const { icon } = this.$props as IconProps;
-      if (typeof icon === "string") names.add(icon);
+    beforeCreate(this: ComponentPublicInstance<IconProps>) {
+      if (this.$.type !== iconComponent) return;
+      const { icon } = this.$props;
+      if (isIconName(icon)) names.add(icon);
     },
   });
   return names;
