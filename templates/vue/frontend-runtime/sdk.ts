@@ -29,6 +29,7 @@ import {
   PLUGIN_ORDER,
 } from "./module-registration";
 import {
+  type DmsAppConfig,
   type DmsAppContext,
   type DmsComponentPreloader,
   type DmsI18n,
@@ -57,14 +58,16 @@ import {
 } from "./ui";
 import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE, writeCookie } from "./cookies";
 
-// What the last setup of the modules changed in the layers' app configs, which
-// a development update of those configs keeps: see `updateDmsAppConfig`.
-let appConfigSetupChanges: Record<string, unknown> = {};
+/**
+ * What the last setup of the modules changed in the layers' app configs, which
+ * a development update of those configs keeps: see `updateDmsAppConfig`.
+ */
+let appConfigSetupChanges: DmsAppConfig = {};
 
 export function useDmsInjection<T>(
   key: string | InjectionKey<T>,
 ): T | undefined {
-  return inject(key as InjectionKey<T>, undefined);
+  return inject<T | undefined>(key, undefined);
 }
 
 function registerDmsFrontendEntry(
@@ -148,7 +151,10 @@ function createSdk(
  *
  * `useDmsAppConfig()` holds the layers' app configs merged, highest precedence
  * first, before the first module is set up: a project's layer overrides the
- * DMS's, which fills in the rest. A setup may still read and extend it.
+ * DMS's, which fills in the rest. A setup may still read and extend it. The
+ * modules read and extend the public options and the app config while they
+ * are set up, so those restart here rather than being published with the
+ * registry: the public options empty, the app config from the layers alone.
  */
 export async function setupFrontendModules(
   registrations: DmsFrontendModuleRegistration[],
@@ -156,9 +162,6 @@ export async function setupFrontendModules(
 ): Promise<void> {
   const next = createDmsFrontendRegistry();
   const configs = layerAppConfigs.map(({ config }) => config);
-  // Modules read and extend these two while they are set up, so they restart
-  // here rather than being published with the registry: the public options
-  // empty, the app config from the layers alone.
   runtimeConfig.value.public = {} as PublicRuntimeConfig;
   appConfig.value = mergeLayerAppConfigs(configs);
   for (const registration of registrations) {
@@ -191,6 +194,26 @@ export function updateDmsAppConfig(layerAppConfigs: DmsLayerAppConfig[]): void {
   );
 }
 
+/**
+ * Installs the registered components, injections and plugins into an app, and
+ * answers the hook that runs once it is mounted.
+ *
+ * The app's error handler shows the error page for a failure. A warning Vue
+ * prints for a component whose `setup` failed, or for one under it, is left
+ * out: the comment Vue renders in place of an `undefined` component has no
+ * public instance, so the template rendering it is the one that failed. That
+ * filter is installed from the first failure on only: until then Vue keeps its
+ * own output, whose component trace shows the props. An app that already has
+ * a handler keeps it. A server renders a single page per app; in the browser
+ * the app outlives Inertia visits, so once a page has failed the handler stays
+ * for the session and later warnings print as plain text (no inspectable
+ * objects), still all of them.
+ *
+ * The plugins set up in `PLUGIN_ORDER`, and the modules' priority order stays
+ * within a group (the sort is stable). What plugins start without awaiting it
+ * is still part of the page a server renders: its HTML shows it, so the render
+ * waits for it.
+ */
 export async function installDmsPlugins(
   app: App,
   i18n: Composer,
@@ -198,7 +221,24 @@ export async function installDmsPlugins(
   loadLocaleMessages: DmsLocaleLoader,
   supportedLocales: string[],
 ): Promise<() => Promise<void>> {
-  const dmsI18n = i18n as DmsI18n;
+  const setLocale = async (locale: string) => {
+    const messages = await loadLocaleMessages(locale);
+    i18n.setLocaleMessage(locale, messages);
+    i18n.locale.value = locale;
+    if (typeof document !== "undefined" && supportedLocales.includes(locale))
+      writeCookie(LOCALE_COOKIE, locale, {
+        maxAge: LOCALE_COOKIE_MAX_AGE,
+        sameSite: "lax",
+        secure: globalThis.location?.protocol === "https:",
+      });
+  };
+  const locales = computed(() =>
+    supportedLocales.map((code) => ({
+      code,
+      name: new Intl.DisplayNames([code], { type: "language" }).of(code),
+    })),
+  );
+  const dmsI18n: DmsI18n = Object.assign(i18n, { setLocale, locales });
   const hooks = new Map<string, Array<() => void | Promise<void>>>();
   const appContext: DmsAppContext = {
     vueApp: app,
@@ -229,8 +269,6 @@ export async function installDmsPlugins(
     instance,
     trace,
   ) => {
-    // The comment Vue renders in place of an `undefined` component has no
-    // public instance: the template rendering it is the one that failed.
     const source = instance?.$ ?? getCurrentInstance();
     if (!withinFailedSetup(source, failedSetups))
       console.warn(`[Vue warn]: ${message}${trace ? `\n${trace}` : ""}`);
@@ -238,12 +276,6 @@ export async function installDmsPlugins(
   app.config.errorHandler = (reason, instance, info) => {
     if (instance && info === SETUP_FUNCTION_ERROR) {
       failedSetups.add(instance.$);
-      // From the first failure on only: until then Vue keeps its own output,
-      // whose component trace shows the props. An app that already has a
-      // handler keeps it. A server renders a single page per app; in the
-      // browser the app outlives Inertia visits, so once a page has failed
-      // the handler stays for the session and later warnings print as plain
-      // text (no inspectable objects), still all of them.
       app.config.warnHandler ??= warnOutsideFailedSetups;
     }
     failPage(runtime, reason);
@@ -253,23 +285,6 @@ export async function installDmsPlugins(
   Reflect.set(app, "$i18n", i18n);
   Reflect.set(appContext.vueApp, "$dms", appContext);
   Reflect.set(app.config.globalProperties, "$i18n", i18n);
-  dmsI18n.setLocale = async (locale: string) => {
-    const messages = await loadLocaleMessages(locale);
-    i18n.setLocaleMessage(locale, messages);
-    i18n.locale.value = locale;
-    if (typeof document !== "undefined" && supportedLocales.includes(locale))
-      writeCookie(LOCALE_COOKIE, locale, {
-        maxAge: LOCALE_COOKIE_MAX_AGE,
-        sameSite: "lax",
-        secure: globalThis.location?.protocol === "https:",
-      });
-  };
-  dmsI18n.locales = computed(() =>
-    supportedLocales.map((code) => ({
-      code,
-      name: new Intl.DisplayNames([code], { type: "language" }).of(code),
-    })),
-  );
   app.component("DmsLink", DmsLink);
   app.component("DmsClientOnly", DmsClientOnly);
   registry.components.forEach(({ component, name }) => {
@@ -281,7 +296,6 @@ export async function installDmsPlugins(
   registry.plugins.forEach((plugin) => {
     app.use(plugin);
   });
-  // Stable: within a group, the modules' priority order stays.
   const pluginSetups = [...registry.pluginSetups].sort(
     (left, right) => PLUGIN_ORDER[left.enforce] - PLUGIN_ORDER[right.enforce],
   );
@@ -291,8 +305,6 @@ export async function installDmsPlugins(
       app.runWithContext(() => registration.setup(appContext)),
     );
   }
-  // What plugins start without awaiting it is still part of the page a
-  // server renders: its HTML shows it, so the render waits for it.
   if (runtime.isServer) await Promise.all(runtime.serverPrefetches);
   return async () => {
     for (const callback of hooks.get("app:mounted") ?? []) await callback();
