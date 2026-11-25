@@ -1,4 +1,5 @@
 import { cpSync, readFileSync } from "node:fs";
+import { isJsonObject, type JsonValue } from "../../src/internal/json";
 import { isScalar, isSeq, parseDocument } from "yaml";
 import { join } from "node:path";
 import { listNames } from "./files";
@@ -41,4 +42,17 @@ export function readWorkspacePnpmConfig(): WorkspacePnpmConfig {
 export function readWorkspacePackageManager(): string | undefined {
   const manifest = readFileSync(join(TEMPLATE, "package.json"), "utf8");
   return /"packageManager":\s*"([^"]+)"/.exec(manifest)?.[1];
+}
+
+/** The `compilerOptions` of the `tsconfig.workspace.json` the generated types workspace starts from. */
+export function readWorkspaceCompilerOptions(): {
+  [option: string]: JsonValue;
+} {
+  const config: unknown = JSON.parse(
+    readFileSync(join(TEMPLATE, "tsconfig.workspace.json"), "utf8"),
+  );
+  const options = isJsonObject(config) ? config.compilerOptions : undefined;
+  if (!isJsonObject(options))
+    throw new Error("tsconfig.workspace.json holds no compilerOptions");
+  return options;
 }

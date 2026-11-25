@@ -14,6 +14,7 @@ import {
   typesEntry,
   vueDeclarationsConfig,
 } from "../src/prepare-types-relocate";
+import { readWorkspaceCompilerOptions } from "./helpers/templates";
 import type { InstalledPackage } from "../src/prepare-types-packages";
 
 const OUT = resolve("/work/project/.dms-types");
@@ -61,6 +62,23 @@ function relocate(
     rootDir,
   });
 }
+
+void describe("relocateTsconfig of the shipped workspace template", () => {
+  void it("reads an import-less file as a module, which a script would turn into a global", () => {
+    const { compilerOptions } = relocateTsconfig({
+      template: {
+        ...TEMPLATE,
+        compilerOptions: readWorkspaceCompilerOptions(),
+      },
+      paths: PATHS,
+      layers: [SHOP],
+      outDir: OUT,
+      dependencies: [],
+      rootDir: resolve("/"),
+    });
+    assert.equal(compilerOptions.moduleDetection, "force");
+  });
+});
 
 void describe("relocateTsconfig", () => {
   void it("aims a layer alias at the source tree and keeps a runtime file's", () => {
