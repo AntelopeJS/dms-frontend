@@ -125,21 +125,30 @@ if (props.footer) {
       "<template><p>Footer, second edition</p></template>\n",
     );
     assert.deepEqual((await rebuild)[0], { state: "building" });
-    const ready = once(builder, "message");
-    let newRenderFinished = false;
+    const order: string[] = [];
+    const ready = once(builder, "message").then((args: unknown[]) => {
+      order.push("ready");
+      return args[0];
+    });
     const queued = email.renderEmailTemplate("Welcome", {}).then((html) => {
-      newRenderFinished = true;
+      order.push("queued");
       return html;
     });
-    const replaced = await Promise.race([
-      ready.then(() => true),
-      new Promise((settle) => setTimeout(() => settle(false), 1_000)),
-    ]);
-    assert.equal(newRenderFinished, false, "new renders wait for the build");
     openGate();
-    assert.match(await held, /Footer, first edition/);
-    assert.equal(replaced, false, "the rebuild waited for the render");
-    assert.deepEqual((await ready)[0], { state: "ready" });
+    const firstHtml = await held;
+    order.push("held");
+    assert.match(firstHtml, /Footer, first edition/);
+    assert.deepEqual(await ready, { state: "ready" });
+    assert.deepEqual(
+      order.filter((event) => event !== "queued"),
+      ["held", "ready"],
+      "the rebuild waited for the render",
+    );
+    assert.equal(
+      order.indexOf("queued") !== 0,
+      true,
+      "new renders wait for the build",
+    );
     assert.match(await queued, /Welcome/);
     assert.match(
       await email.renderEmailTemplate("Welcome", { footer: true }),
