@@ -11,6 +11,7 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "jsx": "preserve",
+    "moduleDetection": "force",
     "types": ["vite/client"]
   },
   "files": [
