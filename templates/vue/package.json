@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node compress-assets.mjs && vite build --ssr ssr-renderer.ts --outDir dist/ssr && vite build --config vite.email.config.ts && vite build --config vite.server.config.ts",
+    "build": "vite build --bypass-lock && node compress-assets.mjs && vite build --bypass-lock --ssr ssr-renderer.ts --outDir dist/ssr && vite build --bypass-lock --config vite.email.config.ts && vite build --bypass-lock --config vite.server.config.ts",
     "build:client": "vite build --bypass-lock",
     "build:compress": "node compress-assets.mjs",
     "build:ssr": "vite build --bypass-lock --ssr ssr-renderer.ts --outDir dist/ssr",
