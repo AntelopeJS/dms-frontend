@@ -7,7 +7,7 @@ import { after, describe, it } from "node:test";
 import { templateViteArguments } from "./helpers/template-scripts";
 
 const VITE_BIN = join(
-  dirname(require.resolve("vite/package.json")),
+  dirname(require.resolve("vite-8-4/package.json")),
   "bin",
   "vite.js",
 );
