@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.11.11
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.10...v0.11.11)
+
+### 🩹 Fixes
+
+- Build the verification's bundles one after another ([#398](https://github.com/AntelopeJS/dms-frontend/pull/398))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.11.10
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.9...v0.11.10)
