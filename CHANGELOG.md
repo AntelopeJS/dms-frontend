@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.11.10
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.9...v0.11.10)
+
+### 🩹 Fixes
+
+- **deps:** Move to @antelopejs/dms 0.23 and interface-dms 0.16 ([#395](https://github.com/AntelopeJS/dms-frontend/pull/395))
+- Force module detection in the generated types workspace ([#397](https://github.com/AntelopeJS/dms-frontend/pull/397))
+
+### 🏡 Chore
+
+- Lint the shipped templates under tooling-configs 0.10 ([#394](https://github.com/AntelopeJS/dms-frontend/pull/394))
+
+### ✅ Tests
+
+- Order the email rebuild after the held render by event, not by timer ([#396](https://github.com/AntelopeJS/dms-frontend/pull/396))
+
+### 🤖 CI
+
+- Drop the dms-control cache names ([#391](https://github.com/AntelopeJS/dms-frontend/pull/391))
+- Re-sync the AntelopeJS pack for the release app ([#392](https://github.com/AntelopeJS/dms-frontend/pull/392))
+- Stop forwarding the retired RELEASE_GITHUB_TOKEN ([#393](https://github.com/AntelopeJS/dms-frontend/pull/393))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.11.9
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.8...v0.11.9)
