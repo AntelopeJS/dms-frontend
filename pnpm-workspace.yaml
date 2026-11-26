@@ -1,0 +1,7 @@
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@antelopejs/*"
+  - "@antelopejs/interface-*"
+allowBuilds:
+  lefthook: false
+  mongodb-memory-server: false

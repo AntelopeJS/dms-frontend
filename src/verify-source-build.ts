@@ -142,10 +142,12 @@ async function buildBundle(
 }
 
 /**
- * Builds the bundles and type-checks at once: the steps share no output,
- * and each is mostly one busy core. Every step runs to its end, so a failure
- * is reported once nothing else writes to the screen, and the first failing
- * step, in their usual order, is the one reported.
+ * Builds the bundles one after another, beside the type check: the client and
+ * SSR builds share a Vite command, root, config file and mode, and Vite 8.4
+ * refuses a second build of a project that another is running. Every step
+ * runs to its end, so a failure is reported once nothing else writes to the
+ * screen, and the first failing step, in their usual order, is the one
+ * reported.
  *
  * The build and type-check steps of a source verification, run at once in the
  * temporary workspace `verify-source-runner` materialized.
@@ -154,12 +156,21 @@ export async function buildAndTypeCheck(
   context: VerificationContext,
 ): Promise<void> {
   const stepWarnings = VERIFY_BUILD_STEPS.map(() => new ViteWarnings());
-  const outcomes = await Promise.allSettled([
-    ...VERIFY_BUILD_STEPS.map((step, index) =>
-      buildBundle(context, step, stepWarnings[index]),
-    ),
-    typeCheck(context),
+  const builds = async (): Promise<PromiseSettledResult<void>[]> => {
+    const settled: PromiseSettledResult<void>[] = [];
+    for (const [index, step] of VERIFY_BUILD_STEPS.entries()) {
+      const [outcome] = await Promise.allSettled([
+        buildBundle(context, step, stepWarnings[index]),
+      ]);
+      settled.push(outcome);
+    }
+    return settled;
+  };
+  const [bundles, typeChecked] = await Promise.all([
+    builds(),
+    Promise.allSettled([typeCheck(context)]),
   ]);
+  const outcomes = [...bundles, ...typeChecked];
   for (const warnings of stepWarnings)
     for (const line of warnings.lines()) context.warnings.read(line);
   const failure = outcomes.find((outcome) => outcome.status === "rejected");
