@@ -5,9 +5,9 @@ import { it } from "node:test";
 import { build, loadConfigFromFile } from "vite";
 import {
   copyStaticTemplates,
+  materializeLayers,
   writeFrontendModuleRegistry,
-} from "../src/common";
-import { materializeLayers } from "../src/materialize";
+} from "../src/materialize";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 const PROBE = "__dmsVitePluginsWorkerProbe";

@@ -15,6 +15,30 @@ const COMMANDS_USE_CORE_OUTPUT = {
   },
 } as const;
 
+/**
+ * tsx compiles Vite into CommonJS for a `.ts` file, while Vite's `build()`
+ * still imports rolldown as ESM: rolldown loads twice and drops Vite's
+ * built-in plugins. A file that builds with Vite is a `.mts` file.
+ */
+const VITE_BUILDS_FROM_ESM = {
+  files: ["scripts/**/*.ts", "tests/**/*.ts"],
+  rules: {
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          {
+            name: "vite",
+            importNames: ["build"],
+            message:
+              "Build with Vite from a .mts file: under tsx a .ts file loads rolldown twice.",
+          },
+        ],
+      },
+    ],
+  },
+} as const;
+
 export default defineConfig({
   extends: [antelopePreset({ importSorting: false })],
   ignorePatterns: ANTELOPE_IGNORE_PATTERNS,
@@ -22,5 +46,5 @@ export default defineConfig({
     typeAware: true,
     maxWarnings: 0,
   },
-  overrides: [COMMANDS_USE_CORE_OUTPUT],
+  overrides: [COMMANDS_USE_CORE_OUTPUT, VITE_BUILDS_FROM_ESM],
 });

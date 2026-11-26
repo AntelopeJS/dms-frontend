@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { autoImportedGlobals } from "./auto-imported-globals";
+import { autoImportedGlobals } from "./auto-imported-globals.mts";
 
-const ROOT = resolve(__dirname, "..");
+const ROOT = resolve(import.meta.dirname, "..");
 const MODULE = resolve(ROOT, "templates", "eslint-globals.mjs");
 const FORMATTER = resolve(ROOT, "node_modules", ".bin", "oxfmt");
 
