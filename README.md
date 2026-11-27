@@ -53,7 +53,7 @@ pnpm exec ajs dms start -b https://api.example.com -p 3001
 
 | Package            | Supported | Tested with |
 | ------------------ | --------- | ----------- |
-| `@antelopejs/core` | `~1.24.0` | `1.24.0`    |
+| `@antelopejs/core` | `~1.24.0` | `1.24.9`    |
 
 <!-- antelopejs-docs-compat:end -->
 
