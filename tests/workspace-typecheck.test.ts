@@ -227,3 +227,30 @@ void describe("generated workspace typecheck", () => {
     }
   });
 });
+
+void describe("layer app config types", () => {
+  void it("lets a layer config set part of the keys a module requires", () => {
+    const workspace = shippedRuntimeWorkspace({
+      "app/app-config-types.ts":
+        'export {};\n\ndeclare module "#dms/frontend-module" {\n  interface DmsAppConfig {\n    ui: { icons: Record<string, string>; colors: { primary: string; neutral: string } };\n    branding: { name: string };\n  }\n}\n',
+      "app/app.config.ts":
+        'export default defineDmsAppConfig({\n  ui: { colors: { primary: "green" } },\n});\n',
+    });
+
+    assert.deepEqual(typecheck(workspace), []);
+  });
+
+  void it("rejects a layer config whose value has the wrong type", () => {
+    const workspace = shippedRuntimeWorkspace({
+      "app/app-config-types.ts":
+        'export {};\n\ndeclare module "#dms/frontend-module" {\n  interface DmsAppConfig {\n    ui: { colors: { primary: string } };\n  }\n}\n',
+      "app/app.config.ts":
+        "export default defineDmsAppConfig({\n  ui: { colors: { primary: 1 } },\n});\n",
+    });
+
+    assert.match(
+      typecheck(workspace).join("\n"),
+      /^app-configs\.generated\.ts\(\d+,\d+\): error TS2322:/m,
+    );
+  });
+});

@@ -108,11 +108,26 @@ export function withPublicOptions(
       : registration;
   });
 }
+/**
+ * `T` with every key optional, down through its records. An array stays
+ * whole: the merge of the layers' configs concatenates arrays rather than
+ * merging their items.
+ */
+type DeepPartial<T> = T extends readonly unknown[]
+  ? T
+  : T extends object
+    ? { [K in keyof T]?: DeepPartial<T[K]> }
+    : T;
+
 /** A layer's `app/app.config.ts`, as `app-configs.generated.ts` lists them. */
 export interface DmsLayerAppConfig {
   /** The id of the frontend module the layer belongs to. */
   module: string;
-  config: DmsAppConfig;
+  /**
+   * What this layer sets of the merged `DmsAppConfig`: any part of it, since
+   * the other layers and the modules fill the rest.
+   */
+  config: DeepPartial<DmsAppConfig>;
 }
 /**
  * What a middleware answers: nothing to go on, `false` to abort, or a location
