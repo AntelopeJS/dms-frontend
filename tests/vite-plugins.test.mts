@@ -11,9 +11,9 @@ import {
 } from "vite";
 import {
   copyStaticTemplates,
+  materializeLayers,
   writeFrontendModuleRegistry,
-} from "../src/common";
-import { materializeLayers } from "../src/materialize";
+} from "../src/materialize";
 import {
   defineDmsFrontendBuild,
   type DmsFrontendBuild,

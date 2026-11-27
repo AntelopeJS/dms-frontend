@@ -5,7 +5,9 @@
     "noEmit": true,
     "composite": false,
     "incremental": false,
-    "declaration": false
+    "declaration": false,
+    "module": "esnext",
+    "allowImportingTsExtensions": true
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts", "./**/*.mts"]
 }

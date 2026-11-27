@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { autoImportedGlobals } from "../scripts/auto-imported-globals";
+import { autoImportedGlobals } from "../scripts/auto-imported-globals.mts";
 import eslintGlobals from "../templates/eslint-globals.mjs";
 
 const REGENERATE =

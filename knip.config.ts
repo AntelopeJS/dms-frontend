@@ -6,6 +6,9 @@ const TEST_SUITE_ENTRIES = ["tests/**/*.test.ts"];
 /** Every file of the suite under tests/, helpers and fixtures included. */
 const TEST_SUITE_FILES = ["tests/**/*.ts"];
 
+/** The `.mts` scripts, which the preset's project leaves out. */
+const ESM_SCRIPT_FILES = ["scripts/**/*.mts"];
+
 /** The formal checks that the tests run, with the files they import. */
 const FORMAL_CHECK_ENTRIES = [".agents/skills/formal-*/check.mjs"];
 const FORMAL_CHECK_FILES = [".agents/skills/formal-*/*.mjs"];
@@ -33,7 +36,7 @@ const LINKED_TEST_DEPENDENCIES = ["vue-tsc"];
 
 export default antelopeKnipConfig({
   entry: [...TEST_SUITE_ENTRIES, ...FORMAL_CHECK_ENTRIES],
-  project: [...TEST_SUITE_FILES, ...FORMAL_CHECK_FILES],
+  project: [...TEST_SUITE_FILES, ...ESM_SCRIPT_FILES, ...FORMAL_CHECK_FILES],
   ignore: CONSUMER_COMPILED_TEMPLATES,
   ignoreDependencies: [
     ...SHIPPED_TEMPLATE_DEPENDENCIES,

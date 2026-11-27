@@ -7,7 +7,7 @@ import { ViteWarnings } from "../src/vite-output";
 import { temporaryDirectory } from "./fixtures/temporary-directory.mts";
 
 const VITE_BIN = join(
-  dirname(require.resolve("vite-8-4/package.json")),
+  dirname(require.resolve("vite/package.json")),
   "bin",
   "vite.js",
 );
