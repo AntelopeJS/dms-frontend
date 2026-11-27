@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.11.12
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.11...v0.11.12)
+
+### 🩹 Fixes
+
+- Type each layer's app config as a deep partial of DmsAppConfig ([#402](https://github.com/AntelopeJS/dms-frontend/pull/402))
+
+### 📦 Build
+
+- **deps:** Move the root vite to 8.4 and build with it from .mts files ([#399](https://github.com/AntelopeJS/dms-frontend/pull/399))
+- Typecheck the scripts project ([#404](https://github.com/AntelopeJS/dms-frontend/pull/404))
+
+### 🏡 Chore
+
+- **deps:** Update pnpm/action-setup action to v6.1.1 ([#400](https://github.com/AntelopeJS/dms-frontend/pull/400))
+- **deps:** Update oxfmt, oxlint and pnpm/action-setup ([#403](https://github.com/AntelopeJS/dms-frontend/pull/403))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.11.11
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.10...v0.11.11)
