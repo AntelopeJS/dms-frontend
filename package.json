@@ -71,7 +71,7 @@
     "test:real-source": "pnpm run build && node dist/verify-source-runner.js",
     "format": "oxfmt .",
     "lint": "oxlint && pnpm run docs:reference:check && pnpm run source-checks",
-    "typecheck": "tsc --noEmit && tsx scripts/typecheck-projects.ts tsconfig.templates.json tsconfig.tests.json e2e/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsx scripts/typecheck-projects.ts tsconfig.templates.json tsconfig.tests.json e2e/tsconfig.json scripts/tsconfig.json",
     "lint:fix": "oxlint --fix --max-warnings=1000000 && oxfmt .",
     "knip": "knip --dependencies",
     "knip:all": "knip",

@@ -6,6 +6,8 @@
     "composite": false,
     "incremental": false,
     "declaration": false,
+    "lib": ["ES2021", "DOM"],
+    "skipLibCheck": true,
     "module": "esnext",
     "allowImportingTsExtensions": true
   },
