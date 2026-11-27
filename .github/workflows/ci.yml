@@ -159,7 +159,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.select.outputs.e2e == 'full' && '[{"part":"browser"},{"part":"journeys","shard":"1/2"},{"part":"journeys","shard":"2/2"}]' || '[{"part":"browser"}]') }}
+        include: ${{ fromJSON(needs.select.outputs.e2e == 'full' && '[{"part":"browser"},{"part":"journeys","shard":"1/4"},{"part":"journeys","shard":"2/4"},{"part":"journeys","shard":"3/4"},{"part":"journeys","shard":"4/4"}]' || '[{"part":"browser"}]') }}
     name: e2e (${{ matrix.part }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }})
     env:
       SUITE: ${{ needs.select.outputs.e2e }}
