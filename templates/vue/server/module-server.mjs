@@ -235,9 +235,8 @@ async function loadDeclarations(devServer) {
  */
 function declarationsOf(loader) {
   // SAFETY: `ssrLoadModule` types every module `Record<string, any>` and the build is imported by a URL computed at run time; both are the generated `server-modules.generated.ts`, which exports `serverModules`, the declarations of the modules with a dms.server.ts.
-  return /** @type {{ serverModules: ServerModuleDeclaration[] }} */ (
-    loader
-  ).serverModules;
+  return /** @type {{ serverModules: ServerModuleDeclaration[] }} */ (loader)
+    .serverModules;
 }
 
 /**
