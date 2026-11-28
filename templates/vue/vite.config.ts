@@ -166,7 +166,6 @@ const optimizedDependencies = [
   "ufo",
   "defu",
   "zod",
-  "json-schema-to-zod",
   "striptags",
 ];
 
