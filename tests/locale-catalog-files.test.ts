@@ -100,7 +100,9 @@ function writeCatalogFixture(workspace: string, layer: ResolvedLayer): void {
 }
 
 void describe("generated locale catalogs", () => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dms-locale-files-")));
+  const root = realpathSync.native(
+    mkdtempSync(join(tmpdir(), "dms-locale-files-")),
+  );
   const workspace = join(root, "workspace");
   const layer: ResolvedLayer = {
     path: join(root, "source"),
