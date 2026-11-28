@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.11.14
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.13...v0.11.14)
+
+### 🩹 Fixes
+
+- **install:** Retry without the release age when no mature version matches ([#419](https://github.com/AntelopeJS/dms-frontend/pull/419))
+- **prepare-types:** Copy the staged output beside a symlinked --out on another filesystem ([#420](https://github.com/AntelopeJS/dms-frontend/pull/420))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.11.13
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.12...v0.11.13)
