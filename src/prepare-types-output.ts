@@ -1,4 +1,5 @@
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -118,12 +119,15 @@ export function runInputs(
   ];
 }
 
-/** `path` with every symlink resolved, or `path` itself when it is missing. */
+/** `path` with every symlink resolved, those of its existing ancestors when it is missing. */
 function realPath(path: string): string {
   try {
     return realpathSync.native(path);
   } catch {
-    return nativePath.resolve(path);
+    const absolute = nativePath.resolve(path);
+    const parent = nativePath.dirname(absolute);
+    if (parent === absolute) return absolute;
+    return nativePath.join(realPath(parent), nativePath.basename(absolute));
   }
 }
 
@@ -193,6 +197,33 @@ export function resetStaging(out: string): string {
 }
 
 /**
+ * Moves `staging` to the sibling `<target>.next`, on the filesystem of
+ * `target`: by a copy when `target` is on another one, such as the directory a
+ * symlinked `out` links to on another mount. Symlinks are copied as they are.
+ *
+ * @returns The path the staged set now sits at
+ */
+function stageBeside(staging: string, target: string): string {
+  const next = `${target}.next`;
+  if (realPath(staging) === next) return staging;
+  removeWrittenSibling(next);
+  try {
+    renameSync(staging, next);
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "EXDEV"))
+      throw error;
+    try {
+      cpSync(staging, next, { recursive: true, verbatimSymlinks: true });
+    } catch (copyError) {
+      rmSync(next, { recursive: true, force: true, maxRetries: 3 });
+      throw copyError;
+    }
+    rmSync(staging, { recursive: true, force: true, maxRetries: 3 });
+  }
+  return next;
+}
+
+/**
  * Renames `staging` into the place of `out`, or of the directory `out` links
  * to, so a reader beside the run finds the files of the previous run or those
  * of this one, and never a directory being written. When the new set cannot
@@ -200,11 +231,12 @@ export function resetStaging(out: string): string {
  */
 export function publishStaging(staging: string, out: string): void {
   const target = realPath(out);
+  const ready = stageBeside(staging, target);
   const previous = `${target}.previous`;
   removeWrittenSibling(previous);
   if (existsSync(target)) renameSync(target, previous);
   try {
-    renameSync(staging, target);
+    renameSync(ready, target);
   } catch (error) {
     if (existsSync(previous)) renameSync(previous, target);
     throw error;
