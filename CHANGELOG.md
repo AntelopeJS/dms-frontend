@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.11.13
+
+[compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.12...v0.11.13)
+
+### 🔥 Performance
+
+- **ci:** Run the journeys in four shards dealt by recorded time ([#406](https://github.com/AntelopeJS/dms-frontend/pull/406))
+- **ci:** Run the full browser suite in two Playwright shards ([#407](https://github.com/AntelopeJS/dms-frontend/pull/407))
+
+### 🩹 Fixes
+
+- **tests:** Key the locale catalog build on the workspace's long path ([#417](https://github.com/AntelopeJS/dms-frontend/pull/417))
+- **prepare-types:** Write a sibling of --out and rename it into place ([#416](https://github.com/AntelopeJS/dms-frontend/pull/416))
+
+### 📦 Build
+
+- **ci:** Sync @antelopejs/tooling-configs 0.10.12 ([#410](https://github.com/AntelopeJS/dms-frontend/pull/410))
+- **deps:** Move to tooling-configs 0.10.14 and dms 0.25 ([#418](https://github.com/AntelopeJS/dms-frontend/pull/418))
+
+### 🏡 Chore
+
+- **deps:** Update dependency @antelopejs/core to v1.24.9 ([#408](https://github.com/AntelopeJS/dms-frontend/pull/408))
+- **deps:** Update dependency release-it to v21 ([#411](https://github.com/AntelopeJS/dms-frontend/pull/411))
+
+### 🤖 CI
+
+- Run the repo's own jobs on Blacksmith 4 vCPU ([#405](https://github.com/AntelopeJS/dms-frontend/pull/405))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.11.12
 
 [compare changes](https://github.com/AntelopeJS/dms-frontend/compare/v0.11.11...v0.11.12)
