@@ -233,7 +233,7 @@ void it("pre-bundles a module's dependency at startup without naming it", async 
   }
 });
 
-void it("names no dependency the DMS dropped for SortableJS", () => {
+void it("names no dependency the DMS dropped", () => {
   const list = templateSource().match(
     /const optimizedDependencies = (\[[^\]]*\])/,
   );
@@ -244,5 +244,12 @@ void it("names no dependency the DMS dropped for SortableJS", () => {
     "the template lists names",
   );
   assert.ok(names.includes("vue"));
-  assert.ok(!names.includes("vuedraggable"));
+  assert.ok(
+    !names.includes("vuedraggable"),
+    "SortableJS replaced vuedraggable",
+  );
+  assert.ok(
+    !names.includes("json-schema-to-zod"),
+    "no module installs json-schema-to-zod: Vite warns at every start that it cannot resolve a name of optimizeDeps.include",
+  );
 });
