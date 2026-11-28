@@ -33,6 +33,15 @@ function install() {
     );
     process.exit(1);
   }
+  if (
+    scenario === "immature-only" &&
+    !args.includes("--config.minimum-release-age=0")
+  ) {
+    console.error(
+      " ERR_PNPM_NO_MATURE_MATCHING_VERSION  Version 7.6.2 (released 23 hours ago) of tldts-core does not meet the minimumReleaseAge constraint",
+    );
+    process.exit(1);
+  }
   const vueTsc = join(process.cwd(), "node_modules/vue-tsc/bin");
   mkdirSync(vueTsc, { recursive: true });
   writeFileSync(join(vueTsc, "vue-tsc.js"), "");

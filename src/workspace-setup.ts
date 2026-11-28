@@ -131,11 +131,23 @@ const PNPM_INSTALL_ARGS = [
   "--reporter=append-only",
 ];
 
+/** pnpm's error when a range matches no release older than `minimumReleaseAge`. */
+const NO_MATURE_VERSION = /\bERR_PNPM_NO_MATURE_MATCHING_VERSION\b/;
+
+/**
+ * Lifts the workspace's `minimumReleaseAge`. A release a day old can depend on
+ * one published after it, such as `tldts` 7.6.2 on `tldts-core` 7.6.2, 51
+ * seconds later: until that dependency is a day old too, no mature version
+ * matches its range.
+ */
+const ANY_RELEASE_AGE = "--config.minimum-release-age=0";
+
 /**
  * Run pnpm install in the workspace directory, as one task whose label follows
  * pnpm's progress. Its output is kept and replayed on failure, or streamed
  * behind a gutter in a verbose run. `extraArgs` follow pnpm's own, e.g.
- * `--ignore-scripts`.
+ * `--ignore-scripts`. An install that finds no mature version of a dependency
+ * runs once more without the release age.
  *
  * Disables npm's update notifier: the workspace pins its own pnpm, which a DMS
  * user has no reason to upgrade.
@@ -147,19 +159,20 @@ export async function installDeps(
 ): Promise<void> {
   const progress = new InstallProgress();
   const task = getProcessTasks().start(progress.label);
-  try {
-    const { code, lines } = await runWorkspacePnpm(
-      [...PNPM_INSTALL_ARGS, ...extraArgs],
-      {
-        name: "pnpm",
-        cwd: workspaceDir,
-        env: { ...process.env, npm_config_update_notifier: "false" },
-        mapLine,
-        onLine: (line) => {
-          if (progress.read(line)) task.update(progress.label);
-        },
+  const install = (args: string[]) =>
+    runWorkspacePnpm([...PNPM_INSTALL_ARGS, ...extraArgs, ...args], {
+      name: "pnpm",
+      cwd: workspaceDir,
+      env: { ...process.env, npm_config_update_notifier: "false" },
+      mapLine,
+      onLine: (line) => {
+        if (progress.read(line)) task.update(progress.label);
       },
-    );
+    });
+  try {
+    let { code, lines } = await install([]);
+    if (code !== 0 && lines.some((line) => NO_MATURE_VERSION.test(line)))
+      ({ code, lines } = await install([ANY_RELEASE_AGE]));
     if (code !== 0) {
       throw new CliError(
         describeChildFailure({
