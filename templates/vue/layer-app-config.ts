@@ -27,7 +27,10 @@ function isSameValue(left: PlainValue, right: PlainValue): boolean {
     const keys = Object.keys(left);
     return (
       keys.length === Object.keys(right).length &&
-      keys.every((key) => key in right && isSameValue(left[key], right[key]))
+      keys.every(
+        (key) =>
+          Object.hasOwn(right, key) && isSameValue(left[key], right[key]),
+      )
     );
   }
   return Object.is(left, right);
@@ -81,7 +84,7 @@ export function withAppConfigChanges(
  */
 export function assignInPlace(target: PlainRecord, source: PlainRecord): void {
   for (const key of Object.keys(target)) {
-    if (!(key in source)) delete target[key];
+    if (!Object.hasOwn(source, key)) delete target[key];
   }
   for (const [key, value] of Object.entries(source)) {
     const current = target[key];

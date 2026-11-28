@@ -1,11 +1,3 @@
-/**
- * What the frontend server promises about the backend, as the user docs state
- * it (`docs/7.deployment/3.routing-and-proxy.md`, `4.public-endpoints.md`,
- * `5.security.md`), written apart from the code under test so that the two
- * can disagree. Paths are WHATWG-normalized, the "normalized path" of the
- * docs.
- */
-
 /** @typedef {{ path: string, auth?: string, maxBodyBytes?: number | string }} ProxyEntry */
 /** @typedef {{ path: string, methods?: string[], headers?: string[] }} EndpointEntry */
 /** @typedef {{ proxies: ProxyEntry[], endpoints: EndpointEntry[] }} Deployment */

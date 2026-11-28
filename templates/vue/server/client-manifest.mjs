@@ -11,10 +11,6 @@ const CLIENT_MANIFEST_PATH = join(
 );
 const SOURCE_TEMPLATE_PATH = join(PROJECT_ROOT, "index.html");
 
-/**
- * Read once and kept: both files are build output and cannot change while
- * the server is up.
- */
 /** @type {import("vite").Manifest | undefined} */
 let clientManifest;
 /** @type {string | undefined} */

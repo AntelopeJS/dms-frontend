@@ -5,12 +5,6 @@ import { relayedLocation } from "../templates/vue/server/proxy-redirects.mjs";
 import "./fixtures/dms-backend-proxies.mts";
 import { addressOf } from "./helpers/net";
 
-/**
- * A backend redirect is the browser's to follow. Followed by the proxy, a
- * redirect to another site served that site's page, and its cookies, from
- * the dashboard's origin.
- */
-
 const ENVIRONMENT = [
   "DMS_API_BASE_URL",
   "DMS_PUBLIC_ENDPOINTS",

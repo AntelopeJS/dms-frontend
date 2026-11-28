@@ -1,7 +1,3 @@
-/**
- * Reads what a JSON answer holds without assuming its shape.
- */
-
 /** @typedef {Record<string, unknown>} Row */
 
 /**

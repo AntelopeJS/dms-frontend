@@ -226,8 +226,6 @@ void describe("update notice", () => {
   });
 });
 
-/** A built workspace whose server prints the output settings it inherited. */
-
 function settingsWorkspace() {
   return {
     ...builtWorkspace(),
