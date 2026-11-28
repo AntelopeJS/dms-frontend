@@ -153,6 +153,27 @@ function emptyButInstall(directory: string): void {
 }
 
 /**
+ * Removes the sibling `path` of `--out` when it is missing, empty or marked as
+ * written by `prepare-types`, and refuses any other.
+ */
+function removeWrittenSibling(path: string): void {
+  const stats = statSync(path, { throwIfNoEntry: false });
+  if (stats === undefined) return;
+  if (
+    !stats.isDirectory() ||
+    (!isEmptyDirectory(path) &&
+      !existsSync(nativePath.join(path, TYPES_MARKER)))
+  )
+    throw new CliError({
+      title: `${path} was not written by prepare-types`,
+      reason:
+        "The run writes and removes this sibling of --out to replace --out.",
+      fixes: ["Move or remove it"],
+    });
+  rmSync(path, { recursive: true, force: true, maxRetries: 3 });
+}
+
+/**
  * Creates the directory a run writes before it takes the place of `out`: the
  * sibling `<out>.next`, emptied of what a failed run left there and holding
  * the marker that lets a later run replace `out` again. A sibling resolves
@@ -162,7 +183,7 @@ function emptyButInstall(directory: string): void {
  */
 export function resetStaging(out: string): string {
   const staging = `${nativePath.resolve(out)}.next`;
-  rmSync(staging, { recursive: true, force: true });
+  removeWrittenSibling(staging);
   mkdirSync(staging, { recursive: true });
   writeFileSync(
     nativePath.join(staging, TYPES_MARKER),
@@ -174,15 +195,21 @@ export function resetStaging(out: string): string {
 /**
  * Renames `staging` into the place of `out`, or of the directory `out` links
  * to, so a reader beside the run finds the files of the previous run or those
- * of this one, and never a directory being written.
+ * of this one, and never a directory being written. When the new set cannot
+ * take its place, the previous one is put back.
  */
 export function publishStaging(staging: string, out: string): void {
   const target = realPath(out);
   const previous = `${target}.previous`;
-  rmSync(previous, { recursive: true, force: true });
+  removeWrittenSibling(previous);
   if (existsSync(target)) renameSync(target, previous);
-  renameSync(staging, target);
-  rmSync(previous, { recursive: true, force: true });
+  try {
+    renameSync(staging, target);
+  } catch (error) {
+    if (existsSync(previous)) renameSync(previous, target);
+    throw error;
+  }
+  rmSync(previous, { recursive: true, force: true, maxRetries: 3 });
 }
 
 function readWorkspaceTsconfig(path: string): Tsconfig {

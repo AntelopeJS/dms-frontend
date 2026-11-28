@@ -109,10 +109,19 @@ void describe("resetStaging", () => {
     mkdirSync(out);
     writeFileSync(join(out, "tsconfig.json"), "{}\n");
     mkdirSync(join(root, "out.next", "node_modules"), { recursive: true });
+    writeFileSync(join(root, "out.next", TYPES_MARKER), "{}\n");
     const staging = resetStaging(out);
     assert.equal(staging, join(root, "out.next"));
     assert.deepEqual(listNames(staging), [TYPES_MARKER]);
     assert.deepEqual(listNames(out), ["tsconfig.json"]);
+  });
+
+  void it("refuses a sibling it did not write and keeps it", () => {
+    const root = directory();
+    mkdirSync(join(root, "out.next"));
+    writeFileSync(join(root, "out.next", "notes.md"), "mine\n");
+    assert.throws(() => resetStaging(join(root, "out")), /not written by/);
+    assert.deepEqual(listNames(join(root, "out.next")), ["notes.md"]);
   });
 });
 
@@ -121,6 +130,7 @@ void describe("publishStaging", () => {
     const root = directory();
     const out = join(root, "out");
     mkdirSync(out);
+    writeFileSync(join(out, TYPES_MARKER), "{}\n");
     writeFileSync(join(out, "stale.d.ts"), "");
     const staging = resetStaging(out);
     writeFileSync(join(staging, "tsconfig.json"), "{}\n");
