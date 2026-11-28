@@ -94,10 +94,10 @@ async function checkRunFrontend(ctx) {
     ownOrigin: shortAnswer(ownOrigin),
   }, [
     ctx.equal("a signed POST without Origin reaches the backend route", shortAnswer(webhook), { status: 200, body: { received: true, provider: "stripe" } }),
-    ctx.equal("an unsigned POST without Origin reaches the route, which refuses the signature itself", shortAnswer(unsigned), { status: 401, body: "Bad signature" }),
+    ctx.equal("an unsigned POST without Origin reaches the route, which refuses the signature itself", shortAnswer(unsigned), { status: 401, body: "$demo.pages.hooks.bad_signature" }),
     ctx.equal("a path one segment deeper is not public: 403 from the frontend", shortAnswer(deeper), { status: 403, body: CROSS_ORIGIN }),
     ctx.equal("a method the endpoint does not declare is not public: 403", shortAnswer(wrongMethod), { status: 403, body: CROSS_ORIGIN }),
-    ctx.equal("the same POST with the frontend's own Origin is proxied too", shortAnswer(ownOrigin), { status: 401, body: "Bad signature" }),
+    ctx.equal("the same POST with the frontend's own Origin is proxied too", shortAnswer(ownOrigin), { status: 401, body: "$demo.pages.hooks.bad_signature" }),
   ]);
 
   const origins = [

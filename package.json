@@ -99,9 +99,9 @@
   },
   "devDependencies": {
     "@antelopejs/core": "~1.24.0",
-    "@antelopejs/dms": ">=0.24.0 <0.25.0",
-    "@antelopejs/interface-dms": ">=0.17.0 <0.18.0",
-    "@antelopejs/tooling-configs": ">=0.10.12 <0.11.0",
+    "@antelopejs/dms": ">=0.25.1 <0.26.0",
+    "@antelopejs/interface-dms": ">=0.17.3 <0.18.0",
+    "@antelopejs/tooling-configs": ">=0.10.14 <0.11.0",
     "@iconify/utils": "^3.1.0",
     "@iconify/vue": "^5.0.1",
     "@inertiajs/vue3": "^3.7.1",
