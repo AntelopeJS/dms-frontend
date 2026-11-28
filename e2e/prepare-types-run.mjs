@@ -123,6 +123,17 @@ export const journeys = [
         ],
         { critical: true },
       );
+      const tsconfig = join(fixture.project, OUT, "tsconfig.json");
+      let missing = 0;
+      const reader = setInterval(() => {
+        if (!existsSync(tsconfig)) missing += 1;
+      }, 10);
+      const rerun = await prepareTypes(ctx, fixture.project, OUT).finally(() => clearInterval(reader));
+      observe(ctx, "a second run beside a reader", { code: rerun.code, stderr: rerun.stderr }, [
+        ctx.equal("exit 0", rerun.code, 0),
+        ctx.equal("the reader never finds --out without its tsconfig.json", missing, 0),
+        ctx.equal("no file written outside --out", tree(fixture.project, OUT), before),
+      ]);
       const moved = `${fixture.project}-moved`;
       rmSync(moved, { recursive: true, force: true });
       renameSync(fixture.project, moved);

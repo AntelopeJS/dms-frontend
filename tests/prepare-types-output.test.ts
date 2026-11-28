@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import {
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
@@ -17,7 +18,8 @@ import { jsonAt, readJson } from "./helpers/json";
 import {
   assertOutsideSources,
   outputProblems,
-  resetOutput,
+  publishStaging,
+  resetStaging,
   runInputs,
   TYPES_MARKER,
   writeRelocatedTypes,
@@ -56,9 +58,10 @@ void describe("outputProblems", () => {
   });
 
   void it("accepts a directory this command wrote", () => {
-    const out = directory();
-    resetOutput(out);
-    writeFileSync(join(out, "tsconfig.json"), "{}\n");
+    const out = join(directory(), "out");
+    const staging = resetStaging(out);
+    writeFileSync(join(staging, "tsconfig.json"), "{}\n");
+    publishStaging(staging, out);
     assert.deepEqual(titles(out), []);
   });
 
@@ -99,15 +102,54 @@ void describe("runPrepareTypes", () => {
   });
 });
 
-void describe("resetOutput", () => {
-  void it("empties a directory but for node_modules, and marks it", () => {
-    const out = directory();
-    mkdirSync(join(out, "node_modules", "vite"), { recursive: true });
-    mkdirSync(join(out, "frontend-modules"));
+void describe("resetStaging", () => {
+  void it("marks an empty sibling of out, dropping what a failed run left, and leaves out as it was", () => {
+    const root = directory();
+    const out = join(root, "out");
+    mkdirSync(out);
     writeFileSync(join(out, "tsconfig.json"), "{}\n");
-    resetOutput(out);
-    assert.deepEqual(listNames(out).sort(), [TYPES_MARKER, "node_modules"]);
-    assert.deepEqual(listNames(join(out, "node_modules")), ["vite"]);
+    mkdirSync(join(root, "out.next", "node_modules"), { recursive: true });
+    writeFileSync(join(root, "out.next", TYPES_MARKER), "{}\n");
+    const staging = resetStaging(out);
+    assert.equal(staging, join(root, "out.next"));
+    assert.deepEqual(listNames(staging), [TYPES_MARKER]);
+    assert.deepEqual(listNames(out), ["tsconfig.json"]);
+  });
+
+  void it("refuses a sibling it did not write and keeps it", () => {
+    const root = directory();
+    mkdirSync(join(root, "out.next"));
+    writeFileSync(join(root, "out.next", "notes.md"), "mine\n");
+    assert.throws(() => resetStaging(join(root, "out")), /not written by/);
+    assert.deepEqual(listNames(join(root, "out.next")), ["notes.md"]);
+  });
+});
+
+void describe("publishStaging", () => {
+  void it("puts the staged set in place of out and leaves no sibling", () => {
+    const root = directory();
+    const out = join(root, "out");
+    mkdirSync(out);
+    writeFileSync(join(out, TYPES_MARKER), "{}\n");
+    writeFileSync(join(out, "stale.d.ts"), "");
+    const staging = resetStaging(out);
+    writeFileSync(join(staging, "tsconfig.json"), "{}\n");
+    publishStaging(staging, out);
+    assert.deepEqual(listNames(out).sort(), [TYPES_MARKER, "tsconfig.json"]);
+    assert.deepEqual(listNames(root), ["out"]);
+  });
+
+  void it("replaces the directory a symlinked out links to and keeps the link", () => {
+    const root = directory();
+    const real = join(root, "real");
+    mkdirSync(real);
+    const out = join(root, "out");
+    symlinkSync(real, out, "dir");
+    const staging = resetStaging(out);
+    writeFileSync(join(staging, "tsconfig.json"), "{}\n");
+    publishStaging(staging, out);
+    assert.equal(lstatSync(out).isSymbolicLink(), true);
+    assert.deepEqual(listNames(real).sort(), [TYPES_MARKER, "tsconfig.json"]);
   });
 });
 

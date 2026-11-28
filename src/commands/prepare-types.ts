@@ -35,7 +35,7 @@ export function cmdPrepareTypes(): Command {
     )
     .requiredOption(
       "--out <dir>",
-      "Directory to write; one this command wrote is emptied and written again, any other must be empty or new",
+      "Directory to write; one this command wrote is replaced once the run succeeds, any other must be empty or new",
     )
     .option(
       "-l, --layer <path>",

@@ -14,7 +14,8 @@ import { writeHeader } from "./output";
 import {
   assertOutsideSources,
   PREPARE_TYPES_OUT_VARIABLE,
-  resetOutput,
+  publishStaging,
+  resetStaging,
   runInputs,
   writeRelocatedTypes,
 } from "./prepare-types-output";
@@ -44,26 +45,26 @@ async function prepareTypes(): Promise<PreparationResult> {
   writeHeader("prepare-types", [pluralize(layers.length, "module")]);
   assertLayersSupportRenderer(layers);
   assertOutsideSources(out, runInputs(layers, options.localPackages));
-  resetOutput(out);
+  const staging = resetStaging(out);
   const isVerbose = isVerboseRun();
   const context: VerificationContext = {
-    workspace: out,
+    workspace: staging,
     isVerbose,
-    mapLine: createPathMapper(out, layers),
+    mapLine: createPathMapper(staging, layers),
     warnings: new ViteWarnings(),
     env: { ...process.env, [VITE_LOG_LEVEL_VARIABLE]: viteLogLevel(isVerbose) },
   };
   const tasks = getProcessTasks();
   await tasks.run(
     `Materializing ${pluralize(layers.length, "module")}`,
-    async () => materializeWorkspace(out, layers, options.localPackages),
+    async () => materializeWorkspace(staging, layers, options.localPackages),
     { done: `Materialized ${pluralize(layers.length, "module")}` },
   );
-  await installDeps(out, context.mapLine, ["--ignore-scripts"]);
+  await installDeps(staging, context.mapLine, ["--ignore-scripts"]);
   await generateTypeDeclarations(context);
   const writeTsconfig = await tasks.run(
     "Pointing the types at the sources",
-    async () => writeRelocatedTypes(out, layers),
+    async () => writeRelocatedTypes(staging, layers),
     { done: "Pointed the types at the sources" },
   );
   await tasks.run(
@@ -71,6 +72,7 @@ async function prepareTypes(): Promise<PreparationResult> {
     async () => emitVueDeclarations(context, layers, writeTsconfig),
     { done: "Declared the .vue files" },
   );
+  publishStaging(staging, out);
   return {
     ok: true,
     modules: layers.length,
