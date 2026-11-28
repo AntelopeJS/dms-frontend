@@ -1,18 +1,5 @@
 /// <reference types="node" />
 
-/**
- * What a frontend module's `dms.server.ts` declares: the routes it serves from
- * the frontend server, its auth hooks, its route rules and the backend paths
- * the server proxies. Imported as `#dms/server`.
- *
- * The entry runs in the frontend server's Node.js process, next to the
- * session secret: it is the module's own trusted code, as its backend half
- * is, not a sandbox. It may import `#dms/server`, Node.js built-ins, npm
- * dependencies and the module's own server files, never the application's
- * code (`.vue` files, `dms.frontend.ts`). Nothing it imports reaches the
- * browser bundle.
- */
-
 /** The methods a route can answer. */
 export type DmsServerMethod =
   | "GET"

@@ -219,7 +219,7 @@ function appendSealedCookie(response, name, value, cookieAttributes) {
  *   the cookie seals, `undefined` when there is none
  */
 export function readSession(request) {
-  if (REQUEST_SESSION in request) return request[REQUEST_SESSION];
+  if (Object.hasOwn(request, REQUEST_SESSION)) return request[REQUEST_SESSION];
   const sealed = readSealedCookie(request, SESSION_COOKIE);
   if (!isSession(sealed)) return undefined;
   const age = Date.now() - sealed.updatedAt;

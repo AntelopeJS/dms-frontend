@@ -409,8 +409,6 @@ export async function setupWorkspace(
   };
 }
 
-/** Debounce window for coalescing a burst of watcher events into one apply. */
-
 /**
  * The registry and what derives from it. A locale file it refuses is named at
  * its source, the file to edit, rather than at its copy in the workspace.

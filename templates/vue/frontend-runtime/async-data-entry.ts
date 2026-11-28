@@ -19,7 +19,9 @@ function pickValue<T>(value: Awaited<T>, keys?: string[]): T {
   const picked =
     keys && isKeyedObject(value)
       ? Object.fromEntries(
-          keys.filter((key) => key in value).map((key) => [key, value[key]]),
+          keys
+            .filter((key) => Object.hasOwn(value, key))
+            .map((key) => [key, value[key]]),
         )
       : value;
   // SAFETY: `picked` is either the whole value or the subset of its own keys that the caller listed in `pick`, and `pick` is only offered for object results, so it keeps the shape the caller declared as T.

@@ -1,9 +1,3 @@
-/**
- * The part of the e2e kit's journey API these journeys use, declared as
- * narrowly as they use it. `@antelopejs/dms/e2e` exports the journey context,
- * the tab and the check, but not the page, request and run shapes below.
- */
-
 /** Anything a check can observe or a JSON answer can hold. */
 export type Json = string | number | boolean | null | undefined | Json[] | { [key: string]: Json };
 
