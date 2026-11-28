@@ -139,6 +139,10 @@ function registerInstallAndBuildTests(): void {
     assert.match(run.stderr, /\n {2}\.\/frontend-vue:\n/);
     assert.doesNotMatch(run.stderr, /frontend-modules|DEP0169|Progress:/);
     assert.match(run.stderr, /Run with --verbose for the full output\.\n$/);
+    assert.equal(
+      run.calls.filter((call) => call.args[0] === "install").length,
+      1,
+    );
   });
 
   void it("streams everything behind a gutter in a verbose run", async () => {
