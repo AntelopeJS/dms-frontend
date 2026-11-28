@@ -1,8 +1,10 @@
 import {
+  existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -89,7 +91,7 @@ export function outputProblems(
   )
     problems.push({
       title: `--out is not empty and was not written by prepare-types: ${target}`,
-      reason: `A directory it wrote holds a ${TYPES_MARKER} file, and the command empties such a directory before it writes it again.`,
+      reason: `A directory it wrote holds a ${TYPES_MARKER} file, and the command replaces such a directory.`,
       fixes: ["Pass an empty or new directory"],
     });
   return problems;
@@ -151,17 +153,36 @@ function emptyButInstall(directory: string): void {
 }
 
 /**
- * Empties `out` but for its `node_modules`, which a new run installs into, and
- * writes the marker that lets a later run empty it again. The marker comes
- * first: a run that fails halfway leaves a directory the next run may reuse.
+ * Creates the directory a run writes before it takes the place of `out`: the
+ * sibling `<out>.next`, emptied of what a failed run left there and holding
+ * the marker that lets a later run replace `out` again. A sibling resolves
+ * every path relative to it as `out` does.
+ *
+ * @returns The absolute path of the staging directory
  */
-export function resetOutput(out: string): void {
-  mkdirSync(out, { recursive: true });
-  emptyButInstall(out);
+export function resetStaging(out: string): string {
+  const staging = `${nativePath.resolve(out)}.next`;
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
   writeFileSync(
-    nativePath.join(out, TYPES_MARKER),
+    nativePath.join(staging, TYPES_MARKER),
     `${JSON.stringify({ command: "ajs dms prepare-types" }, null, 2)}\n`,
   );
+  return staging;
+}
+
+/**
+ * Renames `staging` into the place of `out`, or of the directory `out` links
+ * to, so a reader beside the run finds the files of the previous run or those
+ * of this one, and never a directory being written.
+ */
+export function publishStaging(staging: string, out: string): void {
+  const target = realPath(out);
+  const previous = `${target}.previous`;
+  rmSync(previous, { recursive: true, force: true });
+  if (existsSync(target)) renameSync(target, previous);
+  renameSync(staging, target);
+  rmSync(previous, { recursive: true, force: true });
 }
 
 function readWorkspaceTsconfig(path: string): Tsconfig {
