@@ -62,7 +62,7 @@ export interface FakePnpmRun {
 
 /** How a run is set up. */
 export interface FakePnpmRunOptions {
-  /** What the fake pnpm does: `success`, `install-fails` or `ssr-fails`. */
+  /** What the fake pnpm does: `success`, `install-fails`, `immature-only` or `ssr-fails`. */
   scenario?: string;
   /** Prepares a new sandbox before the run. */
   setUp?: (sandbox: string) => void;

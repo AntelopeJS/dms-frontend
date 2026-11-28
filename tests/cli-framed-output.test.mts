@@ -100,6 +100,28 @@ function registerInstallAndBuildTests(): void {
     assert.equal(install.env.updateNotifier, "false");
   });
 
+  void it("installs again without the release age when no mature version matches", async () => {
+    const run = await cli.run(["prepare", "-b", backend.url], {
+      scenario: "immature-only",
+    });
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stderr, new RegExp(`✔ Installed 3 packages${DONE}`));
+    assert.doesNotMatch(run.stderr, /ERR_PNPM/);
+    assert.deepEqual(
+      run.calls.map((call) => call.args),
+      [
+        ["install", "--no-frozen-lockfile", "--reporter=append-only"],
+        [
+          "install",
+          "--no-frozen-lockfile",
+          "--reporter=append-only",
+          "--config.minimum-release-age=0",
+        ],
+      ],
+    );
+  });
+
   void it("replays the end of a failed install, with paths at their source", async () => {
     const run = await cli.run(["dev", "-b", backend.url, "-p", "0"], {
       setUp: projectHome,
@@ -117,6 +139,10 @@ function registerInstallAndBuildTests(): void {
     assert.match(run.stderr, /\n {2}\.\/frontend-vue:\n/);
     assert.doesNotMatch(run.stderr, /frontend-modules|DEP0169|Progress:/);
     assert.match(run.stderr, /Run with --verbose for the full output\.\n$/);
+    assert.equal(
+      run.calls.filter((call) => call.args[0] === "install").length,
+      1,
+    );
   });
 
   void it("streams everything behind a gutter in a verbose run", async () => {
