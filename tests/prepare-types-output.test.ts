@@ -158,6 +158,20 @@ void describe("publishStaging", () => {
     assert.deepEqual(listNames(real).sort(), [TYPES_MARKER, "tsconfig.json"]);
   });
 
+  void it("replaces an out below a symlinked directory again", () => {
+    const real = directory();
+    const link = join(directory(), "link");
+    symlinkSync(real, link, "dir");
+    const out = join(link, "out");
+    for (const file of ["first.d.ts", "second.d.ts"]) {
+      const staging = resetStaging(out);
+      writeFileSync(join(staging, file), "");
+      publishStaging(staging, out);
+    }
+    assert.deepEqual(listNames(real), ["out"]);
+    assert.deepEqual(listNames(out).sort(), [TYPES_MARKER, "second.d.ts"]);
+  });
+
   void it(
     "replaces the directory a symlinked out links to on another filesystem",
     {

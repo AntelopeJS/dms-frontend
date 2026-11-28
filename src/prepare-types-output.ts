@@ -119,12 +119,15 @@ export function runInputs(
   ];
 }
 
-/** `path` with every symlink resolved, or `path` itself when it is missing. */
+/** `path` with every symlink resolved, those of its existing ancestors when it is missing. */
 function realPath(path: string): string {
   try {
     return realpathSync.native(path);
   } catch {
-    return nativePath.resolve(path);
+    const absolute = nativePath.resolve(path);
+    const parent = nativePath.dirname(absolute);
+    if (parent === absolute) return absolute;
+    return nativePath.join(realPath(parent), nativePath.basename(absolute));
   }
 }
 
@@ -202,7 +205,7 @@ export function resetStaging(out: string): string {
  */
 function stageBeside(staging: string, target: string): string {
   const next = `${target}.next`;
-  if (next === staging) return staging;
+  if (realPath(staging) === next) return staging;
   removeWrittenSibling(next);
   try {
     renameSync(staging, next);
